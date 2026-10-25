@@ -1,6 +1,6 @@
 # Pyrtan
 
-**Open-source total automation: a swarm of small services that act on the web
+**Open-source total automation: a core set of expandable services that act on all forms of I/O
 through hardcoded, inspectable decision trees.**
 
 Pyrtan looks like an assistant from the outside. You give it a sentence; it

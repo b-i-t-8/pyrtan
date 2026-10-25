@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --prefix=/install .
 
 FROM python:3.12-slim
 LABEL org.opencontainers.image.title="pyrtan" \
-      org.opencontainers.image.description="A swarm of small services that act on the web through hardcoded, inspectable decision trees." \
+      org.opencontainers.image.description="A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees." \
       org.opencontainers.image.source="https://github.com/b-i-t-8/pyrtan" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 COPY --from=build /install /usr/local

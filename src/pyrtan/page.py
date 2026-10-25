@@ -42,7 +42,7 @@ PAGE = r"""<!doctype html>
 <body>
 <main>
   <h1>Pyrtan <small id="who">…</small></h1>
-  <p class="lede">A swarm of small services that act on the web through hardcoded, inspectable decision trees. Type a sentence a tree answers to; the answer comes back with the exact path that produced it. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Type a sentence a tree answers to; the answer comes back with the exact path that produced it. No model is involved.</p>
 
   <form id="ask">
     <input type="text" id="text" placeholder="what's the weather in Oslo" autofocus autocomplete="off">

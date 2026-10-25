@@ -1,10 +1,10 @@
-# Design — Pyrtan: a swarm of services that act on the web through hardcoded decision trees
+# Design — Pyrtan: a core set of expandable services that act on all forms of I/O through hardcoded decision trees
 
 | | |
 |---|---|
 | **Status** | **Built, v0.1.** The core, the service, the hub and the command exist and are tested (111 tests, including a two-service swarm behind a hub on localhost). No deployment, no users, no browser adapter yet. |
 | **Date** | 2026-10-24 |
-| **Decision** | Pyrtan is an open-source automation tool: many small services, each holding declarative decision trees that read and act on the web, routed by a hub, with no model in the loop and a complete trace of every run. |
+| **Decision** | Pyrtan is an open-source automation tool: a core set of expandable services, each holding declarative decision trees that read and act on all forms of I/O, routed by a hub, with no model in the loop and a complete trace of every run. |
 | **Where** | This repository: `src/pyrtan`, `examples/`, `tests/`. AGPL-3.0-or-later. |
 
 ## 0. The brief, and the reading this design commits to
