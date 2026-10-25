@@ -1,5 +1,5 @@
 # Build the image and publish it to GitHub's registry on every tag, so a
-# deployment (deploy/pyrtan.com/rendezvous, the compose stack, hosting)
+# deployment (the compose stack, hosting)
 # can pull ghcr.io/b-i-t-8/pyrtan:<version> instead of building from a
 # checkout. Tests run first; a tag whose tests fail publishes nothing.
 

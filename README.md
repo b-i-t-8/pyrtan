@@ -331,8 +331,10 @@ examples/       trees that run against real public APIs, and offline against
 tests/          pytest; a swarm of two services behind a hub runs on localhost
 _meta/          the design record, the tree format reference, and the
                 design for pyrtan.com
-deploy/         Dockerfile at the root; a compose stack for OpenMediaVault,
-                a systemd unit, and what to put in the pyrtan.com repositories
+deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
+                and a systemd unit
+site/           pyrtan.com: the landing page, the seed list, the catalog
+                viewer, and the build the pages workflow publishes
 ```
 
 ## Status

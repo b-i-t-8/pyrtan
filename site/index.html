@@ -37,8 +37,8 @@
   <p class="lede">Open-source total automation: a core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. It answers like an assistant. Inside, there is no model.</p>
 
   <div class="actions">
-    <a class="primary" href="/console/">Open the console</a>
-    <a href="/catalog/">Browse the catalog</a>
+    <a class="primary" href="console/">Open the console</a>
+    <a href="catalog/">Browse the catalog</a>
     <a href="#directory">The directory</a>
     <a href="https://github.com/b-i-t-8/pyrtan">Source on GitHub</a>
   </div>
@@ -69,10 +69,10 @@ pyrtan serve trees --port 8701                            # then open http://127
   <p>Python 3.12 or later, no runtime dependencies. Runs on a laptop, a NAS or a container; <a href="https://github.com/b-i-t-8/pyrtan/blob/main/deploy/README.md">deployment notes</a>.</p>
 
   <h2>The console</h2>
-  <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="/console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
+  <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
 
   <h2 id="directory">The directory</h2>
-  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="/rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
+  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
   <div class="card"><table id="hubs"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the seeds…</td></tr></tbody></table></div>
 <pre>pyrtan hub --federate --advertise https://your-hub --listed --token …   # your hub, behind a tunnel or TLS
 pyrtan follow --at https://your-hub --token …                           # follow the first seed; route to it
@@ -107,7 +107,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">
   const hubs = [...seen.values()].sort((a, b) => ({up:0, stale:1, down:2}[a.link] - {up:0, stale:1, down:2}[b.link]) || a.id.localeCompare(b.id));
   for (const h of hubs) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td><a href="/console/?hub=${encodeURIComponent(h.id)}">open in console</a></td></tr>`;
+    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td><a href="console/?hub=${encodeURIComponent(h.id)}">open in console</a></td></tr>`;
     body.appendChild(tr);
   }
   if (!hubs.length) body.innerHTML = `<tr><td colspan="4" class="mute">The seeds know of nobody yet.</td></tr>`;

@@ -1,0 +1,79 @@
+# Hacker News, through its public Firebase API. Two trees: this one answers
+# the question, and `hacker-news-item` fetches one story, so that `each`
+# can reuse it.
+
+name = "hacker-news"
+version = 1
+description = "Top stories on Hacker News, from its public API."
+tags = ["news", "read-only"]
+license = "MIT"
+hosts = ["hacker-news.firebaseio.com"]
+start = "fetch-ids"
+
+[[triggers]]
+pattern = "[what's the] top story on hacker news"
+inputs = { count = 1 }
+
+[[triggers]]
+pattern = "top {count:int} stories on hacker news"
+
+[inputs.count]
+type = "int"
+default = 1
+min = 1
+max = 30
+description = "How many stories to return"
+
+[nodes.fetch-ids]
+kind = "observe"
+http = { method = "GET", url = "https://hacker-news.firebaseio.com/v0/topstories.json" }
+into = "ids_resp"
+extract = [{ into = "ids", json = "json" }]
+next = "check"
+
+[nodes.check]
+kind = "decide"
+on = "ids_resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { when = { gte = 500 }, then = "hn-down" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "ids"
+branches = [
+  { when = { empty = true }, then = "nothing" },
+  { when = { type = "list" }, then = "stories" },
+  { else = "unexpected" },
+]
+
+[nodes.stories]
+kind = "each"
+over = "ids"
+limit = "{{ inputs.count }}"
+tree = "hacker-news-item"
+with = { id = "{{ item }}" }
+into = "stories"
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "Top of Hacker News: {{ state.stories[0].title }} — {{ state.stories[0].url }}"
+output = { stories = "{{ state.stories }}" }
+
+[nodes.nothing]
+kind = "fail"
+reason = "no-stories"
+say = "Hacker News returned an empty front page."
+
+[nodes.hn-down]
+kind = "fail"
+reason = "upstream-down"
+say = "Hacker News answered {{ state.ids_resp.status }}; try again later."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-response"
+say = "Hacker News answered {{ state.ids_resp.status }} with something this tree does not recognise."
