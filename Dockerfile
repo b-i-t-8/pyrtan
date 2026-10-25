@@ -17,7 +17,10 @@ LABEL org.opencontainers.image.title="pyrtan" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 COPY --from=build /install /usr/local
 COPY examples /examples
-RUN useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin pyrtan \
+# The build context keeps the host checkout's modes, which a NAS share
+# can leave unreadable to others; the non-root user must read the examples.
+RUN chmod -R a+rX /examples \
+ && useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin pyrtan \
  && mkdir -p /trees && chown pyrtan:pyrtan /trees
 USER pyrtan
 VOLUME ["/trees"]
