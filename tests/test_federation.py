@@ -263,3 +263,55 @@ def test_signing_primitives():
     assert Remote("http://b", "http://b/inbox", "s", state="accepted").link == "pending"  # accepted, not heard from yet
     assert Remote("http://b", "http://b/inbox", "s", state="accepted", last_error="x").link == "down"
     assert Remote("http://b", "http://b/inbox", "s", state="rejected").link == "down"
+
+
+def test_rendezvous_directory_lists_only_who_asked(two, tmp_path):
+    a, b = two
+    (tmp_path / "c").mkdir()
+    (tmp_path / "c" / "gamma.toml").write_text(ECHO.format(name="gamma", word="gamma"))
+    c = Swarm("c", tmp_path / "c")
+    try:
+        # A is the rendezvous. B follows and asks to be listed; C follows quietly.
+        b.post("/follow", {"url": a.url, "listed": True})
+        c.post("/follow", {"url": a.url})
+        assert a.fed.followers[b.url].listed and not a.fed.followers[c.url].listed
+        status, d = http_json("GET", f"{a.url}/directory")  # public
+        assert status == 200 and d["rendezvous"] == a.url and [h["id"] for h in d["hubs"]] == [b.url]
+        assert d["hubs"][0]["trees"] == []  # not read yet
+        a.hub.refresh_all()  # the rendezvous reads what a listed follower holds
+        d = http_json("GET", f"{a.url}/directory")[1]
+        assert d["hubs"][0]["trees"] == ["beta"] and d["hubs"][0]["link"] == "up"
+        assert a.fed.followers[c.url].trees == []  # a quiet follower is not read
+        # Listing grants no routing: the rendezvous still answers only for itself.
+        assert a.post("/intent", {"text": "beta hello"})[1]["reason"] == "no-match"
+        assert [t["name"] for t in a.get("/capabilities")[1]["trees"]] == ["alpha"]
+        # Listed survives the state file.
+        state = tmp_path / "state.json"
+        a.fed.state_path = state
+        a.fed._save()
+        assert Federation(a.url, state=state).followers[b.url].listed is True
+        # Unfollowing removes the listing.
+        b.post("/unfollow", {"url": a.url})
+        assert http_json("GET", f"{a.url}/directory")[1]["hubs"] == []
+        assert "/directory" in http_json("GET", f"{a.url}/api")[1]["endpoints"]
+    finally:
+        c.stop()
+
+
+def test_cli_directory_and_follow_default(two, capsys, monkeypatch):
+    a, b = two
+
+    def run(*argv):
+        code = main(list(argv))
+        out = capsys.readouterr()
+        return code, out.out, out.err
+
+    monkeypatch.setenv("PYRTAN_RENDEZVOUS", a.url)
+    code, out, _ = run("follow", "--at", b.url, "--token", "token-b", "--listed")  # no URL: the rendezvous
+    assert code == 0 and f"now follows {a.url}" in out and "asked to be listed" in out
+    code, out, _ = run("directory")
+    assert code == 0 and "1 listed hub(s)" in out and b.url in out and "--listed" in out
+    code, out, _ = run("directory", "--json")
+    assert json.loads(out)["hubs"][0]["id"] == b.url
+    code, _, err = run("directory", "--at", b.svc_srv.url)
+    assert code == 3 and "no directory" in err

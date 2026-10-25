@@ -12,6 +12,7 @@ What to create, in order:
 | :-- | :-- | :-- | :-- |
 | 1 | `b-i-t-8/pyrtan-trees` | `pyrtan.com/catalog/` | its own `trees/` folder, checked and indexed by CI |
 | 2 | `b-i-t-8/pyrtan-site` | `pyrtan.com/` and `pyrtan.com/console/` | `index.html` here, and `pyrtan console --out` |
+| 3 | a small box with Docker | `hub.pyrtan.com`, the rendezvous | [`rendezvous/`](rendezvous/) here |
 
 Both can be one repository if you prefer; two keeps "I wrote a tree" pull
 requests apart from "I changed the site" ones, and lets the catalog's
@@ -140,7 +141,42 @@ a LAN over plain `http://` cannot be reached from an `https://` page (the
 browser blocks it); the console says so and points at the hub's own `/`,
 which is the same console served locally.
 
-## 3. Later: hosting
+## 3. The rendezvous (`hub.pyrtan.com`)
+
+The one piece of pyrtan.com that runs: a public federated hub with the
+example trees, that anyone may follow and that lists the hubs which ask
+to be found (`_meta/federation.md` §7). Any small VPS does; it holds no
+data but the follow list.
+
+1. **DNS:** an `A` (and `AAAA`) record for `hub.pyrtan.com` to the box.
+2. **On the box**, with Docker installed:
+
+   ```
+   mkdir -p /opt/rendezvous && cd /opt/rendezvous
+   curl -fsSLO https://raw.githubusercontent.com/b-i-t-8/pyrtan/main/deploy/pyrtan.com/rendezvous/docker-compose.yml
+   curl -fsSLO https://raw.githubusercontent.com/b-i-t-8/pyrtan/main/deploy/pyrtan.com/rendezvous/Caddyfile
+   echo "PYRTAN_TOKEN=$(openssl rand -hex 24)" > .env
+   docker compose up -d
+   ```
+
+   Caddy fetches the certificate; the hub comes up as
+   `https://hub.pyrtan.com` with its one service of examples. The image
+   is published by this repository's `image` workflow on every tag
+   (`ghcr.io/b-i-t-8/pyrtan:0.3.0`); the first time, make the package
+   public under the repository's *Packages* settings, or `docker login
+   ghcr.io` on the box.
+3. **Check:** `curl https://hub.pyrtan.com/actor` answers with
+   `"type": "Hub"`; `pyrtan directory` lists nobody yet;
+   `pyrtan ask "what's the weather in Oslo" --at https://hub.pyrtan.com
+   --token …` answers.
+4. **From any other hub:** `pyrtan follow --at https://your-hub --token …`
+   follows it (the default URL is the rendezvous); add `--listed` to
+   appear in `pyrtan directory`.
+
+To update: edit the image tag in the compose file, `docker compose pull
+&& docker compose up -d`. The follow list is in the `state` volume.
+
+## 4. Later: hosting
 
 Nothing here needs to change. A tenant's hub is this repository's image
 started with `--token`, `--cors https://pyrtan.com`, `--gaps` on a volume,

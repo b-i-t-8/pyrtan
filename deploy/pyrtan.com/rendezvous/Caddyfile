@@ -1,0 +1,7 @@
+# TLS from Let's Encrypt, everything to the hub. Caddy sets the usual
+# proxy headers; the hub does not read them, it only needs --advertise to
+# know its public name.
+hub.pyrtan.com {
+    reverse_proxy hub:8700
+    encode gzip
+}

@@ -35,6 +35,7 @@
   <div class="actions">
     <a class="primary" href="/console/">Open the console</a>
     <a href="/catalog/">Browse the catalog</a>
+    <a href="https://hub.pyrtan.com/#directory">The rendezvous</a>
     <a href="https://github.com/b-i-t-8/pyrtan">Source on GitHub</a>
   </div>
 
@@ -65,6 +66,12 @@ pyrtan serve trees --port 8701                            # then open http://127
 
   <h2>The console</h2>
   <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="/console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
+
+  <h2>The rendezvous</h2>
+  <p>A public hub at <code>hub.pyrtan.com</code> holds the example trees and takes follows from anyone. <code>pyrtan follow --at https://your-hub</code> makes your swarm answer through it; <code>--listed</code> puts your hub in its <a href="https://hub.pyrtan.com/#directory">directory</a> so others can find and follow yours. Following is one-way trust and one hop: the rendezvous routes to nobody, and nothing crosses more than one hub.</p>
+<pre>pyrtan hub --federate --advertise https://your-hub --token …       # your hub, behind TLS
+pyrtan follow --at https://your-hub --token … --listed              # follow the rendezvous, be listed
+pyrtan directory                                                    # who else is there</pre>
 
   <h2>Hosting</h2>
   <p>Self-hosting is the product. A hosted option, running the same open-source hub per customer with secrets, retention, scheduled re-runs and alerts around it, is planned; it will speak the same API, so a swarm can move either way without changing a caller.</p>

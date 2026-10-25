@@ -132,11 +132,12 @@ would buy interoperation that means anything: a Mastodon server cannot
 run a tree. The shape is kept because it is the right shape for "who
 hears from whom"; the wire format is Pyrtan's own and says so.
 
-**A directory of hubs.** A place where hubs register so others can find
-them. Rejected for now: it is the catalog's job to make trees findable,
-and a hub's job to answer for what it holds. An operator who wants to be
-followed publishes their hub's URL; the catalog could carry "hubs that
-hold this tree" later, as metadata, without the runtime changing.
+**A directory of hubs that routes.** A place hubs register with, which
+then answers for all of them. Rejected: it would route to hubs nobody
+chose. What was built instead is the *rendezvous* (§7): a hub anyone may
+follow, whose directory lists the followers that asked to be listed, and
+which routes to none of them. Discovery is a directory's job; routing
+stays an operator's follow.
 
 **Multi-hop routing.** Announcing transitive capabilities with a hop
 count, and forwarding with a TTL. It would let a sentence cross three
@@ -171,7 +172,32 @@ follow. `--closed` takes no follows at all while still following others.
 restart forgets them and the other side's `link` goes `down` until the
 follow is redone.
 
-## 6. What this design does not claim
+## 7. The rendezvous
+
+A rendezvous is an ordinary federated hub that is public on purpose. The
+one at `https://hub.pyrtan.com` (`deploy/pyrtan.com/rendezvous/`) holds
+the example trees, takes open follows, follows nobody, and keeps a
+directory:
+
+- **To try federation:** `pyrtan follow` with no URL follows it (the
+  default is `$PYRTAN_RENDEZVOUS` or `https://hub.pyrtan.com`), and your
+  hub answers "what's the weather in Oslo" through it.
+- **To be found:** `pyrtan follow --listed` asks the rendezvous to show
+  your hub at `GET /directory` (public), with the trees it holds. The
+  rendezvous reads a listed follower's `/capabilities`, signed with the
+  pair secret, on its poll; a follower that did not ask is never read.
+  `pyrtan directory` prints the list; the console shows it under
+  Directory.
+- **What listing is not:** routing. The rendezvous forwards nothing to a
+  listed hub, and a hub that finds another in the directory follows it
+  with its own `pyrtan follow`, which is the one act of trust there is.
+
+`listed` travels in the Follow activity and in the state file, so a
+restart keeps the directory. Any federated hub can be a rendezvous for
+its own circle: the directory is on every federated hub, empty until
+someone asks.
+
+## 8. What this design does not claim
 
 It does not claim a follower cannot see what the followed hub holds; that
 is the point of following. It does not claim a hub behind a federation

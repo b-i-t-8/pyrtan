@@ -117,7 +117,17 @@ a gap), Trees (capabilities, with a link to the catalog), Peers (hub only;
 A browser will refuse a `http://` hub from an `https://` page. The console
 says so and points at the hub's own `/`, which is the same console.
 
-### 2.6 Hosting (designed)
+### 2.6 The rendezvous (built)
+
+pyrtan.com runs one public federated hub, `hub.pyrtan.com`, from the
+same image as everything else (`deploy/pyrtan.com/rendezvous/`). It holds
+the example trees so a new hub has something to federate with on day
+one, and it keeps the opt-in directory from [`federation.md`](federation.md)
+§7, which is how operators find each other. It follows nobody, so pyrtan.com
+never routes a stranger's sentence to a stranger's hub. The site links
+to it; the console on pyrtan.com can be pointed at it like at any hub.
+
+### 2.7 Hosting (designed)
 
 A tenant gets a hub and one or more services as containers from this
 repository's image, with a token, `--cors https://pyrtan.com`, `--gaps` on

@@ -328,6 +328,8 @@ class Hub:
         if fed is not None:
             if method == "GET" and path == "/actor":
                 return 200, fed.actor()
+            if method == "GET" and path == "/directory":
+                return 200, fed.directory()
             if method == "POST" and path == "/inbox":
                 return fed.handle_inbox(body, headers)
             if method == "GET" and path in ("/following", "/followers"):
@@ -339,7 +341,7 @@ class Hub:
                 if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
                 try:
-                    remote = fed.follow(url)
+                    remote = fed.follow(url, listed=body.get("listed") is True)
                 except ValueError as e:
                     return 400, {"status": "error", "reason": "cannot-follow", "say": str(e)}
                 return 200, {"status": "ok", "following": remote.to_dict()}
@@ -359,7 +361,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/follow", "/unfollow", "/following", "/followers", "/outbox"]
+                endpoints += ["/actor", "/inbox", "/directory", "/follow", "/unfollow", "/following", "/followers", "/outbox"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -397,6 +399,7 @@ def serve_hub(
     state: str | None = None,
     open_follows: bool = True,
     follow: list[str] | None = None,
+    listed: bool = False,
 ) -> tuple[Hub, Server]:
     hub = Hub(name=name, poll_every=poll_every, token=token)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
@@ -406,7 +409,7 @@ def serve_hub(
         hub.add_peer(url)
     for url in follow or []:
         try:
-            hub.federation.follow(url)  # type: ignore[union-attr]
+            hub.federation.follow(url, listed=listed)  # type: ignore[union-attr]
         except ValueError as e:
             print(f"pyrtan hub: cannot follow {url}: {e}", flush=True)
     hub.start_polling()

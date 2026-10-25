@@ -37,6 +37,13 @@ and ``X-Pyrtan-Signature`` is HMAC-SHA256 over the method, path, date and
 the SHA-256 of the canonical JSON body. The body sent *is* that canonical
 JSON, so the receiver can verify from the body it parsed.
 
+A hub may also be a *rendezvous*: a public hub others follow to try
+federation and, if they ask to be ``listed``, to be found. ``GET
+/directory`` names the listed followers, with the trees they hold (the
+rendezvous reads a listed follower's ``/capabilities``, signed, because
+listing is asking to be seen). The directory is discovery only: a
+rendezvous routes to nobody it did not follow, like any hub.
+
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
 library, and a pair secret is enough for hubs whose operators chose each
@@ -60,12 +67,21 @@ from typing import Any, Callable
 from . import __version__
 from .service import bearer_ok, http_json
 
+DEFAULT_RENDEZVOUS = "https://hub.pyrtan.com"
 SIGNATURE_WINDOW = 300.0   # seconds a signed message stays valid
 MAX_HOPS = 1               # federation is one hop; raise with care
 STALE_AFTER = 30.0
 DOWN_AFTER = 90.0
 ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce")
 SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
+
+
+def rendezvous_url() -> str:
+    """The rendezvous `pyrtan follow` and `pyrtan directory` use when given
+    no URL: ``$PYRTAN_RENDEZVOUS`` or the one at pyrtan.com."""
+    import os
+
+    return os.environ.get("PYRTAN_RENDEZVOUS") or DEFAULT_RENDEZVOUS
 
 
 # ---------------------------------------------------------------- signing
@@ -121,6 +137,7 @@ class Remote:
     last_error: str | None = None
     since: float = field(default_factory=time.time)
     kind: str = "hub"
+    listed: bool = False        # a follower that asked to appear in our directory
 
     @property
     def link(self) -> str:
@@ -136,14 +153,14 @@ class Remote:
         return "down"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"url": self.url, "name": self.name, "kind": "hub", "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error}
+        return {"url": self.url, "name": self.name, "kind": "hub", "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "listed": self.listed}
 
     def to_state(self) -> dict[str, Any]:
-        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since}
+        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "listed": self.listed}
 
     @classmethod
     def from_state(cls, d: dict[str, Any]) -> "Remote":
-        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())))
+        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), listed=bool(d.get("listed", False)))
 
 
 class Federation:
@@ -211,9 +228,10 @@ class Federation:
         self.outbox.append({**activity, "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
         return ok, None if ok else f"inbox answered {status}: {answer}"
 
-    def follow(self, url: str) -> Remote:
+    def follow(self, url: str, listed: bool = False) -> Remote:
         """Follow the hub at ``url``: fetch its actor, make a pair secret,
-        send the Follow. The remote is pending until it Accepts."""
+        send the Follow. The remote is pending until it Accepts. ``listed``
+        asks the hub to show this one in its directory."""
         url = url.rstrip("/")
         if url == self.id:
             raise ValueError("a hub cannot follow itself")
@@ -233,7 +251,7 @@ class Federation:
                 remote.name = actor.get("name", remote.name)
                 remote.state = "pending"
             self._save()
-        activity = self._activity("Follow", url, secret=remote.secret, inbox=self.inbox, name=self.name)
+        activity = self._activity("Follow", url, secret=remote.secret, inbox=self.inbox, name=self.name, listed=bool(listed))
         # Under a shared federation secret the Follow is signed with it; in
         # the open case with the pair secret, which proves nothing yet but
         # keeps every message signed.
@@ -288,9 +306,38 @@ class Federation:
         else:
             remote.last_error = f"capabilities answered {status}"
 
+    def refresh_listed(self, remote: Remote) -> None:
+        """Read what a listed follower holds, for the directory. Signed with
+        the pair secret: the follower accepts a request from the hub it
+        follows. Nothing is routed there; this is what it asked to show."""
+        if not remote.listed or remote.state != "accepted":
+            return
+        path = "/capabilities"
+        try:
+            status, caps = http_json("GET", f"{remote.url}{path}", timeout=5.0, headers=sign(remote.secret, self.id, "GET", path, None))
+        except Exception as e:
+            remote.last_error = str(e)
+            return
+        if status == 200 and isinstance(caps, dict):
+            self._take_capabilities(remote, caps)
+        else:
+            remote.last_error = f"capabilities answered {status}"
+
     def refresh_all(self) -> None:
         for remote in list(self.following.values()):
             self.refresh(remote)
+        for remote in list(self.followers.values()):
+            self.refresh_listed(remote)
+
+    def directory(self) -> dict[str, Any]:
+        """The listed followers: where to find hubs to follow."""
+        with self._lock:
+            hubs = [
+                {"id": r.url, "name": r.name, "since": r.since, "link": r.link, "trees": [t.get("name") for t in r.trees if isinstance(t, dict) and t.get("name")]}
+                for r in self.followers.values()
+                if r.listed and r.state == "accepted"
+            ]
+        return {"rendezvous": self.id, "name": self.name, "hubs": sorted(hubs, key=lambda h: (h["link"] != "up", h["since"]))}
 
     def _take_capabilities(self, remote: Remote, caps: dict[str, Any]) -> None:
         with self._lock:
@@ -388,7 +435,7 @@ class Federation:
         if status != 200 or not isinstance(doc, dict) or doc.get("id", "").rstrip("/") != actor or doc.get("inbox") != inbox:
             return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor does not describe this follower."}
         with self._lock:
-            remote = Remote(actor, inbox, pair, str(activity.get("name") or doc.get("name") or ""), state="accepted", last_ok=time.time())
+            remote = Remote(actor, inbox, pair, str(activity.get("name") or doc.get("name") or ""), state="accepted", last_ok=time.time(), listed=activity.get("listed") is True)
             self.followers[actor] = remote
             self._save()
         self.deliver(remote, self._activity("Accept", {"type": "Follow", "actor": actor, "object": self.id}))
