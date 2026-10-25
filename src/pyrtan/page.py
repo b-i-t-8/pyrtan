@@ -18,6 +18,9 @@ console's origin with ``--cors``. No external assets, no build step.
 
 from __future__ import annotations
 
+import json
+import urllib.parse
+
 from . import __version__
 
 PAGE = r"""<!doctype html>
@@ -26,7 +29,9 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyrtan</title>
-<meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, and find the gaps.">
+<meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, find the gaps, and join a hub as a member that keeps its blobs.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2b5db8">
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --accent:#2b5db8; --accent-fg:#fff; --soft:#f1efe9 }
   @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --accent:#7fa6f0; --accent-fg:#101318; --soft:#222420 } }
@@ -95,6 +100,7 @@ PAGE = r"""<!doctype html>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
+    <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
 
@@ -143,6 +149,33 @@ PAGE = r"""<!doctype html>
     <h2>Directory</h2>
     <p class="mute" style="font-size:14px;margin-top:0">Every hub that asked to be found, as this hub has heard it through the swarm. Entries are hints carried hub to hub; <em>link</em> is how recently each announced. Nothing here is routed to: to use one, follow it from your own hub, <code>pyrtan follow URL --at YOUR-HUB</code>. To be in it: <code>pyrtan hub --listed</code>.</p>
     <div class="card"><table id="directory"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th>Last announced</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-member" hidden>
+    <h2>This browser as a member</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">A browser or a phone cannot be reached, so it joins a hub the other way round: it follows the hub, polls a mailbox the hub keeps for it, carries the directory, and keeps copies of the hub's blobs (its directory, gaps, unanswered sentences, anything given to <code>pyrtan keep</code>). When the hub's box dies, what it kept is still here. Install this page to the home screen and it is the phone app.</p>
+    <div class="card">
+      <div id="member-off">
+        <form class="row" id="join-form">
+          <input type="text" id="member-name" placeholder="a name for this device, e.g. barry's phone" autocomplete="off">
+          <input type="password" id="member-fedsecret" placeholder="federation secret, if the hub takes follows only with one" autocomplete="off">
+          <button type="submit">Join this hub</button>
+        </form>
+        <div class="mute" style="font-size:14px">Makes an identity for this browser (kept in local storage), follows the hub with it, and starts polling. Nothing leaves this device but signed activities to the hub.</div>
+      </div>
+      <div id="member-on" hidden>
+        <div><span class="status done">member</span> <code id="member-id"></code> <span class="mute" id="member-state"></span></div>
+        <div class="mute" style="font-size:14px;margin:6px 0">Name <code id="member-name-shown"></code> · mailbox polled <span id="member-polled">never</span> · <label><input type="checkbox" id="member-listed"> listed in the directory</label></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+          <button type="button" class="quiet" id="member-poll">Poll now</button>
+          <button type="button" class="quiet" id="member-leave">Leave</button>
+        </div>
+        <h2 style="font-size:15px;margin:14px 0 6px">Kept here for this hub</h2>
+        <table id="kept"><thead><tr><th>Key</th><th>Size</th><th>Updated</th><th></th></tr></thead><tbody></tbody></table>
+        <h2 style="font-size:15px;margin:14px 0 6px">Activity</h2>
+        <pre id="member-log" style="max-height:220px"></pre>
+      </div>
+    </div>
   </section>
 
   <section id="tab-api" hidden>
@@ -202,6 +235,7 @@ function showTab(name) {
   if (name === "gaps") loadGaps();
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
+  if (name === "member") member.render();
 }
 
 async function loadDirectory() {
@@ -209,7 +243,7 @@ async function loadDirectory() {
   const body = $("#directory tbody"); body.innerHTML = "";
   for (const h of d.hubs || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code>${h.via === "self" ? ' <span class="mute">(this hub)</span>' : ""}<div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.seen ? new Date(h.seen * 1000).toLocaleString() : ""}</td>`;
+    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code>${h.via === "self" ? ' <span class="mute">(this hub)</span>' : ""}${h.kind === "member" ? ' <span class="mute">(member)</span>' : ""}<div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.seen ? new Date(h.seen * 1000).toLocaleString() : ""}</td>`;
     body.appendChild(tr);
   }
   if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Follow a seed, or start this hub with <code>--listed</code>.</td></tr>`;
@@ -264,6 +298,9 @@ async function load() {
   if (!a) { $("#who").textContent = remote ? "not connected" : "unreachable"; return; }
   $("#peers-tab").hidden = !isHub;
   $("#directory-tab").hidden = !(isHub && a.federation);
+  $("#member-tab").hidden = !(isHub && a.federation);
+  member.hub = a.federation || null;
+  if (member.hub) member.start();
   $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
   $("#hub-version").textContent = a.version ? ` · ${a.pyrtan} v${a.version}` : "";
   try {
@@ -382,9 +419,175 @@ $("#connect-form").addEventListener("submit", (e) => {
   store.set(remote ? {url: $("#hub-url").value.trim(), token} : {token});
   load();
 });
+// ---------------------------------------------------------------- member
+// A browser as a federation actor without an inbox. Everything it sends is
+// signed the way hubs sign: HMAC-SHA256 over method, path, date and the
+// SHA-256 of the canonical JSON body. SHA-256 and HMAC are written out here
+// because crypto.subtle is not available on a plain http:// LAN address.
+const sha256 = (() => {
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  return (bytes) => {
+    const l = bytes.length, bitLen = l * 8, padded = new Uint8Array(((l + 9 + 63) >> 6) << 6);
+    padded.set(bytes); padded[l] = 0x80;
+    const dv = new DataView(padded.buffer); dv.setUint32(padded.length - 4, bitLen >>> 0); dv.setUint32(padded.length - 8, Math.floor(bitLen / 4294967296));
+    let h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    const w = new Uint32Array(64);
+    for (let o = 0; o < padded.length; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+      for (let i = 16; i < 64; i++) { const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15] >>> 3), s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2] >>> 10); w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0; }
+      let [a,b,c,d,e,f,g,hh] = h;
+      for (let i = 0; i < 64; i++) { const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25), ch = (e & f) ^ (~e & g), t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0, S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) >>> 0; hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0; }
+      h = h.map((v, i) => (v + [a,b,c,d,e,f,g,hh][i]) >>> 0);
+    }
+    return new Uint8Array(h.flatMap(v => [v >>> 24 & 255, v >>> 16 & 255, v >>> 8 & 255, v & 255]));
+  };
+})();
+const enc = new TextEncoder();
+const hex = (b) => Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+function hmac(keyText, msgBytes) {
+  let key = enc.encode(keyText); if (key.length > 64) key = sha256(key);
+  const k = new Uint8Array(64); k.set(key);
+  const ipad = k.map(x => x ^ 0x36), opad = k.map(x => x ^ 0x5c);
+  const inner = sha256(new Uint8Array([...ipad, ...msgBytes]));
+  return hex(sha256(new Uint8Array([...opad, ...inner])));
+}
+function canonical(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
+  return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
+}
+function signHeaders(secret, actor, method, path, body) {
+  const date = String(Math.floor(Date.now() / 1000));
+  const digest = hex(sha256(enc.encode(body === null || body === undefined ? "" : canonical(body))));
+  const mac = hmac(secret, enc.encode([method.toUpperCase(), path, date, digest].join("\n")));
+  return {"X-Pyrtan-Actor": actor, "X-Pyrtan-Date": date, "X-Pyrtan-Signature": mac};
+}
+const randomHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
+
+const member = {
+  hub: null, me: null, timer: null, log: [], directory: new Map(), db: null,
+  key() { return "pyrtan.member:" + (this.hub || ""); },
+  load() { try { this.me = JSON.parse(localStorage.getItem(this.key()) || "null"); } catch (e) { this.me = null; } },
+  save() { try { if (this.me) localStorage.setItem(this.key(), JSON.stringify(this.me)); else localStorage.removeItem(this.key()); } catch (e) {} },
+  note(line) { this.log.unshift(new Date().toLocaleTimeString() + "  " + line); this.log = this.log.slice(0, 40); const el = $("#member-log"); if (el) el.textContent = this.log.join("\n"); },
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((res, rej) => { const r = indexedDB.open("pyrtan-member", 1); r.onupgradeneeded = () => r.result.createObjectStore("kept", {keyPath: "id"}); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    return this.db;
+  },
+  async keptAll() { const db = await this.open(); return new Promise((res, rej) => { const r = db.transaction("kept").objectStore("kept").getAll(); r.onsuccess = () => res(r.result.filter(b => b.hub === this.hub)); r.onerror = () => rej(r.error); }); },
+  async keptGet(key) { const db = await this.open(); return new Promise((res, rej) => { const r = db.transaction("kept").objectStore("kept").get(this.hub + "|" + key); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error); }); },
+  async keptPut(blob) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("kept", "readwrite"); t.objectStore("kept").put({...blob, id: this.hub + "|" + blob.key, hub: this.hub}); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); },
+  async keptClear() { const all = await this.keptAll(); const db = await this.open(); await new Promise((res) => { const t = db.transaction("kept", "readwrite"); for (const b of all) t.objectStore("kept").delete(b.id); t.oncomplete = () => res(); }); },
+  async send(method, path, body) {
+    if (!this.me) throw new Error("not a member");
+    const headers = Object.assign({"Accept": "application/json"}, signHeaders(this.me.secret, this.me.id, method, path, body === undefined ? null : body));
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const r = await fetch((base ? base.replace(/\/+$/, "") : "") + path, {method, headers, body: body === undefined ? undefined : canonical(body)});
+    let data = null; try { data = await r.json(); } catch (e) {}
+    return {status: r.status, data};
+  },
+  activity(type, object, extra) { return Object.assign({type, id: this.me.id + "/activities/" + randomHex(8), actor: this.me.id, published: new Date().toISOString().replace(/\.\d+Z$/, "Z"), object}, extra || {}); },
+  async join(name, fedSecret) {
+    this.me = {id: "urn:pyrtan:member:" + randomHex(16), secret: randomHex(32), name: name || "browser", state: "pending", listed: true, joined: Date.now()};
+    this.save();
+    const act = this.activity("Follow", this.hub, {secret: this.me.secret, inbox: "mailbox", name: this.me.name});
+    const headers = Object.assign({"Accept": "application/json", "Content-Type": "application/json"}, signHeaders(fedSecret || this.me.secret, this.me.id, "POST", "/inbox", act));
+    const r = await fetch((base ? base.replace(/\/+$/, "") : "") + "/inbox", {method: "POST", headers, body: canonical(act)});
+    const data = await r.json().catch(() => ({}));
+    if (r.status !== 202) { this.me = null; this.save(); this.note(`follow refused: ${data.say || r.status}`); problem(`The hub did not take the follow: ${data.say || r.status}`, true); this.render(); return; }
+    this.note(`followed ${this.hub}`);
+    await this.poll();
+    this.start();
+    this.render();
+  },
+  async leave() {
+    try { await this.send("POST", "/inbox", this.activity("Undo", {type: "Follow", actor: this.me.id, object: this.hub})); } catch (e) {}
+    await this.keptClear();
+    this.me = null; this.save(); this.stop(); this.note("left"); this.render();
+  },
+  async poll() {
+    if (!this.me) return;
+    let r; try { r = await this.send("GET", "/mailbox"); } catch (e) { this.note("poll failed: " + e.message); return; }
+    if (r.status === 401) { this.note("the hub no longer knows this member"); this.me.state = "refused"; this.save(); this.render(); return; }
+    this.me.polled = Date.now();
+    for (const a of (r.data && r.data.activities) || []) {
+      if (a.type === "Accept") { this.me.state = "accepted"; this.note("accepted"); }
+      else if (a.type === "Announce") { for (const e of a.object.directory || []) this.directory.set(e.id, e); this.note(`announce: ${(a.object.trees||[]).length} trees, ${(a.object.directory||[]).length} directory entries`); }
+      else if (a.type === "Keep") { await this.keptPut(a.object); await this.send("POST", "/inbox", this.activity("Kept", {key: a.object.key, sha256: a.object.sha256})); this.note(`keeping ${a.object.key} (${a.object.size} B)`); }
+      else if (a.type === "Fetch") { const b = await this.keptGet(a.object.key); if (b) { await this.send("POST", "/inbox", this.activity("Kept", {key: b.key, sha256: b.sha256, data: b.data})); this.note(`handed back ${b.key}`); } else this.note(`asked for ${a.object.key}, not kept here`); }
+      else if (a.type === "Reject") { this.me.state = "rejected"; this.note("rejected: " + (a.summary || "")); }
+    }
+    this.save(); this.render();
+  },
+  async announce() {
+    if (!this.me || this.me.state !== "accepted") return;
+    const kept = (await this.keptAll()).map(b => b.key).sort();
+    const own = this.me.listed ? [{id: this.me.id, name: this.me.name, kind: "member", trees: [], seen: Date.now() / 1000}] : [];
+    const heard = [...this.directory.values()].filter(e => e.id !== this.me.id);
+    try {
+      const r = await this.send("POST", "/inbox", this.activity("Announce", {type: "Capabilities", name: this.me.name, trees: [], directory: own.concat(heard), kept}));
+      for (const e of (r.data && r.data.directory) || []) this.directory.set(e.id, e);
+    } catch (e) { this.note("announce failed: " + e.message); }
+  },
+  start() {
+    this.load();
+    if (!this.me || this.timer) { this.render(); return; }
+    this.timer = setInterval(() => this.poll(), 20000);
+    this.announceTimer = setInterval(() => this.announce(), 60000);
+    this.poll().then(() => this.announce());
+  },
+  stop() { clearInterval(this.timer); clearInterval(this.announceTimer); this.timer = null; },
+  async render() {
+    if (!$("#member-on")) return;
+    $("#member-off").hidden = !!this.me; $("#member-on").hidden = !this.me;
+    if (!this.me) return;
+    $("#member-id").textContent = this.me.id; $("#member-state").textContent = this.me.state;
+    $("#member-name-shown").textContent = this.me.name; $("#member-polled").textContent = this.me.polled ? new Date(this.me.polled).toLocaleTimeString() : "never";
+    $("#member-listed").checked = !!this.me.listed;
+    const body = $("#kept tbody"); body.innerHTML = "";
+    for (const b of await this.keptAll()) { const tr = document.createElement("tr"); tr.innerHTML = `<td><code>${esc(b.key)}</code></td><td>${esc(b.size)} B</td><td class="mute">${b.updated ? new Date(b.updated * 1000).toLocaleString() : ""}</td><td><a href="#" data-show="${esc(b.key)}">show</a></td>`; body.appendChild(tr); }
+    if (!body.children.length) body.innerHTML = `<tr><td colspan="4" class="mute">Nothing yet. The hub sends its blobs as it needs keepers; "Poll now" asks sooner.</td></tr>`;
+  },
+};
+$("#join-form").addEventListener("submit", (e) => { e.preventDefault(); member.join($("#member-name").value.trim(), $("#member-fedsecret").value); });
+$("#member-poll").addEventListener("click", () => member.poll().then(() => member.announce()));
+$("#member-leave").addEventListener("click", () => member.leave());
+$("#member-listed").addEventListener("change", (e) => { member.me.listed = e.target.checked; member.save(); member.announce(); });
+$("#kept").addEventListener("click", async (e) => { const a = e.target.closest("a[data-show]"); if (!a) return; e.preventDefault(); const b = await member.keptGet(a.dataset.show); alert(b ? JSON.stringify(b.data, null, 2).slice(0, 4000) : "not kept"); });
+if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
+
 $("#forget").addEventListener("click", () => { store.clear(); base = ""; token = ""; $("#hub-url").value = ""; $("#hub-token").value = ""; $("#who").textContent = "not connected"; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); });
 load();
 </script>
 </body>
 </html>
+""".replace("__VERSION__", __version__)
+
+MANIFEST = json.dumps({
+    "name": "Pyrtan",
+    "short_name": "Pyrtan",
+    "description": "The console of a Pyrtan swarm, and a member of it: install it and this device keeps the hub's blobs.",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#fbfaf7",
+    "theme_color": "#2b5db8",
+    "icons": [{"src": "data:image/svg+xml," + urllib.parse.quote('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#2b5db8"/><path d="M18 46V18h14a9 9 0 0 1 0 18h-8" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>'), "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
+}, indent=2)
+
+# The service worker keeps the console shell so the page opens offline (a
+# phone in a tunnel, a hub that is down): the shell comes from the cache,
+# everything the page asks the hub for goes to the network and nowhere else.
+SERVICE_WORKER = r"""const SHELL = "pyrtan-shell-__VERSION__";
+const FILES = ["./", "manifest.webmanifest"];
+self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
+self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener("fetch", (e) => {
+  const url = new URL(e.request.url);
+  const shell = e.request.mode === "navigate" || url.pathname.endsWith("/manifest.webmanifest");
+  if (!shell || e.request.method !== "GET") return;  // API calls: the network, always
+  e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); return r; }).catch(() => caches.match(e.request).then(r => r || caches.match("./"))));
+});
 """.replace("__VERSION__", __version__)

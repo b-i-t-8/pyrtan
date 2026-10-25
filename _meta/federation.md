@@ -245,7 +245,15 @@ because nobody can reach its inbox. To be routable it needs an address:
 a port forward behind TLS, or a tunnel (Cloudflare Tunnel, Tailscale
 Funnel) that costs nothing and opens no port. The deploy guide says how.
 
-## 8. What this design does not claim
+## 8. Members
+
+A browser or a phone cannot be followed, because nobody can reach it. It
+can follow. v0.5 adds *members*: actors with no inbox, which poll a
+mailbox the hub keeps for them, and the blobs hubs and members keep for
+each other. Both are in [`members.md`](members.md); the rules above
+hold unchanged for them.
+
+## 9. What this design does not claim
 
 It does not claim a follower cannot see what the followed hub holds; that
 is the point of following. It does not claim a hub behind a federation

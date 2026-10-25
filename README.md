@@ -125,6 +125,7 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory. |
+| `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another (default: the first live seed from pyrtan.com): it then routes sentences to that hub's trees too. `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
@@ -195,7 +196,25 @@ hourly snapshot of what they know; `pyrtan follow` with no URL takes
 the first seed that answers, then the first hub from the snapshot. An entry is a hint,
 not a route: to use a hub you found, follow it. A hub can also hold trees
 itself, `pyrtan hub --trees DIR`, so a whole federated swarm can be one
-process on one box. The answer to a federated
+process on one box.
+
+## Members, and what they keep
+
+A browser or a phone cannot be reached, so it joins a hub the other way
+round: the console's **Member** tab makes an identity for the device,
+follows the hub with it, and polls a mailbox the hub keeps for it. A
+member carries the directory like any hub, is listed in it if it wants
+to be, and **keeps blobs**: the hub hands its own blobs (its directory,
+its gaps, its unanswered sentences, anything given to `pyrtan keep KEY
+FILE`) to the members and hubs that follow it, until `--replicas` of
+them have confirmed, and asks for them back when it needs them. When the
+hub's box dies and a new one comes up with the same name, its members'
+next announce says what they kept and the hub takes it back; `pyrtan
+kept` shows who holds what, `pyrtan fetch KEY` gets a blob back from
+whoever has it. Install the console to the home screen and it is the
+phone app, offline-capable. Nothing secret is ever a blob. The design is
+in [`_meta/members.md`](_meta/members.md). Members do not run trees yet;
+that is the JavaScript runtime of v0.6. The answer to a federated
 sentence carries `via: [the hub it crossed]`, and the console's Peers tab
 shows who follows whom. The design is in
 [`_meta/federation.md`](_meta/federation.md).
@@ -340,9 +359,10 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.4.0. The core, the service, the hub, the command, the console, the
-catalog client, the language rules, federation between hubs and the
-gossiped directory are built and tested; HTTP is the one form of I/O the core speaks; a swarm can
+0.5.0. The core, the service, the hub, the command, the console, the
+catalog client, the language rules, federation between hubs, the
+gossiped directory, members (a browser or a phone as part of the swarm)
+and the blobs they keep are built and tested; HTTP is the one form of I/O the core speaks; a swarm can
 require a token, keep its gaps, refuse private addresses, and follow
 other swarms. Not yet built: further adapters (a browser for pages that need
 a script to render; files, shells, serial lines, message queues),

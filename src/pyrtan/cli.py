@@ -14,6 +14,9 @@
     pyrtan unfollow URL --at HUB
     pyrtan peers  --at HUB                   services, and hubs followed and following
     pyrtan directory [--at HUB]              every hub that asked to be found, as the swarm knows it
+    pyrtan keep KEY [FILE] --at HUB          give your hub a blob to keep, and have its keepers keep it
+    pyrtan kept   --at HUB                   what your hub keeps, who holds it, and what it keeps for others
+    pyrtan fetch  KEY --at HUB               get a blob back, from your hub or from whoever holds it
     pyrtan gaps   --at URL                   branches waiting to be written
     pyrtan unanswered --at URL [--scaffold DIR]  trees waiting to be written
     pyrtan new    [NAME] [--from TEXT] [--dir PATH]  scaffold a tree file
@@ -41,7 +44,7 @@ from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
 from .federation import bootstrap_candidates, first_live_seed
 from .grow import Proposal, propose
-from .page import PAGE
+from .page import MANIFEST, PAGE, SERVICE_WORKER
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
@@ -121,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--closed", action="store_true", help="take no follows at all (this hub can still follow others)")
     p.add_argument("--state", metavar="FILE", default=os.environ.get("PYRTAN_STATE"), help="keep who this hub follows and is followed by, and the directory, in this file across restarts (default $PYRTAN_STATE)")
     p.add_argument("--listed", action="store_true", default=os.environ.get("PYRTAN_LISTED", "").lower() in ("1", "true", "yes"), help="put this hub in the directory it gossips, so others can find it (default $PYRTAN_LISTED)")
+    p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
+    p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
     p.add_argument("--quiet", action="store_true")
 
     p = sub.add_parser("follow", help="follow another hub, through a running federated hub of yours")
@@ -132,6 +137,23 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("unfollow", help="stop following a hub")
     p.add_argument("url", help="the other hub's URL")
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("keep", help="give your hub a blob to keep; its keepers get a copy")
+    p.add_argument("key", help="a key: lowercase, digits, dot, dash, underscore, slash")
+    p.add_argument("file", nargs="?", help="a JSON file to keep (default: read JSON from stdin)")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("kept", help="what your hub keeps, who holds each blob, and what it keeps for others")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"))
+    p.add_argument("--json", action="store_true")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("fetch", help="get a blob back from your hub, or from whoever holds it")
+    p.add_argument("key")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"))
+    p.add_argument("--out", help="write the data here (default: stdout)")
     _token_arg(p, "your hub's token, if any")
 
     p = sub.add_parser("directory", help="every hub that asked to be found, as a hub knows it")
@@ -183,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "console": cmd_console,
         "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory,
+        "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch,
     }
     return commands[args.command](args)
 
@@ -420,6 +443,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
         federate=args.federate or bool(args.advertise) or bool(follow) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, listed=args.listed,
         trees=[Path(t) for t in args.trees], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
+        store=args.store, replicas=args.replicas,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
@@ -469,6 +493,68 @@ def cmd_follow(args: argparse.Namespace) -> int:
             print("pyrtan follow: no seed or snapshot hub answers" + (f" (tried {', '.join(tried)})" if tried else " (none listed; set $PYRTAN_SEEDS or $PYRTAN_RENDEZVOUS)") + "; give a hub URL", file=sys.stderr)
             return 3
     return _hub_post(args, "/follow", {"url": url, "listed": bool(args.listed)}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted" + (" and is listed in the directory" if b.get("listed") else ""))
+
+
+def cmd_keep(args: argparse.Namespace) -> int:
+    try:
+        data = json.loads(Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read())
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"pyrtan keep: {e}", file=sys.stderr)
+        return 2
+    return _hub_post(args, "/keep", {"key": args.key, "data": data}, lambda b: f"{args.at} keeps {b['keeping']['key']} ({b['keeping']['size']} bytes); held by {len(b['keeping']['holders'])} of {b['keeping']['wanted']} wanted keeper(s)")
+
+
+def cmd_kept(args: argparse.Namespace) -> int:
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("GET", f"{at}/keep", token=args.token)
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} is not a federated hub ({status})", file=sys.stderr)
+        return 3
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    print(f"{at} keeps {len(body['keeping'])} blob(s) of its own, wants {body['replicas']} keeper(s) each; keeps {len(body['kept'])} for {body['store']['actors']} other(s)")
+    for k in body["keeping"]:
+        print(f"  {k['key']:24} {k['size']:>8} B  held by {len(k['holders'])}/{k['wanted']}" + (f"  ({', '.join(k['holders'])})" if k["holders"] else "  (nobody yet)"))
+    for k in body["kept"]:
+        print(f"  for {k['actor']}: {k['key']} ({k['size']} B)")
+    return 0
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("POST", f"{at}/fetch", {"key": args.key}, token=args.token)
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} answered {status}", file=sys.stderr)
+        return 3
+    if body.get("status") == "asked":
+        print(f"pyrtan fetch: {body.get('say')}", file=sys.stderr)
+        return 4
+    if body.get("status") != "ok":
+        print(f"pyrtan fetch: {body.get('say') or body.get('reason')}", file=sys.stderr)
+        return 1
+    blob = body["blob"]
+    text = json.dumps(blob["data"], indent=2, ensure_ascii=False)
+    if args.out:
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
+        print(f"{blob['key']} ({blob['size']} bytes, from {body['source']}) -> {args.out}")
+    else:
+        print(text)
+    return 0
 
 
 def cmd_directory(args: argparse.Namespace) -> int:
@@ -651,7 +737,9 @@ def cmd_console(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(PAGE, encoding="utf-8")
-    print(f"wrote {out}; serve it from any static host, and point it at a hub with --cors set for that host")
+    (out.parent / "manifest.webmanifest").write_text(MANIFEST, encoding="utf-8")
+    (out.parent / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")
+    print(f"wrote {out}, manifest.webmanifest and sw.js beside it; serve the folder from any static host, and point it at a hub with --cors set for that host")
     return 0
 
 

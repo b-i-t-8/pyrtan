@@ -53,7 +53,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .gaps import GapStore
-from .page import PAGE
+from .page import MANIFEST, PAGE, SERVICE_WORKER
 from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
@@ -63,10 +63,15 @@ from .transport import Transport, UrllibTransport
 MAX_BODY = 1 << 20
 
 # What answers without a token: the console, its index, and liveness.
-PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory"})
+PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory", "/manifest.webmanifest", "/sw.js"})
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
-SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities"})
+SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities", "/mailbox"})
+
+
+def signed_path(path: str) -> bool:
+    """Whether a signed (federated) request may reach this path at all."""
+    return path in SIGNED_PATHS or path.startswith("/kept/")
 # What /health says to a caller without a token, when one is required.
 PUBLIC_HEALTH_KEYS = ("status", "name", "peers", "up", "stale", "down", "uptime_s")
 
@@ -223,6 +228,10 @@ class Service:
             return 200, {"unanswered": self.unanswered.to_list()}
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
+        if method == "GET" and path == "/manifest.webmanifest":
+            return 200, ("application/manifest+json", MANIFEST)
+        if method == "GET" and path == "/sw.js":
+            return 200, ("text/javascript; charset=utf-8", SERVICE_WORKER)
         if method == "GET" and path == "/api":
             return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered"]}
         if method == "POST" and path == "/intent":
@@ -287,7 +296,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             """True if the request may proceed; otherwise a 401 has been sent."""
             if token is None or path in PUBLIC_PATHS or bearer_ok(self.headers.get("Authorization"), token):
                 return True
-            if federated and path in SIGNED_PATHS and self.headers.get("X-Pyrtan-Signature"):
+            if federated and signed_path(path) and self.headers.get("X-Pyrtan-Signature"):
                 return True  # the route verifies the signature
             self._send(401, {"status": "error", "reason": "unauthorised", "say": "This Pyrtan needs a token: send Authorization: Bearer <token>."}, extra={"WWW-Authenticate": 'Bearer realm="pyrtan"'})
             return False
@@ -301,7 +310,10 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
         # -------------------------------------------------------- i/o
 
         def _send(self, status: int, payload: Any, extra: dict[str, str] | None = None) -> None:
-            if isinstance(payload, str):
+            if isinstance(payload, tuple) and len(payload) == 2 and isinstance(payload[0], str):
+                ctype, text = payload  # (content type, text): the manifest, the service worker
+                data = text.encode("utf-8")
+            elif isinstance(payload, str):
                 data = payload.encode("utf-8")
                 ctype = "text/html; charset=utf-8"
             else:

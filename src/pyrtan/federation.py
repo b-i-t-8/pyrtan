@@ -71,6 +71,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .service import http_json
+from .store import BlobStore, StoreError, check_key, digest as blob_digest
 
 DEFAULT_SEEDS = "https://pyrtan.com/rendezvous/seeds.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
@@ -83,7 +84,11 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce")
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch")
+MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
+MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
+HOLDER_FRESH = 86400.0                 # a holder confirmed within this counts toward the replicas
+ASK_WINDOW = 600.0                     # a member asked to keep within this counts as covered until it confirms
 SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
 
 
@@ -206,7 +211,7 @@ class Remote:
     last_ok: float = 0.0
     last_error: str | None = None
     since: float = field(default_factory=time.time)
-    kind: str = "hub"
+    kind: str = "hub"           # hub | member
 
     @property
     def link(self) -> str:
@@ -222,14 +227,14 @@ class Remote:
         return "down"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"url": self.url, "name": self.name, "kind": "hub", "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error}
+        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error}
 
     def to_state(self) -> dict[str, Any]:
-        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since}
+        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind}
 
     @classmethod
     def from_state(cls, d: dict[str, Any]) -> "Remote":
-        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())))
+        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"))
 
 
 def heard(seen: float, now: float | None = None) -> str:
@@ -239,7 +244,7 @@ def heard(seen: float, now: float | None = None) -> str:
 
 
 class Federation:
-    def __init__(self, hub_id: str, *, name: str = "hub", secret: str | None = None, state: str | Path | None = None, open_follows: bool = True, capabilities: Callable[[], list[dict[str, Any]]] | None = None, listed: bool = False) -> None:
+    def __init__(self, hub_id: str, *, name: str = "hub", secret: str | None = None, state: str | Path | None = None, open_follows: bool = True, capabilities: Callable[[], list[dict[str, Any]]] | None = None, listed: bool = False, store: BlobStore | str | Path | None = None, replicas: int = 2, auto_keys: dict[str, Callable[[], Any]] | None = None) -> None:
         self.id = hub_id.rstrip("/")
         self.name = name
         self.secret = secret or None          # a shared federation secret: Follows must be signed with it
@@ -247,6 +252,12 @@ class Federation:
         self.state_path = Path(state) if state else None
         self.capabilities = capabilities or (lambda: [])
         self.listed = listed                  # put ourselves in the directory we gossip
+        self.store = store if isinstance(store, BlobStore) else BlobStore(store)
+        self.replicas = max(0, int(replicas))  # how many keepers each of our blobs should have
+        self.auto_keys = dict(auto_keys or {})  # blobs kept automatically: key -> what to keep
+        self._auto_digest: dict[str, str] = {}
+        self.keeping: dict[str, dict[str, Any]] = {}        # our blobs: key -> {sha256, size, updated, holders: {actor: {at, sha256}}}
+        self.mailboxes: dict[str, deque[dict[str, Any]]] = {}  # activities waiting for members
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
         self.directory_entries: dict[str, dict[str, Any]] = {}
@@ -267,7 +278,7 @@ class Federation:
         return f"{self.id}/inbox"
 
     def actor(self) -> dict[str, Any]:
-        return {"type": "Hub", "id": self.id, "name": self.name, "inbox": self.inbox, "capabilities": f"{self.id}/capabilities", "directory": f"{self.id}/directory", "pyrtan": __version__, "follows": "open" if (self.open_follows and not self.secret) else "secret", "listed": self.listed}
+        return {"type": "Hub", "id": self.id, "name": self.name, "inbox": self.inbox, "mailbox": f"{self.id}/mailbox", "capabilities": f"{self.id}/capabilities", "directory": f"{self.id}/directory", "pyrtan": __version__, "follows": "open" if (self.open_follows and not self.secret) else "secret", "listed": self.listed, "replicas": self.replicas}
 
     # ------------------------------------------------------------ state
 
@@ -280,6 +291,7 @@ class Federation:
                 "following": [r.to_state() for r in self.following.values()],
                 "followers": [r.to_state() for r in self.followers.values()],
                 "directory": list(self.directory_entries.values()),
+                "keeping": self.keeping,
             }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -296,6 +308,9 @@ class Federation:
         for d in data.get("followers", []):
             self.followers[d["url"]] = Remote.from_state(d)
         self.merge_directory(data.get("directory", []), via="state")
+        keeping = data.get("keeping")
+        if isinstance(keeping, dict):
+            self.keeping = {k: v for k, v in keeping.items() if isinstance(v, dict) and isinstance(v.get("holders"), dict)}
 
     def set_listed(self, listed: bool) -> None:
         with self._lock:
@@ -309,7 +324,7 @@ class Federation:
     def own_entry(self) -> dict[str, Any] | None:
         if not self.listed:
             return None
-        return {"id": self.id, "name": self.name, "trees": sorted({t.get("name") for t in self.capabilities() if isinstance(t, dict) and t.get("name")}), "seen": time.time()}
+        return {"id": self.id, "name": self.name, "kind": "hub", "trees": sorted({t.get("name") for t in self.capabilities() if isinstance(t, dict) and t.get("name")}), "seen": time.time()}
 
     def gossip(self) -> list[dict[str, Any]]:
         """What this hub tells others about the directory: itself, if
@@ -331,7 +346,7 @@ class Federation:
         changed = 0
         with self._lock:
             for e in entries:
-                if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://")):
+                if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://", MEMBER_PREFIX)):
                     continue
                 hub_id = e["id"].rstrip("/")
                 if hub_id == self.id:
@@ -348,6 +363,7 @@ class Federation:
                 self.directory_entries[hub_id] = {
                     "id": hub_id,
                     "name": str(e.get("name") or "")[:80],
+                    "kind": "member" if hub_id.startswith(MEMBER_PREFIX) else "hub",
                     "trees": [str(t)[:80] for t in e.get("trees", []) if isinstance(t, (str, int))][:200],
                     "seen": seen,
                     "via": via,
@@ -366,7 +382,7 @@ class Federation:
         now = time.time()
         hubs = []
         for e in self.gossip():
-            hubs.append({"id": e["id"], "name": e["name"], "trees": e["trees"], "seen": e["seen"], "link": heard(e["seen"], now), "via": e.get("via", "self" if e["id"] == self.id else "")})
+            hubs.append({"id": e["id"], "name": e["name"], "kind": e.get("kind", "hub"), "trees": e["trees"], "seen": e["seen"], "link": heard(e["seen"], now), "via": e.get("via", "self" if e["id"] == self.id else "")})
         hubs.sort(key=lambda h: (h["id"] != self.id, {"up": 0, "stale": 1, "down": 2}[h["link"]], h["name"], h["id"]))
         return {"hub": self.id, "name": self.name, "listed": self.listed, "count": len(hubs), "hubs": hubs}
 
@@ -375,25 +391,50 @@ class Federation:
     def _activity(self, type_: str, object_: Any, **extra: Any) -> dict[str, Any]:
         return {"type": type_, "id": f"{self.id}/activities/{uuid.uuid4()}", "actor": self.id, "published": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "object": object_, **extra}
 
-    def _announcement(self) -> dict[str, Any]:
-        return {"type": "Capabilities", "name": self.name, "trees": self.capabilities(), "directory": self.gossip()}
+    def _announcement(self, for_remote: Remote | None = None) -> dict[str, Any]:
+        out = {"type": "Capabilities", "name": self.name, "trees": self.capabilities(), "directory": self.gossip()}
+        if for_remote is not None:
+            out["kept"] = [b["key"] for b in self.store.list_kept(for_remote.url)]  # what we keep for them
+        return out
 
-    def deliver(self, remote: Remote, activity: dict[str, Any], secret: str | None = None) -> tuple[bool, str | None]:
+    def deliver(self, remote: Remote, activity: dict[str, Any], secret: str | None = None) -> tuple[bool, str | None, Any]:
         """Post an activity to a remote's inbox, signed with the pair secret
-        (or the one given). Returns (delivered, error)."""
+        (or the one given); for a member, leave it in its mailbox. Returns
+        (delivered, error, the inbox's answer)."""
+        if remote.inbox == "mailbox":
+            box = self.mailboxes.setdefault(remote.url, deque(maxlen=MAILBOX_MAX))
+            box.append(activity)
+            self.outbox.append({**activity, "to": remote.url, "delivered": True, "error": None, "mailbox": True})
+            return True, None, None
         path = "/inbox"
         headers = sign(secret or remote.secret, self.id, "POST", path, activity)
         try:
             status, answer = http_json("POST", remote.inbox, activity, timeout=10.0, headers=headers)
         except Exception as e:
             self.outbox.append({**activity, "to": remote.url, "delivered": False, "error": str(e)})
-            return False, str(e)
+            return False, str(e), None
         ok = status in (200, 202)
         self.outbox.append({**activity, "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
-        if ok and isinstance(answer, dict) and activity.get("type") == "Announce":
-            # An inbox answers an Announce with its own gossip: one round trip, both directions.
-            self.merge_directory(answer.get("directory"), via=remote.url)
-        return ok, None if ok else f"inbox answered {status}: {answer}"
+        if ok and isinstance(answer, dict):
+            if activity.get("type") == "Announce":
+                # An inbox answers an Announce with its own gossip: one round trip, both directions.
+                self.merge_directory(answer.get("directory"), via=remote.url)
+            if activity.get("type") == "Keep" and answer.get("kept") == activity["object"].get("key"):
+                self.confirm(remote.url, activity["object"]["key"], activity["object"]["sha256"])
+        return ok, None if ok else f"inbox answered {status}: {answer}", answer
+
+    def mailbox(self, actor: str) -> list[dict[str, Any]]:
+        """Hand a member what has been waiting for it, and forget it."""
+        box = self.mailboxes.get(actor.rstrip("/"))
+        if not box:
+            return []
+        out = list(box)
+        box.clear()
+        remote = self.followers.get(actor.rstrip("/"))
+        if remote is not None:
+            remote.last_ok = time.time()
+            remote.last_error = None
+        return out
 
     def follow(self, url: str) -> Remote:
         """Follow the hub at ``url``: fetch its actor, make a pair secret,
@@ -421,7 +462,7 @@ class Federation:
         # Under a shared federation secret the Follow is signed with it; in
         # the open case with the pair secret, which proves nothing yet but
         # keeps every message signed.
-        ok, error = self.deliver(remote, activity, self.secret or remote.secret)
+        ok, error, _ = self.deliver(remote, activity, self.secret or remote.secret)
         if not ok:
             remote.last_error = error
         elif remote.state == "accepted":
@@ -452,10 +493,9 @@ class Federation:
         if not due or not self.followers:
             return 0
         self._announced = (digest, time.time())
-        activity = self._activity("Announce", announcement)
         delivered = 0
         for remote in list(self.followers.values()):
-            ok, error = self.deliver(remote, activity)
+            ok, error, _ = self.deliver(remote, self._activity("Announce", self._announcement(remote)))
             if ok:
                 delivered += 1
                 remote.last_ok = time.time()
@@ -475,10 +515,9 @@ class Federation:
         if not due or not accepted:
             return 0
         self._announced_up = (digest, time.time())
-        activity = self._activity("Announce", announcement)
         delivered = 0
         for remote in accepted:
-            ok, _ = self.deliver(remote, activity)
+            ok, _, _ = self.deliver(remote, self._activity("Announce", self._announcement(remote)))
             delivered += ok
         return delivered
 
@@ -501,8 +540,155 @@ class Federation:
     def refresh_all(self) -> None:
         for remote in list(self.following.values()):
             self.refresh(remote)
+        self.auto()
         self.announce_up()
         self.announce()
+        self.replicate()
+
+    # ------------------------------------------------------------ keeping
+
+    def keep(self, key: str, data: Any) -> dict[str, Any]:
+        """Keep a blob of our own and see that enough others keep it too."""
+        meta = self.store.put_own(key, data)
+        with self._lock:
+            entry = self.keeping.setdefault(key, {"holders": {}})
+            if entry.get("sha256") != meta["sha256"]:
+                entry["asked"] = {}
+            entry.update({"sha256": meta["sha256"], "size": meta["size"], "updated": meta["updated"]})
+            self._save()
+        self.replicate(only=key)
+        return self.keeping_view(key)
+
+    def confirm(self, actor: str, key: str, sha256: str) -> None:
+        with self._lock:
+            entry = self.keeping.get(key)
+            if entry is None:
+                return
+            entry["holders"][actor.rstrip("/")] = {"at": time.time(), "sha256": sha256}
+            entry.get("asked", {}).pop(actor.rstrip("/"), None)
+            self._save()
+
+    def holders(self, key: str) -> list[str]:
+        """Who holds the current version of a blob, confirmed recently."""
+        entry = self.keeping.get(key)
+        if not entry:
+            return []
+        now = time.time()
+        return sorted(a for a, h in entry["holders"].items() if h.get("sha256") == entry.get("sha256") and now - float(h.get("at", 0)) < HOLDER_FRESH)
+
+    def keeping_view(self, key: str | None = None) -> Any:
+        def view(k: str, e: dict[str, Any]) -> dict[str, Any]:
+            return {"key": k, "sha256": e.get("sha256"), "size": e.get("size"), "updated": e.get("updated"), "holders": self.holders(k), "wanted": self.replicas, "known": sorted(e["holders"])}
+
+        with self._lock:
+            if key is not None:
+                e = self.keeping.get(key)
+                return view(key, e) if e else None
+            return [view(k, e) for k, e in sorted(self.keeping.items())]
+
+    def keepers(self) -> list[Remote]:
+        """Who we may ask to keep a blob: everyone we share a secret with, members first."""
+        remotes = [r for r in self.followers.values() if r.state == "accepted"] + [r for r in self.following.values() if r.state == "accepted"]
+        remotes.sort(key=lambda r: (r.kind != "member", r.link != "up", r.url))
+        return remotes
+
+    def replicate(self, only: str | None = None, limit: int = 20) -> int:
+        """Send ``Keep`` for every blob with fewer fresh holders than
+        ``replicas``, to keepers that do not hold it, at most ``limit`` at a
+        time. Returns how many were sent."""
+        sent = 0
+        now = time.time()
+        for key in ([only] if only else list(self.keeping)):
+            entry = self.keeping.get(key)
+            blob = self.store.get_own(key)
+            if not entry or not blob:
+                continue
+            asked = entry.setdefault("asked", {})
+            # A member confirms later, through its mailbox: count it as covered
+            # for a while rather than asking every member at once.
+            have = set(self.holders(key)) | {actor for actor, t in asked.items() if now - float(t) < ASK_WINDOW}
+            # Someone new before a holder gone stale: the stale one may be gone for good.
+            for remote in sorted(self.keepers(), key=lambda r: r.url in entry["holders"]):
+                if len(have) >= self.replicas or sent >= limit:
+                    break
+                if remote.url in have:
+                    continue
+                ok, _, _ = self.deliver(remote, self._activity("Keep", {"key": key, "sha256": blob["sha256"], "size": blob["size"], "updated": blob["updated"], "data": blob["data"]}))
+                if ok:
+                    sent += 1
+                    have.add(remote.url)
+                    if remote.inbox == "mailbox":
+                        asked[remote.url] = now
+        return sent
+
+    def auto(self) -> None:
+        """Keep the automatic blobs (directory, gaps, ...) when they changed."""
+        for key, fn in self.auto_keys.items():
+            try:
+                data = fn()
+            except Exception:
+                continue
+            sha, size = blob_digest(data)
+            if size > 256 * 1024 or self._auto_digest.get(key) == sha:
+                continue
+            self._auto_digest[key] = sha
+            try:
+                self.keep(key, data)
+            except StoreError:
+                continue
+
+    def kept_for(self, actor: str, key: str) -> dict[str, Any] | None:
+        """A blob we keep for ``actor``, for it to take back."""
+        return self.store.get_kept(actor, key)
+
+    def fetch(self, key: str) -> dict[str, Any]:
+        """Our own copy of a blob, or the copy a holder keeps: a hub answers
+        at once, a member is asked through its mailbox and answers later."""
+        own = self.store.get_own(key)
+        if own:
+            return {"status": "ok", "source": "own", "blob": own}
+        asked: list[str] = []
+        entry = self.keeping.get(key, {})
+        for actor in sorted(entry.get("holders", {})):
+            remote = self.followers.get(actor) or self.following.get(actor)
+            if remote is None:
+                continue
+            if remote.inbox == "mailbox":
+                self.deliver(remote, self._activity("Fetch", {"key": key}))
+                asked.append(actor)
+                continue
+            path = f"/kept/{key}"
+            try:
+                status, blob = http_json("GET", f"{remote.url}{path}", timeout=10.0, headers=sign(remote.secret, self.id, "GET", path, None))
+            except Exception:
+                continue
+            if status == 200 and isinstance(blob, dict) and "data" in blob:
+                try:
+                    self.store.put_own(key, blob["data"])
+                except StoreError:
+                    continue
+                return {"status": "ok", "source": actor, "blob": self.store.get_own(key)}
+        if asked:
+            return {"status": "asked", "say": f"{len(asked)} member(s) asked through their mailbox; try again once they have answered.", "asked": asked}
+        return {"status": "error", "reason": "not-held", "say": f"Nobody holds {key!r}."}
+
+    def _adopt(self, key: str, blob: Any, who: str) -> bool:
+        """Take a blob a keeper hands back, when we have no copy of our own."""
+        if not isinstance(blob, dict) or "data" not in blob or self.store.get_own(key):
+            return False
+        try:
+            self.store.put_own(key, blob["data"])
+        except StoreError:
+            return False
+        with self._lock:
+            entry = self.keeping.setdefault(key, {"holders": {}})
+            meta = self.store.get_own(key) or {}
+            entry.update({"sha256": meta.get("sha256"), "size": meta.get("size"), "updated": meta.get("updated")})
+            entry["holders"][who] = {"at": time.time(), "sha256": meta.get("sha256")}
+            self._save()
+        if key == "directory":
+            self.merge_directory(blob.get("data"), via=who)
+        return True
 
     def _take_capabilities(self, remote: Remote, caps: dict[str, Any]) -> None:
         with self._lock:
@@ -545,18 +731,19 @@ class Federation:
         self.inbox_log.append({**activity, "received": time.time()})
         if kind == "Follow":
             return self._on_follow(actor, activity, h)
-        if kind == "Announce":
-            # From a hub we follow: its trees are ours to route to. From a
-            # follower: only the directory it carries.
-            followed = self.following.get(actor)
-            follower = self.followers.get(actor)
+        followed = self.following.get(actor)
+        follower = self.followers.get(actor)
+        if kind in ("Announce", "Keep", "Kept", "Fetch"):
+            # Announce from a hub we follow: its trees are ours to route to;
+            # from a follower: only the directory it carries. Keeping goes
+            # both ways between any two that share a secret.
             remote = followed or follower
         else:
-            remote = self.following.get(actor) if kind in ("Accept", "Reject") else self.followers.get(actor)
+            remote = followed if kind in ("Accept", "Reject") else follower
         if remote is None:
             return 403, {"status": "error", "reason": "unknown-actor", "say": f"{actor} is not a hub this one follows or is followed by."}
         problem = verify(remote.secret, "POST", "/inbox", activity, h)
-        if problem and kind == "Announce" and followed and follower and followed is not follower:
+        if problem and kind in ("Announce", "Keep", "Kept", "Fetch") and followed and follower and followed is not follower:
             # Mutual follow: the announce may be signed with the other pair.
             remote = follower if remote is followed else followed
             problem = verify(remote.secret, "POST", "/inbox", activity, h)
@@ -587,10 +774,43 @@ class Federation:
                     remote.last_ok = time.time()
                     remote.last_error = None
             taken = self.merge_directory(obj.get("directory", []), via=actor)
-            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip()}
+            # What it keeps for us that we no longer have: ask for it back.
+            wanted = [k for k in obj.get("kept", []) if isinstance(k, str) and not self.store.get_own(k)]
+            for k in wanted[:20]:
+                self.deliver(remote, self._activity("Fetch", {"key": k}))
+            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip(), "kept": [b["key"] for b in self.store.list_kept(actor)]}
+        if kind == "Keep":
+            obj = activity.get("object")
+            if not isinstance(obj, dict) or "data" not in obj:
+                return 400, {"status": "error", "reason": "bad-activity", "say": "A Keep carries {\"key\", \"sha256\", \"data\"}."}
+            try:
+                meta = self.store.put_kept(actor, obj.get("key"), obj["data"], sha256=obj.get("sha256"), updated=obj.get("updated"))
+            except StoreError as e:
+                return 413, {"status": "error", "reason": "not-kept", "say": str(e)}
+            remote.last_ok = time.time()
+            return 200, {"status": "ok", "kept": meta["key"], "sha256": meta["sha256"]}
+        if kind == "Kept":
+            obj = activity.get("object")
+            if not isinstance(obj, dict) or not isinstance(obj.get("key"), str):
+                return 400, {"status": "error", "reason": "bad-activity", "say": "A Kept names a key."}
+            if "data" in obj:
+                self._adopt(obj["key"], obj, actor)
+            elif isinstance(obj.get("sha256"), str):
+                self.confirm(actor, obj["key"], obj["sha256"])
+            remote.last_ok = time.time()
+            return 200, {"status": "ok"}
+        if kind == "Fetch":
+            obj = activity.get("object")
+            key = obj.get("key") if isinstance(obj, dict) else None
+            blob = self.store.get_kept(actor, key) if isinstance(key, str) else None
+            if blob is None:
+                return 404, {"status": "error", "reason": "not-kept", "say": f"Nothing kept here for {actor} under {key!r}."}
+            return 200, {"status": "ok", "blob": blob}
         if kind == "Undo":
             with self._lock:
                 self.followers.pop(actor, None)
+                self.mailboxes.pop(actor, None)
+                self.store.drop_kept(actor)
                 self._save()
             return 200, {"status": "ok"}
         return 400, {"status": "error", "reason": "bad-activity"}
@@ -610,23 +830,33 @@ class Federation:
             problem = verify(pair, "POST", "/inbox", activity, h)
             if problem:
                 return 401, {"status": "error", "reason": "unsigned", "say": problem}
-        # The inbox must be the actor's own: ask the actor.
-        try:
-            status, doc = http_json("GET", f"{actor}/actor", timeout=10.0)
-        except Exception as e:
-            return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor did not answer: {e}"}
-        if status != 200 or not isinstance(doc, dict) or doc.get("id", "").rstrip("/") != actor or doc.get("inbox") != inbox:
-            return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor does not describe this follower."}
+        if inbox == "mailbox":
+            # A member: a browser or a phone, with no address of its own. It
+            # polls its mailbox here, signed, instead of being posted to.
+            if not actor.startswith(MEMBER_PREFIX) or len(actor) < len(MEMBER_PREFIX) + 16:
+                return 400, {"status": "error", "reason": "bad-activity", "say": f"A member's id is {MEMBER_PREFIX}<at least 16 characters>."}
+            name = str(activity.get("name") or "")[:80]
+            kind = "member"
+        else:
+            # The inbox must be the actor's own: ask the actor.
+            try:
+                status, doc = http_json("GET", f"{actor}/actor", timeout=10.0)
+            except Exception as e:
+                return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor did not answer: {e}"}
+            if status != 200 or not isinstance(doc, dict) or doc.get("id", "").rstrip("/") != actor or doc.get("inbox") != inbox:
+                return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor does not describe this follower."}
+            name = str(activity.get("name") or doc.get("name") or "")
+            kind = "hub"
         with self._lock:
-            remote = Remote(actor, inbox, pair, str(activity.get("name") or doc.get("name") or ""), state="accepted", last_ok=time.time())
+            remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind)
             self.followers[actor] = remote
             self._save()
         self.deliver(remote, self._activity("Accept", {"type": "Follow", "actor": actor, "object": self.id}))
-        self.deliver(remote, self._activity("Announce", self._announcement()))
-        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}."}
+        self.deliver(remote, self._activity("Announce", self._announcement(remote)))
+        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}.", "mailbox": f"{self.id}/mailbox" if kind == "member" else None}
 
     # ------------------------------------------------------------ views
 
     def to_dict(self) -> dict[str, Any]:
         with self._lock:
-            return {"id": self.id, "listed": self.listed, "following": [r.to_dict() for r in self.following.values()], "followers": [r.to_dict() for r in self.followers.values()], "directory": len(self.directory_entries) + (1 if self.listed else 0)}
+            return {"id": self.id, "listed": self.listed, "following": [r.to_dict() for r in self.following.values()], "followers": [r.to_dict() for r in self.followers.values()], "directory": len(self.directory_entries) + (1 if self.listed else 0), "keeping": len(self.keeping), "store": self.store.usage(), "replicas": self.replicas}

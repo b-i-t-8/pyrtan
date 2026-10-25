@@ -40,6 +40,8 @@ x-pyrtan: &pyrtan
     # PYRTAN_FOLLOW: "seed"
     # PYRTAN_LISTED: "true"
     PYRTAN_STATE: /state/federation.json
+    PYRTAN_STORE: /state/store          # blobs: the hub's own and the ones it keeps for others
+    PYRTAN_REPLICAS: "2"                # how many members or hubs should keep each of its blobs
 
 services:
   hub:
