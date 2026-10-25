@@ -117,21 +117,21 @@ a gap), Trees (capabilities, with a link to the catalog), Peers (hub only;
 A browser will refuse a `http://` hub from an `https://` page. The console
 says so and points at the hub's own `/`, which is the same console.
 
-### 2.6 The rendezvous (built)
+### 2.6 The rendezvous (built; nothing runs)
 
-pyrtan.com runs one public federated hub, `hub.pyrtan.com`, from the
-same image as everything else (`deploy/pyrtan.com/rendezvous/`). It holds
-the example trees so a new hub has something to federate with on day
-one, and it keeps the opt-in directory from [`federation.md`](federation.md)
-§7, which is how operators find each other. It follows nobody, so pyrtan.com
-never routes a stranger's sentence to a stranger's hub. The site links
-to it; the console on pyrtan.com can be pointed at it like at any hub.
+pyrtan.com runs nothing. Hubs find each other through the directory
+every federated hub keeps and gossips ([`federation.md`](federation.md)
+§7); the site publishes `rendezvous/seeds.json`, a static list of hubs
+to follow first, and its page reads the live directory from those seeds
+in the visitor's browser. The first seed is the author's own NAS,
+reachable through a tunnel. A hosted hub, when there is one, is just
+another seed.
 
 ### 2.7 Hosting (designed)
 
 A tenant gets a hub and one or more services as containers from this
 repository's image, with a token, `--cors https://pyrtan.com`, `--gaps` on
-a volume, `--egress public`, `--federate --advertise https://<tenant>.pyrtan.com`
+a volume, `--egress public`, `--federate --advertise https://<tenant>.pyrtan.com --listed`
 with `--state` on the volume, and TLS from the ingress. A hosted hub and
 a self-hosted one follow each other like any two hubs
 ([`federation.md`](federation.md)): a customer's NAS can answer for their

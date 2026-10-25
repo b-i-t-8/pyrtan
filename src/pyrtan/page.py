@@ -141,8 +141,8 @@ PAGE = r"""<!doctype html>
 
   <section id="tab-directory" hidden>
     <h2>Directory</h2>
-    <p class="mute" style="font-size:14px;margin-top:0">Hubs that follow this one and asked to be found. This hub routes to none of them; each operator follows whom they choose: <code>pyrtan follow URL --at YOUR-HUB</code>. To be listed here: <code>pyrtan follow <span class="at">URL</span> --at YOUR-HUB --listed</code>.</p>
-    <div class="card"><table id="directory"><thead><tr><th>Link</th><th>Hub</th><th>Holds</th><th>Since</th></tr></thead><tbody></tbody></table></div>
+    <p class="mute" style="font-size:14px;margin-top:0">Every hub that asked to be found, as this hub has heard it through the swarm. Entries are hints carried hub to hub; <em>link</em> is how recently each announced. Nothing here is routed to: to use one, follow it from your own hub, <code>pyrtan follow URL --at YOUR-HUB</code>. To be in it: <code>pyrtan hub --listed</code>.</p>
+    <div class="card"><table id="directory"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th>Last announced</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section id="tab-api" hidden>
@@ -209,10 +209,10 @@ async function loadDirectory() {
   const body = $("#directory tbody"); body.innerHTML = "";
   for (const h of d.hubs || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.since ? new Date(h.since * 1000).toLocaleDateString() : ""}</td>`;
+    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code>${h.via === "self" ? ' <span class="mute">(this hub)</span>' : ""}<div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.seen ? new Date(h.seen * 1000).toLocaleString() : ""}</td>`;
     body.appendChild(tr);
   }
-  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody listed yet.</td></tr>`;
+  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Follow a seed, or start this hub with <code>--listed</code>.</td></tr>`;
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 
@@ -244,7 +244,8 @@ async function detect() {
   } catch (e) {}
   remote = true;
   const saved = store.get();
-  base = saved.url || ""; token = saved.token || "";
+  const asked = new URLSearchParams(location.search).get("hub");
+  base = asked || saved.url || ""; token = saved.token || "";
   $("#connect").hidden = false;
   $("#origin").textContent = location.origin;
   $("#hub-url").value = base; $("#hub-token").value = token;

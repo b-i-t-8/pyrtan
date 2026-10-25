@@ -282,17 +282,21 @@ Five trees, all against real public APIs, all tested offline:
    sentence"), and federation in the shape of ActivityPub: a hub follows
    other hubs and routes to them, one hop, every message signed, following
    as the only trust. Design in [`federation.md`](federation.md).
-4. **v0.4: more forms of I/O.** First the browser: `observe` with
+4. **v0.4, built: no server anywhere.** The directory hubs find each
+   other by is kept and gossiped by every federated hub, with a static
+   seed list at pyrtan.com in place of a rendezvous hub; a hub can hold
+   trees itself (`--trees`), so a federated swarm can be one process.
+5. **v0.5: more forms of I/O.** First the browser: `observe` with
    `browser = { url, wait_for, actions }` on Playwright as an optional
    extra, for pages that need a script to render, with the same host rule
    and the same extraction. Then file, shell, serial and queue adapters,
    each a node source with its own allow-list (paths, commands, devices,
    topics), so a tree reads a log, runs a named command or polls a device
    by the same rules it reads a page, and the trace reads the same.
-5. **v0.5: the catalog grows up.** Namespaces, publishing through pull
+6. **v0.6: the catalog grows up.** Namespaces, publishing through pull
    requests with the checker as the gate, and opt-in gap reporting from
    hubs back to a tree's author, carried as another federation topic.
-6. **Beside the swarm, never inside it:** an authoring aid that reads gaps
+7. **Beside the swarm, never inside it:** an authoring aid that reads gaps
    and drafts the branch for a person to accept.
 
 ## 7. Open questions

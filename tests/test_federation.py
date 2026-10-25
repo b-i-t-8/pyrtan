@@ -111,7 +111,7 @@ def test_follow_accept_announce_and_route(two):
     assert out["reason"] == "no-match"
 
     _, box = a.get("/outbox")
-    assert [x["type"] for x in box["outbox"]] == ["Follow"] and box["outbox"][0]["delivered"]
+    assert [x["type"] for x in box["outbox"]] == ["Follow", "Announce"] and all(x["delivered"] for x in box["outbox"])  # the Follow, then our announce upward
     assert [x["type"] for x in box["inbox"]] == ["Accept", "Announce"]
 
 
@@ -135,7 +135,12 @@ def test_signed_requests_replace_the_token_only_for_hubs_we_know(two):
     # The inbox checks the activity's actor against the signature's.
     announce = {"type": "Announce", "actor": a.url, "object": {"type": "Capabilities", "trees": []}}
     status, out = http_json("POST", f"{b.url}/inbox", announce, headers=sign(secret, a.url, "POST", "/inbox", announce))
-    assert status == 403 and out["reason"] == "unknown-actor"  # B does not follow A, so A cannot announce to it
+    # A follows B, so B takes A's announce for the directory it carries, and nothing else:
+    # being followed grants nothing, so B still routes only to its own trees.
+    assert status == 200 and out["status"] == "ok" and out["trees"] == 0
+    assert [t["name"] for t in b.get("/capabilities")[1]["trees"]] == ["beta"]
+    stranger = {"type": "Announce", "actor": "http://stranger", "object": {"type": "Capabilities", "trees": []}}
+    assert http_json("POST", f"{b.url}/inbox", stranger, headers=sign(secret, "http://stranger", "POST", "/inbox", stranger))[0] == 403
     bad = {"type": "Announce", "actor": b.url, "object": {"type": "Capabilities", "trees": []}}
     assert http_json("POST", f"{a.url}/inbox", bad, headers=sign("nope", b.url, "POST", "/inbox", bad))[0] == 401
     assert http_json("POST", f"{a.url}/inbox", {"type": "Dance", "actor": b.url}, headers=sign(secret, b.url, "POST", "/inbox", {"type": "Dance", "actor": b.url}))[0] == 400
@@ -216,7 +221,8 @@ def test_unfollow_announce_on_change_and_state(two, tmp_path):
     assert b.url not in a.fed.following and a.url not in b.fed.followers
     assert a.post("/intent", {"text": "beta hello"})[1]["reason"] == "no-match"
     assert a.post("/unfollow", {"url": b.url})[1]["removed"] is False
-    assert json.loads(state.read_text()) == {"following": [], "followers": []}
+    saved = json.loads(state.read_text())
+    assert saved["following"] == [] and saved["followers"] == [] and saved["listed"] is False
 
 
 def test_unfederated_hub_has_no_inbox(tmp_path):
@@ -265,53 +271,131 @@ def test_signing_primitives():
     assert Remote("http://b", "http://b/inbox", "s", state="rejected").link == "down"
 
 
-def test_rendezvous_directory_lists_only_who_asked(two, tmp_path):
+def test_directory_is_gossiped_in_both_directions_and_routes_to_nobody(two, tmp_path):
     a, b = two
     (tmp_path / "c").mkdir()
     (tmp_path / "c" / "gamma.toml").write_text(ECHO.format(name="gamma", word="gamma"))
-    c = Swarm("c", tmp_path / "c")
+    c = Swarm("c", tmp_path / "c", listed=True)
     try:
-        # A is the rendezvous. B follows and asks to be listed; C follows quietly.
-        b.post("/follow", {"url": a.url, "listed": True})
-        c.post("/follow", {"url": a.url})
-        assert a.fed.followers[b.url].listed and not a.fed.followers[c.url].listed
+        # B lists itself; A follows B and hears about B in the Accept's Announce.
+        b.fed.set_listed(True)
+        a.post("/follow", {"url": b.url})
         status, d = http_json("GET", f"{a.url}/directory")  # public
-        assert status == 200 and d["rendezvous"] == a.url and [h["id"] for h in d["hubs"]] == [b.url]
-        assert d["hubs"][0]["trees"] == []  # not read yet
-        a.hub.refresh_all()  # the rendezvous reads what a listed follower holds
-        d = http_json("GET", f"{a.url}/directory")[1]
-        assert d["hubs"][0]["trees"] == ["beta"] and d["hubs"][0]["link"] == "up"
-        assert a.fed.followers[c.url].trees == []  # a quiet follower is not read
-        # Listing grants no routing: the rendezvous still answers only for itself.
-        assert a.post("/intent", {"text": "beta hello"})[1]["reason"] == "no-match"
-        assert [t["name"] for t in a.get("/capabilities")[1]["trees"]] == ["alpha"]
-        # Listed survives the state file.
+        assert status == 200 and d["hub"] == a.url and [h["id"] for h in d["hubs"]] == [b.url]
+        assert d["hubs"][0]["trees"] == ["beta"] and d["hubs"][0]["link"] == "up" and d["hubs"][0]["via"] == b.url
+        # C (listed) follows B: it announces upward, so B hears of C; A hears of C from B on B's next announce.
+        c.post("/follow", {"url": b.url})
+        assert {h["id"] for h in b.fed.directory()["hubs"]} == {b.url, c.url}
+        assert c.url not in {h["id"] for h in a.fed.directory()["hubs"]}
+        b.hub.refresh_all()  # B announces downward (the directory changed) and A merges
+        assert {h["id"] for h in a.fed.directory()["hubs"]} == {b.url, c.url}
+        assert next(h for h in a.fed.directory()["hubs"] if h["id"] == c.url)["via"] == b.url
+        # And C hears of nobody but B until B announces to it; after that, the same two.
+        assert {h["id"] for h in c.fed.directory()["hubs"]} >= {b.url, c.url}
+        # A is not listed, so it appears nowhere; listing itself puts it in its own gossip and up to B.
+        assert a.url not in {h["id"] for h in b.fed.directory()["hubs"]}
+        a.post("/listed", {"listed": True})
+        assert a.url in {h["id"] for h in b.fed.directory()["hubs"]}
+        assert a.fed.directory()["hubs"][0]["id"] == a.url and a.fed.directory()["hubs"][0]["via"] == "self"
+        # Nothing in the directory is routed to: B still answers only for itself.
+        assert b.post("/intent", {"text": "alpha hello"})[1]["reason"] == "no-match"
+        assert [t["name"] for t in b.get("/capabilities")[1]["trees"]] == ["beta"]
+        # The directory survives a restart through the state file.
         state = tmp_path / "state.json"
         a.fed.state_path = state
         a.fed._save()
-        assert Federation(a.url, state=state).followers[b.url].listed is True
-        # Unfollowing removes the listing.
-        b.post("/unfollow", {"url": a.url})
-        assert http_json("GET", f"{a.url}/directory")[1]["hubs"] == []
+        again = Federation(a.url, state=state)
+        assert again.listed and {h["id"] for h in again.directory()["hubs"]} == {a.url, b.url, c.url}
+        # Merge rules: our own entry is never overwritten, the future is not believed, old news is dropped.
+        a.fed.merge_directory([{"id": a.url, "name": "impostor", "trees": ["x"], "seen": time.time() + 1e6}], via="x")
+        assert a.fed.directory()["hubs"][0]["name"] == "a"
+        a.fed.merge_directory([{"id": "http://future", "trees": [], "seen": time.time() + 1e6}], via="x")
+        assert abs(a.fed.directory_entries["http://future"]["seen"] - time.time()) < 5
+        assert a.fed.merge_directory([{"id": "http://old", "trees": [], "seen": time.time() - 30 * 86400}], via="x") == 0
+        assert a.fed.merge_directory([{"id": "not a url"}, "junk", {"id": "http://ok", "seen": "soon"}], via="x") == 0
         assert "/directory" in http_json("GET", f"{a.url}/api")[1]["endpoints"]
     finally:
         c.stop()
 
 
-def test_cli_directory_and_follow_default(two, capsys, monkeypatch):
+def test_seeds_and_cli_defaults(two, capsys, monkeypatch, tmp_path):
     a, b = two
+    from pyrtan.federation import first_live_seed, seed_urls
 
     def run(*argv):
         code = main(list(argv))
         out = capsys.readouterr()
         return code, out.out, out.err
 
+    seeds = tmp_path / "seeds.json"
+    seeds.write_text(json.dumps({"pyrtan-seeds": 1, "hubs": ["http://127.0.0.1:9", b.url, a.url]}))
+    monkeypatch.setenv("PYRTAN_SEEDS", str(seeds))
+    monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
+    assert seed_urls() == ["http://127.0.0.1:9", b.url, a.url]
+    assert first_live_seed() == b.url  # the dead one is skipped
     monkeypatch.setenv("PYRTAN_RENDEZVOUS", a.url)
-    code, out, _ = run("follow", "--at", b.url, "--token", "token-b", "--listed")  # no URL: the rendezvous
-    assert code == 0 and f"now follows {a.url}" in out and "asked to be listed" in out
+    assert seed_urls() == [a.url]
+    monkeypatch.delenv("PYRTAN_RENDEZVOUS")
+    b.fed.set_listed(True)
+    code, out, _ = run("follow", "--at", a.url, "--token", "token-a", "--listed")  # no URL: the first live seed
+    assert code == 0 and f"now follows {b.url}" in out and "listed in the directory" in out
+    assert a.fed.listed and a.url in {h["id"] for h in b.fed.directory()["hubs"]}
+    monkeypatch.setenv("PYRTAN_AT", "http://127.0.0.1:9")  # the local default is dead: fall through to the seeds
     code, out, _ = run("directory")
-    assert code == 0 and "1 listed hub(s)" in out and b.url in out and "--listed" in out
-    code, out, _ = run("directory", "--json")
-    assert json.loads(out)["hubs"][0]["id"] == b.url
-    code, _, err = run("directory", "--at", b.svc_srv.url)
-    assert code == 3 and "no directory" in err
+    assert code == 0 and f"as b ({b.url})" in out and a.url in out and b.url in out
+    code, out, _ = run("directory", "--at", a.url, "--json")
+    assert {h["id"] for h in json.loads(out)["hubs"]} == {a.url, b.url}
+    assert run("directory", "--at", b.svc_srv.url)[0] == 3
+    monkeypatch.setenv("PYRTAN_SEEDS", str(tmp_path / "missing.json"))
+    assert seed_urls() == []
+    code, _, err = run("follow", "--at", a.url, "--token", "token-a")
+    assert code == 3 and "no seed answers" in err
+
+
+def test_hub_holds_trees_itself(tmp_path):
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "alpha.toml").write_text(ECHO.format(name="alpha", word="alpha"))
+    (tmp_path / "t" / "picnic.toml").write_text("""
+name = "picnic"
+description = "delegates to the hub it lives in"
+start = "ask"
+
+[[triggers]]
+pattern = "picnic {text}"
+
+[inputs.text]
+type = "str"
+
+[nodes.ask]
+kind = "delegate"
+intent = "alpha {{ inputs.text }}"
+into = "a"
+next = "say"
+
+[nodes.say]
+kind = "done"
+say = "picnic says {{ state.a.say }}"
+""")
+    from pyrtan.hub import serve_hub
+
+    hub, srv = serve_hub(port=0, quiet=True, name="solo", trees=[tmp_path / "t"], federate=True)
+    try:
+        _, health = http_json("GET", f"{srv.url}/health")
+        assert health["local"] == 2 and health["trees"] == 2 and health["peers"] == 0
+        _, caps = http_json("GET", f"{srv.url}/capabilities")
+        assert {(t["name"], t["peer"]) for t in caps["trees"]} == {("alpha", "local"), ("picnic", "local")}
+        _, out = http_json("POST", f"{srv.url}/intent", {"text": "alpha hi"})
+        assert out["status"] == "done" and out["say"] == "alpha: hi" and out["peer"] == "local"
+        assert out["trace"]["steps"][0]["kind"] == "intent"
+        # A local tree's delegate goes back through the hub, in-process.
+        _, out = http_json("POST", f"{srv.url}/run", {"tree": "picnic", "inputs": {"text": "now"}})
+        assert out["status"] == "done" and out["say"] == "picnic says alpha: now"
+        _, peers = http_json("GET", f"{srv.url}/peers")
+        assert peers["peers"][0]["kind"] == "local" and peers["peers"][0]["trees"] == ["alpha", "picnic"]
+        assert http_json("GET", f"{srv.url}/gaps")[1]["gaps"] == []
+        # Hot reload holds for local trees too, and the announce digest follows.
+        (tmp_path / "t" / "beta.toml").write_text(ECHO.format(name="beta", word="beta"))
+        assert "beta" in {t["name"] for t in hub.local_capabilities()}
+    finally:
+        hub.stop()
+        srv.stop()

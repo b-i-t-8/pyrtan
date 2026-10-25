@@ -62,13 +62,17 @@ restart; the container runs as uid 10001, so `chown 10001 trees` (or
 `chmod o+w trees`) on the NAS, else the gaps stay in memory and `/health`
 reports `gaps_file_error`.
 
-To let this swarm answer for another (a friend's hub, or a hosted one),
-add `--federate --advertise https://<your-public-url> --state
-/trees/.federation.json` to the hub's command once it is behind TLS, then
-`pyrtan follow https://other-hub --at https://<your-public-url> --token …`.
-Following is one-directional trust: your hub routes to the hubs you
-follow, and hubs that follow yours may ask it. See
-[`../_meta/federation.md`](../_meta/federation.md).
+To let this swarm answer for another (a friend's hub, or any hub in the
+directory), give the hub a public address, with a tunnel that opens no
+port (`cloudflared tunnel --url http://127.0.0.1:8700`, or `tailscale
+funnel 8700`) or a port forward behind TLS, then set in the compose
+file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_FOLLOW:
+seed` and `PYRTAN_LISTED: "true"`, with `PYRTAN_TOKEN` set. The hub then
+follows the first seed from pyrtan.com, routes to it, and is listed in
+the directory every hub gossips; `pyrtan follow URL --at <your hub>
+--token …` follows any other. Following is one-directional trust: your
+hub routes to the hubs you follow, and hubs that follow yours may ask it.
+See [`../_meta/federation.md`](../_meta/federation.md).
 
 ### Without the plugin
 

@@ -33,6 +33,13 @@ x-pyrtan: &pyrtan
     # this before the hub is reachable from outside your LAN.
     # PYRTAN_TOKEN: "change-me-to-something-long"
     PYRTAN_EGRESS: any
+    # Federation: once the hub is reachable from outside (a tunnel or a
+    # port-forward with TLS), give it its public URL and it follows the
+    # seeds at pyrtan.com and lists itself in the directory. Needs the token.
+    # PYRTAN_ADVERTISE: "https://hub.example.net"
+    # PYRTAN_FOLLOW: "seed"
+    # PYRTAN_LISTED: "true"
+    PYRTAN_STATE: /state/federation.json
 
 services:
   hub:
@@ -44,6 +51,8 @@ services:
       PYRTAN_PORT: "8700"
     ports:
       - "8700:8700"
+    volumes:
+      - hub-state:/state
 
   news:
     <<: *pyrtan
@@ -66,3 +75,6 @@ services:
     volumes:
       - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]
+
+volumes:
+  hub-state:

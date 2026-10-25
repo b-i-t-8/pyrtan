@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.3.** `src/pyrtan/federation.py`, the hub's federation routes, `pyrtan follow` / `unfollow` / `peers`, the console's federation table, and tests of two and three hubs over real sockets. |
+| **Status** | **Built, v0.3; the directory redone in v0.4.** `src/pyrtan/federation.py`, the hub's federation routes, `pyrtan follow` / `unfollow` / `peers` / `directory`, the console's federation and directory tables, and tests of two and three hubs over real sockets. |
 | **Date** | 2026-10-25 |
-| **Decision** | A hub may follow other hubs, in the shape of ActivityPub (actor, inbox, Follow/Accept/Undo/Announce), and route sentences to the hubs it follows. Following is trust, in one direction, and federation is one hop. |
+| **Decision** | A hub may follow other hubs, in the shape of ActivityPub (actor, inbox, Follow/Accept/Undo/Announce), and route sentences to the hubs it follows. Following is trust, in one direction, and federation is one hop. Hubs find each other through a directory every hub keeps and gossips; nothing central runs. |
 | **Where** | `src/pyrtan/federation.py`, `src/pyrtan/hub.py`. |
 
 ## 0. The brief
@@ -134,10 +134,11 @@ hears from whom"; the wire format is Pyrtan's own and says so.
 
 **A directory of hubs that routes.** A place hubs register with, which
 then answers for all of them. Rejected: it would route to hubs nobody
-chose. What was built instead is the *rendezvous* (§7): a hub anyone may
-follow, whose directory lists the followers that asked to be listed, and
-which routes to none of them. Discovery is a directory's job; routing
-stays an operator's follow.
+chose. **A rendezvous hub that holds the directory** (v0.3) was built
+and then replaced: it was a server, and the point of a swarm is that
+there is none. What stands is §7: a directory every hub keeps and
+gossips, a static seed list, and routing that only ever follows an
+operator's follow.
 
 **Multi-hop routing.** Announcing transitive capabilities with a hop
 count, and forwarding with a TTL. It would let a sentence cross three
@@ -172,30 +173,65 @@ follow. `--closed` takes no follows at all while still following others.
 restart forgets them and the other side's `link` goes `down` until the
 follow is redone.
 
-## 7. The rendezvous
+## 7. The directory, and why nothing runs at pyrtan.com
 
-A rendezvous is an ordinary federated hub that is public on purpose. The
-one at `https://hub.pyrtan.com` (`deploy/pyrtan.com/rendezvous/`) holds
-the example trees, takes open follows, follows nobody, and keeps a
-directory:
+v0.3 had a *rendezvous hub*: one public hub at `hub.pyrtan.com` that
+kept a list of the followers who asked to be listed. It worked and it
+was wrong, for the reason §1 gives: it was a server somebody had to run,
+and a swarm that needs a server to find itself is not a swarm. v0.4
+replaces it with a directory that every federated hub keeps.
 
-- **To try federation:** `pyrtan follow` with no URL follows it (the
-  default is `$PYRTAN_RENDEZVOUS` or `https://hub.pyrtan.com`), and your
-  hub answers "what's the weather in Oslo" through it.
-- **To be found:** `pyrtan follow --listed` asks the rendezvous to show
-  your hub at `GET /directory` (public), with the trees it holds. The
-  rendezvous reads a listed follower's `/capabilities`, signed with the
-  pair secret, on its poll; a follower that did not ask is never read.
-  `pyrtan directory` prints the list; the console shows it under
-  Directory.
-- **What listing is not:** routing. The rendezvous forwards nothing to a
-  listed hub, and a hub that finds another in the directory follows it
-  with its own `pyrtan follow`, which is the one act of trust there is.
+**Entries.** A hub started `--listed` (or told `pyrtan follow --listed`,
+or `POST /listed`) makes an entry for itself: its id, name, the names of
+the trees it holds, and `seen`, the time it made the entry. That is all a
+directory knows about a hub.
 
-`listed` travels in the Follow activity and in the state file, so a
-restart keeps the directory. Any federated hub can be a rendezvous for
-its own circle: the directory is on every federated hub, empty until
-someone asks.
+**Gossip.** Every `Announce` carries the sender's directory: its own
+entry if listed, and every live entry it has heard. Announces now go
+both ways: down to followers as before, and *up* from a follower to the
+hubs it follows (`announce_up`), signed with the pair secret. The
+followed hub routes none of what a follower announces, being followed
+grants nothing, but it keeps the directory the announce carries. An
+inbox answers an Announce with its own gossip, so one round trip
+exchanges both ways. Announces go out when the trees or the directory
+change and on a heartbeat (`ANNOUNCE_EVERY`, a minute), which is what
+keeps `seen` fresh across the swarm.
+
+**Merging.** A newer `seen` replaces an older one; a hub's own entry is
+never overwritten by what others say about it; a `seen` from the future
+is clamped to now; an entry unheard of for `DIRECTORY_TTL` (a week) is
+dropped; the table is bounded (`DIRECTORY_MAX`, the oldest go first).
+Each entry remembers `via`, the hub it was last heard from.
+
+**Reading it.** `GET /directory` (public) on any federated hub lists what
+that hub knows, each entry with `link` computed from `seen`: `up` within
+ten minutes, `stale` within a day, `down` after. `pyrtan directory` asks
+your own hub first and falls back to the seeds; the console shows it on
+every federated hub; the page at pyrtan.com asks the seeds from the
+visitor's browser.
+
+**Seeds.** pyrtan.com publishes `rendezvous/seeds.json`, a static list
+of hub URLs maintained by pull request, the role of a torrent's bootstrap
+nodes. `pyrtan follow` with no URL follows the first seed whose `/actor`
+answers; `pyrtan hub --follow seed` does the same on start. A seed is an
+ordinary federated hub whose operator keeps it up; the first one is the
+author's NAS. `$PYRTAN_SEEDS` points at another list (a URL or a file),
+`$PYRTAN_RENDEZVOUS` at one hub.
+
+**What an entry is not.** A hub two follows away cannot verify who made
+an entry: there are no public keys in the standard library, and HMAC
+proves things only between two hubs that share a secret. So an entry is
+a *hint*: a name, a URL, a claim about trees. It is verified the one way
+that matters, by following the hub, which fetches its `/actor` and runs
+the handshake. The directory never routes. Signing entries with a
+pure-Python Ed25519 would be three hundred lines of this author's own
+cryptography for a property a follow already gives; not taken.
+
+**Reachability.** A hub behind NAT can follow, announce upward, keep the
+directory and pass it on, all outbound. It cannot be followed or asked,
+because nobody can reach its inbox. To be routable it needs an address:
+a port forward behind TLS, or a tunnel (Cloudflare Tunnel, Tailscale
+Funnel) that costs nothing and opens no port. The deploy guide says how.
 
 ## 8. What this design does not claim
 
