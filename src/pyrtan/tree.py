@@ -161,6 +161,7 @@ class Tree:
     tags: list[str] = field(default_factory=list)
     source: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    license: str = ""
 
     def node(self, node_id: str) -> Node:
         try:
@@ -209,6 +210,7 @@ class Tree:
             "description": self.description,
             "tags": self.tags,
             "hosts": self.hosts,
+            "license": self.license,
             "triggers": [t.pattern for t in self.triggers],
             "inputs": {
                 n: {k: v for k, v in {"type": s.type, "default": s.default, "required": s.required and s.default is None, "description": s.description}.items() if v not in (None, "", False)}
@@ -250,6 +252,9 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     tags = raw.get("tags", [])
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
         raise TreeError(f"{name}: 'tags' must be a list of strings")
+    license_ = raw.get("license", "")
+    if not isinstance(license_, str):
+        raise TreeError(f"{name}: 'license' must be a string such as \"MIT\" (an SPDX identifier)")
 
     triggers: list[Trigger] = []
     for i, t in enumerate(raw.get("triggers", [])):
@@ -305,7 +310,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip())
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))

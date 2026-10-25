@@ -1,0 +1,65 @@
+# The catalog repository's workflow (pyrtan-trees/.github/workflows/catalog.yml).
+#
+# On every push and pull request: every tree must load, check clean, carry
+# a license and have a unique name, and the tests must pass. On a push to
+# main: build index.json, put the tree files next to it, publish to Pages.
+#
+# Pin PYRTAN_REF to a tag of b-i-t-8/pyrtan; bump it to adopt a newer
+# checker or index format.
+
+name: catalog
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PYRTAN_REF: v0.2.0
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install pyrtan
+        run: uv tool install --python 3.12 "git+https://github.com/b-i-t-8/pyrtan@${PYRTAN_REF}"
+      - name: Check every tree
+        run: pyrtan check trees
+      - name: Build the index (fails on a tree with no license or a duplicate name)
+        run: |
+          mkdir -p site
+          pyrtan index trees --out site/index.json
+      - name: Replay the tests
+        if: hashFiles('tests/**') != ''
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv/bin/python pytest "git+https://github.com/b-i-t-8/pyrtan@${PYRTAN_REF}"
+          .venv/bin/python -m pytest -q
+      - name: Lay out the catalog
+        run: |
+          # index.json plus every tree file at the path the index names.
+          (cd trees && find . -name '*.toml' -not -name 'pyproject.toml' | cpio -pdm ../site)
+          cp -n README.md site/ 2>/dev/null || true
+          ls -R site | head -50
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -37,7 +37,7 @@ from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
 from .template import MISSING, TemplateError, render, resolve
 from .trace import Step, Trace
-from .transport import Transport, TransportError, UrllibTransport
+from .transport import EgressRefused, Transport, TransportError, UrllibTransport
 from .tree import Node, Tree, TreeError
 
 MAX_STEPS = 500
@@ -229,15 +229,18 @@ class Runner:
             timeout = float(node.get("timeout", DEFAULT_TIMEOUT))
             attempts = 1 + int(node.get("retries", DEFAULT_RETRIES)) if retry else 1
             last_error: str | None = None
+            resp = None
             for attempt in range(attempts):
                 try:
                     resp = self.transport.request(method, url, headers, body, timeout)
                     break
                 except TransportError as e:
                     last_error = str(e)
+                    if isinstance(e, EgressRefused):
+                        break  # a policy refusal does not change on retry
                     if attempt + 1 < attempts:
                         time.sleep(min(0.2 * (attempt + 1), 1.0))
-            else:
+            if resp is None:
                 trace.add(Step(node.id, node.kind, f"{method} {url} failed: {last_error}"))
                 return Outcome("error", tree.name, reason="transport", say=f"{node.id}: {last_error}")
             observed = resp.to_state()

@@ -2,6 +2,7 @@ name = "hacker-news-item"
 version = 1
 description = "One Hacker News item by id: title, url, score, author."
 tags = ["news", "read-only"]
+license = "MIT"
 hosts = ["hacker-news.firebaseio.com"]
 start = "fetch"
 

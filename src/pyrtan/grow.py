@@ -48,6 +48,7 @@ name = "{name}"
 version = 1
 description = ""
 tags = []
+license = ""            # an SPDX identifier such as "MIT", if you share it
 hosts = {hosts}
 start = "fetch"
 

@@ -6,6 +6,7 @@ name = "weather"
 version = 1
 description = "Current weather for a place, from Open-Meteo."
 tags = ["weather", "read-only"]
+license = "MIT"
 hosts = ["geocoding-api.open-meteo.com", "api.open-meteo.com"]
 start = "geocode"
 

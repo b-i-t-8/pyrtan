@@ -6,6 +6,7 @@ name = "hacker-news"
 version = 1
 description = "Top stories on Hacker News, from its public API."
 tags = ["news", "read-only"]
+license = "MIT"
 hosts = ["hacker-news.firebaseio.com"]
 start = "fetch-ids"
 

@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from pyrtan import Registry, RecordedTransport
+from pyrtan import Registry, RecordedTransport, __version__
 from pyrtan.hub import Hub
 from pyrtan.service import Server, Service, http_json
 from pyrtan.tree import load_tree_text
@@ -218,7 +218,8 @@ def test_demo_page_is_served_by_service_and_hub(example_service):
     _, server = example_service
     with urllib.request.urlopen(f"{server.url}/") as resp:
         assert resp.headers.get_content_type() == "text/html"
-        assert b"<title>Pyrtan</title>" in resp.read()
+        page = resp.read()
+        assert b"<title>Pyrtan</title>" in page and f"console v{__version__}".encode() in page
     status, api = http_json("GET", f"{server.url}/api")
     assert status == 200 and api["pyrtan"] == "service"
     hub = Hub()

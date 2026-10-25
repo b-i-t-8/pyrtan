@@ -51,8 +51,16 @@ tree you dropped into `trees/` before it is live:
 demo has met: `http://<nas-ip>:8700/gaps`.
 
 The services do not expose their own ports; everything goes through the
-hub on 8700. Nothing authenticates: this is a demo for your LAN. Do not
-forward 8700 to the internet.
+hub on 8700. As shipped nothing authenticates: this is a demo for your
+LAN. Before forwarding 8700 anywhere, set a token: uncomment
+`PYRTAN_TOKEN` in the compose file's `x-pyrtan` block (every container
+reads it, so the swarm shares it), put TLS in front, and open
+`https://pyrtan.com/console/` with the hub's URL and the token; the
+compose file already passes `--cors https://pyrtan.com` to the hub. The
+`mine` service keeps its gaps in `trees/.gaps.jsonl` so they survive a
+restart; the container runs as uid 10001, so `chown 10001 trees` (or
+`chmod o+w trees`) on the NAS, else the gaps stay in memory and `/health`
+reports `gaps_file_error`.
 
 ### Without the plugin
 

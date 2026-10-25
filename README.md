@@ -122,12 +122,21 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
-| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. |
+| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
 | `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
+| `pyrtan search WORDS` | Finds trees in a catalog (default: the one at pyrtan.com). |
+| `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
+| `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees; what a catalog's CI runs. |
+| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere. |
+
+`serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
+`Authorization: Bearer` on everything but `/health` and the console, and
+`--cors ORIGIN` to let a browser at another origin call. `ask`, `gaps` and
+`unanswered` take `--token` too.
 
 ## A swarm
 
@@ -138,9 +147,48 @@ pyrtan serve examples/hacker-news --port 8702 --hub http://127.0.0.1:8700
 pyrtan ask "top 3 stories on hacker news"
 ```
 
-Open <http://127.0.0.1:8700/> for the demo page: a sentence box, the
-answer, the output and the trace, and everything the swarm can answer. To
-run the demo on a NAS or any Docker host, see [`deploy/README.md`](deploy/README.md).
+Open <http://127.0.0.1:8700/> for the console: a sentence box, the answer,
+the output and the trace; everything the swarm can answer; each peer and
+its `link`; and the gaps. The same console lives at
+<https://pyrtan.com/console/> and can be pointed at any hub started with
+`--cors https://pyrtan.com`. To run the swarm on a NAS or any Docker host,
+see [`deploy/README.md`](deploy/README.md).
+
+## The catalog
+
+Trees other people wrote are at <https://pyrtan.com/catalog/>, a directory
+of static files anyone can mirror.
+
+```
+pyrtan search weather
+pyrtan pull weather --dir trees
+pyrtan serve trees
+```
+
+A pull checks the file's hash against the catalog's index, loads it as a
+tree, and checks the name and version inside before writing it; a file you
+have edited is not overwritten without `--force`. Point `--catalog` (or
+`$PYRTAN_CATALOG`) at a directory or URL of your own to use a private
+catalog; `pyrtan index DIR` builds one from any folder of trees. A tree in
+a catalog says what others may do with it in a `license` line (an SPDX
+identifier such as `MIT`).
+
+## Leaving the LAN
+
+Nothing authenticates by default. When a hub is reachable from outside:
+
+```
+pyrtan hub --host 0.0.0.0 --token "$(openssl rand -hex 24)" --cors https://pyrtan.com
+pyrtan serve trees --hub http://hub:8700 --token … --gaps /var/lib/pyrtan/gaps.jsonl --egress public
+```
+
+A swarm shares one token: a service presents it when it registers, the hub
+presents it when it forwards, and a stranger can neither join nor ask.
+`--egress public` makes a service refuse any host that resolves to a
+loopback, private, link-local or metadata address, on the first URL and on
+every redirect, so a tree whose host comes from its input cannot be
+pointed at your own network. Put TLS in front with whatever proxy you
+already run; Pyrtan does not do it itself.
 
 A service and a hub answer the same requests, so a caller never needs to
 know which it is talking to. A swarm starts as one process holding every
@@ -193,24 +241,27 @@ shows the same proposal and the same command whenever nothing answers.
 
 ```
 src/pyrtan/     the package: tree, intent, template, conditions, extract,
-                html, transport, runtime, trace, registry, grow, service,
-                hub, cli
+                html, transport, runtime, trace, registry, gaps, grow,
+                service, hub, page (the console), catalog, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
-_meta/          the design record and the tree format reference
-deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
-                and a systemd unit, with the steps for each
+_meta/          the design record, the tree format reference, and the
+                design for pyrtan.com
+deploy/         Dockerfile at the root; a compose stack for OpenMediaVault,
+                a systemd unit, and what to put in the pyrtan.com repositories
 ```
 
 ## Status
 
-0.1.0. The core, the service, the hub and the command are built and tested,
-and HTTP is the one form of I/O the core speaks. Not yet built: further
-adapters (a browser for pages that need a script to render; files, shells,
-serial lines, message queues), authentication between services, persistent
-storage for gaps and unanswered sentences, and a tree marketplace. See
-[`_meta/design.md`](_meta/design.md) for the sequencing.
+0.2.0. The core, the service, the hub, the command, the console and the
+catalog client are built and tested; HTTP is the one form of I/O the core
+speaks; a swarm can require a token, keep its gaps, and refuse private
+addresses. Not yet built: further adapters (a browser for pages that need
+a script to render; files, shells, serial lines, message queues),
+persistent storage for unanswered sentences, `pyrtan watch`, and hosting.
+See [`_meta/design.md`](_meta/design.md) for the runtime's design and
+[`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 
 Pyrtan is a product of [Hillvon.io](https://hillvon.io).
 
