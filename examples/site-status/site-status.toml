@@ -1,0 +1,61 @@
+# Is a site up? The host comes from the sentence, so it cannot be checked
+# at load time; the runtime refuses anything outside `hosts`, and this tree
+# allows any host on purpose, with the wildcard spelled out.
+
+name = "site-status"
+version = 1
+description = "Whether a web site answers, and how quickly."
+tags = ["ops", "read-only"]
+hosts = ["*"]
+start = "probe"
+
+[[triggers]]
+pattern = "is {host:word} up"
+[[triggers]]
+pattern = "is {host:word} down"
+[[triggers]]
+pattern = "[check] status of {host:word}"
+
+[inputs.host]
+type = "str"
+pattern = "(?i)^[a-z0-9.\\-]+(:[0-9]+)?$"
+description = "A host name, with no scheme"
+
+[nodes.probe]
+kind = "observe"
+http = { method = "GET", url = "https://{{ inputs.host | lower }}/" }
+into = "resp"
+timeout = 8
+retries = 1
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { between = [200, 399] }, then = "up" },
+  { when = { between = [400, 499] }, then = "refusing" },
+  { when = { gte = 500 }, then = "erroring" },
+  { else = "odd" },
+]
+
+[nodes.up]
+kind = "done"
+say = "{{ inputs.host }} is up: {{ state.resp.status }} in {{ state.resp.elapsed_ms }} ms."
+output = { host = "{{ inputs.host }}", up = true, status = "{{ state.resp.status }}", elapsed_ms = "{{ state.resp.elapsed_ms }}" }
+
+[nodes.refusing]
+kind = "done"
+say = "{{ inputs.host }} answers but refuses the front page ({{ state.resp.status }}); the server is up."
+output = { host = "{{ inputs.host }}", up = true, status = "{{ state.resp.status }}", note = "client error on /" }
+
+[nodes.erroring]
+kind = "fail"
+reason = "server-error"
+say = "{{ inputs.host }} is answering {{ state.resp.status }}: up, but broken."
+output = { host = "{{ inputs.host }}", up = false, status = "{{ state.resp.status }}" }
+
+[nodes.odd]
+kind = "fail"
+reason = "unexpected-status"
+say = "{{ inputs.host }} answered {{ state.resp.status }}, which this tree has no branch for."

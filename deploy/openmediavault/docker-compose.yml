@@ -1,0 +1,58 @@
+# Pyrtan demo swarm for OpenMediaVault (or any Docker host).
+#
+# One hub, reachable from the LAN, and two services behind it that each
+# hold part of the examples, so the demo shows routing between services
+# rather than one process. A third service holds a trees/ folder you can
+# edit on the NAS: drop a .toml in and it is live on the next request.
+#
+# Edit the two CHANGE-ME paths (the checkout, and a trees folder) to match
+# your shared folder, then in OMV: Services > Compose > Files > Add (paste
+# this) > Up. Steps in ../README.md.
+#
+# Open http://<nas-ip>:8700/ for the demo page.
+
+name: pyrtan
+
+x-pyrtan: &pyrtan
+  # Built on the NAS from a checkout of the repository (no image is
+  # published yet). The context is the repository root.
+  build:
+    context: /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan
+  image: pyrtan:local
+  restart: unless-stopped
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  tmpfs: [/tmp]
+  logging:
+    driver: json-file
+    options: { max-size: "5m", max-file: "3" }
+
+services:
+  hub:
+    <<: *pyrtan
+    command: ["hub", "--host", "0.0.0.0", "--port", "8700", "--poll", "10"]
+    environment:
+      PYRTAN_PORT: "8700"
+    ports:
+      - "8700:8700"
+
+  news:
+    <<: *pyrtan
+    command: ["serve", "/examples/hacker-news", "/examples/github", "--host", "0.0.0.0", "--port", "8701", "--name", "news", "--hub", "http://hub:8700", "--advertise", "http://news:8701"]
+    depends_on: [hub]
+
+  weather:
+    <<: *pyrtan
+    command: ["serve", "/examples/weather", "/examples/site-status", "--host", "0.0.0.0", "--port", "8701", "--name", "weather", "--hub", "http://hub:8700", "--advertise", "http://weather:8701"]
+    depends_on: [hub]
+
+  # Your own trees. Edit files in this folder from a share; the service
+  # reloads them without a restart. `pyrtan check` them first:
+  #   docker compose -p pyrtan exec mine pyrtan check /trees
+  mine:
+    <<: *pyrtan
+    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701"]
+    volumes:
+      - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees:ro
+    depends_on: [hub]

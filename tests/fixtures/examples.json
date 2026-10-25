@@ -1,0 +1,17 @@
+{
+  "GET https://hacker-news.firebaseio.com/v0/topstories.json": {"status": 200, "body": [101, 102, 103]},
+  "GET https://hacker-news.firebaseio.com/v0/item/101.json": {"status": 200, "body": {"id": 101, "type": "story", "title": "Pyrtan 0.1", "url": "https://example.org/p", "score": 42, "by": "alice"}},
+  "GET https://hacker-news.firebaseio.com/v0/item/102.json": {"status": 200, "body": {"id": 102, "type": "story", "title": "Ask HN: self post", "score": 7, "by": "x"}},
+  "GET https://hacker-news.firebaseio.com/v0/item/103.json": {"status": 200, "body": {"id": 103, "type": "comment", "by": "y", "text": "a comment"}},
+  "GET https://hacker-news.firebaseio.com/v0/item/999.json": {"status": 200, "body": null},
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json": {"status": 200, "body": {"results": [{"name": "Oslo", "country": "Norway", "latitude": 59.91, "longitude": 10.75}]}},
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json": {"status": 200, "body": {"generationtime_ms": 0.5}},
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius": {"status": 200, "body": {"current_units": {"temperature_2m": "°C"}, "current": {"temperature_2m": 4.2, "relative_humidity_2m": 80, "wind_speed_10m": 12.3, "weather_code": 61}}},
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit": {"status": 200, "body": {"current_units": {"temperature_2m": "°F"}, "current": {"temperature_2m": 39.6, "relative_humidity_2m": 80, "wind_speed_10m": 12.3, "weather_code": 0}}},
+  "GET https://example.com/": {"status": 200, "body": "<html><head><title>Example Domain</title></head><body><h1>Example Domain</h1></body></html>"},
+  "GET https://broken.example/": {"status": 503, "body": "down"},
+  "GET https://teapot.example/": {"status": 418, "body": "short and stout"},
+  "GET https://api.github.com/repos/b-i-t-8/pyrtan/releases/latest": {"status": 200, "body": {"tag_name": "v0.1.0", "name": "First", "published_at": "2026-10-24T00:00:00Z", "html_url": "https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0", "prerelease": false}},
+  "GET https://api.github.com/repos/b-i-t-8/nothing/releases/latest": {"status": 404, "body": {"message": "Not Found"}},
+  "GET https://api.github.com/repos/b-i-t-8/busy/releases/latest": {"status": 403, "body": {"message": "API rate limit exceeded"}}
+}

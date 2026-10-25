@@ -1,0 +1,38 @@
+# Pyrtan demo as one systemd service, without Docker: a single process
+# holding every example tree, serving the demo page on port 8701.
+#
+#   sudo cp pyrtan-demo.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pyrtan-demo
+#
+# Assumes pyrtan was installed under /opt/pyrtan as deploy/README.md
+# describes, so the command lives at /opt/pyrtan/bin/pyrtan. Trees are read
+# from /var/lib/pyrtan/trees; edit TREES to taste.
+
+[Unit]
+Description=Pyrtan demo swarm (single process)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pyrtan
+Group=pyrtan
+Environment=PYTHONUNBUFFERED=1
+Environment=TREES=/var/lib/pyrtan/trees
+ExecStart=/opt/pyrtan/bin/pyrtan serve ${TREES} --host 0.0.0.0 --port 8701 --name demo
+Restart=on-failure
+RestartSec=3
+# Hardening: the process needs the network and read access to its trees, nothing else.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/pyrtan /var/lib/pyrtan
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

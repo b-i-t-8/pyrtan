@@ -1,0 +1,62 @@
+# Latest release of a GitHub repository, from the public API. Shows an
+# optional token from the service's env and a decision on the status code.
+
+name = "github-release"
+version = 1
+description = "The latest release of a GitHub repository."
+tags = ["github", "read-only"]
+hosts = ["api.github.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest release of {repo:word}"
+[[triggers]]
+pattern = "latest {repo:word} release"
+
+[inputs.repo]
+type = "str"
+pattern = "^[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+$"
+description = "owner/name"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.github.com/repos/{{ inputs.repo }}/releases/latest", headers = { Accept = "application/vnd.github+json" } }
+into = "resp"
+extract = [
+  { into = "tag", json = "json.tag_name" },
+  { into = "name", json = "json.name" },
+  { into = "published", json = "json.published_at" },
+  { into = "url", json = "json.html_url" },
+  { into = "prerelease", json = "json.prerelease" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "none" },
+  { when = { in = [403, 429] }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.repo }}: {{ state.tag }} ({{ state.published }}) {{ state.url }}"
+output = { repo = "{{ inputs.repo }}", tag = "{{ state.tag }}", name = "{{ state.name }}", published = "{{ state.published }}", url = "{{ state.url }}", prerelease = "{{ state.prerelease }}" }
+
+[nodes.none]
+kind = "fail"
+reason = "no-release"
+say = "{{ inputs.repo }} has no releases, or does not exist."
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "GitHub is rate-limiting unauthenticated requests ({{ state.resp.status }})."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-response"
+say = "GitHub answered {{ state.resp.status }}."
