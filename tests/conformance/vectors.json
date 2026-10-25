@@ -1,0 +1,2088 @@
+{
+ "clock": "2026-10-25T12:00:00+00:00",
+ "fixture": "tests/fixtures/examples.json",
+ "pyrtan-conformance": 1,
+ "runs": [
+  {
+   "expect": {
+    "inputs": {
+     "count": 1
+    },
+    "output": {
+     "stories": [
+      {
+       "by": "alice",
+       "id": 101,
+       "score": 42,
+       "title": "Pyrtan 0.1",
+       "url": "https://example.org/p"
+      }
+     ]
+    },
+    "say": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "check",
+       "node": "fetch-ids",
+       "observed": {
+        "ids": [
+         101,
+         102,
+         103
+        ]
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/topstories.json -> 200; ids=[101, 102, 103]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "check",
+       "observed": 200,
+       "summary": "state.ids_resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "stories",
+       "node": "any",
+       "observed": [
+        101,
+        102,
+        103
+       ],
+       "summary": "state.ids = [101, 102, 103]"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 1,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "stories",
+       "summary": "1 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "inputs": {
+    "count": 1
+   },
+   "intent": "What's the top story on Hacker News?",
+   "tree": "hacker-news"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "count": 3
+    },
+    "output": {
+     "stories": [
+      {
+       "by": "alice",
+       "id": 101,
+       "score": 42,
+       "title": "Pyrtan 0.1",
+       "url": "https://example.org/p"
+      },
+      {
+       "by": "x",
+       "id": 102,
+       "score": 7,
+       "title": "Ask HN: self post",
+       "url": "https://news.ycombinator.com/item?id=102"
+      },
+      null
+     ]
+    },
+    "say": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "check",
+       "node": "fetch-ids",
+       "observed": {
+        "ids": [
+         101,
+         102,
+         103
+        ]
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/topstories.json -> 200; ids=[101, 102, 103]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "check",
+       "observed": 200,
+       "summary": "state.ids_resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "stories",
+       "node": "any",
+       "observed": [
+        101,
+        102,
+        103
+       ],
+       "summary": "state.ids = [101, 102, 103]"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 1,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "x",
+        "score": 7,
+        "title": "Ask HN: self post",
+        "type": "story",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json -> 200; title=Ask HN: self post, url=None, score=7, by=x, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "self-post",
+       "node": "has-url",
+       "summary": "state.url = <missing>"
+      },
+      {
+       "depth": 1,
+       "kind": "set",
+       "next": "reply",
+       "node": "self-post",
+       "observed": {
+        "url": "https://news.ycombinator.com/item?id=102"
+       },
+       "summary": "url=https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Ask HN: self post (7 points, by x) https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "y",
+        "score": null,
+        "title": null,
+        "type": "comment",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/103.json -> 200; title=None, url=None, score=None, by=y, type=comment"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "not-a-story",
+       "node": "kind",
+       "observed": "comment",
+       "summary": "state.type = comment"
+      },
+      {
+       "depth": 1,
+       "kind": "fail",
+       "next": null,
+       "node": "not-a-story",
+       "summary": "not-a-story: Item 103 is a comment, not a story."
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "stories",
+       "summary": "3 item(s), 1 failed"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "inputs": {
+    "count": 3
+   },
+   "intent": "top 3 stories on hacker news",
+   "tree": "hacker-news"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "reason": "bad-input",
+    "say": "input 'count' must be at most 30, got 99",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "inputs": {
+    "count": 99
+   },
+   "intent": "top 99 stories on hacker news",
+   "tree": "hacker-news"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "id": 999
+    },
+    "reason": "no-such-item",
+    "say": "There is no Hacker News item 999.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": null,
+        "score": null,
+        "title": null,
+        "type": null,
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/999.json -> 200; title=None, url=None, score=None, by=None, type=None"
+      },
+      {
+       "chosen": "exists False",
+       "depth": 0,
+       "kind": "decide",
+       "next": "missing",
+       "node": "kind",
+       "summary": "state.type = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "missing",
+       "summary": "no-such-item: There is no Hacker News item 999."
+      }
+     ],
+     "tree": "hacker-news-item"
+    },
+    "tree": "hacker-news-item"
+   },
+   "inputs": {
+    "id": 999
+   },
+   "intent": "hacker news item 999",
+   "tree": "hacker-news-item"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo",
+     "units": "celsius"
+    },
+    "output": {
+     "country": "Norway",
+     "humidity": 80,
+     "place": "Oslo",
+     "sky": "raining",
+     "temperature": 4.2,
+     "unit": "°C",
+     "wind_kmh": 12.3
+    },
+    "say": "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "forecast",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "have-temp",
+       "node": "forecast",
+       "observed": {
+        "code": 61,
+        "humidity": 80,
+        "temp": 4.2,
+        "unit": "°C",
+        "wind": 12.3
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius -> 200; temp=4.2, humidity=80, wind=12.3, code=61, unit=°C"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sky",
+       "node": "have-temp",
+       "observed": 4.2,
+       "summary": "state.temp = 4.2"
+      },
+      {
+       "chosen": "between [51, 67]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rain",
+       "node": "sky",
+       "observed": 61,
+       "summary": "state.code = 61"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "rain",
+       "observed": {
+        "sky": "raining"
+       },
+       "summary": "sky=raining"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h."
+      }
+     ],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "inputs": {
+    "place": "Oslo"
+   },
+   "intent": "weather in Oslo",
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo",
+     "units": "fahrenheit"
+    },
+    "output": {
+     "country": "Norway",
+     "humidity": 80,
+     "place": "Oslo",
+     "sky": "clear",
+     "temperature": 39.6,
+     "unit": "°F",
+     "wind_kmh": 12.3
+    },
+    "say": "Oslo, Norway: 39.6°F, clear, humidity 80%, wind 12.3 km/h.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "forecast",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "have-temp",
+       "node": "forecast",
+       "observed": {
+        "code": 0,
+        "humidity": 80,
+        "temp": 39.6,
+        "unit": "°F",
+        "wind": 12.3
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit -> 200; temp=39.6, humidity=80, wind=12.3, code=0, unit=°F"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sky",
+       "node": "have-temp",
+       "observed": 39.6,
+       "summary": "state.temp = 39.6"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "clear",
+       "node": "sky",
+       "observed": 0,
+       "summary": "state.code = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "clear",
+       "observed": {
+        "sky": "clear"
+       },
+       "summary": "sky=clear"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Oslo, Norway: 39.6°F, clear, humidity 80%, wind 12.3 km/h."
+      }
+     ],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "inputs": {
+    "place": "Oslo",
+    "units": "fahrenheit"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "reason": "bad-input",
+    "say": "input 'units' must be one of ['celsius', 'fahrenheit'], got 'kelvin'",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "inputs": {
+    "place": "Oslo",
+    "units": "kelvin"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Nowhereville",
+     "units": "celsius"
+    },
+    "reason": "unknown-place",
+    "say": "I could not find a place called Nowhereville.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": null,
+        "hit": null,
+        "lat": null,
+        "lon": null,
+        "name": null
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json -> 200; hit=None, lat=None, lon=None, name=None, country=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-place",
+       "node": "found",
+       "summary": "state.hit = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-place",
+       "summary": "unknown-place: I could not find a place called Nowhereville."
+      }
+     ],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "inputs": {
+    "place": "Nowhereville"
+   },
+   "intent": "how cold is it in Nowhereville",
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "example.com"
+    },
+    "output": {
+     "elapsed_ms": 0,
+     "host": "example.com",
+     "status": 200,
+     "up": true
+    },
+    "say": "example.com is up: 200 in 0 ms.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "probe",
+       "summary": "GET https://example.com/ -> 200"
+      },
+      {
+       "chosen": "between [200, 399]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "up",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "up",
+       "summary": "example.com is up: 200 in 0 ms."
+      }
+     ],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "inputs": {
+    "host": "example.com"
+   },
+   "intent": "is Example.com up",
+   "tree": "site-status"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "broken.example"
+    },
+    "output": {
+     "host": "broken.example",
+     "status": 503,
+     "up": false
+    },
+    "reason": "server-error",
+    "say": "broken.example is answering 503: up, but broken.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "probe",
+       "summary": "GET https://broken.example/ -> 503"
+      },
+      {
+       "chosen": "gte 500",
+       "depth": 0,
+       "kind": "decide",
+       "next": "erroring",
+       "node": "status",
+       "observed": 503,
+       "summary": "state.resp.status = 503"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "erroring",
+       "summary": "server-error: broken.example is answering 503: up, but broken."
+      }
+     ],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "inputs": {
+    "host": "broken.example"
+   },
+   "intent": "is broken.example up",
+   "tree": "site-status"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "teapot.example"
+    },
+    "output": {
+     "host": "teapot.example",
+     "note": "client error on /",
+     "status": 418,
+     "up": true
+    },
+    "say": "teapot.example answers but refuses the front page (418); the server is up.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "probe",
+       "summary": "GET https://teapot.example/ -> 418"
+      },
+      {
+       "chosen": "between [400, 499]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "refusing",
+       "node": "status",
+       "observed": 418,
+       "summary": "state.resp.status = 418"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "refusing",
+       "summary": "teapot.example answers but refuses the front page (418); the server is up."
+      }
+     ],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "inputs": {
+    "host": "teapot.example"
+   },
+   "intent": "check status of teapot.example",
+   "tree": "site-status"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "reason": "bad-input",
+    "say": "input 'host' must match '(?i)^[a-z0-9.\\\\-]+(:[0-9]+)?$', got 'http://x'",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "inputs": {
+    "host": "http://x"
+   },
+   "tree": "site-status"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "b-i-t-8/pyrtan"
+    },
+    "output": {
+     "name": "First",
+     "prerelease": false,
+     "published": "2026-10-24T00:00:00Z",
+     "repo": "b-i-t-8/pyrtan",
+     "tag": "v0.1.0",
+     "url": "https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0"
+    },
+    "say": "b-i-t-8/pyrtan: v0.1.0 (2026-10-24T00:00:00Z) https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "name": "First",
+        "prerelease": false,
+        "published": "2026-10-24T00:00:00Z",
+        "tag": "v0.1.0",
+        "url": "https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0"
+       },
+       "summary": "GET https://api.github.com/repos/b-i-t-8/pyrtan/releases/latest -> 200; tag=v0.1.0, name=First, published=2026-10-24T00:00:00Z, url=https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0, prerelease=False"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "b-i-t-8/pyrtan: v0.1.0 (2026-10-24T00:00:00Z) https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0"
+      }
+     ],
+     "tree": "github-release"
+    },
+    "tree": "github-release"
+   },
+   "inputs": {
+    "repo": "b-i-t-8/pyrtan"
+   },
+   "intent": "latest release of b-i-t-8/pyrtan",
+   "tree": "github-release"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "b-i-t-8/nothing"
+    },
+    "reason": "no-release",
+    "say": "b-i-t-8/nothing has no releases, or does not exist.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "name": null,
+        "prerelease": null,
+        "published": null,
+        "tag": null,
+        "url": null
+       },
+       "summary": "GET https://api.github.com/repos/b-i-t-8/nothing/releases/latest -> 404; tag=None, name=None, published=None, url=None, prerelease=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-release: b-i-t-8/nothing has no releases, or does not exist."
+      }
+     ],
+     "tree": "github-release"
+    },
+    "tree": "github-release"
+   },
+   "inputs": {
+    "repo": "b-i-t-8/nothing"
+   },
+   "intent": "latest b-i-t-8/nothing release",
+   "tree": "github-release"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "b-i-t-8/busy"
+    },
+    "reason": "rate-limited",
+    "say": "GitHub is rate-limiting unauthenticated requests (403).",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "name": null,
+        "prerelease": null,
+        "published": null,
+        "tag": null,
+        "url": null
+       },
+       "summary": "GET https://api.github.com/repos/b-i-t-8/busy/releases/latest -> 403; tag=None, name=None, published=None, url=None, prerelease=None"
+      },
+      {
+       "chosen": "in [403, 429]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rate-limited",
+       "node": "status",
+       "observed": 403,
+       "summary": "state.resp.status = 403"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "rate-limited",
+       "summary": "rate-limited: GitHub is rate-limiting unauthenticated requests (403)."
+      }
+     ],
+     "tree": "github-release"
+    },
+    "tree": "github-release"
+   },
+   "inputs": {
+    "repo": "b-i-t-8/busy"
+   },
+   "intent": "latest release of b-i-t-8/busy",
+   "tree": "github-release"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Paris",
+     "units": "celsius"
+    },
+    "reason": "transport",
+    "say": "geocode: no recorded response for GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "geocode",
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json failed: no recorded response for GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json"
+      }
+     ],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "inputs": {
+    "place": "Paris"
+   },
+   "intent": "weather in Paris",
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "id": 101
+    },
+    "output": {
+     "by": "alice",
+     "id": 101,
+     "score": 42,
+     "title": "Pyrtan 0.1",
+     "url": "https://example.org/p"
+    },
+    "say": "Pyrtan 0.1 (42 points, by alice) https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news-item"
+    },
+    "tree": "hacker-news-item"
+   },
+   "inputs": {
+    "id": 101
+   },
+   "tree": "hacker-news-item"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "count": 2
+    },
+    "output": {
+     "stories": [
+      {
+       "by": "alice",
+       "id": 101,
+       "score": 42,
+       "title": "Pyrtan 0.1",
+       "url": "https://example.org/p"
+      },
+      {
+       "by": "x",
+       "id": 102,
+       "score": 7,
+       "title": "Ask HN: self post",
+       "url": "https://news.ycombinator.com/item?id=102"
+      }
+     ]
+    },
+    "say": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "check",
+       "node": "fetch-ids",
+       "observed": {
+        "ids": [
+         101,
+         102,
+         103
+        ]
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/topstories.json -> 200; ids=[101, 102, 103]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "check",
+       "observed": 200,
+       "summary": "state.ids_resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "stories",
+       "node": "any",
+       "observed": [
+        101,
+        102,
+        103
+       ],
+       "summary": "state.ids = [101, 102, 103]"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 1,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "x",
+        "score": 7,
+        "title": "Ask HN: self post",
+        "type": "story",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json -> 200; title=Ask HN: self post, url=None, score=7, by=x, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "self-post",
+       "node": "has-url",
+       "summary": "state.url = <missing>"
+      },
+      {
+       "depth": 1,
+       "kind": "set",
+       "next": "reply",
+       "node": "self-post",
+       "observed": {
+        "url": "https://news.ycombinator.com/item?id=102"
+       },
+       "summary": "url=https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Ask HN: self post (7 points, by x) https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "stories",
+       "summary": "2 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "inputs": {
+    "count": 2
+   },
+   "tree": "hacker-news"
+  }
+ ],
+ "trees": {
+  "github-release": {
+   "description": "The latest release of a GitHub repository.",
+   "hosts": [
+    "api.github.com"
+   ],
+   "inputs": {
+    "repo": {
+     "description": "owner/name",
+     "pattern": "^[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "github-release",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "tag",
+       "json": "json.tag_name"
+      },
+      {
+       "into": "name",
+       "json": "json.name"
+      },
+      {
+       "into": "published",
+       "json": "json.published_at"
+      },
+      {
+       "into": "url",
+       "json": "json.html_url"
+      },
+      {
+       "into": "prerelease",
+       "json": "json.prerelease"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Accept": "application/vnd.github+json"
+      },
+      "method": "GET",
+      "url": "https://api.github.com/repos/{{ inputs.repo }}/releases/latest"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-release",
+     "say": "{{ inputs.repo }} has no releases, or does not exist."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "GitHub is rate-limiting unauthenticated requests ({{ state.resp.status }})."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "name": "{{ state.name }}",
+      "prerelease": "{{ state.prerelease }}",
+      "published": "{{ state.published }}",
+      "repo": "{{ inputs.repo }}",
+      "tag": "{{ state.tag }}",
+      "url": "{{ state.url }}"
+     },
+     "say": "{{ inputs.repo }}: {{ state.tag }} ({{ state.published }}) {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "none",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "in": [
+         403,
+         429
+        ]
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "GitHub answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "github",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest release of {repo:word}"
+    },
+    {
+     "pattern": "latest {repo:word} release"
+    }
+   ],
+   "version": 1
+  },
+  "hacker-news": {
+   "description": "Top stories on Hacker News, from its public API.",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "inputs": {
+    "count": {
+     "default": 1,
+     "description": "How many stories to return",
+     "max": 30,
+     "min": 1,
+     "type": "int"
+    }
+   },
+   "license": "MIT",
+   "name": "hacker-news",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "nothing",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "stories",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "ids"
+    },
+    "check": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "hn-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "ids_resp.status"
+    },
+    "fetch-ids": {
+     "extract": [
+      {
+       "into": "ids",
+       "json": "json"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://hacker-news.firebaseio.com/v0/topstories.json"
+     },
+     "into": "ids_resp",
+     "kind": "observe",
+     "next": "check"
+    },
+    "hn-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Hacker News answered {{ state.ids_resp.status }}; try again later."
+    },
+    "nothing": {
+     "kind": "fail",
+     "reason": "no-stories",
+     "say": "Hacker News returned an empty front page."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "stories": "{{ state.stories }}"
+     },
+     "say": "Top of Hacker News: {{ state.stories[0].title }} — {{ state.stories[0].url }}"
+    },
+    "stories": {
+     "into": "stories",
+     "kind": "each",
+     "limit": "{{ inputs.count }}",
+     "next": "reply",
+     "over": "ids",
+     "tree": "hacker-news-item",
+     "with": {
+      "id": "{{ item }}"
+     }
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Hacker News answered {{ state.ids_resp.status }} with something this tree does not recognise."
+    }
+   },
+   "start": "fetch-ids",
+   "tags": [
+    "news",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "inputs": {
+      "count": 1
+     },
+     "pattern": "[what's the] top story on hacker news"
+    },
+    {
+     "pattern": "top {count:int} stories on hacker news"
+    }
+   ],
+   "version": 1
+  },
+  "hacker-news-item": {
+   "description": "One Hacker News item by id: title, url, score, author.",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "inputs": {
+    "id": {
+     "description": "The item id",
+     "min": 1,
+     "type": "int"
+    }
+   },
+   "license": "MIT",
+   "name": "hacker-news-item",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      },
+      {
+       "into": "url",
+       "json": "json.url"
+      },
+      {
+       "into": "score",
+       "json": "json.score"
+      },
+      {
+       "into": "by",
+       "json": "json.by"
+      },
+      {
+       "into": "type",
+       "json": "json.type"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://hacker-news.firebaseio.com/v0/item/{{ inputs.id }}.json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "kind"
+    },
+    "has-url": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "self-post"
+      }
+     ],
+     "kind": "decide",
+     "on": "url"
+    },
+    "kind": {
+     "branches": [
+      {
+       "then": "has-url",
+       "when": {
+        "eq": "story"
+       }
+      },
+      {
+       "then": "has-url",
+       "when": {
+        "eq": "job"
+       }
+      },
+      {
+       "then": "missing",
+       "when": {
+        "exists": false
+       }
+      },
+      {
+       "else": "not-a-story"
+      }
+     ],
+     "kind": "decide",
+     "on": "type"
+    },
+    "missing": {
+     "kind": "fail",
+     "reason": "no-such-item",
+     "say": "There is no Hacker News item {{ inputs.id }}."
+    },
+    "not-a-story": {
+     "kind": "fail",
+     "reason": "not-a-story",
+     "say": "Item {{ inputs.id }} is a {{ state.type }}, not a story."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "by": "{{ state.by }}",
+      "id": "{{ inputs.id }}",
+      "score": "{{ state.score }}",
+      "title": "{{ state.title }}",
+      "url": "{{ state.url }}"
+     },
+     "say": "{{ state.title }} ({{ state.score }} points, by {{ state.by }}) {{ state.url }}"
+    },
+    "self-post": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "url": "https://news.ycombinator.com/item?id={{ inputs.id }}"
+     }
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "news",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "hacker news item {id:int}"
+    }
+   ],
+   "version": 1
+  },
+  "site-status": {
+   "description": "Whether a web site answers, and how quickly.",
+   "hosts": [
+    "*"
+   ],
+   "inputs": {
+    "host": {
+     "description": "A host name, with no scheme",
+     "pattern": "(?i)^[a-z0-9.\\-]+(:[0-9]+)?$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "site-status",
+   "nodes": {
+    "erroring": {
+     "kind": "fail",
+     "output": {
+      "host": "{{ inputs.host }}",
+      "status": "{{ state.resp.status }}",
+      "up": false
+     },
+     "reason": "server-error",
+     "say": "{{ inputs.host }} is answering {{ state.resp.status }}: up, but broken."
+    },
+    "odd": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "{{ inputs.host }} answered {{ state.resp.status }}, which this tree has no branch for."
+    },
+    "probe": {
+     "http": {
+      "method": "GET",
+      "url": "https://{{ inputs.host | lower }}/"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status",
+     "retries": 1,
+     "timeout": 8
+    },
+    "refusing": {
+     "kind": "done",
+     "output": {
+      "host": "{{ inputs.host }}",
+      "note": "client error on /",
+      "status": "{{ state.resp.status }}",
+      "up": true
+     },
+     "say": "{{ inputs.host }} answers but refuses the front page ({{ state.resp.status }}); the server is up."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "up",
+       "when": {
+        "between": [
+         200,
+         399
+        ]
+       }
+      },
+      {
+       "then": "refusing",
+       "when": {
+        "between": [
+         400,
+         499
+        ]
+       }
+      },
+      {
+       "then": "erroring",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "odd"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "up": {
+     "kind": "done",
+     "output": {
+      "elapsed_ms": "{{ state.resp.elapsed_ms }}",
+      "host": "{{ inputs.host }}",
+      "status": "{{ state.resp.status }}",
+      "up": true
+     },
+     "say": "{{ inputs.host }} is up: {{ state.resp.status }} in {{ state.resp.elapsed_ms }} ms."
+    }
+   },
+   "start": "probe",
+   "tags": [
+    "ops",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "is {host:host} up"
+    },
+    {
+     "pattern": "is {host:host} down"
+    },
+    {
+     "pattern": "[check] status of {host:host}"
+    }
+   ],
+   "version": 1
+  },
+  "weather": {
+   "description": "Current weather for a place, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    },
+    "units": {
+     "default": "celsius",
+     "one_of": [
+      "celsius",
+      "fahrenheit"
+     ],
+     "type": "str"
+    }
+   },
+   "language": {
+    "synonyms": {
+     "weather": [
+      "forecast",
+      "temperature"
+     ]
+    }
+   },
+   "license": "MIT",
+   "name": "weather",
+   "nodes": {
+    "clear": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "clear"
+     }
+    },
+    "cloudy": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "cloudy"
+     }
+    },
+    "fog": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "foggy"
+     }
+    },
+    "forecast": {
+     "extract": [
+      {
+       "into": "temp",
+       "json": "json.current.temperature_2m"
+      },
+      {
+       "into": "humidity",
+       "json": "json.current.relative_humidity_2m"
+      },
+      {
+       "into": "wind",
+       "json": "json.current.wind_speed_10m"
+      },
+      {
+       "into": "code",
+       "json": "json.current.weather_code"
+      },
+      {
+       "into": "unit",
+       "json": "json.current_units.temperature_2m"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit={{ inputs.units }}"
+     },
+     "into": "fc",
+     "kind": "observe",
+     "next": "have-temp"
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "forecast",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "have-temp": {
+     "branches": [
+      {
+       "then": "sky",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "no-forecast"
+      }
+     ],
+     "kind": "decide",
+     "on": "temp"
+    },
+    "no-forecast": {
+     "kind": "fail",
+     "reason": "no-forecast",
+     "say": "Open-Meteo found {{ state.name }} but returned no current temperature (status {{ state.fc.status }})."
+    },
+    "rain": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "raining"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "humidity": "{{ state.humidity }}",
+      "place": "{{ state.name }}",
+      "sky": "{{ state.sky }}",
+      "temperature": "{{ state.temp }}",
+      "unit": "{{ state.unit }}",
+      "wind_kmh": "{{ state.wind }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }}: {{ state.temp }}{{ state.unit }}, {{ state.sky }}, humidity {{ state.humidity }}%, wind {{ state.wind }} km/h."
+    },
+    "sky": {
+     "branches": [
+      {
+       "then": "clear",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "cloudy",
+       "when": {
+        "between": [
+         1,
+         3
+        ]
+       }
+      },
+      {
+       "then": "fog",
+       "when": {
+        "between": [
+         45,
+         48
+        ]
+       }
+      },
+      {
+       "then": "rain",
+       "when": {
+        "between": [
+         51,
+         67
+        ]
+       }
+      },
+      {
+       "then": "snow",
+       "when": {
+        "between": [
+         71,
+         77
+        ]
+       }
+      },
+      {
+       "then": "rain",
+       "when": {
+        "between": [
+         80,
+         82
+        ]
+       }
+      },
+      {
+       "then": "snow",
+       "when": {
+        "between": [
+         85,
+         86
+        ]
+       }
+      },
+      {
+       "then": "storm",
+       "when": {
+        "between": [
+         95,
+         99
+        ]
+       }
+      },
+      {
+       "else": "unknown-sky"
+      }
+     ],
+     "kind": "decide",
+     "on": "code"
+    },
+    "snow": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "snowing"
+     }
+    },
+    "storm": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "stormy"
+     }
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    },
+    "unknown-sky": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "weather code {{ state.code }}"
+     }
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] weather in {place}"
+    },
+    {
+     "pattern": "[what's the] weather for {place}"
+    },
+    {
+     "pattern": "how [hot|cold|warm] is it in {place}"
+    }
+   ],
+   "version": 1
+  }
+ }
+}

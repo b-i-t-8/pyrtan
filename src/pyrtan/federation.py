@@ -84,7 +84,8 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch")
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer")
+ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
 HOLDER_FRESH = 86400.0                 # a holder confirmed within this counts toward the replicas
@@ -212,6 +213,7 @@ class Remote:
     last_error: str | None = None
     since: float = field(default_factory=time.time)
     kind: str = "hub"           # hub | member
+    trusted: bool = False       # a member that joined with the operator's token: it may run the hub's trees
 
     @property
     def link(self) -> str:
@@ -227,14 +229,14 @@ class Remote:
         return "down"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error}
+        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "trusted": self.trusted}
 
     def to_state(self) -> dict[str, Any]:
-        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind}
+        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind, "trusted": self.trusted}
 
     @classmethod
     def from_state(cls, d: dict[str, Any]) -> "Remote":
-        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"))
+        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)))
 
 
 def heard(seen: float, now: float | None = None) -> str:
@@ -258,6 +260,10 @@ class Federation:
         self._auto_digest: dict[str, str] = {}
         self.keeping: dict[str, dict[str, Any]] = {}        # our blobs: key -> {sha256, size, updated, holders: {actor: {at, sha256}}}
         self.mailboxes: dict[str, deque[dict[str, Any]]] = {}  # activities waiting for members
+        self.handout: Callable[[], dict[str, Any]] = lambda: {}  # the trees trusted members run: name -> the tree as JSON
+        self._handed: dict[str, dict[str, dict[str, Any]]] = {}  # member -> key -> {sha256, at, confirmed}
+        self._asks: dict[str, dict[str, Any]] = {}            # run id -> {member, event, answer}
+        self.ask_timeout = ASK_TIMEOUT
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
         self.directory_entries: dict[str, dict[str, Any]] = {}
@@ -544,6 +550,7 @@ class Federation:
         self.announce_up()
         self.announce()
         self.replicate()
+        self.hand_out()
 
     # ------------------------------------------------------------ keeping
 
@@ -637,6 +644,52 @@ class Federation:
             except StoreError:
                 continue
 
+    def hand_out(self, limit: int = 20) -> int:
+        """Give every trusted member the trees it should run (``trees/<name>``
+        blobs), each once per version until the member confirms. Returns
+        how many were sent."""
+        trees = self.handout()
+        if not trees:
+            return 0
+        now = time.time()
+        sent = 0
+        for remote in list(self.followers.values()):
+            if remote.kind != "member" or not remote.trusted or remote.state != "accepted":
+                continue
+            handed = self._handed.setdefault(remote.url, {})
+            for name, tree in trees.items():
+                key = f"trees/{name}"
+                raw = tree.raw
+                sha, size = blob_digest(raw)
+                h = handed.get(key)
+                if h and h["sha256"] == sha and (h["confirmed"] or now - h["at"] < ASK_WINDOW):
+                    continue
+                if sent >= limit:
+                    return sent
+                ok, _, _ = self.deliver(remote, self._activity("Keep", {"key": key, "sha256": sha, "size": size, "updated": now, "data": raw}))
+                if ok:
+                    handed[key] = {"sha256": sha, "at": now, "confirmed": False}
+                    sent += 1
+        return sent
+
+    def ask(self, remote: Remote, tree: str, inputs: dict[str, Any], depth: int = 0, timeout: float | None = None) -> dict[str, Any]:
+        """Have a trusted member run a tree: an Ask in its mailbox, then wait
+        for its Answer (at most ``timeout`` seconds, default ``ask_timeout``;
+        a member polls)."""
+        timeout = self.ask_timeout if timeout is None else timeout
+        run = uuid.uuid4().hex
+        pending = {"member": remote.url, "event": threading.Event(), "answer": None}
+        self._asks[run] = pending
+        try:
+            self.deliver(remote, self._activity("Ask", {"run": run, "tree": tree, "inputs": inputs, "depth": depth}))
+            if not pending["event"].wait(timeout):
+                return {"status": "error", "reason": "member-timeout", "tree": tree, "say": f"{remote.name or remote.url} did not answer within {int(timeout)} s; a member answers when it next polls."}
+            answer = dict(pending["answer"] or {})
+            answer.setdefault("tree", tree)
+            return answer
+        finally:
+            self._asks.pop(run, None)
+
     def kept_for(self, actor: str, key: str) -> dict[str, Any] | None:
         """A blob we keep for ``actor``, for it to take back."""
         return self.store.get_kept(actor, key)
@@ -720,7 +773,9 @@ class Federation:
             return None
         return actor if verify(secret, method, path, body, h) is None else None
 
-    def handle_inbox(self, activity: Any, headers: dict[str, str] | None) -> tuple[int, dict[str, Any]]:
+    def handle_inbox(self, activity: Any, headers: dict[str, str] | None, trusted: bool = False) -> tuple[int, dict[str, Any]]:
+        """``trusted`` says the request also carried the operator's token: a
+        member that follows that way may run the hub's trees."""
         h = _lower(headers)
         if not isinstance(activity, dict) or activity.get("type") not in ACTIVITY_TYPES or not isinstance(activity.get("actor"), str):
             return 400, {"status": "error", "reason": "bad-activity", "say": f"Send an activity of type {', '.join(ACTIVITY_TYPES)} with an actor."}
@@ -730,10 +785,10 @@ class Federation:
         kind = activity["type"]
         self.inbox_log.append({**activity, "received": time.time()})
         if kind == "Follow":
-            return self._on_follow(actor, activity, h)
+            return self._on_follow(actor, activity, h, trusted)
         followed = self.following.get(actor)
         follower = self.followers.get(actor)
-        if kind in ("Announce", "Keep", "Kept", "Fetch"):
+        if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer"):
             # Announce from a hub we follow: its trees are ours to route to;
             # from a follower: only the directory it carries. Keeping goes
             # both ways between any two that share a secret.
@@ -743,7 +798,7 @@ class Federation:
         if remote is None:
             return 403, {"status": "error", "reason": "unknown-actor", "say": f"{actor} is not a hub this one follows or is followed by."}
         problem = verify(remote.secret, "POST", "/inbox", activity, h)
-        if problem and kind in ("Announce", "Keep", "Kept", "Fetch") and followed and follower and followed is not follower:
+        if problem and kind in ("Announce", "Keep", "Kept", "Fetch", "Answer") and followed and follower and followed is not follower:
             # Mutual follow: the announce may be signed with the other pair.
             remote = follower if remote is followed else followed
             problem = verify(remote.secret, "POST", "/inbox", activity, h)
@@ -773,6 +828,12 @@ class Federation:
                     remote.name = obj.get("name") or remote.name
                     remote.last_ok = time.time()
                     remote.last_error = None
+                    if remote.kind == "member" and remote.trusted:
+                        # A trusted member runs the trees we handed it, and only those;
+                        # what each tree answers to is our copy's word, not the member's.
+                        handed = self.handout()
+                        names = {t.get("name") for t in obj.get("trees", []) if isinstance(t, dict)}
+                        remote.trees = [handed[n].capability() for n in sorted(names & set(handed))]
             taken = self.merge_directory(obj.get("directory", []), via=actor)
             # What it keeps for us that we no longer have: ask for it back.
             wanted = [k for k in obj.get("kept", []) if isinstance(k, str) and not self.store.get_own(k)]
@@ -793,10 +854,25 @@ class Federation:
             obj = activity.get("object")
             if not isinstance(obj, dict) or not isinstance(obj.get("key"), str):
                 return 400, {"status": "error", "reason": "bad-activity", "say": "A Kept names a key."}
-            if "data" in obj:
+            if obj["key"].startswith("trees/"):
+                with self._lock:
+                    handed = self._handed.setdefault(actor, {}).get(obj["key"])
+                    if handed and handed.get("sha256") == obj.get("sha256"):
+                        handed["confirmed"] = True
+            elif "data" in obj:
                 self._adopt(obj["key"], obj, actor)
             elif isinstance(obj.get("sha256"), str):
                 self.confirm(actor, obj["key"], obj["sha256"])
+            remote.last_ok = time.time()
+            return 200, {"status": "ok"}
+        if kind == "Answer":
+            obj = activity.get("object")
+            run = obj.get("run") if isinstance(obj, dict) else None
+            pending = self._asks.get(run) if isinstance(run, str) else None
+            if pending is None or pending["member"] != actor:
+                return 404, {"status": "error", "reason": "no-such-ask", "say": "No run waits for this answer from this member."}
+            pending["answer"] = obj.get("outcome") if isinstance(obj.get("outcome"), dict) else {"status": "error", "reason": "bad-answer", "say": "The member's answer was not an outcome."}
+            pending["event"].set()
             remote.last_ok = time.time()
             return 200, {"status": "ok"}
         if kind == "Fetch":
@@ -810,12 +886,13 @@ class Federation:
             with self._lock:
                 self.followers.pop(actor, None)
                 self.mailboxes.pop(actor, None)
+                self._handed.pop(actor, None)
                 self.store.drop_kept(actor)
                 self._save()
             return 200, {"status": "ok"}
         return 400, {"status": "error", "reason": "bad-activity"}
 
-    def _on_follow(self, actor: str, activity: dict[str, Any], h: dict[str, str]) -> tuple[int, dict[str, Any]]:
+    def _on_follow(self, actor: str, activity: dict[str, Any], h: dict[str, str], trusted: bool = False) -> tuple[int, dict[str, Any]]:
         pair = activity.get("secret")
         inbox = activity.get("inbox")
         if not isinstance(pair, str) or len(pair) < 16 or not isinstance(inbox, str):
@@ -848,12 +925,15 @@ class Federation:
             name = str(activity.get("name") or doc.get("name") or "")
             kind = "hub"
         with self._lock:
-            remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind)
+            remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind, trusted=bool(trusted and kind == "member"))
             self.followers[actor] = remote
+            self._handed.pop(actor, None)
             self._save()
         self.deliver(remote, self._activity("Accept", {"type": "Follow", "actor": actor, "object": self.id}))
         self.deliver(remote, self._activity("Announce", self._announcement(remote)))
-        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}.", "mailbox": f"{self.id}/mailbox" if kind == "member" else None}
+        if remote.trusted:
+            self.hand_out()
+        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}.", "mailbox": f"{self.id}/mailbox" if kind == "member" else None, "trusted": remote.trusted}
 
     # ------------------------------------------------------------ views
 

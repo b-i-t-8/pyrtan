@@ -53,7 +53,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .gaps import GapStore
-from .page import MANIFEST, PAGE, SERVICE_WORKER
+from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
@@ -63,7 +63,7 @@ from .transport import Transport, UrllibTransport
 MAX_BODY = 1 << 20
 
 # What answers without a token: the console, its index, and liveness.
-PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory", "/manifest.webmanifest", "/sw.js"})
+PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory", "/manifest.webmanifest", "/sw.js", "/pyrtan.js"})
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
 SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities", "/mailbox"})
@@ -232,6 +232,8 @@ class Service:
             return 200, ("application/manifest+json", MANIFEST)
         if method == "GET" and path == "/sw.js":
             return 200, ("text/javascript; charset=utf-8", SERVICE_WORKER)
+        if method == "GET" and path == "/pyrtan.js":
+            return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
             return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered"]}
         if method == "POST" and path == "/intent":

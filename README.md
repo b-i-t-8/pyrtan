@@ -212,9 +212,19 @@ hub's box dies and a new one comes up with the same name, its members'
 next announce says what they kept and the hub takes it back; `pyrtan
 kept` shows who holds what, `pyrtan fetch KEY` gets a blob back from
 whoever has it. Install the console to the home screen and it is the
-phone app, offline-capable. Nothing secret is ever a blob. The design is
-in [`_meta/members.md`](_meta/members.md). Members do not run trees yet;
-that is the JavaScript runtime of v0.6. The answer to a federated
+phone app, offline-capable. Nothing secret is ever a blob.
+
+A member that joined **with the hub's token** is trusted, and **runs
+trees**: the hub hands it its own trees and any `--handout DIR` (trees
+for the devices, not the box) as blobs, the device announces them, and a
+sentence for one of them goes into the device's mailbox as an `Ask` and
+comes back as its `Answer`, with `peer: <member>` and `via: ["member"]`.
+The runtime that does it is `pyrtan.js`, the same tree runtime in
+JavaScript, served at `/pyrtan.js` by every hub and written beside the
+console; `tests/conformance/` holds the vectors both runtimes must agree
+on, generated from the examples by the Python runtime and checked
+against the JavaScript one in the test suite. The design is in
+[`_meta/members.md`](_meta/members.md). The answer to a federated
 sentence carries `via: [the hub it crossed]`, and the console's Peers tab
 shows who follows whom. The design is in
 [`_meta/federation.md`](_meta/federation.md).
@@ -359,10 +369,11 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.5.0. The core, the service, the hub, the command, the console, the
+0.6.0. The core, the service, the hub, the command, the console, the
 catalog client, the language rules, federation between hubs, the
-gossiped directory, members (a browser or a phone as part of the swarm)
-and the blobs they keep are built and tested; HTTP is the one form of I/O the core speaks; a swarm can
+gossiped directory, members (a browser or a phone as part of the swarm),
+the blobs they keep and the trees they run (`pyrtan.js`, conformant with
+the Python runtime) are built and tested; HTTP is the one form of I/O the core speaks; a swarm can
 require a token, keep its gaps, refuse private addresses, and follow
 other swarms. Not yet built: further adapters (a browser for pages that need
 a script to render; files, shells, serial lines, message queues),

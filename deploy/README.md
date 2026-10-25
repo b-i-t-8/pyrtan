@@ -74,6 +74,13 @@ the directory every hub gossips; `pyrtan follow URL --at <your hub>
 hub routes to the hubs you follow, and hubs that follow yours may ask it.
 See [`../_meta/federation.md`](../_meta/federation.md).
 
+Your phone is part of it too: open the hub's console on the phone, enter
+the token, and in the Member tab join; the phone then keeps the hub's
+blobs and runs the hub's trees when asked. Trees meant for the phones
+rather than the NAS (they need the internet the NAS is kept from, or the
+network the person is on) go in a `handout` directory next to `trees`,
+with `PYRTAN_HANDOUT: /handout` in the compose file.
+
 ### Without the plugin
 
 Over SSH, from the checkout:

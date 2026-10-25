@@ -44,9 +44,10 @@ from . import __version__
 from .federation import MAX_HOPS, Federation, Remote, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
-from .page import MANIFEST, PAGE, SERVICE_WORKER
+from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry
 from .runtime import Outcome
+from .tree import Tree
 from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, signed_path
 from .store import StoreError, check_key
 
@@ -117,8 +118,9 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None) -> None:
         self.name = name
+        self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
         self.token = token or None
         self.peers: dict[str, Peer] = {}
@@ -143,8 +145,31 @@ class Hub:
             "gaps": lambda: self.gaps()["gaps"],
             "unanswered": lambda: self.unanswered_all()["unanswered"],
         }
-        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto)
+        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.announced_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto)
+        self.federation.handout = self.handout_trees
         return self.federation
+
+    def handout_trees(self) -> dict[str, Tree]:
+        """The trees a trusted member may run: the ones this hub holds itself,
+        and the ones given it to hand out (``--handout``), by name."""
+        out: dict[str, Tree] = {}
+        for reg in (self.local.service.registry if self.local is not None else None, self.handout_registry):
+            if reg is None:
+                continue
+            reg.reload()
+            for t in reg.trees():
+                out.setdefault(t.name, t)
+        return out
+
+    def member_capabilities(self) -> list[dict[str, Any]]:
+        """The trees this hub's trusted members have announced they run."""
+        if self.federation is None:
+            return []
+        return [{**t, "peer": r.url, "link": r.link, "via": "member"} for r in list(self.federation.followers.values()) if r.kind == "member" and r.trusted for t in r.trees]
+
+    def announced_capabilities(self) -> list[dict[str, Any]]:
+        """What this hub answers for: its own trees, its services', and its members'."""
+        return self.local_capabilities() + self.member_capabilities()
 
     def hold(self, service: Service) -> Local:
         """Hold trees in this process. The service's delegations reach the
@@ -220,6 +245,8 @@ class Hub:
             out: list[Local | Peer | Remote] = [self.local] if self.local is not None else []
             out.extend(self.peers.values())
             if self.federation is not None:
+                # Trusted members run our own trees; a hub we follow answers for its.
+                out.extend(r for r in self.federation.followers.values() if r.kind == "member" and r.trusted and r.trees)
                 out.extend(self.federation.following.values())
             return out
 
@@ -265,7 +292,7 @@ class Hub:
         }
 
     def capabilities(self) -> dict[str, Any]:
-        trees = self.local_capabilities()
+        trees = self.announced_capabilities()
         if self.federation is not None:
             for remote in list(self.federation.following.values()):
                 for t in remote.trees:
@@ -323,6 +350,17 @@ class Hub:
             answer.setdefault("peer", "local")
             return 200, answer
         hops = list(body.get("hops") or [])
+        if isinstance(peer, Remote) and peer.kind == "member":
+            # One of our own devices runs it: an Ask in its mailbox, its Answer back.
+            if path != "/run":
+                return 200, {"status": "error", "reason": "not-on-member", "say": "A member runs trees; it cannot be asked a sentence or resumed."}
+            assert self.federation is not None
+            answer = self.federation.ask(peer, str(body.get("tree")), dict(body.get("inputs") or {}), int(body.get("depth", 0)))
+            answer.setdefault("peer", peer.url)
+            answer["via"] = ["member"]
+            if not body.get("trace", True):
+                answer.pop("trace", None)
+            return 200, answer
         if isinstance(peer, Remote):
             # Over federation: one hop, signed, and the request says where it has been.
             if len(hops) >= MAX_HOPS or (self.federation and self.federation.id in hops):
@@ -408,7 +446,7 @@ class Hub:
             if method == "GET" and path == "/directory":
                 return 200, fed.directory()
             if method == "POST" and path == "/inbox":
-                return fed.handle_inbox(body, headers)
+                return fed.handle_inbox(body, headers, trusted=bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token))
             if method == "GET" and path in ("/following", "/followers"):
                 return 200, {path[1:]: fed.to_dict()[path[1:]]}
             if method == "GET" and path == "/outbox":
@@ -462,6 +500,8 @@ class Hub:
             return 200, ("application/manifest+json", MANIFEST)
         if method == "GET" and path == "/sw.js":
             return 200, ("text/javascript; charset=utf-8", SERVICE_WORKER)
+        if method == "GET" and path == "/pyrtan.js":
+            return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
             if fed is not None:
@@ -484,7 +524,8 @@ class Hub:
 
 def _rank(peer: Local | Peer | Remote) -> int:
     # Our own trees, then a service of ours, then a hub we follow; the healthier of each.
-    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (10 if isinstance(peer, Remote) else 0) - (1 if isinstance(peer, Local) else 0)
+    # Our own trees, then a service of ours, then our trusted members, then a hub we follow; the healthier of each.
+    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (5 if isinstance(peer, Remote) and peer.kind == "member" else 10 if isinstance(peer, Remote) else 0) - (1 if isinstance(peer, Local) else 0)
 
 
 def serve_hub(
@@ -505,6 +546,7 @@ def serve_hub(
     follow: list[str] | None = None,
     listed: bool = False,
     trees: list[str | Path] | None = None,
+    handout: list[str | Path] | None = None,
     env: dict[str, Any] | None = None,
     gaps: str | None = None,
     egress: str = "any",
@@ -512,7 +554,7 @@ def serve_hub(
     replicas: int = 2,
 ) -> tuple[Hub, Server]:
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas)
