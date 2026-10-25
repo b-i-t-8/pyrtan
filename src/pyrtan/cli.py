@@ -4,6 +4,7 @@
     pyrtan list   [PATH ...]                 what is loaded and what it answers to
     pyrtan run    TEXT [--trees PATH]        answer a sentence, in this process
     pyrtan run    --tree NAME --input k=v    run a named tree
+    pyrtan match  TEXT [--trees PATH]        how a sentence reads: the rewrites and every trigger's verdict
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
@@ -68,6 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
     _token_arg(p, "the token the hub (--hub) requires, if any")
+
+    p = sub.add_parser("match", help="how a sentence reads against the trees: the rewrites, every trigger's verdict, the winner")
+    p.add_argument("text")
+    p.add_argument("--trees", action="append", default=[], help="tree file or directory (repeatable; default $PYRTAN_TREES or ./trees)")
+    p.add_argument("--now", help="read dates against this day (YYYY-MM-DD) instead of today")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("ask", help="answer a sentence through a running service or hub")
     p.add_argument("text")
@@ -134,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "console": cmd_console,
     }
     return commands[args.command](args)
@@ -241,6 +248,52 @@ def cmd_run(args: argparse.Namespace) -> int:
     if recorder is not None:
         recorder.save(args.record)
     return _report(outcome, args.json, not args.no_trace)
+
+
+def cmd_match(args: argparse.Namespace) -> int:
+    """Show how a sentence is read, without running anything: the rewrites
+    the language rules made, each trigger that matched or refused, and the
+    winner. The tool for someone writing a trigger."""
+    import datetime as _dt
+
+    reg = Registry.from_paths(_paths(args.trees))
+    for path, err in reg.errors.items():
+        print(f"pyrtan: {path}: {err}", file=sys.stderr)
+    now: Any = _dt.datetime.now(_dt.timezone.utc)
+    if args.now:
+        try:
+            now = _dt.date.fromisoformat(args.now)
+        except ValueError:
+            print(f"pyrtan match: --now must be YYYY-MM-DD, got {args.now!r}", file=sys.stderr)
+            return 2
+    reading = reg.read(args.text, now)
+    if args.json:
+        print(json.dumps(reading.to_dict(), indent=2, ensure_ascii=False, default=str))
+        return 0 if reading.winner else 1
+    print(f"sentence: {reading.text!r}")
+    if reading.cleaned != reading.text:
+        print(f"read as:  {reading.cleaned!r}")
+    for step in reading.steps:
+        print(f"    {step}")
+    if not reading.considered:
+        print("no trigger matched" + (f" ({len(reg.candidates())} tried)" if reg.candidates() else " (no trees loaded)"))
+        return 1
+    print("triggers:")
+    for m in sorted(reading.considered, key=lambda m: (-m.specificity, m.tree)):
+        verdict = "refused" if m.rejected else ("match" if m in reading.matches else "match, less specific")
+        print(f"    {m.tree}: {m.trigger.pattern!r}  {m.specificity} literal chars  -> {verdict}")
+        if m.inputs and not m.rejected:
+            print(f"        inputs: {json.dumps(m.inputs, ensure_ascii=False, default=str)}")
+        for note in m.notes:
+            print(f"        {note}")
+    if reading.winner:
+        print(f"winner: {reading.winner.tree}")
+        return 0
+    if reading.matches:
+        print(f"tie: {sorted({m.tree for m in reading.matches})}; make one trigger more specific")
+    else:
+        print("no match: every trigger that fit refused a slot")
+    return 1
 
 
 def _answer_questions(outcome: Outcome, resume) -> Outcome:

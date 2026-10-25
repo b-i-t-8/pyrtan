@@ -29,7 +29,7 @@ from __future__ import annotations
 import datetime as _dt
 import time
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from . import conditions
 from .extract import extract
@@ -98,6 +98,7 @@ class Runner:
     transport: Transport = field(default_factory=UrllibTransport)
     resolver: Resolver | None = None
     env: dict[str, Any] = field(default_factory=dict)
+    clock: Callable[[], _dt.datetime] = field(default=lambda: _dt.datetime.now(_dt.timezone.utc))
     max_steps: int = MAX_STEPS
     max_depth: int = MAX_DEPTH
     emitted: list[dict[str, Any]] = field(default_factory=list)
@@ -105,15 +106,27 @@ class Runner:
     # ------------------------------------------------------------ entry points
 
     def run_intent(self, text: str, depth: int = 0) -> Outcome:
-        try:
-            match = self.registry.match(text)
-        except NoMatch:
+        """Read a sentence and run the tree it names. The trace begins with an
+        ``intent`` step: what the sentence was rewritten to, which rules
+        fired, and which trigger took it."""
+        reading = self.registry.read(text, self.clock())
+        if not reading.matches:
             if self.resolver is not None:
                 return self.resolver.run_intent(text, depth)
-            return Outcome("error", "", reason="no-match", **no_match_outcome(text, "Nothing here"))
-        except Ambiguous as e:
-            return Outcome("error", "", reason="ambiguous", say=str(e), output={"candidates": [m.tree for m in e.matches]})
-        return self.run_tree(match.tree, match.inputs, depth)
+            out = Outcome("error", "", reason="no-match", **no_match_outcome(text, "Nothing here"))
+            out.output = {**(out.output or {}), "reading": {"cleaned": reading.cleaned, "steps": reading.steps, "considered": [m.trigger.pattern for m in reading.considered]}}
+            return out
+        if len({m.tree for m in reading.matches}) > 1:
+            trees = sorted({m.tree for m in reading.matches})
+            return Outcome("error", "", reason="ambiguous", say=f"{text!r} matches more than one tree equally well: {', '.join(trees)}", output={"candidates": trees, "reading": {"cleaned": reading.cleaned, "steps": reading.steps}})
+        match = reading.matches[0]
+        tree = self.registry.get(match.tree)
+        if tree is None:
+            return self.run_tree(match.tree, match.inputs, depth)
+        trace = Trace(tree.name)
+        step = reading.step()
+        trace.add(Step(step["node"], step["kind"], step["summary"], observed=step["observed"], next=tree.start, depth=depth))
+        return self.run(tree, match.inputs, depth=depth, trace=trace)
 
     def run_tree(self, name: str, inputs: dict[str, Any] | None = None, depth: int = 0) -> Outcome:
         tree = self.registry.get(name)
@@ -132,7 +145,7 @@ class Runner:
         except TreeError as e:
             return Outcome("error", tree.name, reason="bad-input", say=str(e), trace=trace)
         state = dict(state) if state is not None else {}
-        scope: dict[str, Any] = {"inputs": bound, "state": state, "tree": {"name": tree.name, "version": tree.version}, "now": _now(), "env": self.env}
+        scope: dict[str, Any] = {"inputs": bound, "state": state, "tree": {"name": tree.name, "version": tree.version}, "now": _now(self.clock()), "env": self.env}
         if scope_extra:
             scope.update(scope_extra)
         try:
@@ -410,6 +423,6 @@ def _cond_text(cond: dict[str, Any]) -> str:
     return " and ".join(f"{k} {v!r}" for k, v in cond.items())
 
 
-def _now() -> dict[str, Any]:
-    now = _dt.datetime.now(_dt.timezone.utc)
+def _now(now: _dt.datetime | None = None) -> dict[str, Any]:
+    now = now or _dt.datetime.now(_dt.timezone.utc)
     return {"iso": now.isoformat(timespec="seconds"), "date": now.date().isoformat(), "epoch": int(now.timestamp()), "year": now.year}

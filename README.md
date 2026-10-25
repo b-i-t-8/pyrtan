@@ -122,6 +122,7 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
+| `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
@@ -223,11 +224,49 @@ directory picks the file up the moment it is saved. No model drafts
 anything: the proposal is derived from the words by rules, and the demo page
 shows the same proposal and the same command whenever nothing answers.
 
+## Sentences
+
+Pyrtan reads a sentence with rules, not a model, and the trace's first
+step shows exactly what the rules did:
+
+```
+$ pyrtan match "Hey Pyrtan, what's the forecast in Oslo please?" --trees examples
+sentence: "Hey Pyrtan, what's the forecast in Oslo please?"
+read as:  'what is the forecast in Oslo'
+    fillers: 'Hey Pyrtan', 'please'
+    contractions: what's->what is
+triggers:
+    weather: "[what's the] weather in {place}"  18 literal chars  -> match
+        inputs: {"place": "Oslo"}
+winner: weather
+```
+
+The fixed rules: unicode folded; greetings, politeness and request
+wrappers dropped from the edges; contractions expanded; number words
+turned to digits (`top three stories` → `top 3 stories`); a literal word
+matching its plural or singular. A tree adds its own in a `[language]`
+table: `synonyms` (`weather = ["forecast", "temperature"]` is how the
+example above matched) and an opt-in `typos` rule that reads a word one
+edit from exactly one pattern word as that word, and never chooses between
+two.
+
+Slots can be typed, each with a fixed parser: `{when:date}` reads
+`tomorrow`, `next friday`, `in 3 days` or `oct 25` as `YYYY-MM-DD` against
+the service's clock; `{at:time}` reads `3pm` or `15:30`; `{for:duration}`
+reads `an hour and a half` as seconds; `{n:number}` reads `twenty-one`;
+`{site:host}`, `{u:url}` and `{to:email}` read what they say. A value a
+parser cannot read, or could read two ways (`3/10/2026`), makes the
+trigger refuse the sentence rather than guess, and the reading says which
+slot refused. The whole set of rules is in
+[`_meta/tree-format.md`](_meta/tree-format.md); the tables are in
+`src/pyrtan/nlp.py`.
+
 ## What Pyrtan refuses
 
-- **No model in the loop.** Nothing in this repository calls an LLM. A model
-  may one day sit *beside* the swarm, proposing branches for recorded gaps;
-  it will not sit inside a run deciding anything.
+- **No model in the loop.** Nothing in this repository calls an LLM. The
+  reading of a sentence is tables and rules, each named in the trace when
+  it fires. A model may one day sit *beside* the swarm, proposing branches
+  for recorded gaps; it will not sit inside a run deciding anything.
 - **No endpoint a tree did not name.** Every HTTP node's host is checked
   against the tree's `hosts` at load time where it is literal and at run
   time where it is templated. Every further form of I/O arrives with an
@@ -240,7 +279,7 @@ shows the same proposal and the same command whenever nothing answers.
 ## Layout
 
 ```
-src/pyrtan/     the package: tree, intent, template, conditions, extract,
+src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
                 service, hub, page (the console), catalog, cli
 examples/       trees that run against real public APIs, and offline against

@@ -98,7 +98,7 @@ def test_unanswered_lists_and_scaffolds(tmp_path, capsys):
         http_json("POST", f"{server.url}/intent", {"text": "ping example.org"})
         http_json("POST", f"{server.url}/intent", {"text": "tell me a joke"})
         code, out, _ = run(capsys, "unanswered", "--at", server.url)
-        assert code == 0 and out.startswith("'ping example.org'  x2") and "would be: host-ping  answering  ping {host:word}" in out and "pyrtan new joke --from" in out
+        assert code == 0 and out.startswith("'ping example.org'  x2") and "would be: host-ping  answering  ping {host:host}" in out and "pyrtan new joke --from" in out
         code, out, _ = run(capsys, "unanswered", "--at", server.url, "--json")
         assert [e["text"] for e in json.loads(out)["unanswered"]] == ["ping example.org", "tell me a joke"]
         code, out, _ = run(capsys, "unanswered", "--at", server.url, "--scaffold", str(tmp_path))
@@ -108,3 +108,16 @@ def test_unanswered_lists_and_scaffolds(tmp_path, capsys):
         assert "kept" in out and "wrote" not in out
     finally:
         server.stop()
+
+
+def test_match_explains_a_sentence(capsys):
+    code, out, _ = run(capsys, "match", "Hey Pyrtan, what's the forecast in Oslo please?", "--trees", str(EXAMPLES))
+    assert code == 0
+    assert "read as:  'what is the forecast in Oslo'" in out
+    assert "fillers: 'Hey Pyrtan', 'please'" in out and "contractions: what's->what is" in out
+    assert "winner: weather" in out and '"place": "Oslo"' in out
+    code, out, _ = run(capsys, "match", "is example dot com up", "--trees", str(EXAMPLES))
+    assert code == 1 and "no trigger matched" in out
+    code, out, _ = run(capsys, "match", "weather in Oslo", "--trees", str(EXAMPLES), "--json")
+    assert code == 0 and json.loads(out)["matches"][0]["tree"] == "weather"
+    assert run(capsys, "match", "x", "--trees", str(EXAMPLES), "--now", "yesterday")[0] == 2

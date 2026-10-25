@@ -255,3 +255,46 @@ say = "{{ state.r.reason }}"
 """
     out = Runner(reg_with(text), RecordedTransport()).run_tree("recursive")
     assert out.status == "done" and "too-deep" in out.trace.render()
+
+
+REMINDER = """
+name = "reminder"
+description = "reads a date and a time"
+start = "say"
+
+[language]
+synonyms = { remind = ["ping", "nudge"] }
+
+[[triggers]]
+pattern = "remind me {when:date} at {at:time}"
+
+[inputs.when]
+type = "str"
+[inputs.at]
+type = "str"
+
+[nodes.say]
+kind = "done"
+say = "{{ inputs.when }} {{ inputs.at }}"
+"""
+
+
+def test_trace_starts_with_how_the_sentence_was_read():
+    import datetime as dt
+
+    runner = Runner(reg_with(REMINDER), RecordedTransport(), clock=lambda: dt.datetime(2026, 10, 25, 12, tzinfo=dt.timezone.utc))
+    out = runner.run_intent("Hey Pyrtan, could you nudge me next friday at 3pm please")
+    assert out.status == "done" and out.say == "2026-10-30 15:00"
+    first = out.trace.steps[0]
+    assert first.kind == "intent" and first.node == "intent" and first.next == "say"
+    assert first.observed["cleaned"] == "nudge me next friday at 3pm"
+    assert first.observed["steps"] == ["fillers: 'Hey Pyrtan', 'please', 'could you'"]  # in the order they were dropped
+    assert first.observed["inputs"] == {"when": "2026-10-30", "at": "15:00"}
+    assert "when: 'next friday' read as '2026-10-30'" in first.observed["notes"]
+    assert "reminder via 'remind me {when:date} at {at:time}'" in out.trace.render()
+    # The same clock drives {{ now }}: a run is deterministic given its observations.
+    out2 = runner.run_intent("remind me tomorrow at noon")
+    assert out2.say == "2026-10-26 12:00"
+    # A sentence that fits the shape but not the value is refused, and says why.
+    out3 = runner.run_intent("remind me someday at noon")
+    assert out3.reason == "no-match" and out3.output["reading"]["considered"] == ["remind me {when:date} at {at:time}"]

@@ -35,7 +35,9 @@ from typing import Any
 
 from . import __version__
 from .grow import Unanswered, no_match_outcome
-from .intent import Trigger, best_matches
+import datetime as _dt
+
+from .intent import Trigger, read
 from .page import PAGE
 from .service import Server, http_json
 
@@ -134,7 +136,7 @@ class Hub:
                 for tree in peer.trees:
                     for pattern in tree.get("triggers", []):
                         try:
-                            out.append(((peer.url, tree["name"]), Trigger(pattern)))
+                            out.append(((peer.url, tree["name"]), Trigger(pattern, language=tree.get("language") or {})))
                         except Exception:
                             continue
         return out
@@ -177,18 +179,27 @@ class Hub:
         text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             return 200, {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
-        matches = best_matches(text, self.candidates())  # type: ignore[arg-type]
+        reading = read(text, self.candidates(), _dt.datetime.now(_dt.timezone.utc))
+        matches = reading.matches
         if not matches:
             entry = self.unanswered.record(text)
             answer = no_match_outcome(text, "No service in the swarm")
             answer["output"]["seen"] = entry["count"]
+            answer["output"]["reading"] = {"cleaned": reading.cleaned, "steps": reading.steps}
             return 200, {"status": "error", "reason": "no-match", **answer}
         tree_names = {m.tree[1] for m in matches}  # type: ignore[index]
         if len(tree_names) > 1:
-            return 200, {"status": "error", "reason": "ambiguous", "say": f"{text!r} matches more than one tree: {sorted(tree_names)}", "output": {"candidates": sorted(tree_names)}}
+            return 200, {"status": "error", "reason": "ambiguous", "say": f"{text!r} matches more than one tree: {sorted(tree_names)}", "output": {"candidates": sorted(tree_names), "reading": {"cleaned": reading.cleaned, "steps": reading.steps}}}
         peer_url, tree_name = matches[0].tree  # type: ignore[misc]
+        for m in matches:
+            m.tree = tree_name  # the step names the tree, not the (peer, tree) pair
         peer = self.holder(tree_name) or self.peers.get(peer_url)
-        return self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True)})
+        status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True)})
+        if isinstance(answer.get("trace"), dict) and isinstance(answer["trace"].get("steps"), list):
+            # The hub read the sentence; the peer only ran the tree. Put the
+            # reading where a caller expects it, at the top of the trace.
+            answer["trace"]["steps"].insert(0, {**reading.step(), "next": answer["trace"]["steps"][0]["node"] if answer["trace"]["steps"] else None, "elapsed_ms": 0, "depth": 0})
+        return status, answer
 
     def run(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         tree = body.get("tree")

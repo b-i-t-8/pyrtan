@@ -317,6 +317,7 @@ async function ask(snapshot, answer) {
   const card = document.createElement("div"); card.className = "card";
   let html = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${ms} ms${r.peer ? " · " + esc(r.peer) : ""}</span></div>`;
   if (r.say) html += `<div class="say">${esc(r.say)}</div>`;
+  if (r.output && r.output.reading && r.output.reading.steps && r.output.reading.steps.length) html += `<div class="mute" style="font-size:14px">Read as <code>${esc(r.output.reading.cleaned)}</code>: ${r.output.reading.steps.map(esc).join("; ")}</div>`;
   if (r.reason === "no-match" && r.output && r.output.proposal) {
     const p = r.output.proposal;
     html += `<div class="gap">No tree answers this yet. The one that would: <code>${esc(p.name)}</code>, answering <code>${esc(p.trigger)}</code>. It is listed under <a href="#unanswered">Unanswered</a>.</div><pre>${esc(p.scaffold)}</pre>`;
