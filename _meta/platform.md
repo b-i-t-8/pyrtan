@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Phase 1 built, v0.2.** Tokens, CORS, persistent gaps, the egress policy, the catalog client and the console are in this repository and tested. The site and the catalog repository are described in [`../deploy/pyrtan.com/README.md`](../deploy/pyrtan.com/README.md). Hosting is designed, not built. |
+| **Status** | **Phase 1 built, v0.2.** Tokens, CORS, persistent gaps, the egress policy, the catalog client and the console are in this repository and tested. The site is this repository's GitHub Pages deployment, described in [`../site/README.md`](../site/README.md). Hosting is designed, not built. |
 | **Date** | 2026-10-25 |
 | **Decision** | pyrtan.com is three separate things on one invariant: a static catalog of trees anyone can pull, a static console that talks only to the public hub API, and (later) paid hosting that runs the unmodified open-source hub per tenant. A caller cannot tell a hosted hub from a self-hosted one, so every piece works for both. |
-| **Where** | This repository for the runtime, client and console. `pyrtan-trees` for the catalog. `pyrtan-site` for the pages. A private repository for the control plane, when there is one. |
+| **Where** | This repository for everything open: the runtime, the client, the console, the catalog (`examples/`) and the site (`site/`, published by the `pages` workflow). A private repository for the control plane, when there is one. |
 
 ## 0. The one invariant
 

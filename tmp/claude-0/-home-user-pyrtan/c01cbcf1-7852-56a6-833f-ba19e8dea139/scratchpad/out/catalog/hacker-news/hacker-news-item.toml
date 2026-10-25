@@ -1,0 +1,66 @@
+name = "hacker-news-item"
+version = 1
+description = "One Hacker News item by id: title, url, score, author."
+tags = ["news", "read-only"]
+license = "MIT"
+hosts = ["hacker-news.firebaseio.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "hacker news item {id:int}"
+
+[inputs.id]
+type = "int"
+min = 1
+description = "The item id"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://hacker-news.firebaseio.com/v0/item/{{ inputs.id }}.json" }
+into = "resp"
+extract = [
+  { into = "title", json = "json.title" },
+  { into = "url", json = "json.url" },
+  { into = "score", json = "json.score" },
+  { into = "by", json = "json.by" },
+  { into = "type", json = "json.type" },
+]
+next = "kind"
+
+[nodes.kind]
+kind = "decide"
+on = "type"
+branches = [
+  { when = { eq = "story" }, then = "has-url" },
+  { when = { eq = "job" }, then = "has-url" },
+  { when = { exists = false }, then = "missing" },
+  { else = "not-a-story" },
+]
+
+[nodes.has-url]
+kind = "decide"
+on = "url"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "self-post" },
+]
+
+[nodes.self-post]
+kind = "set"
+set = { url = "https://news.ycombinator.com/item?id={{ inputs.id }}" }
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.title }} ({{ state.score }} points, by {{ state.by }}) {{ state.url }}"
+output = { id = "{{ inputs.id }}", title = "{{ state.title }}", url = "{{ state.url }}", score = "{{ state.score }}", by = "{{ state.by }}" }
+
+[nodes.missing]
+kind = "fail"
+reason = "no-such-item"
+say = "There is no Hacker News item {{ inputs.id }}."
+
+[nodes.not-a-story]
+kind = "fail"
+reason = "not-a-story"
+say = "Item {{ inputs.id }} is a {{ state.type }}, not a story."
