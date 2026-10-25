@@ -16,12 +16,13 @@ Endpoints:
 ``POST /run``        forwarded to the peer holding ``tree``
 ``POST /resume``     forwarded to the peer named in the snapshot
 ``GET  /gaps``       every peer's gaps, with the peer that saw them
-``GET  /``           the demo page; ``GET /api`` is the JSON index
+``GET  /``           the console; ``GET /api`` is the JSON index
 
 A service that holds several trees and a hub that routes between services
 answer the same requests, so a client need not know which it is talking to,
 and a swarm can start as one process and split later without the callers
-changing.
+changing. A hub given a token requires it of callers (``/register``
+included, so a stranger cannot join the swarm) and presents it to peers.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import __version__
 from .intent import Trigger, best_matches
 from .page import PAGE
 from .service import Server, http_json
@@ -64,9 +66,10 @@ class Peer:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None) -> None:
         self.name = name
         self.poll_every = poll_every
+        self.token = token or None
         self.peers: dict[str, Peer] = {}
         self.started = time.time()
         self._lock = threading.RLock()
@@ -89,7 +92,7 @@ class Hub:
 
     def refresh(self, peer: Peer) -> None:
         try:
-            status, caps = http_json("GET", f"{peer.url}/capabilities", timeout=5.0)
+            status, caps = http_json("GET", f"{peer.url}/capabilities", timeout=5.0, token=self.token)
         except Exception as e:  # urllib raises URLError subclasses of OSError
             status, caps = 0, None
             peer.last_error = str(e)
@@ -200,7 +203,7 @@ class Hub:
         if peer is None:
             return 200, {"status": "error", "reason": "no-peer"}
         try:
-            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0)
+            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0, token=self.token)
         except Exception as e:
             peer.last_error = str(e)
             return 200, {"status": "error", "reason": "peer-unreachable", "say": f"{peer.name or peer.url} did not answer: {e}", "output": {"peer": peer.url}}
@@ -214,7 +217,7 @@ class Hub:
         out: list[dict[str, Any]] = []
         for peer in list(self.peers.values()):
             try:
-                status, body = http_json("GET", f"{peer.url}/gaps", timeout=5.0)
+                status, body = http_json("GET", f"{peer.url}/gaps", timeout=5.0, token=self.token)
             except Exception:
                 continue
             if status == 200 and isinstance(body, dict):
@@ -232,10 +235,10 @@ class Hub:
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
             return 200, self.gaps()
-        if method == "GET" and path in ("/", "/index.html"):
+        if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "hub", "name": self.name, "endpoints": ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/register"]}
+            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/register"]}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -255,9 +258,9 @@ def _rank(peer: Peer) -> int:
     return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link]
 
 
-def serve_hub(host: str = "127.0.0.1", port: int = 8700, *, name: str = "hub", peers: list[str] | None = None, poll_every: float = 10.0, quiet: bool = False) -> tuple[Hub, Server]:
-    hub = Hub(name=name, poll_every=poll_every)
-    server = Server(hub.route, host, port, quiet)
+def serve_hub(host: str = "127.0.0.1", port: int = 8700, *, name: str = "hub", peers: list[str] | None = None, poll_every: float = 10.0, quiet: bool = False, token: str | None = None, cors: list[str] | None = None) -> tuple[Hub, Server]:
+    hub = Hub(name=name, poll_every=poll_every, token=token)
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors)
     for url in peers or []:
         hub.add_peer(url)
     hub.start_polling()

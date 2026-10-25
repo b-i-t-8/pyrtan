@@ -5,6 +5,7 @@ name = "github-release"
 version = 1
 description = "The latest release of a GitHub repository."
 tags = ["github", "read-only"]
+license = "MIT"
 hosts = ["api.github.com"]
 start = "fetch"
 

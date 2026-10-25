@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.1.** The core, the service, the hub and the command exist and are tested (111 tests, including a two-service swarm behind a hub on localhost). No deployment, no users, no browser adapter yet. |
+| **Status** | **Built, v0.1; extended in v0.2.** The core, the service, the hub and the command exist and are tested (a two-service swarm behind a hub runs on localhost in the tests). v0.2 adds tokens, CORS, persistent gaps, an egress policy, the catalog client and the console; see [`platform.md`](platform.md). No browser adapter yet. |
 | **Date** | 2026-10-24 |
 | **Decision** | Pyrtan is an open-source automation tool: many small services, each holding declarative decision trees that read and act on the web, routed by a hub, with no model in the loop and a complete trace of every run. |
 | **Where** | This repository: `src/pyrtan`, `examples/`, `tests/`. AGPL-3.0-or-later. |
@@ -183,9 +183,11 @@ service; nothing consumes it yet. Request/response over HTTP covers every
 case the examples needed, and a bus would be a dependency and an
 operational component before there is a swarm large enough to need one.
 
-**Persisting gaps.** Gaps live in a service's memory and are lost on
-restart. Enough to prove the loop (run, see gap, add branch, reload), not
-enough for a fleet. Deferred to Section 7.
+**Persisting gaps.** In v0.1 gaps lived in a service's memory and were
+lost on restart: enough to prove the loop (run, see gap, add branch,
+reload), not enough for a fleet. v0.2 keeps them in a JSON-lines file per
+service (`--gaps`), deduplicated with a count; the hub still collects from
+peers rather than keeping its own.
 
 ## 5. What the examples show
 
@@ -203,27 +205,32 @@ Five trees, all against real public APIs, all tested offline:
 
 1. **v0.1, built.** Trees, checker, runtime, trace, service, hub, command,
    examples, tests. This document.
-2. **v0.2: first real swarm.** Three or more services on separate boxes
-   behind one hub, with a status page off `/peers`. Gaps persisted to a
-   file per service and collected by the hub. A `pyrtan watch` that
-   re-runs a set of sentences on a schedule and reports when a path changes
-   (the way to learn a site has changed before a person does).
+2. **v0.2, built: a swarm that can leave the LAN, and trees as a shared
+   thing.** A shared token between hub and services, CORS for the console,
+   gaps persisted to a file per service, an opt-in egress policy, the
+   console with a peers view off `/peers`, and the catalog (`pyrtan
+   search`, `pull`, `index`) with `version` pinning a pull. Design in
+   [`platform.md`](platform.md). Still to come from the original v0.2: a
+   `pyrtan watch` that re-runs a set of sentences on a schedule and
+   reports when a path changes (the way to learn a site has changed before
+   a person does).
 3. **v0.3: browser adapter.** `observe` with `browser = { url, wait_for,
    actions }` on Playwright as an optional extra, for pages that need a
    script to render, with the same host rule and the same extraction.
-4. **v0.4: trees as a shared thing.** A directory of trees people can pull
-   by name, with the checker run on contribution, and `version` meaning
-   something.
+4. **v0.4: the catalog grows up.** Namespaces, publishing through pull
+   requests with the checker as the gate, and opt-in gap reporting from
+   hubs back to a tree's author.
 5. **Beside the swarm, never inside it:** an authoring aid that reads gaps
    and drafts the branch for a person to accept.
 
 ## 7. Open questions
 
-- **Authentication between services.** None in v0.1; the swarm is assumed
-  to sit on a trusted network behind an operator's ingress. The first
-  swarm that crosses a network boundary needs a shared secret or mTLS at
-  the hub, and `env` already carries per-service secrets for upstream APIs.
-- **What a tree's `version` governs.** A hub could prefer the highest
+- **Authentication between services.** v0.2 answers the first half: a
+  shared bearer token, presented by services on registration and by the
+  hub on every forward, with `/register` behind it. mTLS, and a token per
+  service rather than per swarm, wait for a swarm that needs them.
+- **What a tree's `version` governs.** In the catalog it is what a pull
+  pins. On the hub it is still undecided: a hub could prefer the highest
   version of a name across peers, or refuse to route to a peer whose
   version is below the caller's. Undecided until two services hold the
   same tree at different versions.

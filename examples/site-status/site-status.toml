@@ -6,6 +6,7 @@ name = "site-status"
 version = 1
 description = "Whether a web site answers, and how quickly."
 tags = ["ops", "read-only"]
+license = "MIT"
 hosts = ["*"]
 start = "probe"
 

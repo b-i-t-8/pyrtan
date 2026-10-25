@@ -27,12 +27,20 @@ x-pyrtan: &pyrtan
   logging:
     driver: json-file
     options: { max-size: "5m", max-file: "3" }
+  environment: &env
+    # Uncomment to require a bearer token on every request but /health and
+    # the console. Every container reads it, so the swarm shares it. Do
+    # this before the hub is reachable from outside your LAN.
+    # PYRTAN_TOKEN: "change-me-to-something-long"
+    PYRTAN_EGRESS: any
 
 services:
   hub:
     <<: *pyrtan
-    command: ["hub", "--host", "0.0.0.0", "--port", "8700", "--poll", "10"]
+    # --cors lets the console at pyrtan.com talk to this hub from a browser.
+    command: ["hub", "--host", "0.0.0.0", "--port", "8700", "--poll", "10", "--cors", "https://pyrtan.com"]
     environment:
+      <<: *env
       PYRTAN_PORT: "8700"
     ports:
       - "8700:8700"
@@ -50,9 +58,11 @@ services:
   # Your own trees. Edit files in this folder from a share; the service
   # reloads them without a restart. `pyrtan check` them first:
   #   docker compose -p pyrtan exec mine pyrtan check /trees
+  # Gaps are kept in /trees/.gaps.jsonl (the one file the service writes),
+  # so the list of branches to write survives a restart.
   mine:
     <<: *pyrtan
-    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701"]
+    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701", "--gaps", "/trees/.gaps.jsonl"]
     volumes:
-      - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees:ro
+      - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]

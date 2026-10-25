@@ -21,6 +21,12 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 A tree that reads a page should prefer an API or a feed when the site offers
 one, and should decide on the status code before it decides on the body.
 
+A tree meant for the catalog at pyrtan.com carries a `license` line (an
+SPDX identifier; `MIT`, `Apache-2.0` or `CC0-1.0` are the usual choices)
+and is contributed to the catalog repository, not this one; see
+[`deploy/pyrtan.com/README.md`](deploy/pyrtan.com/README.md). The examples
+here are MIT so they can be pulled from there too.
+
 ## Changing the runtime
 
 The runtime is small on purpose, and every node kind is paid for by every
@@ -30,7 +36,9 @@ in the pull request. The same goes for a new filter or condition.
 
 Nothing in `src/pyrtan` may call a model, execute code from a tree, or reach
 a host outside a tree's `hosts`. Those are the three rules the design rests
-on; see `_meta/design.md`.
+on; see `_meta/design.md`. A fourth, from `_meta/platform.md`: nothing in
+`src/pyrtan` knows about tenants, plans or billing. The hosted product runs
+this code unchanged.
 
 ## License of contributions
 
