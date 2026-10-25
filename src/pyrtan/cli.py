@@ -7,8 +7,9 @@
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
-    pyrtan gaps   [PATH ... | --at URL]      branches waiting to be written
-    pyrtan new    NAME [--dir PATH]          scaffold a tree file
+    pyrtan gaps   --at URL                   branches waiting to be written
+    pyrtan unanswered --at URL [--scaffold DIR]  trees waiting to be written
+    pyrtan new    [NAME] [--from TEXT] [--dir PATH]  scaffold a tree file
 """
 
 from __future__ import annotations
@@ -21,49 +22,13 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .grow import Proposal, propose
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
 from .transport import RecordedTransport, RecordingTransport, UrllibTransport
 from .tree import check, load_tree
 
-TEMPLATE = '''# {name}: say what this tree does, in one line, below.
-
-name = "{name}"
-version = 1
-description = ""
-tags = []
-hosts = ["example.com"]
-start = "fetch"
-
-[[triggers]]
-pattern = "{words}"
-
-[nodes.fetch]
-kind = "observe"
-http = {{ method = "GET", url = "https://example.com/" }}
-into = "resp"
-extract = [{{ into = "title", css = "title" }}]
-next = "status"
-
-[nodes.status]
-kind = "decide"
-on = "resp.status"
-branches = [
-  {{ when = {{ eq = 200 }}, then = "reply" }},
-  {{ else = "unexpected" }},
-]
-
-[nodes.reply]
-kind = "done"
-say = "{{{{ state.title }}}}"
-output = {{ title = "{{{{ state.title }}}}" }}
-
-[nodes.unexpected]
-kind = "fail"
-reason = "unexpected-response"
-say = "example.com answered {{{{ state.resp.status }}}}."
-'''
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,12 +83,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--at", help="a running service or hub")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("unanswered", help="sentences nobody answered, each with the tree that would")
+    p.add_argument("--at", help="a running service or hub")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--scaffold", metavar="DIR", help="write a tree file for each sentence into DIR (existing files are kept)")
+
     p = sub.add_parser("new", help="scaffold a tree file")
-    p.add_argument("name")
+    p.add_argument("name", nargs="?", help="the tree's name (derived from --from when omitted)")
+    p.add_argument("--from", dest="sentence", metavar="TEXT", help="the sentence the tree should answer; numbers and hosts in it become slots")
     p.add_argument("--dir", default=".")
 
     args = parser.parse_args(argv)
-    return {"check": cmd_check, "list": cmd_list, "run": cmd_run, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "new": cmd_new}[args.command](args)
+    return {"check": cmd_check, "list": cmd_list, "run": cmd_run, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new}[args.command](args)
 
 
 # ---------------------------------------------------------------- commands
@@ -321,15 +292,58 @@ def cmd_gaps(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_unanswered(args: argparse.Namespace) -> int:
+    if not args.at:
+        print("pyrtan unanswered: give --at URL of a running service or hub", file=sys.stderr)
+        return 2
+    try:
+        status, body = http_json("GET", f"{args.at.rstrip('/')}/unanswered")
+    except Exception as e:
+        print(f"pyrtan: {args.at}: {e}", file=sys.stderr)
+        return 3
+    entries = (body or {}).get("unanswered", []) if isinstance(body, dict) else []
+    if args.json:
+        print(json.dumps({"unanswered": entries}, indent=2, ensure_ascii=False))
+        return 0
+    if not entries:
+        print("nothing unanswered: every sentence so far found a tree")
+        return 0
+    for e in entries:
+        prop = e.get("proposal") or propose(e["text"]).to_dict()
+        peer = f" ({e['peer']})" if e.get("peer") else ""
+        print(f"{e['text']!r}  x{e.get('count', 1)}{peer}")
+        print(f"    would be: {prop['name']}  answering  {prop['trigger']}")
+        if args.scaffold:
+            path = _write_scaffold(Proposal(prop["text"], prop["name"], prop["trigger"], prop.get("inputs") or {}), Path(args.scaffold))
+            print(f"    {'wrote' if path else 'kept'} {Path(args.scaffold) / (prop['name'] + '.toml')}")
+        else:
+            print(f"    {prop['scaffold']}")
+    if args.scaffold:
+        print(f"now: pyrtan check {args.scaffold}")
+    return 0
+
+
+def _write_scaffold(proposal: Proposal, directory: Path) -> Path | None:
+    """Write the proposal's tree file unless one is already there."""
+    path = directory / f"{proposal.name}.toml"
+    if path.exists():
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(proposal.scaffold(), encoding="utf-8")
+    return path
+
+
 def cmd_new(args: argparse.Namespace) -> int:
-    name = args.name
-    path = Path(args.dir) / f"{name}.toml"
+    if not args.name and not args.sentence:
+        print("pyrtan new: give a NAME, or --from \"the sentence it should answer\"", file=sys.stderr)
+        return 2
+    proposal = propose(args.sentence or args.name.replace("-", " "), name=args.name)
+    path = Path(args.dir) / f"{proposal.name}.toml"
     if path.exists():
         print(f"pyrtan: {path} exists", file=sys.stderr)
         return 1
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(TEMPLATE.format(name=name, words=name.replace("-", " ")), encoding="utf-8")
-    print(f"wrote {path}; edit it, then: pyrtan check {path}")
+    _write_scaffold(proposal, Path(args.dir))
+    print(f"wrote {path}: {proposal.name!r} answering {proposal.trigger!r}; edit it, then: pyrtan check {path}")
     return 0
 
 

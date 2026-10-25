@@ -2,8 +2,10 @@
 
 It lists what the swarm can answer, takes a sentence, posts it to
 ``/intent`` on the same origin, and shows the answer, the output and the
-trace. No external assets, no build step; it exists so that someone can
-point a browser at a running Pyrtan and understand it in a minute.
+trace. When nothing answers, it shows the tree that would, and the command
+that scaffolds it; the sentences nobody answered are listed beside what the
+swarm can do. No external assets, no build step; it exists so that someone
+can point a browser at a running Pyrtan and understand it in a minute.
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ PAGE = r"""<!doctype html>
 <body>
 <main>
   <h1>Pyrtan <small id="who">…</small></h1>
-  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Type a sentence a tree answers to; the answer comes back with the exact path that produced it. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Type a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
 
   <form id="ask">
     <input type="text" id="text" placeholder="what's the weather in Oslo" autofocus autocomplete="off">
@@ -58,7 +60,10 @@ PAGE = r"""<!doctype html>
   <h2 style="font-size:17px;margin:32px 0 8px">What this swarm can answer</h2>
   <div class="card"><table id="caps"><thead><tr><th>Tree</th><th>Answers to</th><th>From</th></tr></thead><tbody></tbody></table></div>
 
-  <footer>The same endpoints the page uses: <code>POST /intent {"text": "…"}</code>, <code>POST /run {"tree": "…", "inputs": {…}}</code>, <code>GET /capabilities</code>, <code>GET /health</code>, <code>GET /gaps</code>. <a href="https://github.com/b-i-t-8/pyrtan">Source</a>.</footer>
+  <h2 style="font-size:17px;margin:32px 0 8px">Waiting to be written</h2>
+  <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody><tr><td colspan="3" class="mute">Nothing yet: every sentence so far found a tree.</td></tr></tbody></table></div>
+
+  <footer>The same endpoints the page uses: <code>POST /intent {"text": "…"}</code>, <code>POST /run {"tree": "…", "inputs": {…}}</code>, <code>GET /capabilities</code>, <code>GET /health</code>, <code>GET /gaps</code>, <code>GET /unanswered</code>. <a href="https://github.com/b-i-t-8/pyrtan">Source</a>.</footer>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -89,6 +94,19 @@ async function load() {
     const s = sample(t); if (s && !s.includes("…")) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
   }
   tries.addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; ask(); });
+  loadUnanswered();
+}
+async function loadUnanswered() {
+  let u; try { u = await (await fetch("unanswered")).json(); } catch (e) { return; }
+  const rows = (u.unanswered || []);
+  if (!rows.length) return;
+  const body = $("#unanswered tbody"); body.innerHTML = "";
+  for (const e of rows) {
+    const p = e.proposal || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code></td>`;
+    body.appendChild(tr);
+  }
 }
 function renderTrace(tr) {
   if (!tr || !tr.steps) return "";
@@ -111,6 +129,10 @@ async function ask(snapshot, answer) {
   const card = document.createElement("div"); card.className = "card";
   let html = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${ms} ms${r.peer ? " · " + esc(r.peer) : ""}</span></div>`;
   if (r.say) html += `<div class="say">${esc(r.say)}</div>`;
+  if (r.reason === "no-match" && r.output && r.output.proposal) {
+    const p = r.output.proposal;
+    html += `<div class="gap">No tree answers this yet. The one that would: <code>${esc(p.name)}</code>, answering <code>${esc(p.trigger)}</code>.</div><pre>${esc(p.scaffold)}</pre>`;
+  }
   if (r.status === "asked") html += `<form class="resume"><input type="text" placeholder="${esc(r.question||"")}" autofocus><button>Answer</button></form>`;
   if (r.output != null) html += `<details open><summary>output</summary><pre>${esc(JSON.stringify(r.output, null, 2))}</pre></details>`;
   if (r.trace) html += `<details open><summary>trace</summary><pre>${esc(renderTrace(r.trace))}</pre></details>`;
@@ -118,6 +140,7 @@ async function ask(snapshot, answer) {
   out.prepend(card);
   const rf = card.querySelector("form.resume");
   if (rf) rf.addEventListener("submit", (e) => { e.preventDefault(); ask(r.snapshot, rf.querySelector("input").value); });
+  if (r.reason === "no-match") loadUnanswered();
   $("#go").disabled = false;
 }
 $("#ask").addEventListener("submit", (e) => { e.preventDefault(); ask(); });

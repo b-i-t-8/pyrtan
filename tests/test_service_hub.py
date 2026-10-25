@@ -94,6 +94,12 @@ def test_service_endpoints(example_service):
     assert out["status"] == "done" and "trace" not in out
     _, out = http_json("POST", f"{server.url}/intent", {"text": "nothing matches this"})
     assert out["reason"] == "no-match"
+    assert out["output"]["proposal"]["trigger"] == "nothing matches this"
+    assert "pyrtan new nothing-matches-this --from" in out["say"]
+    _, un = http_json("GET", f"{server.url}/unanswered")
+    assert [(u["text"], u["count"]) for u in un["unanswered"]] == [("nothing matches this", 1)]
+    _, health = http_json("GET", f"{server.url}/health")
+    assert health["unanswered"] == 1
     status, out = http_json("GET", f"{server.url}/nowhere")
     assert status == 404
     _, out = http_json("POST", f"{server.url}/run", {"tree": "site-status", "inputs": {"host": "teapot.example"}})
@@ -169,6 +175,18 @@ def test_swarm_of_two_behind_a_hub(tmp_path):
 
         _, out = http_json("POST", f"{hub_srv.url}/run", {"tree": "nope"})
         assert out["reason"] == "no-such-tree"
+
+        # A sentence nobody answers: the hub says so, proposes the tree, and
+        # remembers. B, which has a hub, leaves the record to the hub.
+        _, out = http_json("POST", f"{hub_srv.url}/intent", {"text": "trace route to 10.0.0.1"})
+        assert out["reason"] == "no-match" and out["output"]["seen"] == 1
+        assert out["say"].startswith("No service in the swarm answers 'trace route to 10.0.0.1'. To write the tree that would: pyrtan new trace-route --from")
+        _, out = http_json("POST", f"{srv_b.url}/intent", {"text": "trace route to 10.0.0.1"})
+        assert out["reason"] == "no-match"
+        assert http_json("GET", f"{srv_b.url}/unanswered")[1]["unanswered"] == []
+        _, un = http_json("GET", f"{hub_srv.url}/unanswered")
+        assert [(u["text"], u["count"]) for u in un["unanswered"]] == [("trace route to 10.0.0.1", 2)]
+        assert un["unanswered"][0]["proposal"]["inputs"]["host"]["type"] == "str"
 
         # A peer that dies is marked and skipped.
         srv_a.stop()

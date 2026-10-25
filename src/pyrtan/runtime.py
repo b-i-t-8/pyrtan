@@ -16,7 +16,9 @@ An outcome's ``status`` is one of:
 ``error``
     The run could not proceed: a transport failure, an unhandled observation
     (a ``decide`` with no matching branch, recorded as a gap), a host outside
-    the allow-list, a missing template value, or a limit reached.
+    the allow-list, a missing template value, or a limit reached. A
+    ``no-match`` error carries, in ``output.proposal``, the tree that would
+    answer the sentence, so a dead end always points at the next tree.
 
 Nothing here calls a model. The runner is the whole of Pyrtan's "thinking";
 the trace is the whole of its explanation.
@@ -31,6 +33,7 @@ from typing import Any, Protocol
 
 from . import conditions
 from .extract import extract
+from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
 from .template import MISSING, TemplateError, render, resolve
 from .trace import Step, Trace
@@ -107,7 +110,7 @@ class Runner:
         except NoMatch:
             if self.resolver is not None:
                 return self.resolver.run_intent(text, depth)
-            return Outcome("error", "", reason="no-match", say=f"Nothing here answers {text!r}.")
+            return Outcome("error", "", reason="no-match", **no_match_outcome(text, "Nothing here"))
         except Ambiguous as e:
             return Outcome("error", "", reason="ambiguous", say=str(e), output={"candidates": [m.tree for m in e.matches]})
         return self.run_tree(match.tree, match.inputs, depth)

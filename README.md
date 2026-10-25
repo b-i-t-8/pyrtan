@@ -4,23 +4,29 @@
 through hardcoded, inspectable decision trees.**
 
 Pyrtan looks like an assistant from the outside. You give it a sentence; it
-does something on the web and tells you what happened. Inside there is no
-model. Every service is a set of **trees**: declarative files that say which
-sentences they answer to, which hosts they may touch, what they observe, and
-exactly how they decide what to do next. Every run produces a **trace** that
-names each observation and the condition that chose each branch.
+reads or changes something through whatever form of I/O it has an adapter
+for, and tells you what happened. Today that form is HTTP: APIs and pages.
+The core is built so that files, shells, serial lines, queues and devices
+arrive as further adapters under the same rules. Inside there is no model.
+Every service is a set of **trees**: declarative files that say which
+sentences they answer to, which endpoints they may touch, what they observe,
+and exactly how they decide what to do next. Every run produces a **trace**
+that names each observation and the condition that chose each branch.
 
 That is the trade. A model generalises to sentences nobody wrote a tree for;
-Pyrtan does not, and says so. In return, Pyrtan is deterministic, costs
-nothing per run, works offline against recorded responses, cannot reach a
-host its author did not list, and can always explain itself.
+Pyrtan does not, says so, and hands back the tree that would, ready to fill
+in. In return, Pyrtan is deterministic, costs nothing per run, works offline
+against recorded responses, cannot reach an endpoint its author did not
+list, and can always explain itself.
 
 Trees are close in spirit to Claude's skills, with two differences. They are
-much narrower: a tree does one thing against one web property. And they are
+much narrower: a tree does one thing against one property, whether that is
+an API, a site, a device or any other source or sink of I/O. And they are
 live: a service reloads a tree the moment its file changes, a tree can hand
-part of its work to any other tree in the swarm, and every decision that
-meets a value no branch covers is recorded as a **gap**, which is how a tree
-tells its author where to grow next.
+part of its work to any other tree in the swarm, every decision that meets a
+value no branch covers is recorded as a **gap**, and every sentence nobody
+answers is recorded as **unanswered** with a proposed tree. That is how the
+swarm tells its authors where to grow next.
 
 ```
 $ pyrtan run "what's the weather in Oslo" --trees examples
@@ -116,11 +122,12 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
-| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`. Reloads trees when their files change. |
+| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
-| `pyrtan gaps --at URL` | Every decision that met a value with no branch: the list of what to write next. |
-| `pyrtan new NAME` | Scaffolds a tree file. |
+| `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
+| `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
+| `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
 
 ## A swarm
 
@@ -142,14 +149,41 @@ tree and splits into many without the callers changing. A tree that
 routes it to whichever peer can; the peer's steps come back inside the
 caller's trace.
 
+## When no service in the swarm answers
+
+A sentence nobody answers is not a dead end; it is the next tree. The hub
+(or a service on its own) records it at `/unanswered` and answers with a
+**proposal**: a tree name drawn from the words, a trigger pattern with slots
+where the sentence had numbers or hosts, the inputs those slots need, and
+the one command that writes the file.
+
+```
+$ pyrtan ask "top 3 stories on lobsters"
+error (no-match): No service in the swarm answers 'top 3 stories on lobsters'. To write the tree that would: pyrtan new top-stories-lobsters --from "top 3 stories on lobsters"
+
+$ pyrtan unanswered --at http://127.0.0.1:8700 --scaffold trees/
+'top 3 stories on lobsters'  x1
+    would be: top-stories-lobsters  answering  top {count:int} stories on lobsters
+    wrote trees/top-stories-lobsters.toml
+now: pyrtan check trees/
+```
+
+The scaffold is a complete tree that checks clean: a trigger, its inputs, an
+`observe`, a `decide` on the status and a `done` and `fail`. The author
+fills in what it observes and how it decides; a service serving that
+directory picks the file up the moment it is saved. No model drafts
+anything: the proposal is derived from the words by rules, and the demo page
+shows the same proposal and the same command whenever nothing answers.
+
 ## What Pyrtan refuses
 
 - **No model in the loop.** Nothing in this repository calls an LLM. A model
   may one day sit *beside* the swarm, proposing branches for recorded gaps;
   it will not sit inside a run deciding anything.
-- **No host a tree did not name.** Every HTTP node's host is checked against
-  the tree's `hosts` at load time where it is literal and at run time where
-  it is templated.
+- **No endpoint a tree did not name.** Every HTTP node's host is checked
+  against the tree's `hosts` at load time where it is literal and at run
+  time where it is templated. Every further form of I/O arrives with an
+  allow-list of the same kind, or does not arrive.
 - **No code in trees.** Templates are paths and filters; conditions are
   comparisons. Branching is only ever a `decide` node, visible in the trace.
 - **No loops.** A path through a tree is finite by construction.
@@ -159,7 +193,8 @@ caller's trace.
 
 ```
 src/pyrtan/     the package: tree, intent, template, conditions, extract,
-                html, transport, runtime, trace, registry, service, hub, cli
+                html, transport, runtime, trace, registry, grow, service,
+                hub, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -170,10 +205,12 @@ deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
 
 ## Status
 
-0.1.0. The core, the service, the hub and the command are built and tested.
-Not yet built: a browser adapter (for pages that need a script to render),
-authentication between services, persistent gap storage, and a tree
-marketplace. See [`_meta/design.md`](_meta/design.md) for the sequencing.
+0.1.0. The core, the service, the hub and the command are built and tested,
+and HTTP is the one form of I/O the core speaks. Not yet built: further
+adapters (a browser for pages that need a script to render; files, shells,
+serial lines, message queues), authentication between services, persistent
+storage for gaps and unanswered sentences, and a tree marketplace. See
+[`_meta/design.md`](_meta/design.md) for the sequencing.
 
 Pyrtan is a product of [Hillvon.io](https://hillvon.io).
 
