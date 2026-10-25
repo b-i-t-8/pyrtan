@@ -44,10 +44,11 @@ from . import __version__
 from .federation import MAX_HOPS, Federation, Remote, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
-from .page import PAGE
+from .page import MANIFEST, PAGE, SERVICE_WORKER
 from .registry import Registry
 from .runtime import Outcome
-from .service import Server, Service, bearer_ok, http_json, outcome_from_dict
+from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, signed_path
+from .store import StoreError, check_key
 
 STALE_AFTER = 30.0
 DOWN_AFTER = 90.0
@@ -133,10 +134,16 @@ class Hub:
 
     # ------------------------------------------------------------ federation
 
-    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True, listed: bool = False) -> Federation:
+    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True, listed: bool = False, store: str | None = None, replicas: int = 2) -> Federation:
         """Give this hub an identity other hubs can follow. ``advertise`` is
-        the URL they reach it at."""
-        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities, listed=listed)
+        the URL they reach it at. ``store`` is where it keeps blobs, its own
+        and others'; ``replicas`` how many keepers each of its own should have."""
+        auto = {
+            "directory": lambda: self.federation.gossip() if self.federation else [],
+            "gaps": lambda: self.gaps()["gaps"],
+            "unanswered": lambda: self.unanswered_all()["unanswered"],
+        }
+        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto)
         return self.federation
 
     def hold(self, service: Service) -> Local:
@@ -377,10 +384,16 @@ class Hub:
         if signed and not bearer_ok(headers.get("Authorization"), self.token or ""):
             # A hub we federate with is asking. It may ask the routed paths
             # and the inbox; anything else needs the operator's token.
-            if fed is None or path not in ("/inbox", "/run", "/intent", "/resume", "/capabilities"):
-                return 401, {"status": "error", "reason": "unauthorised", "say": "A signed request may only reach the inbox and the routed paths."}
-            if path != "/inbox" and fed.verify_request(method, path, body if method == "POST" else None, headers) is None:
+            if fed is None or not signed_path(path):
+                return 401, {"status": "error", "reason": "unauthorised", "say": "A signed request may only reach the inbox, the mailbox, the kept blobs and the routed paths."}
+            signer = fed.verify_request(method, path, body if method == "POST" else None, headers) if path != "/inbox" else None
+            if path != "/inbox" and signer is None:
                 return 401, {"status": "error", "reason": "unsigned", "say": "The signature does not hold, or this hub does not know the actor."}
+            if method == "GET" and path == "/mailbox":
+                return 200, {"activities": fed.mailbox(signer or "")}
+            if method == "GET" and path.startswith("/kept/"):
+                blob = fed.kept_for(signer or "", path[len("/kept/"):])
+                return (200, blob) if blob else (404, {"status": "error", "reason": "not-kept", "say": f"Nothing kept here for you under {path[len('/kept/'):]!r}."})
         if method == "GET" and path == "/health":
             return 200, self.health()
         if method == "GET" and path == "/peers":
@@ -417,6 +430,21 @@ class Hub:
                     fed.announce_up(force=True)
                     fed.announce(force=True)
                 return 200, {"status": "ok", "listed": fed.listed}
+            if method == "GET" and path == "/keep":
+                return 200, {"keeping": fed.keeping_view(), "kept": fed.store.list_kept(), "store": fed.store.usage(), "replicas": fed.replicas}
+            if method == "GET" and path.startswith("/keep/"):
+                blob = fed.store.get_own(path[len("/keep/"):])
+                return (200, {**blob, "holders": fed.holders(blob["key"])}) if blob else (404, {"status": "error", "reason": "no-blob", "say": f"No blob of ours under {path[len('/keep/'):]!r}; POST /fetch asks the holders."})
+            if method == "POST" and path == "/keep":
+                try:
+                    return 200, {"status": "ok", "keeping": fed.keep(check_key(body.get("key")), body.get("data"))}
+                except StoreError as e:
+                    return 400, {"status": "error", "reason": "bad-blob", "say": str(e)}
+            if method == "POST" and path == "/fetch":
+                key = body.get("key")
+                if not isinstance(key, str):
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"key\": \"...\"}."}
+                return 200, fed.fetch(key)
             if method == "POST" and path == "/unfollow":
                 url = body.get("url")
                 if not isinstance(url, str):
@@ -430,10 +458,14 @@ class Hub:
             return 200, self.unanswered_all()
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
+        if method == "GET" and path == "/manifest.webmanifest":
+            return 200, ("application/manifest+json", MANIFEST)
+        if method == "GET" and path == "/sw.js":
+            return 200, ("text/javascript; charset=utf-8", SERVICE_WORKER)
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/directory", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -476,12 +508,14 @@ def serve_hub(
     env: dict[str, Any] | None = None,
     gaps: str | None = None,
     egress: str = "any",
+    store: str | None = None,
+    replicas: int = 2,
 ) -> tuple[Hub, Server]:
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
-        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed)
+        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas)
     for url in peers or []:
         hub.add_peer(url)
     for url in follow or []:

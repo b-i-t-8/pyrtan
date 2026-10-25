@@ -448,3 +448,189 @@ def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
     assert code == 0 and "snapshot as of" in o and b.url in o and "gone" in o
     monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "nope.json"))
     assert cli("directory")[0] == 3
+
+
+# ---------------------------------------------------------------- members and keeping
+
+
+class Member:
+    """A browser or a phone, in Python: no inbox, a mailbox it polls."""
+
+    def __init__(self, hub_url: str, name: str = "phone"):
+        import secrets as _secrets
+
+        self.id = f"urn:pyrtan:member:{_secrets.token_hex(16)}"
+        self.secret = _secrets.token_hex(32)
+        self.hub = hub_url.rstrip("/")
+        self.name = name
+        self.kept: dict[str, dict] = {}
+        self.directory: list[dict] = []
+
+    def post(self, activity: dict, secret: str | None = None):
+        activity = {"id": f"{self.id}/activities/{len(self.kept)}", "actor": self.id, "published": "now", **activity}
+        return http_json("POST", f"{self.hub}/inbox", activity, headers=sign(secret or self.secret, self.id, "POST", "/inbox", activity))
+
+    def follow(self, secret: str | None = None):
+        return self.post({"type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}, secret)
+
+    def poll(self) -> list[dict]:
+        status, body = http_json("GET", f"{self.hub}/mailbox", headers=sign(self.secret, self.id, "GET", "/mailbox", None))
+        assert status == 200, body
+        acts = body["activities"]
+        for a in acts:
+            if a["type"] == "Keep":
+                self.kept[a["object"]["key"]] = a["object"]
+                self.post({"type": "Kept", "object": {"key": a["object"]["key"], "sha256": a["object"]["sha256"]}})
+            elif a["type"] == "Fetch":
+                blob = self.kept.get(a["object"]["key"])
+                if blob:
+                    self.post({"type": "Kept", "object": {"key": blob["key"], "sha256": blob["sha256"], "data": blob["data"]}})
+            elif a["type"] == "Announce":
+                self.directory = a["object"].get("directory", [])
+        return acts
+
+    def announce(self, listed: bool = True):
+        own = [{"id": self.id, "name": self.name, "kind": "member", "trees": [], "seen": time.time()}] if listed else []
+        return self.post({"type": "Announce", "object": {"type": "Capabilities", "name": self.name, "trees": [], "directory": own, "kept": sorted(self.kept)}})
+
+
+def test_member_follows_through_a_mailbox_and_keeps_blobs(two, tmp_path):
+    a, b = two
+    a.fed.store = __import__("pyrtan.store", fromlist=["BlobStore"]).BlobStore(tmp_path / "store-a")
+    m = Member(a.url)
+    status, out = m.follow()
+    assert status == 202 and out["mailbox"] == f"{a.url}/mailbox"
+    assert a.fed.followers[m.id].kind == "member" and a.fed.followers[m.id].inbox == "mailbox"
+    # The Accept and the first Announce wait in the mailbox; polling drains it.
+    acts = m.poll()
+    assert [x["type"] for x in acts] == ["Accept", "Announce"] and m.poll() == []
+    _, peers = a.get("/peers")
+    assert peers["followers"][0]["kind"] == "member" and peers["followers"][0]["link"] == "up"
+    # The member lists itself by announcing upward; the hub's directory carries it as a member.
+    status, out = m.announce()
+    assert status == 200 and out["directory"] is not None
+    entry = next(h for h in a.fed.directory()["hubs"] if h["id"] == m.id)
+    assert entry["kind"] == "member" and entry["via"] == m.id
+    # A blob of the hub's own goes to the member through its mailbox; the member's Kept confirms it.
+    status, out = a.post("/keep", {"key": "notes/today", "data": {"todo": ["water plants"]}})
+    assert status == 200 and out["keeping"]["holders"] == []  # nobody has confirmed yet
+    acts = m.poll()
+    assert [x["type"] for x in acts] == ["Keep"] and m.kept["notes/today"]["data"] == {"todo": ["water plants"]}
+    assert a.fed.holders("notes/today") == [m.id]
+    _, out = a.get("/keep")
+    assert out["keeping"][0]["key"] == "notes/today" and out["keeping"][0]["holders"] == [m.id] and out["replicas"] == 2
+    # Fetch: the hub still has its own copy, so no round trip.
+    assert a.post("/fetch", {"key": "notes/today"})[1]["source"] == "own"
+    # The hub loses its store; the member's Announce says what it keeps, the hub asks, the member answers, the blob is back.
+    a.fed.store = __import__("pyrtan.store", fromlist=["BlobStore"]).BlobStore(None)
+    assert a.get("/keep/notes/today")[0] == 404
+    _, out = a.post("/fetch", {"key": "notes/today"})
+    assert out["status"] == "asked" and out["asked"] == [m.id]
+    acts = m.poll()
+    assert [x["type"] for x in acts] == ["Fetch"]
+    _, out = a.get("/keep/notes/today")
+    assert out["data"] == {"todo": ["water plants"]} and out["holders"] == [m.id]
+    # Or without asking: the member's next upward Announce names the key, the hub notices it has no copy and fetches.
+    a.fed.store = __import__("pyrtan.store", fromlist=["BlobStore"]).BlobStore(None)
+    m.announce()
+    assert [x["type"] for x in m.poll()] == ["Fetch"]
+    assert a.get("/keep/notes/today")[1]["data"] == {"todo": ["water plants"]}
+    # Leaving takes the mailbox and the kept blobs with it.
+    assert m.post({"type": "Undo", "object": {"type": "Follow", "actor": m.id, "object": a.url}})[0] == 200
+    assert m.id not in a.fed.followers and m.id not in a.fed.mailboxes
+    assert http_json("GET", f"{a.url}/mailbox", headers=sign(m.secret, m.id, "GET", "/mailbox", None))[0] == 401
+    # A member's id has a shape; a stranger's signature opens nothing.
+    bad = Member(a.url); bad.id = "urn:pyrtan:member:short"
+    assert bad.follow()[0] == 400
+    assert http_json("GET", f"{a.url}/mailbox", headers=sign("x", "urn:pyrtan:member:" + "0" * 32, "GET", "/mailbox", None))[0] == 401
+
+
+def test_hubs_keep_for_each_other_and_the_store_has_limits(two, tmp_path):
+    from pyrtan.store import MAX_BLOB, BlobStore, StoreError
+
+    a, b = two
+    a.fed.store = BlobStore(tmp_path / "a"); b.fed.store = BlobStore(tmp_path / "b")
+    a.post("/follow", {"url": b.url})
+    # A keeps a blob; B (a hub A follows) is a keeper and confirms in the same round trip.
+    status, out = a.post("/keep", {"key": "gaps-archive", "data": [{"tree": "x"}]})
+    assert status == 200 and out["keeping"]["holders"] == [b.url]
+    assert b.fed.store.list_kept(a.url)[0]["key"] == "gaps-archive"
+    assert [k["key"] for k in b.get("/keep")[1]["kept"]] == ["gaps-archive"]
+    # A takes it back from B over the kept path, signed; a stranger cannot.
+    path = "/kept/gaps-archive"
+    status, blob = http_json("GET", f"{b.url}{path}", headers=sign(a.fed.following[b.url].secret, a.url, "GET", path, None))
+    assert status == 200 and blob["data"] == [{"tree": "x"}]
+    assert http_json("GET", f"{b.url}{path}", headers=sign("nope", a.url, "GET", path, None))[0] == 401
+    assert http_json("GET", f"{b.url}/kept/other", headers=sign(a.fed.following[b.url].secret, a.url, "GET", "/kept/other", None))[0] == 404
+    # Fetch after A's store is gone: B answers at once.
+    a.fed.store = BlobStore(tmp_path / "a2")
+    _, out = a.post("/fetch", {"key": "gaps-archive"})
+    assert out["status"] == "ok" and out["source"] == b.url and out["blob"]["data"] == [{"tree": "x"}]
+    # The automatic blobs appear on the poll and change when the directory does.
+    a.hub.refresh_all()
+    keys = {k["key"] for k in a.get("/keep")[1]["keeping"]}
+    assert {"directory", "gaps", "unanswered", "gaps-archive"} <= keys
+    # Limits: a key has a shape, a blob a size, an actor a budget; and the state file remembers who holds what.
+    assert a.post("/keep", {"key": "Bad Key", "data": 1})[0] == 400
+    assert a.post("/keep", {"key": "big", "data": "x" * (MAX_BLOB + 1)})[0] == 400
+    with pytest.raises(StoreError):
+        b.fed.store.put_kept(a.url, "k", {"x": 1}, sha256="wrong")
+    state = tmp_path / "state.json"
+    a.fed.state_path = state; a.fed._save()
+    again = Federation(a.url, state=state, store=BlobStore(tmp_path / "a2"))
+    assert again.keeping["gaps-archive"]["holders"][b.url]["sha256"] == a.fed.keeping["gaps-archive"]["sha256"]
+    # Unfollow drops what B kept for A.
+    a.post("/unfollow", {"url": b.url})
+    assert b.fed.store.list_kept(a.url) == []
+
+
+def test_replication_counts_fresh_holders_only(two, tmp_path):
+    from pyrtan.store import BlobStore
+
+    a, b = two
+    a.fed.store = BlobStore(None); a.fed.replicas = 2
+    m1, m2, m3 = Member(a.url, "m1"), Member(a.url, "m2"), Member(a.url, "m3")
+    for m in (m1, m2, m3):
+        m.follow(); m.poll()
+    a.post("/keep", {"key": "k", "data": 1})
+    # Two members got a Keep (replicas = 2), the third did not.
+    got = [m for m in (m1, m2, m3) if any(x["type"] == "Keep" for x in m.poll())]
+    assert len(got) == 2 and a.fed.holders("k") == sorted(m.id for m in got)
+    assert a.fed.replicate() == 0  # enough holders: nothing sent
+    # A holder goes stale: the next replicate sends to the third.
+    a.fed.keeping["k"]["holders"][got[0].id]["at"] -= 2 * 86400
+    assert a.fed.replicate() == 1
+    third = next(m for m in (m1, m2, m3) if m not in got)
+    assert [x["type"] for x in third.poll()] == ["Keep"] and len(a.fed.holders("k")) == 2
+    # A new version of the blob needs confirming again.
+    a.post("/keep", {"key": "k", "data": 2})
+    assert a.fed.holders("k") == []
+    for m in (m1, m2, m3):
+        m.poll()
+    assert len(a.fed.holders("k")) == 2
+
+
+def test_cli_keep_kept_fetch(two, tmp_path, capsys):
+    from pyrtan.store import BlobStore
+
+    a, b = two
+    a.fed.store = BlobStore(None)
+    a.post("/follow", {"url": b.url})
+
+    def run(*argv):
+        code = main(list(argv))
+        o = capsys.readouterr()
+        return code, o.out, o.err
+
+    f = tmp_path / "blob.json"; f.write_text(json.dumps({"hello": "world"}))
+    code, out, _ = run("keep", "recipes/soup", str(f), "--at", a.url, "--token", "token-a")
+    assert code == 0 and "keeps recipes/soup" in out and "held by 1 of 2" in out
+    code, out, _ = run("kept", "--at", a.url, "--token", "token-a")
+    assert code == 0 and "recipes/soup" in out and b.url in out
+    code, out, _ = run("kept", "--at", b.url, "--token", "token-b")
+    assert f"for {a.url}: recipes/soup" in out
+    a.fed.store = BlobStore(None)
+    code, out, _ = run("fetch", "recipes/soup", "--at", a.url, "--token", "token-a", "--out", str(tmp_path / "back.json"))
+    assert code == 0 and f"from {b.url}" in out and json.loads((tmp_path / "back.json").read_text()) == {"hello": "world"}
+    assert run("fetch", "nothing", "--at", a.url, "--token", "token-a")[0] == 1
+    assert run("keep", "bad key", str(f), "--at", a.url, "--token", "token-a")[0] == 1
