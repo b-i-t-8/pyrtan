@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import threading
+from pathlib import Path
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -44,7 +45,9 @@ from .federation import MAX_HOPS, Federation, Remote, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
 from .page import PAGE
-from .service import Server, bearer_ok, http_json
+from .registry import Registry
+from .runtime import Outcome
+from .service import Server, Service, bearer_ok, http_json, outcome_from_dict
 
 STALE_AFTER = 30.0
 DOWN_AFTER = 90.0
@@ -75,12 +78,52 @@ class Peer:
         return {"url": self.url, "name": self.name, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error}
 
 
+class Local:
+    """Trees the hub holds itself (``pyrtan hub --trees DIR``): a service in
+    the same process, reached without HTTP. A swarm that is one process."""
+
+    url = "local"
+    kind = "local"
+    link = "up"
+    last_ok = 0.0
+    last_error: str | None = None
+
+    def __init__(self, service: Service) -> None:
+        self.service = service
+        self.name = service.name
+
+    @property
+    def trees(self) -> list[dict[str, Any]]:
+        return self.service.capabilities()["trees"]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"url": self.url, "name": self.name, "kind": "local", "link": "up", "trees": [t["name"] for t in self.trees], "last_ok": time.time(), "last_error": None}
+
+
+class _HubResolver:
+    """What a local tree's ``delegate`` reaches: the hub itself, in-process."""
+
+    def __init__(self, hub: "Hub") -> None:
+        self.hub = hub
+
+    def run_tree(self, name: str, inputs: dict[str, Any], depth: int) -> Outcome:
+        _, body = self.hub.run({"tree": name, "inputs": inputs, "depth": depth})
+        return outcome_from_dict(body, name)
+
+    def run_intent(self, text: str, depth: int) -> Outcome:
+        _, body = self.hub.intent({"text": text, "depth": depth})
+        return outcome_from_dict(body, "")
+
+
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None) -> None:
         self.name = name
         self.poll_every = poll_every
         self.token = token or None
         self.peers: dict[str, Peer] = {}
+        self.local: Local | None = None
+        if local is not None:
+            self.hold(local)
         self.federation: Federation | None = None
         self.unanswered = Unanswered()
         self.started = time.time()
@@ -90,15 +133,25 @@ class Hub:
 
     # ------------------------------------------------------------ federation
 
-    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True) -> Federation:
+    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True, listed: bool = False) -> Federation:
         """Give this hub an identity other hubs can follow. ``advertise`` is
         the URL they reach it at."""
-        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities)
+        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities, listed=listed)
         return self.federation
 
+    def hold(self, service: Service) -> Local:
+        """Hold trees in this process. The service's delegations reach the
+        hub directly, so a local tree can call anything the hub routes to."""
+        service.runner.resolver = _HubResolver(self)
+        self.local = Local(service)
+        return self.local
+
     def local_capabilities(self) -> list[dict[str, Any]]:
-        """What this hub's own services hold: what it announces."""
+        """What this hub holds itself and through its own services: what it announces."""
         trees: list[dict[str, Any]] = []
+        if self.local is not None:
+            for t in self.local.trees:
+                trees.append({**t, "peer": "local", "link": "up"})
         with self._lock:
             for peer in self.peers.values():
                 for t in peer.trees:
@@ -154,10 +207,11 @@ class Hub:
 
     # ------------------------------------------------------------ lookup
 
-    def holders(self) -> list[Peer | Remote]:
-        """Everyone this hub may route to: its services, then the hubs it follows."""
+    def holders(self) -> list[Local | Peer | Remote]:
+        """Everyone this hub may route to: its own trees, its services, then the hubs it follows."""
         with self._lock:
-            out: list[Peer | Remote] = list(self.peers.values())
+            out: list[Local | Peer | Remote] = [self.local] if self.local is not None else []
+            out.extend(self.peers.values())
             if self.federation is not None:
                 out.extend(self.federation.following.values())
             return out
@@ -175,10 +229,10 @@ class Hub:
                         continue
         return out
 
-    def holder(self, tree_name: str) -> Peer | Remote | None:
-        """Who to send a tree to: a service of ours before a hub we follow,
-        and the healthiest of either."""
-        best: Peer | Remote | None = None
+    def holder(self, tree_name: str) -> Local | Peer | Remote | None:
+        """Who to send a tree to: our own trees, then a service of ours, then
+        a hub we follow, and the healthiest of each."""
+        best: Local | Peer | Remote | None = None
         for h in self.holders():
             if any(t.get("name") == tree_name for t in h.trees):
                 if best is None or _rank(h) < _rank(best):
@@ -197,7 +251,8 @@ class Hub:
             "up": sum(1 for p in peers if p.link == "up"),
             "stale": sum(1 for p in peers if p.link == "stale"),
             "down": sum(1 for p in peers if p.link == "down"),
-            "trees": sum(len(p.trees) for p in peers),
+            "trees": sum(len(p.trees) for p in peers) + (len(self.local.trees) if self.local else 0),
+            "local": len(self.local.trees) if self.local else 0,
             "unanswered": len(self.unanswered),
             "uptime_s": int(time.time() - self.started),
         }
@@ -252,9 +307,14 @@ class Hub:
             return 200, {"status": "error", "reason": "no-such-tree", "say": "No service holds the tree this snapshot came from."}
         return self.forward(peer, "/resume", body)
 
-    def forward(self, peer: Peer | Remote | None, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def forward(self, peer: Local | Peer | Remote | None, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         if peer is None:
             return 200, {"status": "error", "reason": "no-peer"}
+        if isinstance(peer, Local):
+            handler = {"/run": peer.service.run, "/intent": peer.service.intent, "/resume": peer.service.resume}[path]
+            answer = handler({k: v for k, v in body.items() if k != "hops"})
+            answer.setdefault("peer", "local")
+            return 200, answer
         hops = list(body.get("hops") or [])
         if isinstance(peer, Remote):
             # Over federation: one hop, signed, and the request says where it has been.
@@ -281,6 +341,8 @@ class Hub:
 
     def gaps(self) -> dict[str, Any]:
         out: list[dict[str, Any]] = []
+        if self.local is not None:
+            out.extend({**g, "peer": "local"} for g in self.local.service.gaps.all())
         for peer in list(self.peers.values()):
             try:
                 status, body = http_json("GET", f"{peer.url}/gaps", timeout=5.0, token=self.token)
@@ -294,6 +356,8 @@ class Hub:
         """This hub's unanswered sentences, then each peer's own (a peer
         without a hub keeps its own record; one with a hub leaves it here)."""
         out = self.unanswered.to_list()
+        if self.local is not None:
+            out.extend({**u, "peer": "local"} for u in self.local.service.unanswered.to_list())
         for peer in list(self.peers.values()):
             if peer.link == "down":
                 continue
@@ -321,7 +385,7 @@ class Hub:
             return 200, self.health()
         if method == "GET" and path == "/peers":
             with self._lock:
-                out: dict[str, Any] = {"peers": [p.to_dict() for p in self.peers.values()]}
+                out: dict[str, Any] = {"peers": ([self.local.to_dict()] if self.local else []) + [p.to_dict() for p in self.peers.values()]}
             if fed is not None:
                 out.update(fed.to_dict())
             return 200, out
@@ -340,11 +404,19 @@ class Hub:
                 url = body.get("url")
                 if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
+                if body.get("listed") is True and not fed.listed:
+                    fed.set_listed(True)
                 try:
-                    remote = fed.follow(url, listed=body.get("listed") is True)
+                    remote = fed.follow(url)
                 except ValueError as e:
                     return 400, {"status": "error", "reason": "cannot-follow", "say": str(e)}
-                return 200, {"status": "ok", "following": remote.to_dict()}
+                return 200, {"status": "ok", "following": remote.to_dict(), "listed": fed.listed}
+            if method == "POST" and path == "/listed":
+                fed.set_listed(body.get("listed") is not False)
+                if fed.listed:
+                    fed.announce_up(force=True)
+                    fed.announce(force=True)
+                return 200, {"status": "ok", "listed": fed.listed}
             if method == "POST" and path == "/unfollow":
                 url = body.get("url")
                 if not isinstance(url, str):
@@ -361,7 +433,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/directory", "/follow", "/unfollow", "/following", "/followers", "/outbox"]
+                endpoints += ["/actor", "/inbox", "/directory", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -378,9 +450,9 @@ class Hub:
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
 
 
-def _rank(peer: Peer | Remote) -> int:
-    # A service of ours before a hub we follow; the healthier of either.
-    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (10 if isinstance(peer, Remote) else 0)
+def _rank(peer: Local | Peer | Remote) -> int:
+    # Our own trees, then a service of ours, then a hub we follow; the healthier of each.
+    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (10 if isinstance(peer, Remote) else 0) - (1 if isinstance(peer, Local) else 0)
 
 
 def serve_hub(
@@ -400,16 +472,21 @@ def serve_hub(
     open_follows: bool = True,
     follow: list[str] | None = None,
     listed: bool = False,
+    trees: list[str | Path] | None = None,
+    env: dict[str, Any] | None = None,
+    gaps: str | None = None,
+    egress: str = "any",
 ) -> tuple[Hub, Server]:
-    hub = Hub(name=name, poll_every=poll_every, token=token)
+    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress) if trees else None
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
-        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows)
+        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed)
     for url in peers or []:
         hub.add_peer(url)
     for url in follow or []:
         try:
-            hub.federation.follow(url, listed=listed)  # type: ignore[union-attr]
+            hub.federation.follow(url)  # type: ignore[union-attr]
         except ValueError as e:
             print(f"pyrtan hub: cannot follow {url}: {e}", flush=True)
     hub.start_polling()

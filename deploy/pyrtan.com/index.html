@@ -25,6 +25,10 @@
   .card h3 { margin:0 0 6px; font-size:16px } .card p { margin:0; color:var(--mute); font-size:15px }
   a { color:var(--accent) }
   footer { color:var(--mute); font-size:14px; margin-top:48px; border-top:1px solid var(--line); padding-top:16px }
+  table { width:100%; border-collapse:collapse; font-size:15px } td,th { text-align:left; padding:6px 8px; border-top:1px solid var(--line); vertical-align:top } th { color:var(--mute); font-weight:600; border-top:0 }
+  .link { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--mute) }
+  .link.up { background:#1f7a4d } .link.stale { background:#8a6400 } .link.down { background:#a3382b }
+  .mute { color:var(--mute) }
 </style>
 </head>
 <body>
@@ -35,7 +39,7 @@
   <div class="actions">
     <a class="primary" href="/console/">Open the console</a>
     <a href="/catalog/">Browse the catalog</a>
-    <a href="https://hub.pyrtan.com/#directory">The rendezvous</a>
+    <a href="#directory">The directory</a>
     <a href="https://github.com/b-i-t-8/pyrtan">Source on GitHub</a>
   </div>
 
@@ -67,16 +71,47 @@ pyrtan serve trees --port 8701                            # then open http://127
   <h2>The console</h2>
   <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="/console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
 
-  <h2>The rendezvous</h2>
-  <p>A public hub at <code>hub.pyrtan.com</code> holds the example trees and takes follows from anyone. <code>pyrtan follow --at https://your-hub</code> makes your swarm answer through it; <code>--listed</code> puts your hub in its <a href="https://hub.pyrtan.com/#directory">directory</a> so others can find and follow yours. Following is one-way trust and one hop: the rendezvous routes to nobody, and nothing crosses more than one hub.</p>
-<pre>pyrtan hub --federate --advertise https://your-hub --token …       # your hub, behind TLS
-pyrtan follow --at https://your-hub --token … --listed              # follow the rendezvous, be listed
-pyrtan directory                                                    # who else is there</pre>
+  <h2 id="directory">The directory</h2>
+  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="/rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
+  <div class="card"><table id="hubs"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the seeds…</td></tr></tbody></table></div>
+<pre>pyrtan hub --federate --advertise https://your-hub --listed --token …   # your hub, behind a tunnel or TLS
+pyrtan follow --at https://your-hub --token …                           # follow the first seed; route to it
+pyrtan directory                                                        # who the swarm knows</pre>
+  <p>To become a seed, add your hub's URL to <code>rendezvous/seeds.json</code> by pull request.</p>
 
   <h2>Hosting</h2>
   <p>Self-hosting is the product. A hosted option, running the same open-source hub per customer with secrets, retention, scheduled re-runs and alerts around it, is planned; it will speak the same API, so a swarm can move either way without changing a caller.</p>
 
   <footer>Pyrtan is free software under the AGPL-3.0-or-later, a product of <a href="https://hillvon.io">Hillvon.io</a>. Trees you write are your own.</footer>
 </main>
+<script>
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+(async () => {
+  const note = document.getElementById("hubs-note");
+  let seeds = [];
+  try { seeds = (await (await fetch("rendezvous/seeds.json")).json()).hubs || []; } catch (e) {}
+  if (!seeds.length) { note.textContent = "No seeds listed yet."; return; }
+  const seen = new Map();
+  let answered = 0;
+  for (const seed of seeds) {
+    try {
+      const r = await fetch(seed.replace(/\/+$/, "") + "/directory", {headers: {"Accept": "application/json"}});
+      if (!r.ok) continue;
+      const d = await r.json();
+      answered++;
+      for (const h of d.hubs || []) if (!seen.has(h.id) || seen.get(h.id).seen < h.seen) seen.set(h.id, h);
+    } catch (e) {}
+  }
+  if (!answered) { note.textContent = "No seed answered from this browser (a seed must run with --cors https://pyrtan.com)."; return; }
+  const body = document.querySelector("#hubs tbody"); body.innerHTML = "";
+  const hubs = [...seen.values()].sort((a, b) => ({up:0, stale:1, down:2}[a.link] - {up:0, stale:1, down:2}[b.link]) || a.id.localeCompare(b.id));
+  for (const h of hubs) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td><a href="/console/?hub=${encodeURIComponent(h.id)}">open in console</a></td></tr>`;
+    body.appendChild(tr);
+  }
+  if (!hubs.length) body.innerHTML = `<tr><td colspan="4" class="mute">The seeds know of nobody yet.</td></tr>`;
+})();
+</script>
 </body>
 </html>
