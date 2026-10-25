@@ -16,6 +16,7 @@ Endpoints:
 ``POST /run``        forwarded to the peer holding ``tree``
 ``POST /resume``     forwarded to the peer named in the snapshot
 ``GET  /gaps``       every peer's gaps, with the peer that saw them
+``GET  /unanswered`` sentences no peer answered, each with a proposed tree
 ``GET  /``           the demo page; ``GET /api`` is the JSON index
 
 A service that holds several trees and a hub that routes between services
@@ -31,6 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, best_matches
 from .page import PAGE
 from .service import Server, http_json
@@ -68,6 +70,7 @@ class Hub:
         self.name = name
         self.poll_every = poll_every
         self.peers: dict[str, Peer] = {}
+        self.unanswered = Unanswered()
         self.started = time.time()
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -155,6 +158,7 @@ class Hub:
             "stale": sum(1 for p in peers if p.link == "stale"),
             "down": sum(1 for p in peers if p.link == "down"),
             "trees": sum(len(p.trees) for p in peers),
+            "unanswered": len(self.unanswered),
             "uptime_s": int(time.time() - self.started),
         }
 
@@ -172,7 +176,10 @@ class Hub:
             return 200, {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
         matches = best_matches(text, self.candidates())  # type: ignore[arg-type]
         if not matches:
-            return 200, {"status": "error", "reason": "no-match", "say": f"No service in the swarm answers {text!r}."}
+            entry = self.unanswered.record(text)
+            answer = no_match_outcome(text, "No service in the swarm")
+            answer["output"]["seen"] = entry["count"]
+            return 200, {"status": "error", "reason": "no-match", **answer}
         tree_names = {m.tree[1] for m in matches}  # type: ignore[index]
         if len(tree_names) > 1:
             return 200, {"status": "error", "reason": "ambiguous", "say": f"{text!r} matches more than one tree: {sorted(tree_names)}", "output": {"candidates": sorted(tree_names)}}
@@ -221,6 +228,21 @@ class Hub:
                 out.extend({**g, "peer": peer.url} for g in body.get("gaps", []))
         return {"gaps": out}
 
+    def unanswered_all(self) -> dict[str, Any]:
+        """This hub's unanswered sentences, then each peer's own (a peer
+        without a hub keeps its own record; one with a hub leaves it here)."""
+        out = self.unanswered.to_list()
+        for peer in list(self.peers.values()):
+            if peer.link == "down":
+                continue
+            try:
+                status, body = http_json("GET", f"{peer.url}/unanswered", timeout=5.0)
+            except Exception:
+                continue
+            if status == 200 and isinstance(body, dict):
+                out.extend({**u, "peer": peer.url} for u in body.get("unanswered", []))
+        return {"unanswered": out}
+
     def route(self, method: str, path: str, body: dict[str, Any] | None) -> tuple[int, Any]:
         body = body or {}
         if method == "GET" and path == "/health":
@@ -232,10 +254,12 @@ class Hub:
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
             return 200, self.gaps()
+        if method == "GET" and path == "/unanswered":
+            return 200, self.unanswered_all()
         if method == "GET" and path in ("/", "/index.html"):
             return 200, PAGE
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "hub", "name": self.name, "endpoints": ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/register"]}
+            return 200, {"pyrtan": "hub", "name": self.name, "endpoints": ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):

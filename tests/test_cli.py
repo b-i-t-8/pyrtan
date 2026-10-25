@@ -62,5 +62,49 @@ def test_new_scaffolds_a_tree_that_checks(tmp_path, capsys):
     assert run(capsys, "new", "my-thing", "--dir", str(tmp_path))[0] == 1
 
 
+def test_new_from_a_sentence(tmp_path, capsys):
+    code, out, _ = run(capsys, "new", "--from", "top 3 stories on hacker news", "--dir", str(tmp_path))
+    assert code == 0 and "top {count:int} stories on hacker news" in out
+    path = tmp_path / "top-stories-hacker-news.toml"
+    assert path.exists() and "[inputs.count]" in path.read_text()
+    assert run(capsys, "check", str(path))[0] == 0
+    code, out, _ = run(capsys, "new", "hn", "--from", "top 3 stories on hacker news", "--dir", str(tmp_path))
+    assert code == 0 and (tmp_path / "hn.toml").exists()
+    assert run(capsys, "new", "--dir", str(tmp_path))[0] == 2
+
+
+def test_run_no_match_proposes_a_tree(capsys):
+    code, out, _ = run(capsys, "run", "tell me a joke", "--trees", str(EXAMPLES), "--replay", str(FIXTURES / "examples.json"), "--json")
+    assert code == 3
+    data = json.loads(out)
+    assert data["reason"] == "no-match" and data["output"]["proposal"]["name"] == "joke"
+
+
 def test_gaps_needs_a_target(capsys):
     assert run(capsys, "gaps")[0] == 2
+    assert run(capsys, "unanswered")[0] == 2
+
+
+def test_unanswered_lists_and_scaffolds(tmp_path, capsys):
+    from pyrtan import Registry
+    from pyrtan.service import Server, Service, http_json
+
+    svc = Service(Registry.from_paths([EXAMPLES]), name="x")
+    server = Server(svc.route, quiet=True).start()
+    try:
+        code, out, _ = run(capsys, "unanswered", "--at", server.url)
+        assert code == 0 and "nothing unanswered" in out
+        http_json("POST", f"{server.url}/intent", {"text": "ping example.org"})
+        http_json("POST", f"{server.url}/intent", {"text": "ping example.org"})
+        http_json("POST", f"{server.url}/intent", {"text": "tell me a joke"})
+        code, out, _ = run(capsys, "unanswered", "--at", server.url)
+        assert code == 0 and out.startswith("'ping example.org'  x2") and "would be: host-ping  answering  ping {host:word}" in out and "pyrtan new joke --from" in out
+        code, out, _ = run(capsys, "unanswered", "--at", server.url, "--json")
+        assert [e["text"] for e in json.loads(out)["unanswered"]] == ["ping example.org", "tell me a joke"]
+        code, out, _ = run(capsys, "unanswered", "--at", server.url, "--scaffold", str(tmp_path))
+        assert code == 0 and "wrote" in out and (tmp_path / "host-ping.toml").exists() and (tmp_path / "joke.toml").exists()
+        assert run(capsys, "check", str(tmp_path))[0] == 0
+        code, out, _ = run(capsys, "unanswered", "--at", server.url, "--scaffold", str(tmp_path))
+        assert "kept" in out and "wrote" not in out
+    finally:
+        server.stop()

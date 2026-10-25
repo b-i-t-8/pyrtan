@@ -1,10 +1,10 @@
-# Design — Pyrtan: a swarm of services that act on the web through hardcoded decision trees
+# Design — Pyrtan: a core set of expandable services that act on all forms of I/O through hardcoded decision trees
 
 | | |
 |---|---|
-| **Status** | **Built, v0.1.** The core, the service, the hub and the command exist and are tested (111 tests, including a two-service swarm behind a hub on localhost). No deployment, no users, no browser adapter yet. |
+| **Status** | **Built, v0.1.** The core, the service, the hub and the command exist and are tested (133 tests, including a two-service swarm behind a hub on localhost). No deployment, no users; HTTP is the only form of I/O the core speaks yet. |
 | **Date** | 2026-10-24 |
-| **Decision** | Pyrtan is an open-source automation tool: many small services, each holding declarative decision trees that read and act on the web, routed by a hub, with no model in the loop and a complete trace of every run. |
+| **Decision** | Pyrtan is an open-source automation tool: a core set of expandable services, each holding declarative decision trees that read and act on all forms of I/O, routed by a hub, with no model in the loop and a complete trace of every run. |
 | **Where** | This repository: `src/pyrtan`, `examples/`, `tests/`. AGPL-3.0-or-later. |
 
 ## 0. The brief, and the reading this design commits to
@@ -21,17 +21,25 @@ output, and an explanation. Inside there is no model. The explanation is
 not a model's account of itself; it is the literal path through the tree.
 
 **"Hardcoded decision trees of the web."** A tree is a file an author
-writes, naming the hosts it may touch, the requests it makes, the values it
-extracts, and the comparisons that choose the next step. "Of the web" means
-the tree encodes how one web property behaves: what a 404 means here, which
-JSON path holds the title, which weather code means rain. The knowledge a
-model would hold implicitly, a tree holds explicitly, for one site.
+writes, naming the endpoints it may touch, the requests it makes, the
+values it extracts, and the comparisons that choose the next step. "Of the
+web" means the tree encodes how one property behaves: what a 404 means
+here, which JSON path holds the title, which weather code means rain. The
+knowledge a model would hold implicitly, a tree holds explicitly, for one
+property. The web was the brief's example and is the first form of I/O the
+core speaks; the shape is the same for any other. An adapter names what it
+may reach, a node observes or acts through it, and a `decide` reads what
+came back. A file, a shell, a serial line or a queue is the same tree with
+a different adapter under it.
 
-**"Swarm of services."** A tree is held by a service; a service is a small
-process that answers `/intent` and `/run`; a hub routes between services
-and reports which are up. The swarm is the unit of deployment and of
-ownership: one team can own the trees for one property, run them on their
-own box, and register with a shared hub.
+**"Swarm of services."** Read as a core set of expandable services. A tree
+is held by a service; a service is a small process that answers `/intent`
+and `/run`; a hub routes between services and reports which are up. The
+core is the runtime, the service and the hub; what expands is the set of
+trees, the set of services holding them, and the forms of I/O they reach.
+The swarm is the unit of deployment and of ownership: one team can own the
+trees for one property, run them on their own box, and register with a
+shared hub.
 
 **"Similar to Claude skills but much more focused and dynamic."** A skill
 is a prose instruction package a model reads and interprets. A tree is
@@ -41,8 +49,9 @@ delegate to any other tree in the swarm by sentence or by name, resolved at
 run time; and a decision that meets a value no branch covers is recorded as
 a *gap*, so the set of trees grows where reality disagreed with its author.
 
-**"Total automation."** Read as the ambition, not as a claim. v0.1 reads
-APIs and pages and can POST. What it does not yet do is in Section 7.
+**"Total automation."** Read as the ambition, not as a claim. v0.1 speaks
+HTTP: it reads APIs and pages and can POST. Other forms of I/O are adapters
+still to come (Section 6); what is open is in Section 7.
 
 ## 1. What this design refuses
 
@@ -60,9 +69,12 @@ Four things a reader might expect, and will not find.
   shows. The cost is verbosity (the weather tree spends seven `set` nodes
   turning a code into a word); the benefit is that a tree can be audited by
   someone who does not program.
-- **Reaching a host the author did not list.** `hosts` is checked at load
-  time for literal URLs and at run time for templated ones. A tree that
-  takes a host from its input must say `hosts = ["*"]` out loud.
+- **Reaching an endpoint the author did not list.** `hosts` is checked at
+  load time for literal URLs and at run time for templated ones. A tree
+  that takes a host from its input must say `hosts = ["*"]` out loud. The
+  same rule binds every later form of I/O: an adapter arrives with an
+  allow-list of the same kind (paths, devices, queues), or it does not
+  arrive.
 - **Loops.** A tree is a directed acyclic graph; `pyrtan check` names the
   cycle and refuses. Repetition is `each` over a list with a limit, so
   every run is finite and every trace is complete.
@@ -78,8 +90,9 @@ traded away by a convenient feature.
 2. **The trace is complete.** Every node visited appears, with what it
    observed and, for a decision, which condition held. Delegated runs
    appear inside the caller's trace one level deeper.
-3. **Hosts are closed.** No request leaves to a host outside the tree's
-   list, whether the URL was literal or built at run time.
+3. **Endpoints are closed.** No request leaves to a host outside the
+   tree's list, whether the URL was literal or built at run time, and no
+   future adapter is admitted without an allow-list of the same kind.
 4. **Reads retry; writes do not.** An `observe` may be retried on transport
    failure; an `act` is attempted once. The checker refuses `retries` on an
    act and refuses a write method on an observe.
@@ -101,9 +114,11 @@ sentence ──► intent.py ──► registry.py ──► runtime.py ──�
                                              │    └─ html.py  parser + selector subset
                                              └─ transport.py  urllib | recorded | recording
 
-service.py  one process, one registry, HTTP endpoints, hot reload, gaps
+grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
+service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
+            unanswered
 hub.py      peers, link up/stale/down, routing by capability, forwarding
-cli.py      check · list · run · ask · serve · hub · gaps · new
+cli.py      check · list · run · ask · serve · hub · gaps · unanswered · new
 ```
 
 **The tree** (`tree.py`) is TOML, loaded into dataclasses and checked on
@@ -132,7 +147,22 @@ carry.
 the standard library's client, a recorded fixture that raises on any
 request it did not foresee, and a recorder that writes such fixtures.
 Every example tree is tested offline through the second, and
-`pyrtan run --record` produces fixtures through the third.
+`pyrtan run --record` produces fixtures through the third. The transport
+is also the seam where forms of I/O plug in. A node names a source (`http`
+today), the runtime enforces that source's allow-list, and the transport
+moves the bytes. A file, shell, serial or queue adapter is a new node
+source with the same three parts, and the same recorded and recording
+wrappers around it.
+
+**Growth** (`grow.py`) is where a dead end becomes the next tree. A
+sentence no tree answers is recorded as *unanswered*, counted, and
+answered with a proposal: a name drawn from the words, a trigger with slots
+where the sentence had numbers or hosts, the inputs those slots need, and
+the `pyrtan new … --from` command that writes a scaffold which passes
+`check`. The proposal is derived by rules, not by a model, and it is a
+first draft for an author, not an answer for a caller. A service without a
+hub keeps its own unanswered log; one with a hub leaves the record to the
+hub, which also collects its peers' at `/unanswered`.
 
 **The service** (`service.py`) wraps a registry in the standard library's
 threading HTTP server. It reloads trees from disk on every request that
@@ -174,8 +204,10 @@ to end.
 
 **A model fallback for unmatched sentences.** The obvious feature, and the
 one that would quietly turn the product into the thing it is defined
-against. Not built. A sentence no tree answers returns `no-match`, and the
-honest response to a frequent `no-match` is a new tree.
+against. Not built. A sentence no tree answers returns `no-match`, is
+recorded as unanswered, and comes back with the tree that would answer it.
+The honest response to a frequent `no-match` is a new tree, and the swarm
+now hands the author its first draft rather than an excuse.
 
 **A message bus between services.** NATS or similar would give the swarm
 events and fan-out. v0.1 has `act.emit`, which records an event on the
@@ -183,8 +215,9 @@ service; nothing consumes it yet. Request/response over HTTP covers every
 case the examples needed, and a bus would be a dependency and an
 operational component before there is a swarm large enough to need one.
 
-**Persisting gaps.** Gaps live in a service's memory and are lost on
-restart. Enough to prove the loop (run, see gap, add branch, reload), not
+**Persisting gaps and unanswered sentences.** Both live in a service's or
+hub's memory and are lost on restart. Enough to prove the two loops (run,
+see gap, add branch, reload; ask, see unanswered, scaffold, reload), not
 enough for a fleet. Deferred to Section 7.
 
 ## 5. What the examples show
@@ -208,9 +241,13 @@ Five trees, all against real public APIs, all tested offline:
    file per service and collected by the hub. A `pyrtan watch` that
    re-runs a set of sentences on a schedule and reports when a path changes
    (the way to learn a site has changed before a person does).
-3. **v0.3: browser adapter.** `observe` with `browser = { url, wait_for,
-   actions }` on Playwright as an optional extra, for pages that need a
-   script to render, with the same host rule and the same extraction.
+3. **v0.3: more forms of I/O.** First the browser: `observe` with
+   `browser = { url, wait_for, actions }` on Playwright as an optional
+   extra, for pages that need a script to render, with the same host rule
+   and the same extraction. Then file, shell, serial and queue adapters,
+   each a node source with its own allow-list (paths, commands, devices,
+   topics), so a tree reads a log, runs a named command or polls a device
+   by the same rules it reads a page, and the trace reads the same.
 4. **v0.4: trees as a shared thing.** A directory of trees people can pull
    by name, with the checker run on contribution, and `version` meaning
    something.
@@ -239,8 +276,10 @@ Five trees, all against real public APIs, all tested offline:
 
 ## 8. What this design does not claim
 
-It does not claim to answer sentences nobody wrote a tree for. It does not
-claim trees are quick to write: the weather tree is 15 nodes for a two-call
+It does not claim to answer sentences nobody wrote a tree for; it claims
+to say which tree would, and to write that tree's first draft. It does not
+claim to reach anything beyond HTTP yet. It does not claim trees are quick
+to write: the weather tree is 15 nodes for a two-call
 API, and that is the price of leaving nothing implicit. It does not claim
 the swarm is secure across a network boundary (Section 7). It does not
 claim the examples will keep working as the sites they read change; it

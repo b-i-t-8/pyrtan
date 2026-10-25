@@ -5,8 +5,11 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 
 ## Adding or fixing a tree
 
-1. `pyrtan new my-tree --dir examples/my-tree` and edit the file. Keep the
-   `hosts` list to exactly the hosts it needs.
+1. `pyrtan new --from "the sentence it answers" --dir examples/my-tree`
+   (or `pyrtan new my-tree`) and edit the file. If a running swarm has
+   already been asked the sentence, `pyrtan unanswered --at URL --scaffold
+   DIR` writes the same file. Keep the `hosts` list to exactly the hosts it
+   needs.
 2. `pyrtan check examples/my-tree` until it is clean. Warnings are worth
    reading; an `info` about a `decide` without `else` is a choice, not a
    fault.

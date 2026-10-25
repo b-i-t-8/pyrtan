@@ -15,6 +15,10 @@ Endpoints, all JSON:
 ``GET /gaps``
     Decisions that met a value no branch covered, since the service started.
     Each is a branch waiting to be written.
+``GET /unanswered``
+    Sentences no tree answered, counted, each with a proposed tree. Each is
+    a tree waiting to be written; ``pyrtan unanswered --at URL --scaffold
+    DIR`` writes the files.
 ``GET /``
     The demo page (:mod:`pyrtan.page`); ``GET /api`` is the JSON index.
 
@@ -22,7 +26,7 @@ A service may be given a hub (``--hub``). Then it registers itself on start,
 and a ``delegate`` to a tree it does not hold is forwarded to the hub.
 
 The server is the standard library's threading HTTP server. It is meant for
-a swarm of small processes on a trusted network, behind whatever ingress
+a set of small processes on a trusted network, behind whatever ingress
 the operator already runs; it does not do TLS or authentication itself.
 """
 
@@ -38,6 +42,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .page import PAGE
+from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
 from .trace import Trace
@@ -104,6 +109,7 @@ class Service:
         self.started = time.time()
         self.runner = Runner(registry, transport or UrllibTransport(), resolver=RemoteResolver(self.hub) if self.hub else None, env=env or {})
         self.gaps: list[dict[str, Any]] = []
+        self.unanswered = Unanswered()
         self.runs = 0
         self._lock = threading.Lock()
 
@@ -111,7 +117,7 @@ class Service:
 
     def health(self) -> dict[str, Any]:
         self.registry.reload()
-        return {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "uptime_s": int(time.time() - self.started)}
+        return {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "uptime_s": int(time.time() - self.started)}
 
     def capabilities(self) -> dict[str, Any]:
         self.registry.reload()
@@ -122,7 +128,11 @@ class Service:
         if not isinstance(text, str) or not text.strip():
             return {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
         self.registry.reload()
-        return self._finish(self.runner.run_intent(text, int(body.get("depth", 0))), body)
+        outcome = self.runner.run_intent(text, int(body.get("depth", 0)))
+        if outcome.reason == "no-match" and self.hub is None:
+            # With a hub, the hub saw the sentence and keeps the record.
+            self.unanswered.record(text)
+        return self._finish(outcome, body)
 
     def run(self, body: dict[str, Any]) -> dict[str, Any]:
         tree = body.get("tree")
@@ -165,10 +175,12 @@ class Service:
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
             return 200, {"gaps": self.gaps}
+        if method == "GET" and path == "/unanswered":
+            return 200, {"unanswered": self.unanswered.to_list()}
         if method == "GET" and path in ("/", "/index.html"):
             return 200, PAGE
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps"]}
+            return 200, {"pyrtan": "service", "name": self.name, "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":
