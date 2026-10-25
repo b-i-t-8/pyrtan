@@ -39,7 +39,7 @@ from typing import Any
 
 from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
-from .federation import first_live_seed, seed_urls
+from .federation import bootstrap_candidates, first_live_seed
 from .grow import Proposal, propose
 from .page import PAGE
 from .registry import Registry, default_paths
@@ -465,15 +465,15 @@ def cmd_follow(args: argparse.Namespace) -> int:
     if not url:
         url = first_live_seed()
         if url is None:
-            seeds = seed_urls()
-            print("pyrtan follow: no seed answers" + (f" (tried {', '.join(seeds)})" if seeds else " (no seeds listed; set $PYRTAN_SEEDS or $PYRTAN_RENDEZVOUS)") + "; give a hub URL", file=sys.stderr)
+            tried = bootstrap_candidates()
+            print("pyrtan follow: no seed or snapshot hub answers" + (f" (tried {', '.join(tried)})" if tried else " (none listed; set $PYRTAN_SEEDS or $PYRTAN_RENDEZVOUS)") + "; give a hub URL", file=sys.stderr)
             return 3
     return _hub_post(args, "/follow", {"url": url, "listed": bool(args.listed)}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted" + (" and is listed in the directory" if b.get("listed") else ""))
 
 
 def cmd_directory(args: argparse.Namespace) -> int:
     tried: list[str] = []
-    candidates = [args.at] if args.at else [os.environ.get("PYRTAN_AT") or "http://127.0.0.1:8700", *seed_urls()]
+    candidates = [args.at] if args.at else [os.environ.get("PYRTAN_AT") or "http://127.0.0.1:8700", *bootstrap_candidates()]
     body: Any = None
     at = ""
     for at in candidates:
@@ -487,6 +487,25 @@ def cmd_directory(args: argparse.Namespace) -> int:
         if status == 200 and isinstance(body, dict) and "hubs" in body:
             break
         body = None
+    if body is None and not args.at:
+        # Nobody live: the snapshot pyrtan.com bakes from the seeds, with its age.
+        source = os.environ.get("PYRTAN_SNAPSHOT") or "https://pyrtan.com/rendezvous/directory.json"
+        try:
+            if source.startswith(("http://", "https://")):
+                status, snap = http_json("GET", source, timeout=10.0)
+            else:
+                status, snap = 200, json.loads(Path(source).read_text(encoding="utf-8"))
+        except Exception:
+            status, snap = 0, None
+        if status == 200 and isinstance(snap, dict) and isinstance(snap.get("hubs"), list):
+            import time as _time
+
+            now = _time.time()
+            for h in snap["hubs"]:
+                age = now - float(h.get("seen", 0) or 0)
+                h["link"] = "up" if age < 600 else "stale" if age < 86400 else "down"
+            body = {**snap, "name": f"snapshot as of {snap.get('as_of', '?')}", "hub": source}
+            at = source
     if body is None:
         print(f"pyrtan directory: no federated hub answered (tried {', '.join(tried)})", file=sys.stderr)
         return 3

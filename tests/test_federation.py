@@ -330,6 +330,7 @@ def test_seeds_and_cli_defaults(two, capsys, monkeypatch, tmp_path):
     seeds = tmp_path / "seeds.json"
     seeds.write_text(json.dumps({"pyrtan-seeds": 1, "hubs": ["http://127.0.0.1:9", b.url, a.url]}))
     monkeypatch.setenv("PYRTAN_SEEDS", str(seeds))
+    monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "no-snapshot.json"))  # never reach pyrtan.com from a test
     monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
     assert seed_urls() == ["http://127.0.0.1:9", b.url, a.url]
     assert first_live_seed() == b.url  # the dead one is skipped
@@ -349,7 +350,7 @@ def test_seeds_and_cli_defaults(two, capsys, monkeypatch, tmp_path):
     monkeypatch.setenv("PYRTAN_SEEDS", str(tmp_path / "missing.json"))
     assert seed_urls() == []
     code, _, err = run("follow", "--at", a.url, "--token", "token-a")
-    assert code == 3 and "no seed answers" in err
+    assert code == 3 and "no seed or snapshot hub answers" in err
 
 
 def test_hub_holds_trees_itself(tmp_path):
@@ -399,3 +400,51 @@ say = "picnic says {{ state.a.say }}"
     finally:
         hub.stop()
         srv.stop()
+
+
+def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
+    """site/snapshot.py merges the seeds' directories with the last snapshot,
+    and the command falls back to the snapshot when nothing is live."""
+    import subprocess
+    import sys as _sys
+
+    a, b = two
+    b.fed.set_listed(True)
+    a.post("/follow", {"url": b.url})
+    seeds = tmp_path / "seeds.json"
+    seeds.write_text(json.dumps({"pyrtan-seeds": 1, "hubs": ["http://127.0.0.1:9", a.url]}))
+    old = tmp_path / "old.json"
+    old.write_text(json.dumps({"pyrtan-directory": 1, "hubs": [{"id": "http://gone.example", "name": "gone", "trees": ["x"], "seen": time.time() - 3600}, {"id": "http://ancient.example", "trees": [], "seen": time.time() - 30 * 86400}]}))
+    out = tmp_path / "directory.json"
+    run = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(out), "--previous", str(tmp_path / "missing.json"), "--previous", str(old)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
+    assert run.returncode == 0, run.stderr
+    snap = json.loads(out.read_text())
+    assert snap["pyrtan-directory"] == 1 and snap["seeds"]["answered"] == [a.url] and snap["seeds"]["silent"][0]["seed"] == "http://127.0.0.1:9"
+    assert snap["seeds"]["previous"] == str(old)
+    ids = [h["id"] for h in snap["hubs"]]
+    assert b.url in ids and "http://gone.example" in ids and "http://ancient.example" not in ids  # live from the seed, kept from the snapshot, expired
+    assert next(h for h in snap["hubs"] if h["id"] == b.url)["via"] == a.url
+
+    def cli(*argv):
+        code = main(list(argv))
+        o = capsys.readouterr()
+        return code, o.out, o.err
+
+    from pyrtan.federation import bootstrap_candidates, first_live_seed, snapshot_hubs
+
+    # With every seed dead, the snapshot's hubs are the next place to look.
+    monkeypatch.setenv("PYRTAN_SEEDS", str(tmp_path / "dead-seeds.json"))
+    (tmp_path / "dead-seeds.json").write_text(json.dumps({"hubs": ["http://127.0.0.1:9"]}))
+    monkeypatch.setenv("PYRTAN_SNAPSHOT", str(out))
+    monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
+    assert snapshot_hubs()[0] == b.url  # most recently heard first
+    assert bootstrap_candidates() == ["http://127.0.0.1:9", b.url, "http://gone.example"]
+    assert first_live_seed() == b.url
+    code, o, _ = cli("follow", "--at", a.url, "--token", "token-a")
+    assert code == 0 and f"now follows {b.url}" in o
+    monkeypatch.setenv("PYRTAN_AT", "http://127.0.0.1:9")
+    b.stop()  # nothing live at all now: the snapshot, with its age, and link recomputed
+    code, o, _ = cli("directory")
+    assert code == 0 and "snapshot as of" in o and b.url in o and "gone" in o
+    monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "nope.json"))
+    assert cli("directory")[0] == 3

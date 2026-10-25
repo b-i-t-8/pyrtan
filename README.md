@@ -190,8 +190,9 @@ entry for itself (name, URL, the trees it holds) in every announce it
 sends, every hub keeps the entries it hears and passes them on in both
 directions of every follow, and `pyrtan directory` (or the console, or
 any hub's `/directory`) shows the result. pyrtan.com publishes only
-`rendezvous/seeds.json`, a static list of hubs to follow first; `pyrtan
-follow` with no URL takes the first that answers. An entry is a hint,
+`rendezvous/seeds.json`, a static list of hubs to follow first, and an
+hourly snapshot of what they know; `pyrtan follow` with no URL takes
+the first seed that answers, then the first hub from the snapshot. An entry is a hint,
 not a route: to use a hub you found, follow it. A hub can also hold trees
 itself, `pyrtan hub --trees DIR`, so a whole federated swarm can be one
 process on one box. The answer to a federated

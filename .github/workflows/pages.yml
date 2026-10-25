@@ -1,6 +1,7 @@
-# pyrtan.com: this repository's GitHub Pages site. On every push to main,
-# build the landing page, the console (from this checkout's pyrtan), the
-# catalog (from examples/) and the seed list, and publish them. Set the
+# pyrtan.com: this repository's GitHub Pages site. On every push to main
+# and once an hour, build the landing page, the console (from this
+# checkout's pyrtan), the catalog (from examples/), the seed list and a
+# snapshot of the directory as the seeds know it, and publish them. Set the
 # repository's Pages source to "GitHub Actions" and its custom domain to
 # pyrtan.com; site/CNAME carries the domain.
 
@@ -10,6 +11,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"   # hourly: refresh rendezvous/directory.json from the seeds
 
 permissions:
   contents: read

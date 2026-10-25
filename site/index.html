@@ -72,7 +72,7 @@ pyrtan serve trees --port 8701                            # then open http://127
   <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
 
   <h2 id="directory">The directory</h2>
-  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
+  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know; when none answers, it shows the <a href="rendezvous/directory.json">snapshot</a> pyrtan.com takes from them every hour. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
   <div class="card"><table id="hubs"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the seeds…</td></tr></tbody></table></div>
 <pre>pyrtan hub --federate --advertise https://your-hub --listed --token …   # your hub, behind a tunnel or TLS
 pyrtan follow --at https://your-hub --token …                           # follow the first seed; route to it
@@ -102,9 +102,19 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">
       for (const h of d.hubs || []) if (!seen.has(h.id) || seen.get(h.id).seen < h.seen) seen.set(h.id, h);
     } catch (e) {}
   }
-  if (!answered) { note.textContent = "No seed answered from this browser (a seed must run with --cors https://pyrtan.com)."; return; }
+  let source = answered ? `live from ${answered} seed${answered > 1 ? "s" : ""}` : "";
+  if (!answered) {
+    try {
+      const snap = await (await fetch("rendezvous/directory.json")).json();
+      for (const h of snap.hubs || []) if (!seen.has(h.id) || seen.get(h.id).seen < h.seen) seen.set(h.id, h);
+      source = `no seed answered from this browser; snapshot as of ${snap.as_of || "?"}`;
+    } catch (e) { note.textContent = "No seed answered from this browser, and there is no snapshot yet."; return; }
+  }
+  const now = Date.now() / 1000;
+  for (const h of seen.values()) { const age = now - (h.seen || 0); h.link = age < 600 ? "up" : age < 86400 ? "stale" : "down"; }
   const body = document.querySelector("#hubs tbody"); body.innerHTML = "";
   const hubs = [...seen.values()].sort((a, b) => ({up:0, stale:1, down:2}[a.link] - {up:0, stale:1, down:2}[b.link]) || a.id.localeCompare(b.id));
+  const cap = document.createElement("tr"); cap.innerHTML = `<td colspan="4" class="mute">${esc(source)}</td>`; body.appendChild(cap);
   for (const h of hubs) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td><a href="console/?hub=${encodeURIComponent(h.id)}">open in console</a></td></tr>`;

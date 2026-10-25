@@ -1,8 +1,8 @@
 # pyrtan.com
 
-pyrtan.com is this repository's GitHub Pages site. Nothing runs: on every
-push to `main`, the `pages` workflow builds a static directory and
-publishes it.
+pyrtan.com is this repository's GitHub Pages site. Nothing of ours runs:
+on every push to `main`, and once an hour, the `pages` workflow builds a
+static directory and publishes it.
 
 | Path | What | Built from |
 | :-- | :-- | :-- |
@@ -10,6 +10,7 @@ publishes it.
 | `/console/` | the console; point it at any hub started with `--cors https://pyrtan.com` | `pyrtan console --out` |
 | `/catalog/` | the trees people can `pyrtan pull`, and `index.json` the command reads | `pyrtan index examples`, and the tree files |
 | `/rendezvous/seeds.json` | hubs to follow first | `site/rendezvous/seeds.json` |
+| `/rendezvous/directory.json` | a snapshot of the directory as the seeds know it, refreshed hourly | `site/snapshot.py` |
 
 `site/build.sh out` builds the same thing locally; open `out/index.html`.
 
@@ -53,7 +54,14 @@ behind TLS; [`deploy/README.md`](../deploy/README.md) says how). Put
 yours in by pull request. The landing page asks each seed's `/directory`
 from the visitor's browser, so the directory on pyrtan.com is live and
 needs no backend; the console link on each row opens
-`/console/?hub=<url>`.
+`/console/?hub=<url>`. When no seed answers (every seed is a home box,
+and home boxes go off), the page shows the snapshot instead, marked with
+its time: `site/snapshot.py` asks the seeds on every build, hourly on
+the schedule, keeps the last published snapshot's entries for any seed
+that is down, and drops entries unheard of for a week. `pyrtan follow`
+with no URL tries the snapshot's hubs after the seeds, and `pyrtan
+directory` falls back to it, so a new hub can bootstrap from any listed
+hub that happens to be up, not only from a seed.
 
 ## Later: hosting
 
