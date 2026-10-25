@@ -119,6 +119,11 @@ PAGE = r"""<!doctype html>
     <h2>Peers</h2>
     <div class="card"><table id="peers"><thead><tr><th>Link</th><th>Peer</th><th>Trees</th><th>Last</th></tr></thead><tbody></tbody></table></div>
     <p class="mute" style="font-size:14px"><span class="link up"></span>up: answered within 30 s · <span class="link stale"></span>stale: within 90 s · <span class="link down"></span>down: longer, or never.</p>
+    <div id="federation" hidden>
+      <h2>Federation</h2>
+      <p class="mute" style="font-size:14px;margin-top:0">This hub is <code id="fed-id"></code>. It routes to the hubs it follows; hubs that follow it receive its announcements and may ask it.</p>
+      <div class="card"><table id="hubs"><thead><tr><th>Link</th><th>Hub</th><th>Relation</th><th>Trees</th></tr></thead><tbody></tbody></table></div>
+    </div>
   </section>
 
   <section id="tab-gaps" hidden>
@@ -270,6 +275,20 @@ async function loadPeers() {
     body.appendChild(tr);
   }
   if (!(p.peers || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">No peers yet. Start a service with <code>--hub ${esc(base || location.origin)}</code>.</td></tr>`;
+  const fed = $("#federation");
+  fed.hidden = !p.id;
+  if (p.id) {
+    $("#fed-id").textContent = p.id;
+    const hb = $("#hubs tbody"); hb.innerHTML = "";
+    for (const [rel, list] of [["follows", p.following || []], ["follower", p.followers || []]]) {
+      for (const r of list) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><span class="link ${esc(r.link)}"></span>${esc(r.link)}</td><td><code>${esc(r.name||"")}</code><div class="mute">${esc(r.url)}</div></td><td>${rel}${r.state && r.state !== "accepted" ? ` <span class="mute">(${esc(r.state)})</span>` : ""}</td><td>${(r.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}${r.last_error ? `<div class="failed">${esc(r.last_error)}</div>` : ""}</td>`;
+        hb.appendChild(tr);
+      }
+    }
+    if (!hb.children.length) hb.innerHTML = `<tr><td colspan="4" class="mute">Following nobody, followed by nobody. <code>pyrtan follow https://other-hub --at ${esc(base || location.origin)}</code>.</td></tr>`;
+  }
 }
 
 async function loadGaps() {

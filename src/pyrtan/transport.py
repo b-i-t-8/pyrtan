@@ -129,7 +129,7 @@ class UrllibTransport:
     ``public`` (refuse private, loopback, link-local and metadata addresses,
     on the first URL and on every redirect)."""
 
-    def __init__(self, user_agent: str = "pyrtan/0.2 (+https://github.com/b-i-t-8/pyrtan)", egress: str = "any") -> None:
+    def __init__(self, user_agent: str = "pyrtan/0.3 (+https://github.com/b-i-t-8/pyrtan)", egress: str = "any") -> None:
         if egress not in EGRESS_POLICIES:
             raise ValueError(f"egress policy must be one of {EGRESS_POLICIES}, got {egress!r}")
         self.user_agent = user_agent
