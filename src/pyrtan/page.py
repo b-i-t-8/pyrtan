@@ -18,6 +18,8 @@ console's origin with ``--cors``. No external assets, no build step.
 
 from __future__ import annotations
 
+from . import __version__
+
 PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -138,7 +140,7 @@ GET  /peers    (hub only)</pre>
     </div>
   </section>
 
-  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a> · AGPL-3.0-or-later</footer>
+  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -228,6 +230,7 @@ async function load() {
   if (!a) { $("#who").textContent = remote ? "not connected" : "unreachable"; return; }
   $("#peers-tab").hidden = !isHub;
   $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
+  $("#hub-version").textContent = a.version ? ` · ${a.pyrtan} v${a.version}` : "";
   try {
     const h = await json("health");
     $("#who").textContent = (h.name ? h.name + " · " : "") + (h.peers != null ? `${h.up}/${h.peers} peers up` + (h.trees != null ? `, ${h.trees} trees` : "") : (h.trees ? `${h.trees.length} trees` : ""));
@@ -317,4 +320,4 @@ load();
 </script>
 </body>
 </html>
-"""
+""".replace("__VERSION__", __version__)
