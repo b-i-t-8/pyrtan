@@ -143,9 +143,11 @@ which is the same console served locally.
 ## 3. Later: hosting
 
 Nothing here needs to change. A tenant's hub is this repository's image
-started with `--token`, `--cors https://pyrtan.com`, `--gaps` on a volume
-and `--egress public`, behind TLS; the console at pyrtan.com connects to it
-like to any other. The control plane that provisions it is a separate,
+started with `--token`, `--cors https://pyrtan.com`, `--gaps` on a volume,
+`--egress public` and `--federate --advertise https://<tenant>.pyrtan.com
+--state <volume>/federation.json`, behind TLS; the console at pyrtan.com
+connects to it like to any other, and a self-hosted hub can follow it (or
+be followed by it) like any other hub. The control plane that provisions it is a separate,
 private repository, per `_meta/platform.md` §2.6.
 
 ## Checklist

@@ -15,7 +15,7 @@ on:
   pull_request:
 
 env:
-  PYRTAN_REF: v0.2.0
+  PYRTAN_REF: v0.3.0
 
 permissions:
   contents: read

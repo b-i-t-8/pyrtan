@@ -8,6 +8,10 @@
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
+    pyrtan hub    --federate --advertise URL [--follow URL ...]  and between hubs
+    pyrtan follow URL --at HUB               follow another hub (and route to it)
+    pyrtan unfollow URL --at HUB
+    pyrtan peers  --at HUB                   services, and hubs followed and following
     pyrtan gaps   --at URL                   branches waiting to be written
     pyrtan unanswered --at URL [--scaffold DIR]  trees waiting to be written
     pyrtan new    [NAME] [--from TEXT] [--dir PATH]  scaffold a tree file
@@ -99,10 +103,28 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("hub", help="route between services")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8700)
+    p.add_argument("--name", default="hub", help="what this hub calls itself, to the console and to hubs that follow it")
     p.add_argument("--peer", action="append", default=[], help="a service URL to start with (repeatable; services may also register themselves)")
     p.add_argument("--poll", type=float, default=10.0, help="seconds between health polls")
     _access_args(p)
+    p.add_argument("--federate", action="store_true", help="answer /actor and /inbox so other hubs can follow this one, and follow others")
+    p.add_argument("--advertise", help="the URL other hubs reach this hub at (implies --federate; default: this host and port)")
+    p.add_argument("--follow", action="append", default=[], metavar="URL", help="a hub to follow on start (repeatable)")
+    p.add_argument("--federation-secret", default=os.environ.get("PYRTAN_FEDERATION_SECRET"), help="only hubs that sign their Follow with this secret may follow (default $PYRTAN_FEDERATION_SECRET; without it, follows are open)")
+    p.add_argument("--closed", action="store_true", help="take no follows at all (this hub can still follow others)")
+    p.add_argument("--state", metavar="FILE", help="keep who this hub follows and is followed by in this file, across restarts")
     p.add_argument("--quiet", action="store_true")
+
+    for verb in ("follow", "unfollow"):
+        p = sub.add_parser(verb, help=f"{verb} another hub, through a running federated hub of yours")
+        p.add_argument("url", help="the other hub's URL")
+        p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+        _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("peers", help="a hub's services, and the hubs it follows and is followed by")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"))
+    p.add_argument("--json", action="store_true")
+    _token_arg(p, "the hub's token, if any")
 
     p = sub.add_parser("gaps", help="decisions that met a value with no branch")
     p.add_argument("--at", help="a running service or hub")
@@ -143,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "console": cmd_console,
+        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers,
     }
     return commands[args.command](args)
 
@@ -366,10 +389,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_hub(args: argparse.Namespace) -> int:
     from .hub import serve_hub
 
-    hub, server = serve_hub(args.host, args.port, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors)
-    print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s)" + _access_note(args), flush=True)
+    hub, server = serve_hub(
+        args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
+        federate=args.federate or bool(args.advertise) or bool(args.follow), advertise=args.advertise, federation_secret=args.federation_secret,
+        state=args.state, open_follows=not args.closed, follow=args.follow,
+    )
+    fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") if hub.federation else ""
+    print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){fed}" + _access_note(args), flush=True)
     try:
-        server.serve_forever()
+        server.wait()
     except KeyboardInterrupt:
         pass
     finally:
@@ -404,6 +432,61 @@ def cmd_gaps(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_follow(args: argparse.Namespace) -> int:
+    return _hub_post(args, "/follow", {"url": args.url}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted")
+
+
+def cmd_unfollow(args: argparse.Namespace) -> int:
+    return _hub_post(args, "/unfollow", {"url": args.url}, lambda b: f"{args.at} no longer follows {args.url}" if b.get("removed") else f"{args.at} was not following {args.url}")
+
+
+def _hub_post(args: argparse.Namespace, path: str, payload: dict[str, Any], said) -> int:
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("POST", f"{at}{path}", payload, token=args.token)
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status == 404:
+        print(f"pyrtan: {at} is not a federated hub; start it with --federate", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict) or body.get("status") != "ok":
+        print(f"pyrtan: {at} answered {status}: {(body or {}).get('say') if isinstance(body, dict) else body}", file=sys.stderr)
+        return 1
+    print(said(body))
+    return 0
+
+
+def cmd_peers(args: argparse.Namespace) -> int:
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("GET", f"{at}/peers", token=args.token)
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} answered {status}", file=sys.stderr)
+        return 3
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    for p in body.get("peers", []):
+        print(f"{p['link']:8} service  {p['name'] or '-':12} {p['url']}  {', '.join(p.get('trees', []))}")
+    for r in body.get("following", []):
+        print(f"{r['link']:8} follows  {r['name'] or '-':12} {r['url']}  {', '.join(r.get('trees', []))}" + (f"  ({r['last_error']})" if r.get("last_error") else ""))
+    for r in body.get("followers", []):
+        print(f"{r['link']:8} follower {r['name'] or '-':12} {r['url']}")
+    if not any(body.get(k) for k in ("peers", "following", "followers")):
+        print("no peers")
+    return 0
+
+
 def _access_note(args: argparse.Namespace) -> str:
     notes = []
     if getattr(args, "token", None):
@@ -412,6 +495,10 @@ def _access_note(args: argparse.Namespace) -> str:
         notes.append("cors: " + ", ".join(args.cors))
     if getattr(args, "egress", "any") != "any":
         notes.append(f"egress: {args.egress}")
+    if getattr(args, "federation_secret", None):
+        notes.append("follows need the federation secret")
+    elif getattr(args, "closed", False):
+        notes.append("no follows taken")
     return f" ({'; '.join(notes)})" if notes else ""
 
 

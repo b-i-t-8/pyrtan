@@ -63,17 +63,23 @@ from .transport import Transport, UrllibTransport
 MAX_BODY = 1 << 20
 
 # What answers without a token: the console, its index, and liveness.
-PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health"})
+PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor"})
+# On a federated hub, a request carrying a signature reaches the route,
+# which verifies it (see :mod:`pyrtan.federation`).
+SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities"})
 # What /health says to a caller without a token, when one is required.
 PUBLIC_HEALTH_KEYS = ("status", "name", "peers", "up", "stale", "down", "uptime_s")
 
 
-def http_json(method: str, url: str, payload: Any = None, timeout: float = 15.0, token: str | None = None) -> tuple[int, Any]:
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+def http_json(method: str, url: str, payload: Any = None, timeout: float = 15.0, token: str | None = None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
+    # Canonical JSON on the wire, so a signature over the body (federation)
+    # can be checked from the parsed body on the other side.
+    data = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8") if payload is not None else None
+    hdrs = {"Content-Type": "application/json", "Accept": "application/json"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        hdrs["Authorization"] = f"Bearer {token}"
+    hdrs.update(headers or {})
+    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8") or "null")
@@ -205,7 +211,7 @@ class Service:
 
     # ------------------------------------------------------------ routing
 
-    def route(self, method: str, path: str, body: dict[str, Any] | None) -> tuple[int, Any]:
+    def route(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         body = body or {}
         if method == "GET" and path == "/health":
             return 200, self.health()
@@ -228,7 +234,7 @@ class Service:
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
 
 
-Route = Callable[[str, str, dict[str, Any] | None], tuple[int, Any]]
+Route = Callable[..., tuple[int, Any]]  # (method, path, body, headers) -> (status, payload)
 
 
 def bearer_ok(header: str | None, token: str) -> bool:
@@ -239,7 +245,7 @@ def bearer_ok(header: str | None, token: str) -> bool:
     return scheme.lower() == "bearer" and hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
 
 
-def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None):
+def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False):
     token = token or None
     origins = [o.rstrip("/") for o in (cors or []) if o]
     any_origin = "*" in origins
@@ -281,6 +287,8 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             """True if the request may proceed; otherwise a 401 has been sent."""
             if token is None or path in PUBLIC_PATHS or bearer_ok(self.headers.get("Authorization"), token):
                 return True
+            if federated and path in SIGNED_PATHS and self.headers.get("X-Pyrtan-Signature"):
+                return True  # the route verifies the signature
             self._send(401, {"status": "error", "reason": "unauthorised", "say": "This Pyrtan needs a token: send Authorization: Bearer <token>."}, extra={"WWW-Authenticate": 'Bearer realm="pyrtan"'})
             return False
 
@@ -316,7 +324,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             path = self.path.split("?", 1)[0]
             if not self._authorised(path):
                 return
-            status, payload = route("GET", path, None)
+            status, payload = route("GET", path, None, dict(self.headers))
             self._send(status, self._public_view(path, payload))
 
         def do_POST(self) -> None:
@@ -336,7 +344,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             if not isinstance(body, dict):
                 self._send(400, {"status": "error", "reason": "bad-json", "say": "The body must be a JSON object."})
                 return
-            status, payload = route("POST", path, body)
+            status, payload = route("POST", path, body, dict(self.headers))
             self._send(status, payload)
 
     return Handler
@@ -348,8 +356,8 @@ class Server:
     ``token`` requires ``Authorization: Bearer`` on everything but the public
     paths; ``cors`` lists the browser origins allowed to call (``*`` for any)."""
 
-    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None) -> None:
-        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors))
+    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False) -> None:
+        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated))
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 

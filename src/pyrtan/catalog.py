@@ -148,7 +148,7 @@ def _fetch(url: str, timeout: float = 20.0) -> bytes:
             raise CatalogError(f"{url}: {e}") from e
     if parts.scheme not in ("http", "https"):
         raise CatalogError(f"{url}: a catalog is reached over https (or a file: path)")
-    req = urllib.request.Request(url, headers={"User-Agent": "pyrtan-catalog/0.2", "Accept": "application/json, application/toml, text/plain, */*"})
+    req = urllib.request.Request(url, headers={"User-Agent": "pyrtan-catalog/0.3", "Accept": "application/json, application/toml, text/plain, */*"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read()

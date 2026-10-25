@@ -19,6 +19,11 @@ Endpoints:
 ``GET  /unanswered`` sentences no peer answered, each with a proposed tree
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
+Federated (``--federate``), a hub also answers ``GET /actor``, ``POST
+/inbox``, ``POST /follow`` and ``/unfollow`` (operator), ``GET /following``,
+``/followers`` and ``/outbox``, and routes to the hubs it follows; see
+:mod:`pyrtan.federation`.
+
 A service that holds several trees and a hub that routes between services
 answer the same requests, so a client need not know which it is talking to,
 and a swarm can start as one process and split later without the callers
@@ -28,18 +33,18 @@ included, so a stranger cannot join the swarm) and presents it to peers.
 
 from __future__ import annotations
 
+import datetime as _dt
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from . import __version__
+from .federation import MAX_HOPS, Federation, Remote, sign
 from .grow import Unanswered, no_match_outcome
-import datetime as _dt
-
 from .intent import Trigger, read
 from .page import PAGE
-from .service import Server, http_json
+from .service import Server, bearer_ok, http_json
 
 STALE_AFTER = 30.0
 DOWN_AFTER = 90.0
@@ -53,6 +58,7 @@ class Peer:
     last_ok: float = 0.0
     last_error: str | None = None
     registered: float = field(default_factory=time.time)
+    kind: str = "service"
 
     @property
     def link(self) -> str:
@@ -75,11 +81,29 @@ class Hub:
         self.poll_every = poll_every
         self.token = token or None
         self.peers: dict[str, Peer] = {}
+        self.federation: Federation | None = None
         self.unanswered = Unanswered()
         self.started = time.time()
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    # ------------------------------------------------------------ federation
+
+    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True) -> Federation:
+        """Give this hub an identity other hubs can follow. ``advertise`` is
+        the URL they reach it at."""
+        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.local_capabilities)
+        return self.federation
+
+    def local_capabilities(self) -> list[dict[str, Any]]:
+        """What this hub's own services hold: what it announces."""
+        trees: list[dict[str, Any]] = []
+        with self._lock:
+            for peer in self.peers.values():
+                for t in peer.trees:
+                    trees.append({**t, "peer": peer.url, "link": peer.link})
+        return trees
 
     # ------------------------------------------------------------ peers
 
@@ -113,6 +137,9 @@ class Hub:
     def refresh_all(self) -> None:
         for peer in list(self.peers.values()):
             self.refresh(peer)
+        if self.federation is not None:
+            self.federation.refresh_all()
+            self.federation.announce()  # only when what we hold changed
 
     def start_polling(self) -> None:
         def loop() -> None:
@@ -127,28 +154,36 @@ class Hub:
 
     # ------------------------------------------------------------ lookup
 
+    def holders(self) -> list[Peer | Remote]:
+        """Everyone this hub may route to: its services, then the hubs it follows."""
+        with self._lock:
+            out: list[Peer | Remote] = list(self.peers.values())
+            if self.federation is not None:
+                out.extend(self.federation.following.values())
+            return out
+
     def candidates(self) -> list[tuple[tuple[str, str], Trigger]]:
         out: list[tuple[tuple[str, str], Trigger]] = []
-        with self._lock:
-            for peer in self.peers.values():
-                if peer.link == "down":
-                    continue
-                for tree in peer.trees:
-                    for pattern in tree.get("triggers", []):
-                        try:
-                            out.append(((peer.url, tree["name"]), Trigger(pattern, language=tree.get("language") or {})))
-                        except Exception:
-                            continue
+        for holder in self.holders():
+            if holder.link == "down":
+                continue
+            for tree in holder.trees:
+                for pattern in tree.get("triggers", []):
+                    try:
+                        out.append(((holder.url, tree["name"]), Trigger(pattern, language=tree.get("language") or {})))
+                    except Exception:
+                        continue
         return out
 
-    def holder(self, tree_name: str) -> Peer | None:
-        with self._lock:
-            best: Peer | None = None
-            for peer in self.peers.values():
-                if any(t.get("name") == tree_name for t in peer.trees):
-                    if best is None or _rank(peer) < _rank(best):
-                        best = peer
-            return best
+    def holder(self, tree_name: str) -> Peer | Remote | None:
+        """Who to send a tree to: a service of ours before a hub we follow,
+        and the healthiest of either."""
+        best: Peer | Remote | None = None
+        for h in self.holders():
+            if any(t.get("name") == tree_name for t in h.trees):
+                if best is None or _rank(h) < _rank(best):
+                    best = h
+        return best
 
     # ------------------------------------------------------------ handlers
 
@@ -168,11 +203,11 @@ class Hub:
         }
 
     def capabilities(self) -> dict[str, Any]:
-        trees: list[dict[str, Any]] = []
-        with self._lock:
-            for peer in self.peers.values():
-                for t in peer.trees:
-                    trees.append({**t, "peer": peer.url, "link": peer.link})
+        trees = self.local_capabilities()
+        if self.federation is not None:
+            for remote in list(self.federation.following.values()):
+                for t in remote.trees:
+                    trees.append({**t, "peer": remote.url, "link": remote.link, "via": "federation"})
         return {"name": self.name, "trees": trees}
 
     def intent(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -194,7 +229,7 @@ class Hub:
         for m in matches:
             m.tree = tree_name  # the step names the tree, not the (peer, tree) pair
         peer = self.holder(tree_name) or self.peers.get(peer_url)
-        status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True)})
+        status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True), "hops": body.get("hops", [])})
         if isinstance(answer.get("trace"), dict) and isinstance(answer["trace"].get("steps"), list):
             # The hub read the sentence; the peer only ran the tree. Put the
             # reading where a caller expects it, at the top of the trace.
@@ -217,11 +252,22 @@ class Hub:
             return 200, {"status": "error", "reason": "no-such-tree", "say": "No service holds the tree this snapshot came from."}
         return self.forward(peer, "/resume", body)
 
-    def forward(self, peer: Peer | None, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def forward(self, peer: Peer | Remote | None, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         if peer is None:
             return 200, {"status": "error", "reason": "no-peer"}
+        hops = list(body.get("hops") or [])
+        if isinstance(peer, Remote):
+            # Over federation: one hop, signed, and the request says where it has been.
+            if len(hops) >= MAX_HOPS or (self.federation and self.federation.id in hops):
+                return 200, {"status": "error", "reason": "hop-limit", "say": f"{peer.name or peer.url} holds this tree, but the request has already crossed a hub ({hops}); federation is {MAX_HOPS} hop.", "output": {"hops": hops, "peer": peer.url}}
+            assert self.federation is not None
+            body = {**body, "hops": hops + [self.federation.id]}
+            headers = sign(peer.secret, self.federation.id, "POST", path, body)
+        else:
+            body = {k: v for k, v in body.items() if k != "hops"}
+            headers = None
         try:
-            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0, token=self.token)
+            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0, token=None if headers else self.token, headers=headers)
         except Exception as e:
             peer.last_error = str(e)
             return 200, {"status": "error", "reason": "peer-unreachable", "say": f"{peer.name or peer.url} did not answer: {e}", "output": {"peer": peer.url}}
@@ -229,6 +275,8 @@ class Hub:
             return 200, {"status": "error", "reason": "peer-error", "say": f"{peer.name or peer.url} answered {status}", "output": {"peer": peer.url}}
         peer.last_ok = time.time()
         answer.setdefault("peer", peer.url)
+        if isinstance(peer, Remote):
+            answer["via"] = [*hops, peer.url]
         return 200, answer
 
     def gaps(self) -> dict[str, Any]:
@@ -257,13 +305,49 @@ class Hub:
                 out.extend({**u, "peer": peer.url} for u in body.get("unanswered", []))
         return {"unanswered": out}
 
-    def route(self, method: str, path: str, body: dict[str, Any] | None) -> tuple[int, Any]:
+    def route(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         body = body or {}
+        headers = headers or {}
+        fed = self.federation
+        signed = any(k.lower() == "x-pyrtan-signature" for k in headers)
+        if signed and not bearer_ok(headers.get("Authorization"), self.token or ""):
+            # A hub we federate with is asking. It may ask the routed paths
+            # and the inbox; anything else needs the operator's token.
+            if fed is None or path not in ("/inbox", "/run", "/intent", "/resume", "/capabilities"):
+                return 401, {"status": "error", "reason": "unauthorised", "say": "A signed request may only reach the inbox and the routed paths."}
+            if path != "/inbox" and fed.verify_request(method, path, body if method == "POST" else None, headers) is None:
+                return 401, {"status": "error", "reason": "unsigned", "say": "The signature does not hold, or this hub does not know the actor."}
         if method == "GET" and path == "/health":
             return 200, self.health()
         if method == "GET" and path == "/peers":
             with self._lock:
-                return 200, {"peers": [p.to_dict() for p in self.peers.values()]}
+                out: dict[str, Any] = {"peers": [p.to_dict() for p in self.peers.values()]}
+            if fed is not None:
+                out.update(fed.to_dict())
+            return 200, out
+        if fed is not None:
+            if method == "GET" and path == "/actor":
+                return 200, fed.actor()
+            if method == "POST" and path == "/inbox":
+                return fed.handle_inbox(body, headers)
+            if method == "GET" and path in ("/following", "/followers"):
+                return 200, {path[1:]: fed.to_dict()[path[1:]]}
+            if method == "GET" and path == "/outbox":
+                return 200, {"outbox": list(fed.outbox), "inbox": list(fed.inbox_log)}
+            if method == "POST" and path == "/follow":
+                url = body.get("url")
+                if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
+                try:
+                    remote = fed.follow(url)
+                except ValueError as e:
+                    return 400, {"status": "error", "reason": "cannot-follow", "say": str(e)}
+                return 200, {"status": "ok", "following": remote.to_dict()}
+            if method == "POST" and path == "/unfollow":
+                url = body.get("url")
+                if not isinstance(url, str):
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
+                return 200, {"status": "ok", "removed": fed.unfollow(url)}
         if method == "GET" and path == "/capabilities":
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
@@ -273,7 +357,10 @@ class Hub:
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]}
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
+            if fed is not None:
+                endpoints += ["/actor", "/inbox", "/follow", "/unfollow", "/following", "/followers", "/outbox"]
+            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -289,14 +376,38 @@ class Hub:
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
 
 
-def _rank(peer: Peer) -> int:
-    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link]
+def _rank(peer: Peer | Remote) -> int:
+    # A service of ours before a hub we follow; the healthier of either.
+    return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (10 if isinstance(peer, Remote) else 0)
 
 
-def serve_hub(host: str = "127.0.0.1", port: int = 8700, *, name: str = "hub", peers: list[str] | None = None, poll_every: float = 10.0, quiet: bool = False, token: str | None = None, cors: list[str] | None = None) -> tuple[Hub, Server]:
+def serve_hub(
+    host: str = "127.0.0.1",
+    port: int = 8700,
+    *,
+    name: str = "hub",
+    peers: list[str] | None = None,
+    poll_every: float = 10.0,
+    quiet: bool = False,
+    token: str | None = None,
+    cors: list[str] | None = None,
+    federate: bool = False,
+    advertise: str | None = None,
+    federation_secret: str | None = None,
+    state: str | None = None,
+    open_follows: bool = True,
+    follow: list[str] | None = None,
+) -> tuple[Hub, Server]:
     hub = Hub(name=name, poll_every=poll_every, token=token)
-    server = Server(hub.route, host, port, quiet, token=token, cors=cors)
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
+    if federate or advertise:
+        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows)
     for url in peers or []:
         hub.add_peer(url)
+    for url in follow or []:
+        try:
+            hub.federation.follow(url)  # type: ignore[union-attr]
+        except ValueError as e:
+            print(f"pyrtan hub: cannot follow {url}: {e}", flush=True)
     hub.start_polling()
     return hub, server

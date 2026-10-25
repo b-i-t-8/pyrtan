@@ -118,7 +118,9 @@ grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
 service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
             unanswered
 hub.py      peers, link up/stale/down, routing by capability, forwarding
-cli.py      check · list · run · match · ask · serve · hub · gaps · unanswered · new
+federation.py  actor, inbox, Follow/Accept/Undo/Announce, signed; one hop
+cli.py      check · list · run · match · ask · serve · hub · follow · unfollow ·
+            peers · gaps · unanswered · new · search · pull · index · console
 ```
 
 **Reading a sentence** (`nlp.py`, `intent.py`) is rules all the way down,
@@ -275,17 +277,22 @@ Five trees, all against real public APIs, all tested offline:
    `pyrtan watch` that re-runs a set of sentences on a schedule and
    reports when a path changes (the way to learn a site has changed before
    a person does).
-3. **v0.3: more forms of I/O.** First the browser: `observe` with
+3. **v0.3, built: sentences read by rules, and hubs that follow each
+   other.** The language rules and typed slots (§3, "Reading a
+   sentence"), and federation in the shape of ActivityPub: a hub follows
+   other hubs and routes to them, one hop, every message signed, following
+   as the only trust. Design in [`federation.md`](federation.md).
+4. **v0.4: more forms of I/O.** First the browser: `observe` with
    `browser = { url, wait_for, actions }` on Playwright as an optional
    extra, for pages that need a script to render, with the same host rule
    and the same extraction. Then file, shell, serial and queue adapters,
    each a node source with its own allow-list (paths, commands, devices,
    topics), so a tree reads a log, runs a named command or polls a device
    by the same rules it reads a page, and the trace reads the same.
-4. **v0.4: the catalog grows up.** Namespaces, publishing through pull
+5. **v0.5: the catalog grows up.** Namespaces, publishing through pull
    requests with the checker as the gate, and opt-in gap reporting from
-   hubs back to a tree's author.
-5. **Beside the swarm, never inside it:** an authoring aid that reads gaps
+   hubs back to a tree's author, carried as another federation topic.
+6. **Beside the swarm, never inside it:** an authoring aid that reads gaps
    and drafts the branch for a person to accept.
 
 ## 7. Open questions

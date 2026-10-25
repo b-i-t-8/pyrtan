@@ -121,7 +121,12 @@ says so and points at the hub's own `/`, which is the same console.
 
 A tenant gets a hub and one or more services as containers from this
 repository's image, with a token, `--cors https://pyrtan.com`, `--gaps` on
-a volume, `--egress public`, and TLS from the ingress. The control plane
+a volume, `--egress public`, `--federate --advertise https://<tenant>.pyrtan.com`
+with `--state` on the volume, and TLS from the ingress. A hosted hub and
+a self-hosted one follow each other like any two hubs
+([`federation.md`](federation.md)): a customer's NAS can answer for their
+hosted swarm and the other way round, which is the invariant in §0 made
+concrete. The control plane
 (separate, private) does what the runtime does not: sign-up and teams,
 provisioning, the secrets that reach trees as `env`, trace retention, a
 scheduler that re-runs sentences and reports when a path changes (the

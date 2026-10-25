@@ -124,7 +124,8 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
-| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. |
+| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--federate` lets other hubs follow it and it follow them. |
+| `pyrtan follow URL --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. `unfollow` undoes it; `peers` lists services, hubs followed and followers. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
@@ -154,6 +155,38 @@ its `link`; and the gaps. The same console lives at
 <https://pyrtan.com/console/> and can be pointed at any hub started with
 `--cors https://pyrtan.com`. To run the swarm on a NAS or any Docker host,
 see [`deploy/README.md`](deploy/README.md).
+
+## A federation
+
+A hub can follow other hubs, the way one account follows another on the
+fediverse, and answer for their trees too:
+
+```
+pyrtan hub --port 8700 --name alpha --federate            # on one box
+pyrtan hub --port 8700 --name beta --federate             # on another
+pyrtan follow https://beta.example --at https://alpha.example
+pyrtan ask "top 3 stories on hacker news" --at https://alpha.example   # answered by beta's service
+```
+
+Each federated hub has an actor document at `/actor` and an inbox; a
+follow is a signed `Follow` activity, answered with `Accept` and an
+`Announce` of what the followed hub's services hold, and a new `Announce`
+whenever that changes. The shape is ActivityPub's; the wire format is
+Pyrtan's own, signed with a secret the two hubs share, and nothing here
+federates with Mastodon.
+
+Three rules make it safe to run with strangers. **Following is trust, in
+one direction:** a hub routes only to hubs its operator chose to follow,
+and being followed grants nothing but announcements and the right to
+ask. **Federation is one hop:** a hub announces what it holds itself,
+never what it learned from others, and refuses to forward a request that
+already crossed a hub, so there is nothing to loop. **Every message is
+signed**, and a hub started with `--federation-secret` takes follows only
+from hubs that know the secret; `--closed` takes none. `--state FILE`
+keeps the relationships across restarts. The answer to a federated
+sentence carries `via: [the hub it crossed]`, and the console's Peers tab
+shows who follows whom. The design is in
+[`_meta/federation.md`](_meta/federation.md).
 
 ## The catalog
 
@@ -281,7 +314,7 @@ slot refused. The whole set of rules is in
 ```
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
-                service, hub, page (the console), catalog, cli
+                service, hub, federation, page (the console), catalog, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -293,10 +326,11 @@ deploy/         Dockerfile at the root; a compose stack for OpenMediaVault,
 
 ## Status
 
-0.2.0. The core, the service, the hub, the command, the console and the
-catalog client are built and tested; HTTP is the one form of I/O the core
-speaks; a swarm can require a token, keep its gaps, and refuse private
-addresses. Not yet built: further adapters (a browser for pages that need
+0.3.0. The core, the service, the hub, the command, the console, the
+catalog client, the language rules and federation between hubs are built
+and tested; HTTP is the one form of I/O the core speaks; a swarm can
+require a token, keep its gaps, refuse private addresses, and follow
+other swarms. Not yet built: further adapters (a browser for pages that need
 a script to render; files, shells, serial lines, message queues),
 persistent storage for unanswered sentences, `pyrtan watch`, and hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
