@@ -73,6 +73,7 @@ from . import __version__
 from .service import http_json
 
 DEFAULT_SEEDS = "https://pyrtan.com/rendezvous/seeds.json"
+DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
 SIGNATURE_WINDOW = 300.0   # seconds a signed message stays valid
 MAX_HOPS = 1               # federation is one hop; raise with care
 STALE_AFTER = 30.0
@@ -111,15 +112,45 @@ def seed_urls() -> list[str]:
     return [h.rstrip("/") for h in body["hubs"] if isinstance(h, str) and h.startswith(("http://", "https://"))]
 
 
+def snapshot_hubs() -> list[str]:
+    """Hubs from the directory snapshot pyrtan.com bakes hourly
+    (``$PYRTAN_SNAPSHOT`` overrides the URL or names a file), most recently
+    heard first. What a new hub can try when every seed is down."""
+    source = os.environ.get("PYRTAN_SNAPSHOT") or DEFAULT_SNAPSHOT
+    try:
+        if source.startswith(("http://", "https://")):
+            status, body = http_json("GET", source, timeout=10.0)
+            if status != 200:
+                return []
+        else:
+            body = json.loads(Path(source).read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(body, dict) or not isinstance(body.get("hubs"), list):
+        return []
+    hubs = [h for h in body["hubs"] if isinstance(h, dict) and isinstance(h.get("id"), str) and h["id"].startswith(("http://", "https://"))]
+    hubs.sort(key=lambda h: -float(h.get("seen", 0) or 0))
+    return [h["id"].rstrip("/") for h in hubs]
+
+
+def bootstrap_candidates() -> list[str]:
+    """Where to look for a first hub: the seeds, then the snapshot's hubs."""
+    seeds = seed_urls()
+    return seeds + [h for h in snapshot_hubs() if h not in seeds]
+
+
 def first_live_seed(seeds: list[str] | None = None) -> str | None:
-    """The first seed whose ``/actor`` answers as a hub, or None."""
-    for url in seeds if seeds is not None else seed_urls():
-        try:
-            status, actor = http_json("GET", f"{url}/actor", timeout=5.0)
-        except Exception:
-            continue
-        if status == 200 and isinstance(actor, dict) and actor.get("type") == "Hub":
-            return url
+    """The first seed whose ``/actor`` answers as a hub; when none does, the
+    first hub from the snapshot that answers; else None."""
+    tried = seeds if seeds is not None else seed_urls()
+    for batch in ([tried] if seeds is not None else [tried, lambda: [h for h in snapshot_hubs() if h not in tried]]):
+        for url in (batch() if callable(batch) else batch):
+            try:
+                status, actor = http_json("GET", f"{url}/actor", timeout=5.0)
+            except Exception:
+                continue
+            if status == 200 and isinstance(actor, dict) and actor.get("type") == "Hub":
+                return url
     return None
 
 

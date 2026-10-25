@@ -218,6 +218,18 @@ ordinary federated hub whose operator keeps it up; the first one is the
 author's NAS. `$PYRTAN_SEEDS` points at another list (a URL or a file),
 `$PYRTAN_RENDEZVOUS` at one hub.
 
+**The snapshot.** Seeds are home boxes, and home boxes go off. So the
+site's build, which GitHub runs on every push and once an hour, asks each
+seed's `/directory` and bakes the merged answer into
+`rendezvous/directory.json` with the time, keeping the last snapshot's
+entries for a seed that did not answer and dropping anything a week old
+(`site/snapshot.py`, standard library, no pyrtan). The landing page
+shows it when no seed answers the visitor's browser; `pyrtan directory`
+falls back to it; `pyrtan follow` with no URL tries its hubs after the
+seeds (`$PYRTAN_SNAPSHOT` overrides). A new hub can therefore bootstrap
+from any listed hub that is up, and the only way the directory is empty
+is if nobody has been up for a week. Nothing of ours polls: GitHub does.
+
 **What an entry is not.** A hub two follows away cannot verify who made
 an entry: there are no public keys in the standard library, and HMAC
 proves things only between two hubs that share a secret. So an entry is
