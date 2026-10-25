@@ -20,8 +20,12 @@ from __future__ import annotations
 
 import json
 import urllib.parse
+from pathlib import Path
 
 from . import __version__
+
+# The tree runtime in JavaScript, served beside the console so a member can run trees.
+PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf-8")
 
 PAGE = r"""<!doctype html>
 <html lang="en">
@@ -31,6 +35,7 @@ PAGE = r"""<!doctype html>
 <title>Pyrtan</title>
 <meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, find the gaps, and join a hub as a member that keeps its blobs.">
 <link rel="manifest" href="manifest.webmanifest">
+<script src="pyrtan.js"></script>
 <meta name="theme-color" content="#2b5db8">
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --accent:#2b5db8; --accent-fg:#fff; --soft:#f1efe9 }
@@ -161,17 +166,25 @@ PAGE = r"""<!doctype html>
           <input type="password" id="member-fedsecret" placeholder="federation secret, if the hub takes follows only with one" autocomplete="off">
           <button type="submit">Join this hub</button>
         </form>
-        <div class="mute" style="font-size:14px">Makes an identity for this browser (kept in local storage), follows the hub with it, and starts polling. Nothing leaves this device but signed activities to the hub.</div>
+        <div class="mute" style="font-size:14px">Makes an identity for this browser (kept in local storage), follows the hub with it, and starts polling. Nothing leaves this device but signed activities to the hub. Joined with the hub's token (entered above), this device is <em>trusted</em>: the hub hands it its trees and routes sentences to it, and the trees run here.</div>
       </div>
       <div id="member-on" hidden>
         <div><span class="status done">member</span> <code id="member-id"></code> <span class="mute" id="member-state"></span></div>
-        <div class="mute" style="font-size:14px;margin:6px 0">Name <code id="member-name-shown"></code> · mailbox polled <span id="member-polled">never</span> · <label><input type="checkbox" id="member-listed"> listed in the directory</label></div>
+        <div class="mute" style="font-size:14px;margin:6px 0">Name <code id="member-name-shown"></code> · <span id="member-trust"></span> · mailbox polled <span id="member-polled">never</span> · <label><input type="checkbox" id="member-listed"> listed in the directory</label></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
           <button type="button" class="quiet" id="member-poll">Poll now</button>
           <button type="button" class="quiet" id="member-leave">Leave</button>
         </div>
         <h2 style="font-size:15px;margin:14px 0 6px">Kept here for this hub</h2>
         <table id="kept"><thead><tr><th>Key</th><th>Size</th><th>Updated</th><th></th></tr></thead><tbody></tbody></table>
+        <h2 style="font-size:15px;margin:14px 0 6px">Trees this device runs</h2>
+        <table id="member-trees"><thead><tr><th>Tree</th><th>Answers to</th><th>Reaches</th></tr></thead><tbody></tbody></table>
+        <form class="row" id="member-run" style="margin-top:8px">
+          <select id="member-run-tree" style="font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)"></select>
+          <input type="text" id="member-run-inputs" placeholder='inputs as JSON, e.g. {"place": "Oslo"}' autocomplete="off">
+          <button type="submit">Run here</button>
+        </form>
+        <div id="member-out"></div>
         <h2 style="font-size:15px;margin:14px 0 6px">Activity</h2>
         <pre id="member-log" style="max-height:220px"></pre>
       </div>
@@ -466,7 +479,7 @@ function signHeaders(secret, actor, method, path, body) {
 const randomHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
 
 const member = {
-  hub: null, me: null, timer: null, log: [], directory: new Map(), db: null,
+  hub: null, me: null, timer: null, log: [], directory: new Map(), db: null, runner: null, runs: 0,
   key() { return "pyrtan.member:" + (this.hub || ""); },
   load() { try { this.me = JSON.parse(localStorage.getItem(this.key()) || "null"); } catch (e) { this.me = null; } },
   save() { try { if (this.me) localStorage.setItem(this.key(), JSON.stringify(this.me)); else localStorage.removeItem(this.key()); } catch (e) {} },
@@ -490,14 +503,16 @@ const member = {
   },
   activity(type, object, extra) { return Object.assign({type, id: this.me.id + "/activities/" + randomHex(8), actor: this.me.id, published: new Date().toISOString().replace(/\.\d+Z$/, "Z"), object}, extra || {}); },
   async join(name, fedSecret) {
-    this.me = {id: "urn:pyrtan:member:" + randomHex(16), secret: randomHex(32), name: name || "browser", state: "pending", listed: true, joined: Date.now()};
+    this.me = {id: "urn:pyrtan:member:" + randomHex(16), secret: randomHex(32), name: name || "browser", state: "pending", listed: true, joined: Date.now(), trusted: false};
     this.save();
     const act = this.activity("Follow", this.hub, {secret: this.me.secret, inbox: "mailbox", name: this.me.name});
     const headers = Object.assign({"Accept": "application/json", "Content-Type": "application/json"}, signHeaders(fedSecret || this.me.secret, this.me.id, "POST", "/inbox", act));
+    if (token) headers["Authorization"] = "Bearer " + token;  // the operator's token makes this device trusted: it runs the hub's trees
     const r = await fetch((base ? base.replace(/\/+$/, "") : "") + "/inbox", {method: "POST", headers, body: canonical(act)});
     const data = await r.json().catch(() => ({}));
     if (r.status !== 202) { this.me = null; this.save(); this.note(`follow refused: ${data.say || r.status}`); problem(`The hub did not take the follow: ${data.say || r.status}`, true); this.render(); return; }
-    this.note(`followed ${this.hub}`);
+    this.me.trusted = !!data.trusted; this.save();
+    this.note(`followed ${this.hub}` + (this.me.trusted ? " as a trusted device" : ""));
     await this.poll();
     this.start();
     this.render();
@@ -515,28 +530,55 @@ const member = {
     for (const a of (r.data && r.data.activities) || []) {
       if (a.type === "Accept") { this.me.state = "accepted"; this.note("accepted"); }
       else if (a.type === "Announce") { for (const e of a.object.directory || []) this.directory.set(e.id, e); this.note(`announce: ${(a.object.trees||[]).length} trees, ${(a.object.directory||[]).length} directory entries`); }
-      else if (a.type === "Keep") { await this.keptPut(a.object); await this.send("POST", "/inbox", this.activity("Kept", {key: a.object.key, sha256: a.object.sha256})); this.note(`keeping ${a.object.key} (${a.object.size} B)`); }
+      else if (a.type === "Keep") { await this.keptPut(a.object); if (a.object.key.startsWith("trees/")) this.hold(a.object.data); await this.send("POST", "/inbox", this.activity("Kept", {key: a.object.key, sha256: a.object.sha256})); this.note(`keeping ${a.object.key} (${a.object.size} B)`); }
+      else if (a.type === "Ask") { await this.answer(a.object); }
       else if (a.type === "Fetch") { const b = await this.keptGet(a.object.key); if (b) { await this.send("POST", "/inbox", this.activity("Kept", {key: b.key, sha256: b.sha256, data: b.data})); this.note(`handed back ${b.key}`); } else this.note(`asked for ${a.object.key}, not kept here`); }
       else if (a.type === "Reject") { this.me.state = "rejected"; this.note("rejected: " + (a.summary || "")); }
     }
     this.save(); this.render();
   },
+  // ---- running trees: the hub hands them over as trees/<name> blobs; Ask runs one here, Answer goes back.
+  ensureRunner() {
+    if (this.runner) return this.runner;
+    const self = this;
+    const resolver = {  // a member may ask the hub it follows: delegate goes there, signed
+      async runTree(name, inputs, depth) { const r = await self.send("POST", "/run", {tree: name, inputs, depth}); return r.data; },
+      async runIntent(text, depth) { const r = await self.send("POST", "/intent", {text, depth}); return r.data; },
+    };
+    this.runner = new Pyrtan.Runner({transport: new Pyrtan.FetchTransport(), resolver});
+    return this.runner;
+  },
+  hold(raw) { try { this.ensureRunner().add(raw); } catch (e) { this.note(`tree refused: ${e.message}`); } },
+  async restoreTrees() { for (const b of await this.keptAll()) if (b.key.startsWith("trees/")) this.hold(b.data); },
+  capabilities() { return this.runner ? Object.values(this.runner.trees).map(t => t.capability()) : []; },
+  async answer(ask) {
+    const runner = this.ensureRunner();
+    let outcome;
+    try { outcome = Pyrtan.outcomeDict(await runner.runTree(ask.tree, ask.inputs || {}, ask.depth || 0)); }
+    catch (e) { outcome = {status: "error", tree: ask.tree, reason: "member-error", say: String(e && e.message || e)}; }
+    this.runs++;
+    await this.send("POST", "/inbox", this.activity("Answer", {run: ask.run, outcome}));
+    this.note(`ran ${ask.tree} for the hub: ${outcome.status}` + (outcome.say ? ` · ${String(outcome.say).slice(0, 80)}` : ""));
+    this.render();
+  },
   async announce() {
     if (!this.me || this.me.state !== "accepted") return;
     const kept = (await this.keptAll()).map(b => b.key).sort();
-    const own = this.me.listed ? [{id: this.me.id, name: this.me.name, kind: "member", trees: [], seen: Date.now() / 1000}] : [];
+    const trees = this.me.trusted ? this.capabilities() : [];
+    const own = this.me.listed ? [{id: this.me.id, name: this.me.name, kind: "member", trees: trees.map(t => t.name), seen: Date.now() / 1000}] : [];
     const heard = [...this.directory.values()].filter(e => e.id !== this.me.id);
     try {
-      const r = await this.send("POST", "/inbox", this.activity("Announce", {type: "Capabilities", name: this.me.name, trees: [], directory: own.concat(heard), kept}));
+      const r = await this.send("POST", "/inbox", this.activity("Announce", {type: "Capabilities", name: this.me.name, trees, directory: own.concat(heard), kept}));
       for (const e of (r.data && r.data.directory) || []) this.directory.set(e.id, e);
     } catch (e) { this.note("announce failed: " + e.message); }
   },
   start() {
     this.load();
     if (!this.me || this.timer) { this.render(); return; }
-    this.timer = setInterval(() => this.poll(), 20000);
+    // A trusted device answers Asks, so it polls faster: a sentence waits one poll.
+    this.timer = setInterval(() => this.poll(), this.me.trusted ? 4000 : 20000);
     this.announceTimer = setInterval(() => this.announce(), 60000);
-    this.poll().then(() => this.announce());
+    this.restoreTrees().then(() => this.poll()).then(() => this.announce());
   },
   stop() { clearInterval(this.timer); clearInterval(this.announceTimer); this.timer = null; },
   async render() {
@@ -546,14 +588,34 @@ const member = {
     $("#member-id").textContent = this.me.id; $("#member-state").textContent = this.me.state;
     $("#member-name-shown").textContent = this.me.name; $("#member-polled").textContent = this.me.polled ? new Date(this.me.polled).toLocaleTimeString() : "never";
     $("#member-listed").checked = !!this.me.listed;
-    const body = $("#kept tbody"); body.innerHTML = "";
-    for (const b of await this.keptAll()) { const tr = document.createElement("tr"); tr.innerHTML = `<td><code>${esc(b.key)}</code></td><td>${esc(b.size)} B</td><td class="mute">${b.updated ? new Date(b.updated * 1000).toLocaleString() : ""}</td><td><a href="#" data-show="${esc(b.key)}">show</a></td>`; body.appendChild(tr); }
+    $("#member-trust").textContent = this.me.trusted ? "trusted: runs the hub's trees" : "keeper only (join with the hub's token to run trees)";
+    const tb = $("#member-trees tbody"); tb.innerHTML = "";
+    const sel = $("#member-run-tree"); const chosen = sel.value; sel.innerHTML = "";
+    for (const t of this.capabilities()) {
+      const tr = document.createElement("tr"); tr.innerHTML = `<td><code>${esc(t.name)}</code> <span class="mute">v${esc(t.version)}</span></td><td>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}</td><td class="mute">${esc((t.hosts||[]).join(", "))}</td>`; tb.appendChild(tr);
+      const o = document.createElement("option"); o.value = t.name; o.textContent = t.name; sel.appendChild(o);
+    }
+    if (chosen) sel.value = chosen;
+    if (!tb.children.length) tb.innerHTML = `<tr><td colspan="3" class="mute">${this.me.trusted ? "None handed over yet; the hub sends what this device should run, and this device picks it up on its next poll." : "A keeper runs nothing."}</td></tr>`;
+    const blobs = await this.keptAll();
+    const body = $("#kept tbody"); body.innerHTML = "";  // cleared after the await, so two renders at once do not double the rows
+    for (const b of blobs) { const tr = document.createElement("tr"); tr.innerHTML = `<td><code>${esc(b.key)}</code></td><td>${esc(b.size)} B</td><td class="mute">${b.updated ? new Date(b.updated * 1000).toLocaleString() : ""}</td><td><a href="#" data-show="${esc(b.key)}">show</a></td>`; body.appendChild(tr); }
     if (!body.children.length) body.innerHTML = `<tr><td colspan="4" class="mute">Nothing yet. The hub sends its blobs as it needs keepers; "Poll now" asks sooner.</td></tr>`;
   },
 };
 $("#join-form").addEventListener("submit", (e) => { e.preventDefault(); member.join($("#member-name").value.trim(), $("#member-fedsecret").value); });
 $("#member-poll").addEventListener("click", () => member.poll().then(() => member.announce()));
 $("#member-leave").addEventListener("click", () => member.leave());
+$("#member-run").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("#member-run-tree").value; if (!name) return;
+  let inputs = {}; try { inputs = JSON.parse($("#member-run-inputs").value || "{}"); } catch (err) { problem("inputs must be JSON", true); return; }
+  const t0 = performance.now();
+  const r = Pyrtan.outcomeDict(await member.ensureRunner().runTree(name, inputs));
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${Math.round(performance.now() - t0)} ms · ran in this browser</span></div>${r.say ? `<div class="say">${esc(r.say)}</div>` : ""}${r.output != null ? `<details open><summary>output</summary><pre>${esc(JSON.stringify(r.output, null, 2))}</pre></details>` : ""}${r.trace ? `<details open><summary>trace</summary><pre>${esc(renderTrace(r.trace))}</pre></details>` : ""}`;
+  $("#member-out").prepend(card);
+});
 $("#member-listed").addEventListener("change", (e) => { member.me.listed = e.target.checked; member.save(); member.announce(); });
 $("#kept").addEventListener("click", async (e) => { const a = e.target.closest("a[data-show]"); if (!a) return; e.preventDefault(); const b = await member.keptGet(a.dataset.show); alert(b ? JSON.stringify(b.data, null, 2).slice(0, 4000) : "not kept"); });
 if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
@@ -581,7 +643,7 @@ MANIFEST = json.dumps({
 # phone in a tunnel, a hub that is down): the shell comes from the cache,
 # everything the page asks the hub for goes to the network and nowhere else.
 SERVICE_WORKER = r"""const SHELL = "pyrtan-shell-__VERSION__";
-const FILES = ["./", "manifest.webmanifest"];
+const FILES = ["./", "manifest.webmanifest", "pyrtan.js"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {

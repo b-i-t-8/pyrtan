@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.5.** Members, mailboxes, `Keep`/`Kept`/`Fetch`, the blob store, the console as an installable member; tests with Python members and a browser driven end to end. Members do not run trees; that is v0.6. |
+| **Status** | **Built, v0.5; members run trees since v0.6.** Members, mailboxes, `Keep`/`Kept`/`Fetch`, the blob store, the console as an installable member; tests with Python members and a browser driven end to end. Since v0.6 a *trusted* member (one that joined with the hub's token) holds the hub's trees and runs them on `Ask`; see §7. |
 | **Date** | 2026-10-25 |
 | **Decision** | A device that cannot be reached joins a hub by following it and polling a mailbox the hub keeps for it. It carries the directory like a hub, and it keeps the hub's blobs, so that a swarm's state lives on the devices of the people who run it and a dead box loses nothing. Nothing secret is ever a blob. |
-| **Where** | `src/pyrtan/federation.py` (members, mailboxes, keeping), `src/pyrtan/store.py` (blobs), `src/pyrtan/page.py` (the member in the console, the manifest, the service worker). |
+| **Where** | `src/pyrtan/federation.py` (members, mailboxes, keeping, hand-out, `Ask`/`Answer`), `src/pyrtan/store.py` (blobs), `src/pyrtan/page.py` (the member in the console, the manifest, the service worker), `src/pyrtan/js/pyrtan.js` (the runtime the member runs trees with), `tests/conformance/` (what both runtimes must say). |
 
 ## 0. The brief
 
@@ -101,10 +101,8 @@ it. The operator paths are behind the token; the keeper paths
   HMAC-CTR of my own is not something to hand people's data to. If
   private blobs matter, that is where a dependency would be justified,
   and the design note should say so when it is taken.
-- **Members running trees** in this version. A member announces
-  `trees: []`. Routing to a member through its mailbox (`Ask` in,
-  `Answer` out, the hub holding the request open) is the next design,
-  and needs the JavaScript runtime first.
+- **Any member running trees.** Only a member that joined with the
+  hub's token runs them (§7); a keeper announces `trees: []`.
 - **A quorum.** One hub writes each of its blobs; the holders are
   copies, not voters. Last version wins, by the hub's own say.
 
@@ -127,10 +125,65 @@ it. The operator paths are behind the token; the keeper paths
 
 ## 6. Sequencing
 
-- **v0.5, this:** members, mailboxes, keeping, the console as the member
-  and the phone app.
-- **v0.6:** `pyrtan.js`, the tree runtime in JavaScript, with the Python
-  fixtures as shared conformance vectors; then `Ask`/`Answer` through
-  the mailbox so a phone answers sentences for its hub.
+- **v0.5:** members, mailboxes, keeping, the console as the member and
+  the phone app.
+- **v0.6, built:** `pyrtan.js`, the tree runtime in JavaScript, with the
+  Python fixtures as shared conformance vectors; `Ask`/`Answer` through
+  the mailbox so a phone answers sentences for its hub (§7).
 - **Later:** encrypted private blobs, when a dependency for it is
   justified; members that keep for each other through a hub.
+
+## 7. Members that run trees (v0.6)
+
+**The runtime.** `src/pyrtan/js/pyrtan.js` is the tree runtime again,
+in JavaScript, served by every hub and service at `/pyrtan.js` and
+written beside the console by `pyrtan console --out`. It reads the same
+tree (the TOML's own table, as JSON), walks the same nodes with the same
+templates, conditions, extraction and summaries, and returns the same
+outcome and trace. It is not allowed to drift: `tests/conformance/
+make_vectors.py` runs every example through the Python runtime against
+the recorded responses with a fixed clock and writes `vectors.json`;
+`tests/conformance/run.cjs` runs the same trees and inputs through
+`pyrtan.js` and compares status, say, reason, output, path and gaps;
+`tests/test_conformance.py` runs both and fails when the vectors are
+stale. Three differences are documented in the file's header: `float`
+accepts any number, CSS selection is the browser's `DOMParser` plus a
+`:contains` shim, and a member never reads sentences (the hub does).
+
+**Trust.** A member that follows with the hub's bearer token on the
+`Follow` is recorded `trusted`; one without is a keeper. Trust is what
+decides whether the hub puts its trees, and the sentences they answer,
+on a device: a keeper holds copies, a trusted device acts. The console
+sends the token it was connected with, so joining from the hub's own
+console with the token entered is enough.
+
+**Hand-out.** On a trusted follow, and on every refresh after, the hub
+gives each trusted member every tree it should run as a `Keep` of
+`trees/<name>` carrying the raw tree: its own `--trees`, and any
+`--handout DIR` (`$PYRTAN_HANDOUT`), which are trees the hub hands out
+and does not run itself. The member's `Kept` confirms; a changed tree is
+sent again. The member holds them in its store like any blob, so they
+survive a reload, and announces their names as its capabilities. The hub
+takes the names it handed out and ignores the rest, and the triggers it
+routes by are its own copy's, never the member's word.
+
+**Routing.** A trusted member with trees is a holder like a service: its
+trees show in `/capabilities` with `via: member`, a sentence or a `/run`
+for one of them reaches it, and the hub announces them to the hubs that
+follow it. Order is unchanged, our own trees, then a service of ours,
+then a trusted member, then a hub we follow, so a tree the hub runs
+itself stays on the hub and the member is the fallback for it; a
+`--handout` tree runs only on members. `Ask` goes into the member's
+mailbox with a run id, the tree and the inputs; the hub holds the
+request open until the member's `Answer` names that run id (thirty
+seconds; a trusted member polls every four seconds), then returns the
+outcome with `peer: <member id>` and `via: ["member"]`. An `Answer` for
+a run nobody waits for, or from a member other than the one asked, is
+refused. A member that does not answer in time gets a `member-timeout`
+error, and the `Ask` still in its mailbox is answered to nobody.
+
+**Why a phone would run a tree at all.** It has the network the box
+does not: the internet when the NAS is egress-restricted, the LAN the
+person is on, the geolocation and the camera of v0.7. And it is the
+person's own device, acting by the same inspectable tree, with the same
+trace.

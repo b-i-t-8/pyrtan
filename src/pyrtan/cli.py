@@ -44,7 +44,7 @@ from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
 from .federation import bootstrap_candidates, first_live_seed
 from .grow import Proposal, propose
-from .page import MANIFEST, PAGE, SERVICE_WORKER
+from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
@@ -111,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", type=int, default=8700)
     p.add_argument("--name", default="hub", help="what this hub calls itself, to the console and to hubs that follow it")
     p.add_argument("--trees", action="append", default=[], metavar="PATH", help="trees this hub holds itself, in-process (repeatable); a swarm in one process")
+    p.add_argument("--handout", action="append", default=[t for t in os.environ.get("PYRTAN_HANDOUT", "").split(os.pathsep) if t], metavar="PATH", help="trees for this hub's trusted members (a phone or a browser joined with the token) to run, not this hub (repeatable; default $PYRTAN_HANDOUT); its own --trees are handed out too")
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value the hub's own trees may read as {{ env.K }}")
     p.add_argument("--gaps", metavar="FILE", help="keep the hub's own trees' gaps in this file")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees: 'public' refuses private addresses")
@@ -442,11 +443,13 @@ def cmd_hub(args: argparse.Namespace) -> int:
         args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
         federate=args.federate or bool(args.advertise) or bool(follow) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, listed=args.listed,
-        trees=[Path(t) for t in args.trees], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
+        trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
         store=args.store, replicas=args.replicas,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
+    if hub.handout_registry is not None:
+        local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){local}{fed}" + _access_note(args), flush=True)
     try:
         server.wait()
@@ -739,7 +742,8 @@ def cmd_console(args: argparse.Namespace) -> int:
     out.write_text(PAGE, encoding="utf-8")
     (out.parent / "manifest.webmanifest").write_text(MANIFEST, encoding="utf-8")
     (out.parent / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")
-    print(f"wrote {out}, manifest.webmanifest and sw.js beside it; serve the folder from any static host, and point it at a hub with --cors set for that host")
+    (out.parent / "pyrtan.js").write_text(PYRTAN_JS, encoding="utf-8")
+    print(f"wrote {out}, manifest.webmanifest, sw.js and pyrtan.js beside it; serve the folder from any static host, and point it at a hub with --cors set for that host")
     return 0
 
 

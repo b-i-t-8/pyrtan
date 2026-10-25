@@ -7,7 +7,7 @@ static directory and publishes it.
 | Path | What | Built from |
 | :-- | :-- | :-- |
 | `/` | the landing page, with the live directory read from the seeds in the visitor's browser | `site/index.html` |
-| `/console/` | the console (installable: manifest and service worker beside it); point it at any hub started with `--cors https://pyrtan.com`; its Member tab joins that hub | `pyrtan console --out` |
+| `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it); point it at any hub started with `--cors https://pyrtan.com`; its Member tab joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
 | `/catalog/` | the trees people can `pyrtan pull`, and `index.json` the command reads | `pyrtan index examples`, and the tree files |
 | `/rendezvous/seeds.json` | hubs to follow first | `site/rendezvous/seeds.json` |
 | `/rendezvous/directory.json` | a snapshot of the directory as the seeds know it, refreshed hourly | `site/snapshot.py` |

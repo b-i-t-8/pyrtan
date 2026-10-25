@@ -290,9 +290,12 @@ Five trees, all against real public APIs, all tested offline:
    joins a hub through a mailbox, carries the directory, and keeps the
    hub's blobs so a dead box loses nothing; the console installs as the
    phone app. Design in [`members.md`](members.md).
-6. **v0.6: trees in the browser.** `pyrtan.js`, a second runtime for the
-   same tree files, with the Python fixtures as shared conformance
-   vectors, so a member answers sentences through its hub's mailbox.
+6. **v0.6, built: trees in the browser.** `pyrtan.js`, a second runtime
+   for the same tree files, with the Python fixtures as shared
+   conformance vectors (`tests/conformance/`), so a trusted member
+   answers sentences through its hub's mailbox (`Ask`/`Answer`); a hub
+   hands its own trees and `--handout` ones to the devices that joined
+   with its token. Design in [`members.md`](members.md) §7.
 7. **v0.7: more forms of I/O.** First the browser: `observe` with
    `browser = { url, wait_for, actions }` on Playwright as an optional
    extra, for pages that need a script to render, with the same host rule

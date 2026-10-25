@@ -42,6 +42,7 @@ x-pyrtan: &pyrtan
     PYRTAN_STATE: /state/federation.json
     PYRTAN_STORE: /state/store          # blobs: the hub's own and the ones it keeps for others
     PYRTAN_REPLICAS: "2"                # how many members or hubs should keep each of its blobs
+    # PYRTAN_HANDOUT: /handout          # trees for the phones that joined with the token, not for this box (mount a directory at /handout)
 
 services:
   hub:
@@ -55,6 +56,7 @@ services:
       - "8700:8700"
     volumes:
       - hub-state:/state
+      # - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/handout:/handout   # with PYRTAN_HANDOUT above: trees the phones run
 
   news:
     <<: *pyrtan

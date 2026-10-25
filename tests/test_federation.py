@@ -2,6 +2,7 @@
 sockets: who may ask whom, what is announced, and what is refused."""
 
 import json
+import threading
 import time
 
 import pytest
@@ -634,3 +635,113 @@ def test_cli_keep_kept_fetch(two, tmp_path, capsys):
     assert code == 0 and f"from {b.url}" in out and json.loads((tmp_path / "back.json").read_text()) == {"hello": "world"}
     assert run("fetch", "nothing", "--at", a.url, "--token", "token-a")[0] == 1
     assert run("keep", "bad key", str(f), "--at", a.url, "--token", "token-a")[0] == 1
+
+
+class TrustedMember(Member):
+    """A member that runs trees: it holds what the hub hands it and answers Asks."""
+
+    def __init__(self, hub_url: str, name: str = "phone", answers: dict | None = None):
+        super().__init__(hub_url, name)
+        self.trees: dict[str, dict] = {}
+        self.asks: list[dict] = []
+        self.answers = answers or {}
+
+    def follow(self, secret: str | None = None, token: str | None = None):
+        activity = {"id": f"{self.id}/activities/follow", "actor": self.id, "published": "now", "type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}
+        headers = sign(secret or self.secret, self.id, "POST", "/inbox", activity)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return http_json("POST", f"{self.hub}/inbox", activity, headers=headers)
+
+    def poll(self) -> list[dict]:
+        acts = super().poll()
+        for a in acts:
+            if a["type"] == "Keep" and a["object"]["key"].startswith("trees/"):
+                self.trees[a["object"]["data"]["name"]] = a["object"]["data"]
+            elif a["type"] == "Ask":
+                self.asks.append(a["object"])
+                outcome = self.answers.get(a["object"]["tree"])
+                if outcome is not None:
+                    self.post({"type": "Answer", "object": {"run": a["object"]["run"], "outcome": {**outcome, "output": {"inputs": a["object"]["inputs"]}}}})
+        return acts
+
+    def announce(self, listed: bool = True, trees: list | None = None):
+        caps = trees if trees is not None else [{"name": n, "triggers": ["whatever the member says"]} for n in self.trees]
+        return self.post({"type": "Announce", "object": {"type": "Capabilities", "name": self.name, "trees": caps, "directory": [], "kept": sorted(self.kept)}})
+
+
+def test_trusted_member_runs_the_trees_its_hub_hands_out(tmp_path):
+    (tmp_path / "t").mkdir()
+    (tmp_path / "h").mkdir()
+    (tmp_path / "t" / "alpha.toml").write_text(ECHO.format(name="alpha", word="alpha"))
+    (tmp_path / "h" / "gamma.toml").write_text(ECHO.format(name="gamma", word="gamma"))
+    from pyrtan.hub import serve_hub
+
+    hub, srv = serve_hub(port=0, quiet=True, name="solo", trees=[tmp_path / "t"], handout=[tmp_path / "h"], federate=True, token="tok", poll_every=60)
+    fed = hub.federation
+    try:
+        # Joining with the hub's token makes a member trusted; without it, not.
+        stranger = TrustedMember(srv.url, "stranger")
+        assert stranger.follow()[1]["trusted"] is False
+        assert [a["type"] for a in stranger.poll()] == ["Accept", "Announce"]
+        stranger.announce(trees=[{"name": "alpha", "triggers": ["alpha {text}"]}])
+        assert fed.followers[stranger.id].trees == [] and "alpha" not in stranger.trees
+        phone = TrustedMember(srv.url, "phone", answers={"gamma": {"status": "done", "say": "gamma, from the phone", "trace": {"tree": "gamma", "steps": [{"node": "say", "kind": "done", "depth": 0}], "gaps": []}}})
+        status, out = phone.follow(token="tok")
+        assert status == 202 and out["trusted"] is True and fed.followers[phone.id].trusted
+        # The hub hands out its own trees and the --handout ones at once, in the mailbox after the Accept and the Announce.
+        acts = phone.poll()
+        assert [a["type"] for a in acts] == ["Accept", "Announce", "Keep", "Keep"]
+        assert sorted(phone.trees) == ["alpha", "gamma"] and phone.trees["gamma"]["name"] == "gamma"
+        assert all(h["confirmed"] for h in fed._handed[phone.id].values())
+        assert fed.hand_out() == 0  # nothing new to give
+        # What the member says it runs is filtered to what it was handed, with the hub's own triggers.
+        status, out = phone.announce(trees=[{"name": "gamma", "triggers": ["nonsense"]}, {"name": "alpha", "triggers": ["alpha {text}"]}, {"name": "zeta", "triggers": ["zeta"]}])
+        assert status == 200
+        caps = {t["name"]: t for t in fed.followers[phone.id].trees}
+        assert sorted(caps) == ["alpha", "gamma"] and caps["gamma"]["triggers"] == ["gamma {text}"]
+        _, out = http_json("GET", f"{srv.url}/capabilities", token="tok")
+        assert {(t["name"], t["peer"], t.get("via")) for t in out["trees"]} == {("alpha", "local", None), ("alpha", phone.id, "member"), ("gamma", phone.id, "member")}
+        # A sentence for gamma goes to the phone: an Ask in its mailbox, its Answer back to the caller.
+        got: dict = {}
+
+        def call():
+            got["out"] = http_json("POST", f"{srv.url}/intent", {"text": "gamma hi there"}, token="tok")[1]
+
+        t = threading.Thread(target=call)
+        t.start()
+        deadline = time.time() + 5
+        while not phone.asks and time.time() < deadline:
+            phone.poll()
+            time.sleep(0.05)
+        t.join(5)
+        assert phone.asks and phone.asks[0]["tree"] == "gamma" and phone.asks[0]["inputs"] == {"text": "hi there"}
+        out = got["out"]
+        assert out["status"] == "done" and out["say"] == "gamma, from the phone"
+        assert out["peer"] == phone.id and out["via"] == ["member"] and out["output"] == {"inputs": {"text": "hi there"}}
+        assert [s["kind"] for s in out["trace"]["steps"]] == ["intent", "done"] and out["trace"]["steps"][0]["next"] == "say"
+        # A tree the hub runs itself stays on the hub, even though the phone holds it too.
+        _, out = http_json("POST", f"{srv.url}/intent", {"text": "alpha hi"}, token="tok")
+        assert out["status"] == "done" and out["peer"] == "local"
+        # An answer nobody waits for, or from the wrong member, lands nowhere.
+        assert phone.post({"type": "Answer", "object": {"run": "nope", "outcome": {"status": "done"}}})[0] == 404
+        fed.ask_timeout = 0.2
+        pending = fed.ask(fed.followers[phone.id], "gamma", {"text": "x"}, timeout=0.5)  # the phone is not polling
+        assert pending["status"] == "error" and pending["reason"] == "member-timeout" and pending["tree"] == "gamma"
+        phone.answers = {}
+        _, out = http_json("POST", f"{srv.url}/run", {"tree": "gamma", "inputs": {"text": "x"}}, token="tok")
+        assert out["reason"] == "member-timeout" and out["peer"] == phone.id
+        # The Ask is still in the mailbox; an Answer arriving late is refused, not misfiled.
+        acts = phone.poll()
+        asks = [a for a in acts if a["type"] == "Ask"]
+        assert len(asks) == 2
+        assert phone.post({"type": "Answer", "object": {"run": asks[-1]["object"]["run"], "outcome": {"status": "done"}}})[0] == 404
+        # Leaving forgets what was handed out; joining again hands it out again.
+        assert phone.post({"type": "Undo", "object": {"type": "Follow", "actor": phone.id, "object": srv.url}})[0] == 200
+        assert phone.id not in fed._handed
+        assert phone.follow(token="tok")[0] == 202 and [a["type"] for a in phone.poll()].count("Keep") == 2
+        # Trust survives a restart of the hub's state.
+        assert fed.followers[phone.id].to_dict()["trusted"] is True
+    finally:
+        hub.stop()
+        srv.stop()
