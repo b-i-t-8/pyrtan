@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from .intent import Match, Trigger, best_matches
+import datetime as _dt
+
+from .intent import Match, Reading, Trigger, read
 from .tree import Tree, TreeError, load_tree
 
 
@@ -124,10 +126,15 @@ class Registry:
     def candidates(self) -> list[tuple[str, Trigger]]:
         return [(t.name, trig) for t in self.trees() for trig in t.triggers]
 
-    def match(self, text: str) -> Match:
+    def read(self, text: str, now: _dt.datetime | _dt.date | None = None) -> Reading:
+        """How ``text`` reads against every trigger here: the rewrites, the
+        verdicts, the winner or the tie."""
+        return read(text, self.candidates(), now)
+
+    def match(self, text: str, now: _dt.datetime | _dt.date | None = None) -> Match:
         """The one tree that answers ``text``, or :class:`NoMatch` /
         :class:`Ambiguous`."""
-        matches = best_matches(text, self.candidates())
+        matches = self.read(text, now).matches
         if not matches:
             raise NoMatch(f"no tree answers {text!r}")
         if len(matches) > 1:

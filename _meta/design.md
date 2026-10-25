@@ -106,8 +106,8 @@ traded away by a convenient feature.
 ## 3. Architecture as built
 
 ```
-sentence ──► intent.py ──► registry.py ──► runtime.py ──► Outcome + Trace
-             (triggers)    (trees, reload)   │
+sentence ──► nlp.py ──► intent.py ──► registry.py ──► runtime.py ──► Outcome + Trace
+             (rules)    (triggers)    (trees, reload)   │
                                              ├─ template.py   {{ paths | filters }}
                                              ├─ conditions.py when = { eq, between, … }
                                              ├─ extract.py    json / regex / css
@@ -118,8 +118,24 @@ grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
 service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
             unanswered
 hub.py      peers, link up/stale/down, routing by capability, forwarding
-cli.py      check · list · run · ask · serve · hub · gaps · unanswered · new
+cli.py      check · list · run · match · ask · serve · hub · gaps · unanswered · new
 ```
+
+**Reading a sentence** (`nlp.py`, `intent.py`) is rules all the way down,
+and the trace's first step (`intent`) names each rule that fired. The
+rules: fold unicode; drop greetings, politeness and request wrappers from
+the edges (kept when a trigger in the swarm starts or ends with the word);
+expand contractions; turn number words into digits; match a literal word
+to its plural or singular with a conservative stemmer and an exception
+list. A tree adds `synonyms` and may opt into a `typos` rule (one edit from
+exactly one pattern word; a word close to two is left alone). Typed slots
+(`date`, `time`, `duration`, `number`, `host`, `url`, `email`) each have a
+fixed parser; a value a parser cannot read, or could read two ways, makes
+the trigger refuse the sentence. A `date` is read against the runner's
+clock, which is the same clock `{{ now }}` reads, so invariant 1 holds:
+same tree, same inputs, same clock, same path. There is no scoring, no
+weighting, no fallback; the most literal characters still win and a tie is
+still reported. `pyrtan match` prints the whole reading.
 
 **The tree** (`tree.py`) is TOML, loaded into dataclasses and checked on
 load. `check()` returns problems at three levels; an error refuses the
@@ -185,6 +201,17 @@ actually need is small enough to own (`html.py`, about 250 lines, tested).
 A browser adapter will be an optional extra, not a requirement.
 
 ## 4. Paths considered and not taken
+
+**A model, or a classifier, for intent.** The obvious way to make "could
+you tell me how warm it is in Oslo" find the weather tree is to embed
+sentences and triggers and pick the nearest. Rejected, for the same reason
+a model is rejected inside a run: the choice would be a score nobody can
+read, and the trace would begin with a guess. What was built instead is a
+short list of rewrites and a short list of parsers, each of which either
+fires and says so or does nothing. The cost is that a sentence outside
+the rules is not read, and is recorded as unanswered with a proposed
+trigger; the benefit is that `pyrtan match` can show, line by line, why a
+sentence went where it went, and that the same sentence always goes there.
 
 **Rust.** The earlier product of this name chose Rust for a 6 MB resident
 footprint on site boxes. Pyrtan's services run wherever an operator already

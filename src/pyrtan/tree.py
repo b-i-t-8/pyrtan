@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 
 from . import conditions, extract as extractmod
-from .intent import Trigger, TriggerError
+from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerError
 from .template import PLACEHOLDER, placeholders
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9\-]*$")
@@ -162,6 +162,7 @@ class Tree:
     source: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
     license: str = ""
+    language: Language = field(default_factory=Language)
 
     def node(self, node_id: str) -> Node:
         try:
@@ -211,6 +212,7 @@ class Tree:
             "tags": self.tags,
             "hosts": self.hosts,
             "license": self.license,
+            "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
             "inputs": {
                 n: {k: v for k, v in {"type": s.type, "default": s.default, "required": s.required and s.default is None, "description": s.description}.items() if v not in (None, "", False)}
@@ -256,6 +258,11 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     if not isinstance(license_, str):
         raise TreeError(f"{name}: 'license' must be a string such as \"MIT\" (an SPDX identifier)")
 
+    try:
+        language = Language.from_raw(raw.get("language"), "language")
+    except TriggerError as e:
+        raise TreeError(f"{name}: {e}") from e
+
     triggers: list[Trigger] = []
     for i, t in enumerate(raw.get("triggers", [])):
         if isinstance(t, str):
@@ -263,7 +270,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         if not isinstance(t, dict) or "pattern" not in t:
             raise TreeError(f"{name}: triggers[{i}] needs a 'pattern'")
         try:
-            triggers.append(Trigger(t["pattern"], dict(t.get("inputs", {}))))
+            triggers.append(Trigger(t["pattern"], dict(t.get("inputs", {})), language))
         except TriggerError as e:
             raise TreeError(f"{name}: triggers[{i}]: {e}") from e
 
@@ -310,7 +317,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip())
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))
@@ -341,6 +348,18 @@ def _infer_type(value: Any) -> str:
 # ---------------------------------------------------------------- checking
 
 
+def _slot_fits(kind: str | None, input_type: str) -> bool:
+    """Whether what a slot kind reads can be bound to an input of this type."""
+    produced = PRODUCES[kind]
+    if produced == "int":
+        return input_type in ("int", "float", "str")
+    if produced == "float":
+        return input_type in ("float", "str")
+    if produced == "number":
+        return input_type in ("int", "float", "str")
+    return input_type == "str"
+
+
 def check(tree: Tree) -> list[Problem]:
     """Validate structure, references, templates, conditions, selectors,
     hosts and reachability. Never raises; returns what it found."""
@@ -355,9 +374,13 @@ def check(tree: Tree) -> list[Problem]:
         err("start", f"start node {tree.start!r} does not exist")
 
     for i, t in enumerate(tree.triggers):
-        for slot in t.slots:
+        for slot, kind in t.slots.items():
             if slot not in tree.inputs:
                 err(f"triggers[{i}]", f"slot {{{slot}}} is not a declared input")
+                continue
+            want = tree.inputs[slot].type
+            if not _slot_fits(kind, want):
+                err(f"triggers[{i}]", f"slot {{{slot}:{kind}}} produces a {PRODUCES[kind]}, but input {slot!r} is a {want}")
         for fixed in t.fixed_inputs:
             if fixed not in tree.inputs:
                 err(f"triggers[{i}]", f"fixed input {fixed!r} is not a declared input")

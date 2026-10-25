@@ -12,7 +12,7 @@ from pyrtan.tree import check, load_tree_text
     "text, name, trigger, inputs",
     [
         ("top 3 stories on hacker news", "top-stories-hacker-news", "top {count:int} stories on hacker news", {"count": 3}),
-        ("is example.com up", "host-up", "is {host:word} up", {"host": "example.com"}),
+        ("is example.com up", "host-up", "is {host:host} up", {"host": "example.com"}),
         ("what's the latest release of astral-sh/uv", "latest-release", "what's the latest release of {target:word}", {"target": "astral-sh/uv"}),
         ("convert 12.5 km to miles", "convert-km-miles", "convert {value:float} km to miles", {"value": 12.5}),
         ("turn on the lights", "turn-lights", "turn on the lights", {}),

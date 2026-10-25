@@ -89,7 +89,7 @@ def test_service_endpoints(example_service):
     assert {t["name"] for t in caps["trees"]} >= {"weather", "hacker-news"}
     _, out = http_json("POST", f"{server.url}/intent", {"text": "weather in Oslo"})
     assert out["status"] == "done" and out["output"]["sky"] == "raining"
-    assert out["trace"]["steps"][0]["node"] == "geocode"
+    assert out["trace"]["steps"][0]["kind"] == "intent" and out["trace"]["steps"][1]["node"] == "geocode"
     _, out = http_json("POST", f"{server.url}/run", {"tree": "hacker-news-item", "inputs": {"id": 101}, "trace": False})
     assert out["status"] == "done" and "trace" not in out
     _, out = http_json("POST", f"{server.url}/intent", {"text": "nothing matches this"})
@@ -230,3 +230,29 @@ def test_demo_page_is_served_by_service_and_hub(example_service):
         assert http_json("GET", f"{hub_srv.url}/api")[1]["pyrtan"] == "hub"
     finally:
         hub_srv.stop()
+
+
+def test_hub_reads_sentences_with_the_tree_language_and_puts_the_reading_in_the_trace():
+    reg = Registry.from_paths([EXAMPLES])
+    svc = Service(reg, name="examples", transport=RecordedTransport.from_file(FIXTURES / "examples.json"))
+    srv = Server(svc.route, quiet=True).start()
+    hub = Hub(poll_every=60)
+    hub_srv = Server(hub.route, quiet=True).start()
+    try:
+        hub.add_peer(srv.url)
+        _, caps = http_json("GET", f"{hub_srv.url}/capabilities")
+        weather = next(t for t in caps["trees"] if t["name"] == "weather")
+        assert weather["language"] == {"synonyms": {"weather": ["forecast", "temperature"]}}
+        # The synonym lives in the tree; the hub applies it when it routes.
+        _, out = http_json("POST", f"{hub_srv.url}/intent", {"text": "Hey, what's the forecast in Oslo?"})
+        assert out["status"] == "done" and out["output"]["sky"] == "raining"
+        first = out["trace"]["steps"][0]
+        assert first["kind"] == "intent" and first["next"] == "geocode"
+        assert first["observed"]["cleaned"] == "what is the forecast in Oslo"
+        assert out["trace"]["steps"][1]["node"] == "geocode"
+        _, out = http_json("POST", f"{hub_srv.url}/intent", {"text": "please do nothing"})
+        assert out["reason"] == "no-match" and out["output"]["reading"]["cleaned"] == "do nothing"
+    finally:
+        hub.stop()
+        hub_srv.stop()
+        srv.stop()

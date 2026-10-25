@@ -10,6 +10,10 @@ license = "MIT"
 hosts = ["geocoding-api.open-meteo.com", "api.open-meteo.com"]
 start = "geocode"
 
+# "forecast in Oslo" and "temperature in Oslo" read as "weather in Oslo".
+[language]
+synonyms = { weather = ["forecast", "temperature"] }
+
 [[triggers]]
 pattern = "[what's the] weather in {place}"
 [[triggers]]

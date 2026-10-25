@@ -65,8 +65,13 @@ def test_site_status_branches(runner):
 
 
 def test_site_status_rejects_bad_host(runner):
+    # The {host:host} slot refuses what is not a host name, so the trigger
+    # does not fire at all, and the reading says which trigger refused.
     out = runner.run_intent("is http://x up")
-    assert out.status == "error" and out.reason == "bad-input"
+    assert out.status == "error" and out.reason == "no-match"
+    assert out.output["reading"]["considered"] == ["is {host:host} up"]
+    out = runner.run_tree("site-status", {"host": "http://x"})
+    assert out.status == "error" and out.reason == "bad-input"  # the input's own pattern still guards a direct run
 
 
 def test_github_release(runner):

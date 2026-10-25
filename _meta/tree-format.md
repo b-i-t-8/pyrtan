@@ -31,15 +31,72 @@ pattern = "top {count:int} stories on hacker news"
 inputs = { count = 1 }       # fixed inputs this sentence implies
 ```
 
-A slot is `{name}` (any text), `{name:int}`, `{name:float}` or `{name:word}`
-(no spaces). Every slot must be a declared input. `[words]` are optional;
-`(a|b)` is a required choice; `|` separates alternatives inside either.
-Matching ignores case, surrounding punctuation and repeated spaces; a slot's
-text keeps its case. A pattern needs at least one literal word.
+A slot is `{name}` (any text) or `{name:kind}`. Every slot must be a
+declared input whose type fits the kind. `[words]` are optional; `(a|b)`
+is a required choice; `|` separates alternatives inside either. A pattern
+needs at least one literal word.
+
+| Kind | Reads | Produces | Input type |
+| :-- | :-- | :-- | :-- |
+| `text` (the default) | any text | as written | `str` |
+| `word` | one word, no spaces | as written | `str` |
+| `int`, `float` | digits | a number | `int` / `float` |
+| `number` | digits or words: `3`, `twenty-one`, `a dozen`, `1,000`, `2.5` | a number | `int` or `float` |
+| `date` | `tomorrow`, `friday`, `next friday`, `in 3 days`, `2 weeks ago`, `oct 25`, `25 october 2026`, `2026-10-25`, `13/10` (day first), `end of month` | `YYYY-MM-DD` | `str` |
+| `time` | `3pm`, `15:30`, `3:05 pm`, `noon`, `midnight`, `9 o'clock` | `HH:MM` | `str` |
+| `duration` | `2 hours`, `30 min`, `1h30m`, `an hour and a half` | seconds | `int` |
+| `host` | a host name or a URL | the host, lowercase | `str` |
+| `url` | `http(s)://…` | as written | `str` |
+| `email` | an address | lowercase | `str` |
+
+A slot's text keeps its case. A `date` is read against the service's clock
+(`{{ now }}` in templates is the same clock), so a run is deterministic
+given its observations; the trace records what the words were read as.
+A value the kind cannot read (`3/10/2026`, which could be either order;
+`someday`) makes the trigger refuse the sentence, and the reading says so.
+
+### How a sentence is read
+
+Before any trigger sees a sentence, fixed rules rewrite it, and the trace's
+first step (`intent`) names each rule that fired:
+
+1. **Fold:** unicode normalised, curly quotes straightened, spaces collapsed,
+   punctuation around the sentence dropped.
+2. **Fillers:** greetings, politeness and request wrappers dropped from the
+   edges (`hey pyrtan`, `please`, `can you`, `could you`, `thanks`…), unless
+   a trigger in the swarm starts or ends with that word.
+3. **Contractions:** `what's` → `what is`, `isn't` → `is not`, `gimme` →
+   `give me`…
+4. **Numbers:** number words become digits: `three` → `3`, `twenty-one` →
+   `21`, `two hundred and five` → `205`.
+
+Patterns get the first and third rule at load time, so `[what's the]` and
+`what is the` are the same trigger. Matching ignores case, and a literal
+word matches its plural or singular (`story` / `stories`; `news` stays
+`news`). None of this is a model: every rule is a table in
+`src/pyrtan/nlp.py`, and `pyrtan match "sentence"` shows what each one did.
 
 When several trees match a sentence, the trigger with the most literal
 characters wins. An exact tie is answered as `ambiguous`, naming the
 candidates, rather than resolved by load order.
+
+### `[language]`
+
+What a tree adds to the fixed rules:
+
+```toml
+[language]
+synonyms = { weather = ["forecast", "temperature"], hacker = ["hn", "y combinator"] }
+typos = true
+```
+
+`synonyms` maps a literal word in this tree's patterns to other words (or
+phrases) that read the same; the plural rule applies to them too. `typos`
+(default `false`) lets a sentence word of five letters or more that is one
+edit away from exactly one word in this tree's patterns be read as that
+word; a word close to two is left alone, because choosing would be a guess.
+The trace shows every correction (`typo: wether->weather`). A hub applies a
+tree's `[language]` when it routes, because `/capabilities` carries it.
 
 ## Inputs
 

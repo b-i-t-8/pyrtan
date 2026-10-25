@@ -146,3 +146,16 @@ next = "ok"
         load_tree_text(base.replace('over = "r.json"', 'over = "r.json"\ntree = "a"\nstart = "ok"'))
     notes = problems(base.replace('over = "r.json"', 'over = "r.json"\ntree = "a"'))
     assert any("no 'limit'" in n for n in notes)
+
+
+def test_slot_kinds_must_fit_their_inputs():
+    base = 'name = "t"\nstart = "s"\n[[triggers]]\npattern = "{pat}"\n[inputs.x]\ntype = "{typ}"\n[nodes.s]\nkind = "done"\nsay = "x"\n'
+    for pat, typ in [("at {x:date}", "int"), ("wait {x:duration}", "bool"), ("n {x:float}", "int"), ("on {x:host}", "list")]:
+        with pytest.raises(TreeError, match="produces a"):
+            load_tree_text(base.format(pat=pat, typ=typ))
+    for pat, typ in [("at {x:date}", "str"), ("wait {x:duration}", "int"), ("wait {x:duration}", "str"), ("n {x:number}", "int"), ("n {x:number}", "float"), ("n {x:int}", "float")]:
+        load_tree_text(base.format(pat=pat, typ=typ))
+    with pytest.raises(TreeError, match="language.synonyms"):
+        load_tree_text('name = "t"\nstart = "s"\n[language]\nsynonyms = "no"\n[nodes.s]\nkind = "done"\nsay = "x"\n')
+    with pytest.raises(TreeError, match="unknown key"):
+        load_tree_text('name = "t"\nstart = "s"\n[language]\nstemming = true\n[nodes.s]\nkind = "done"\nsay = "x"\n')

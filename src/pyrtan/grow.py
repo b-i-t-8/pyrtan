@@ -122,7 +122,7 @@ def propose(text: str, name: str | None = None) -> Proposal:
     """A proposal for the sentence ``text``.
 
     Numbers in the sentence become ``{count:int}`` / ``{value:float}``
-    slots, host names ``{host:word}``, ``owner/repo``-shaped words
+    slots, host names ``{host:host}``, ``owner/repo``-shaped words
     ``{target:word}``; every other word is literal. The name is the literal
     words with filler dropped, or ``name`` if given.
     """
@@ -163,7 +163,7 @@ def _slot_for(tok: str, inputs: dict[str, dict[str, Any]]) -> str | None:
     if HOST_RE.match(bare) and not bare.endswith(("...", ".")):
         slot = _unique("host", inputs)
         inputs[slot] = {"type": "str", "description": f"a host name, as in: {bare}", "role": "host"}
-        return f"{{{slot}:word}}"
+        return f"{{{slot}:host}}"
     if PATH_RE.match(bare):
         slot = _unique("target", inputs)
         inputs[slot] = {"type": "str", "description": f"as in: {bare}"}

@@ -11,11 +11,11 @@ hosts = ["*"]
 start = "probe"
 
 [[triggers]]
-pattern = "is {host:word} up"
+pattern = "is {host:host} up"
 [[triggers]]
-pattern = "is {host:word} down"
+pattern = "is {host:host} down"
 [[triggers]]
-pattern = "[check] status of {host:word}"
+pattern = "[check] status of {host:host}"
 
 [inputs.host]
 type = "str"
