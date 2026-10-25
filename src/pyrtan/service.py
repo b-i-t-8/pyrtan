@@ -63,7 +63,7 @@ from .transport import Transport, UrllibTransport
 MAX_BODY = 1 << 20
 
 # What answers without a token: the console, its index, and liveness.
-PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor"})
+PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory"})
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
 SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities"})

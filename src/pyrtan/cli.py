@@ -9,9 +9,10 @@
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
     pyrtan hub    --federate --advertise URL [--follow URL ...]  and between hubs
-    pyrtan follow URL --at HUB               follow another hub (and route to it)
+    pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: the rendezvous
     pyrtan unfollow URL --at HUB
     pyrtan peers  --at HUB                   services, and hubs followed and following
+    pyrtan directory [--at RENDEZVOUS]       hubs that asked to be found
     pyrtan gaps   --at URL                   branches waiting to be written
     pyrtan unanswered --at URL [--scaffold DIR]  trees waiting to be written
     pyrtan new    [NAME] [--from TEXT] [--dir PATH]  scaffold a tree file
@@ -37,6 +38,7 @@ from typing import Any
 
 from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
+from .federation import rendezvous_url
 from .grow import Proposal, propose
 from .page import PAGE
 from .registry import Registry, default_paths
@@ -113,13 +115,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--federation-secret", default=os.environ.get("PYRTAN_FEDERATION_SECRET"), help="only hubs that sign their Follow with this secret may follow (default $PYRTAN_FEDERATION_SECRET; without it, follows are open)")
     p.add_argument("--closed", action="store_true", help="take no follows at all (this hub can still follow others)")
     p.add_argument("--state", metavar="FILE", help="keep who this hub follows and is followed by in this file, across restarts")
+    p.add_argument("--listed", action="store_true", help="with --follow: ask those hubs to show this one in their directory")
     p.add_argument("--quiet", action="store_true")
 
-    for verb in ("follow", "unfollow"):
-        p = sub.add_parser(verb, help=f"{verb} another hub, through a running federated hub of yours")
-        p.add_argument("url", help="the other hub's URL")
-        p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
-        _token_arg(p, "your hub's token, if any")
+    p = sub.add_parser("follow", help="follow another hub, through a running federated hub of yours")
+    p.add_argument("url", nargs="?", default=None, help=f"the other hub's URL (default $PYRTAN_RENDEZVOUS or {rendezvous_url()})")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--listed", action="store_true", help="ask that hub to show yours in its directory, with the trees it holds")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("unfollow", help="stop following a hub")
+    p.add_argument("url", help="the other hub's URL")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("directory", help="hubs that asked a rendezvous to list them")
+    p.add_argument("--at", default=None, help=f"the rendezvous (default $PYRTAN_RENDEZVOUS or {rendezvous_url()})")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("peers", help="a hub's services, and the hubs it follows and is followed by")
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"))
@@ -165,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "console": cmd_console,
-        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers,
+        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory,
     }
     return commands[args.command](args)
 
@@ -392,7 +404,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
     hub, server = serve_hub(
         args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
         federate=args.federate or bool(args.advertise) or bool(args.follow), advertise=args.advertise, federation_secret=args.federation_secret,
-        state=args.state, open_follows=not args.closed, follow=args.follow,
+        state=args.state, open_follows=not args.closed, follow=args.follow, listed=args.listed,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") if hub.federation else ""
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){fed}" + _access_note(args), flush=True)
@@ -433,7 +445,33 @@ def cmd_gaps(args: argparse.Namespace) -> int:
 
 
 def cmd_follow(args: argparse.Namespace) -> int:
-    return _hub_post(args, "/follow", {"url": args.url}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted")
+    url = args.url or rendezvous_url()
+    return _hub_post(args, "/follow", {"url": url, "listed": bool(args.listed)}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted" + (", and asked to be listed" if args.listed else ""))
+
+
+def cmd_directory(args: argparse.Namespace) -> int:
+    at = (args.at or rendezvous_url()).rstrip("/")
+    try:
+        status, body = http_json("GET", f"{at}/directory")
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 404:
+        print(f"pyrtan: {at} is not a federated hub, so it has no directory", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} answered {status}", file=sys.stderr)
+        return 3
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    hubs = body.get("hubs", [])
+    print(f"{body.get('name') or at} ({body.get('rendezvous', at)}): {len(hubs)} listed hub(s)")
+    for h in hubs:
+        print(f"{h['link']:8} {h['name'] or '-':16} {h['id']}  {', '.join(h.get('trees', []))}")
+    if hubs:
+        print(f"to follow one: pyrtan follow URL --at YOUR-HUB; to be listed here: pyrtan follow {at} --at YOUR-HUB --listed")
+    return 0
 
 
 def cmd_unfollow(args: argparse.Namespace) -> int:

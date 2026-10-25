@@ -94,6 +94,7 @@ PAGE = r"""<!doctype html>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
+    <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
 
@@ -136,6 +137,12 @@ PAGE = r"""<!doctype html>
     <h2>Waiting to be written</h2>
     <p class="mute" style="font-size:14px;margin-top:0">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
     <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-directory" hidden>
+    <h2>Directory</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">Hubs that follow this one and asked to be found. This hub routes to none of them; each operator follows whom they choose: <code>pyrtan follow URL --at YOUR-HUB</code>. To be listed here: <code>pyrtan follow <span class="at">URL</span> --at YOUR-HUB --listed</code>.</p>
+    <div class="card"><table id="directory"><thead><tr><th>Link</th><th>Hub</th><th>Holds</th><th>Since</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section id="tab-api" hidden>
@@ -194,6 +201,18 @@ function showTab(name) {
   if (name === "peers") loadPeers();
   if (name === "gaps") loadGaps();
   if (name === "unanswered") loadUnanswered();
+  if (name === "directory") loadDirectory();
+}
+
+async function loadDirectory() {
+  let d; try { d = await json("directory"); } catch (e) { problem(e.message, true); return; }
+  const body = $("#directory tbody"); body.innerHTML = "";
+  for (const h of d.hubs || []) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.since ? new Date(h.since * 1000).toLocaleDateString() : ""}</td>`;
+    body.appendChild(tr);
+  }
+  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody listed yet.</td></tr>`;
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 
@@ -243,6 +262,7 @@ async function load() {
   for (const el of document.querySelectorAll(".at")) el.textContent = base || location.origin;
   if (!a) { $("#who").textContent = remote ? "not connected" : "unreachable"; return; }
   $("#peers-tab").hidden = !isHub;
+  $("#directory-tab").hidden = !(isHub && a.federation);
   $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
   $("#hub-version").textContent = a.version ? ` · ${a.pyrtan} v${a.version}` : "";
   try {
