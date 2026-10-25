@@ -71,7 +71,7 @@ PAGE = r"""<!doctype html>
     <h1>Pyrtan <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
-  <p class="lede">A swarm of small services that act on the web through hardcoded, inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
 
   <section id="connect" hidden>
     <div class="card">
@@ -93,6 +93,7 @@ PAGE = r"""<!doctype html>
     <a href="#trees" data-tab="trees">Trees</a>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
+    <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
 
@@ -126,6 +127,12 @@ PAGE = r"""<!doctype html>
     <div class="card"><table id="gaps"><thead><tr><th>Tree · node</th><th>Saw</th><th>Times</th><th>Where</th></tr></thead><tbody></tbody></table></div>
   </section>
 
+  <section id="tab-unanswered" hidden>
+    <h2>Waiting to be written</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
+    <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
   <section id="tab-api" hidden>
     <h2>The same endpoints this page uses</h2>
     <div class="card">
@@ -135,6 +142,7 @@ POST /resume   {"snapshot": {…}, "answer": …}
 GET  /capabilities
 GET  /health
 GET  /gaps
+GET  /unanswered
 GET  /peers    (hub only)</pre>
       <div class="mute" style="font-size:14px;margin-top:8px">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
@@ -180,6 +188,7 @@ function showTab(name) {
   for (const s of document.querySelectorAll("main > section[id^=tab-]")) s.hidden = s.id !== "tab-" + name;
   if (name === "peers") loadPeers();
   if (name === "gaps") loadGaps();
+  if (name === "unanswered") loadUnanswered();
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 
@@ -274,6 +283,18 @@ async function loadGaps() {
   if (!(g.gaps || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">No gaps: every decision so far had a branch.</td></tr>`;
 }
 
+async function loadUnanswered() {
+  let u; try { u = await json("unanswered"); } catch (e) { problem(e.message, true); return; }
+  const body = $("#unanswered tbody"); body.innerHTML = "";
+  for (const e of u.unanswered || []) {
+    const p = e.proposal || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code></td>`;
+    body.appendChild(tr);
+  }
+  if (!(u.unanswered || []).length) body.innerHTML = `<tr><td colspan="3" class="mute">Nothing yet: every sentence so far found a tree.</td></tr>`;
+}
+
 function renderTrace(tr) {
   if (!tr || !tr.steps) return "";
   const lines = tr.steps.map(s => `${"  ".repeat((s.depth||0)+1)}${s.node} (${s.kind})${s.chosen ? " [" + s.chosen + "]" : ""}: ${s.summary}${s.next ? " -> " + s.next : ""}`);
@@ -296,6 +317,10 @@ async function ask(snapshot, answer) {
   const card = document.createElement("div"); card.className = "card";
   let html = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${ms} ms${r.peer ? " · " + esc(r.peer) : ""}</span></div>`;
   if (r.say) html += `<div class="say">${esc(r.say)}</div>`;
+  if (r.reason === "no-match" && r.output && r.output.proposal) {
+    const p = r.output.proposal;
+    html += `<div class="gap">No tree answers this yet. The one that would: <code>${esc(p.name)}</code>, answering <code>${esc(p.trigger)}</code>. It is listed under <a href="#unanswered">Unanswered</a>.</div><pre>${esc(p.scaffold)}</pre>`;
+  }
   if (r.status === "asked") html += `<form class="row resume"><input type="text" placeholder="${esc(r.question||"")}" autofocus><button>Answer</button></form>`;
   if (r.output != null) html += `<details open><summary>output</summary><pre>${esc(JSON.stringify(r.output, null, 2))}</pre></details>`;
   if (r.trace) html += `<details open><summary>trace</summary><pre>${esc(renderTrace(r.trace))}</pre></details>`;
@@ -304,6 +329,7 @@ async function ask(snapshot, answer) {
   out.prepend(card);
   const rf = card.querySelector("form.resume");
   if (rf) rf.addEventListener("submit", (e) => { e.preventDefault(); ask(r.snapshot, rf.querySelector("input").value); });
+  if (r.reason === "no-match") loadUnanswered();
   $("#go").disabled = false;
 }
 

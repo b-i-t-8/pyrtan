@@ -120,4 +120,7 @@ same `uv tool install` line with `--force`, then
   `hacker-news-item` three times.
 - Hot reload: edit a file in `trees/` from the share and ask again.
 - Gaps: a decision that met a value no branch covers, at `/gaps`.
+- Unanswered: ask something no tree answers and the page shows the tree
+  that would, with the command that writes it; the list is at
+  `/unanswered`.
 - Health as one field: `/peers` on the hub shows each service's `link`.

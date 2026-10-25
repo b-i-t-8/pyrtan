@@ -229,3 +229,8 @@ empty string into a URL.
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.
+
+A `no-match` error also carries `output.proposal`: the tree that would
+answer the sentence, as `name`, `trigger` (slots where the sentence had
+numbers or hosts), `inputs`, and `scaffold`, the `pyrtan new … --from`
+command that writes it. The sentence is recorded at `/unanswered`.

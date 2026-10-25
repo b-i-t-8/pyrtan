@@ -15,6 +15,10 @@ Endpoints, all JSON:
 ``GET /gaps``
     Decisions that met a value no branch covered, since the service started.
     Each is a branch waiting to be written.
+``GET /unanswered``
+    Sentences no tree answered, counted, each with a proposed tree. Each is
+    a tree waiting to be written; ``pyrtan unanswered --at URL --scaffold
+    DIR`` writes the files.
 ``GET /`` and ``GET /console``
     The console (:mod:`pyrtan.page`); ``GET /api`` is the JSON index.
 
@@ -50,6 +54,7 @@ from typing import Any, Callable
 from . import __version__
 from .gaps import GapStore
 from .page import PAGE
+from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
 from .trace import Trace
@@ -139,6 +144,7 @@ class Service:
         self.started = time.time()
         self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {})
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
+        self.unanswered = Unanswered()
         self.runs = 0
         self._lock = threading.Lock()
 
@@ -146,7 +152,7 @@ class Service:
 
     def health(self) -> dict[str, Any]:
         self.registry.reload()
-        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "egress": self.egress, "uptime_s": int(time.time() - self.started)}
+        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "egress": self.egress, "uptime_s": int(time.time() - self.started)}
         if self.gaps.error:
             health["gaps_file_error"] = self.gaps.error
         return health
@@ -160,7 +166,11 @@ class Service:
         if not isinstance(text, str) or not text.strip():
             return {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
         self.registry.reload()
-        return self._finish(self.runner.run_intent(text, int(body.get("depth", 0))), body)
+        outcome = self.runner.run_intent(text, int(body.get("depth", 0)))
+        if outcome.reason == "no-match" and self.hub is None:
+            # With a hub, the hub saw the sentence and keeps the record.
+            self.unanswered.record(text)
+        return self._finish(outcome, body)
 
     def run(self, body: dict[str, Any]) -> dict[str, Any]:
         tree = body.get("tree")
@@ -203,10 +213,12 @@ class Service:
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
             return 200, {"gaps": self.gaps.all()}
+        if method == "GET" and path == "/unanswered":
+            return 200, {"unanswered": self.unanswered.to_list()}
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps"]}
+            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":

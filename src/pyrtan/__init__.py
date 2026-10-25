@@ -1,4 +1,4 @@
-"""Pyrtan: a swarm of small services that act on the web through hardcoded,
+"""Pyrtan: a core set of expandable services that act on all forms of I/O through hardcoded,
 inspectable decision trees.
 
 The public surface is small on purpose:
@@ -7,6 +7,8 @@ The public surface is small on purpose:
 - :class:`pyrtan.Registry` holds the trees a service knows about.
 - :class:`pyrtan.Runner` executes a tree against a transport and returns an
   :class:`pyrtan.Outcome` with a full :class:`pyrtan.Trace`.
+- :func:`pyrtan.grow.propose` turns a sentence nobody answers into the tree
+  that would.
 """
 
 from .tree import Tree, load_tree, load_tree_text, TreeError

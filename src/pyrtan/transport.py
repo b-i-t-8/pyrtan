@@ -1,6 +1,9 @@
-"""How a tree reaches the web.
+"""How a tree reaches the outside: the HTTP form of I/O.
 
-A :class:`Transport` turns a request into a :class:`Response`. The real one is
+A :class:`Transport` turns a request into a :class:`Response`. Further forms
+of I/O (files, shells, serial lines, queues) arrive as further transports
+behind the same seam, each with a recorded and a recording wrapper so trees
+over them are testable offline the same way. The real one is
 :class:`UrllibTransport`, on the standard library. :class:`RecordedTransport`
 replays responses from a fixture, so a tree can be tested end to end with no
 network, and :class:`RecordingTransport` wraps a real transport to write such
