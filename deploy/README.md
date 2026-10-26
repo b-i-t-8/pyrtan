@@ -81,6 +81,14 @@ rather than the NAS (they need the internet the NAS is kept from, or the
 network the person is on) go in a `handout` directory next to `trees`,
 with `PYRTAN_HANDOUT: /handout` in the compose file.
 
+Trees that read the box (a `file` node over `/var/log`, a `shell` node
+running `df`, a `serial` node on a USB modem) see the container, not the
+NAS: mount the paths and pass the devices through in the compose file
+(there are commented lines for it), and the tree's own `paths`,
+`commands` and `devices` lists decide what it may touch. Trees that
+drive a browser need Playwright, which the image does not carry; run
+those from a checkout with `uv sync --extra browser`.
+
 ### Without the plugin
 
 Over SSH, from the checkout:

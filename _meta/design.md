@@ -166,11 +166,12 @@ the standard library's client, a recorded fixture that raises on any
 request it did not foresee, and a recorder that writes such fixtures.
 Every example tree is tested offline through the second, and
 `pyrtan run --record` produces fixtures through the third. The transport
-is also the seam where forms of I/O plug in. A node names a source (`http`
-today), the runtime enforces that source's allow-list, and the transport
-moves the bytes. A file, shell, serial or queue adapter is a new node
-source with the same three parts, and the same recorded and recording
-wrappers around it.
+is also the seam where forms of I/O plug in. A node names a source, the
+runtime enforces that source's allow-list, and the adapter moves the
+bytes. Since v0.7 `adapters.py` holds five more (`browser`, `file`,
+`shell`, `serial`, `queue`), each a node table with a list of its own
+kind, and the recorded and recording fixtures answer for all of them
+under one key scheme (`io.md`).
 
 **Growth** (`grow.py`) is where a dead end becomes the next tree. A
 sentence no tree answers is recorded as *unanswered*, counted, and
@@ -296,13 +297,15 @@ Five trees, all against real public APIs, all tested offline:
    answers sentences through its hub's mailbox (`Ask`/`Answer`); a hub
    hands its own trees and `--handout` ones to the devices that joined
    with its token. Design in [`members.md`](members.md) §7.
-7. **v0.7: more forms of I/O.** First the browser: `observe` with
-   `browser = { url, wait_for, actions }` on Playwright as an optional
-   extra, for pages that need a script to render, with the same host rule
-   and the same extraction. Then file, shell, serial and queue adapters,
-   each a node source with its own allow-list (paths, commands, devices,
-   topics), so a tree reads a log, runs a named command or polls a device
-   by the same rules it reads a page, and the trace reads the same.
+7. **v0.7, built: more forms of I/O.** `browser = { url, wait_for,
+   actions }` on Playwright as the one optional extra, for pages that need
+   a script to render, with the same host rule and the same extraction;
+   and `file`, `shell`, `serial` and `queue` (MQTT) as node sources, each
+   with its own allow-list (`paths`, `commands`, `devices`, `topics`), so
+   a tree reads a log, runs a named program or polls a device by the same
+   rules it reads a page, and the trace reads the same. One fixture
+   answers for every source, in both runtimes. Design in
+   [`io.md`](io.md).
 8. **v0.8: the catalog grows up.** Namespaces, publishing through pull
    requests with the checker as the gate, and opt-in gap reporting from
    hubs back to a tree's author, carried as another federation topic.

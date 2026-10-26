@@ -1,0 +1,65 @@
+# The temperature a room's sensor last published, over MQTT. A queue node
+# subscribes to a topic and waits for one message (an act node publishes
+# one). The broker must be in `hosts`, the topic under `topics`; both are
+# checked at run time when they come from the sentence.
+
+name = "room-temperature"
+version = 1
+description = "The temperature a room's sensor last published, over MQTT."
+tags = ["home", "mqtt"]
+license = "MIT"
+hosts = ["broker.local"]
+topics = ["home/+/temperature"]
+start = "wait"
+
+[[triggers]]
+pattern = "[what's the] temperature in the {room:word}"
+[[triggers]]
+pattern = "how warm is the {room:word}"
+
+[inputs.room]
+type = "str"
+default = "kitchen"
+pattern = "^[a-z0-9-]+$"
+
+[nodes.wait]
+kind = "observe"
+queue = { url = "mqtt://broker.local", topic = "home/{{ inputs.room }}/temperature" }
+into = "q"                    # state.q = { url, topic, received, message = { topic, body, json }, body, json }
+timeout = 15
+retries = 0
+next = "got"
+
+[nodes.got]
+kind = "decide"
+on = "q.received"
+branches = [{ when = { eq = true }, then = "reading" }, { else = "quiet" }]
+
+[nodes.reading]
+kind = "decide"
+on = "q.json.temperature"
+branches = [
+  { when = { lt = 16 }, then = "cold" },
+  { when = { lt = 26 }, then = "fine" },
+  { when = { gte = 26 }, then = "warm" },
+]
+
+[nodes.cold]
+kind = "done"
+say = "{{ inputs.room }}: {{ state.q.json.temperature }}°C, cold."
+output = { room = "{{ inputs.room }}", temperature = "{{ state.q.json.temperature }}", topic = "{{ state.q.message.topic }}" }
+
+[nodes.fine]
+kind = "done"
+say = "{{ inputs.room }}: {{ state.q.json.temperature }}°C."
+output = { room = "{{ inputs.room }}", temperature = "{{ state.q.json.temperature }}", topic = "{{ state.q.message.topic }}" }
+
+[nodes.warm]
+kind = "done"
+say = "{{ inputs.room }}: {{ state.q.json.temperature }}°C, warm."
+output = { room = "{{ inputs.room }}", temperature = "{{ state.q.json.temperature }}", topic = "{{ state.q.message.topic }}" }
+
+[nodes.quiet]
+kind = "fail"
+reason = "no-reading"
+say = "Nothing on home/{{ inputs.room }}/temperature within 15 s; is the sensor publishing?"

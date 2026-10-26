@@ -1,0 +1,57 @@
+# The main heading of a page that needs a script to render: a browser node
+# opens it in a real browser (Playwright's Chromium, the one optional
+# dependency: pip install 'pyrtan[browser]'), waits for a selector, and
+# hands the rendered document to the same extraction an http node uses.
+# The page may fetch what it likes; it may not take the tree to a host
+# outside `hosts`.
+
+name = "rendered-headline"
+version = 1
+description = "The main heading of a page that needs a script to render, through a real browser."
+tags = ["web", "browser", "read-only"]
+license = "MIT"
+hosts = ["*"]
+start = "open"
+
+[[triggers]]
+pattern = "headline of {url:url}"
+[[triggers]]
+pattern = "what does {url:url} say"
+
+[inputs.url]
+type = "str"
+pattern = "^https?://.+$"
+
+[nodes.open]
+kind = "observe"
+browser = { url = "{{ inputs.url }}", wait_for = "h1" }
+into = "page"                 # state.page = { url, status, ok, title, body, elapsed_ms }
+timeout = 30
+retries = 0
+extract = [{ into = "heading", css = "h1" }]
+next = "loaded"
+
+[nodes.loaded]
+kind = "decide"
+on = "page.ok"
+branches = [{ when = { eq = true }, then = "found" }, { else = "not-ok" }]
+
+[nodes.found]
+kind = "decide"
+on = "heading"
+branches = [{ when = { exists = true }, then = "say" }, { else = "none" }]
+
+[nodes.say]
+kind = "done"
+say = "{{ state.page.title }} — {{ state.heading | strip }}"
+output = { url = "{{ state.page.url }}", title = "{{ state.page.title }}", heading = "{{ state.heading | strip }}" }
+
+[nodes.none]
+kind = "fail"
+reason = "no-heading"
+say = "{{ state.page.url }} rendered without an h1."
+
+[nodes.not-ok]
+kind = "fail"
+reason = "unexpected-response"
+say = "{{ inputs.url }} answered {{ state.page.status }}."

@@ -129,7 +129,7 @@ class UrllibTransport:
     ``public`` (refuse private, loopback, link-local and metadata addresses,
     on the first URL and on every redirect)."""
 
-    def __init__(self, user_agent: str = "pyrtan/0.6 (+https://github.com/b-i-t-8/pyrtan)", egress: str = "any") -> None:
+    def __init__(self, user_agent: str = "pyrtan/0.7 (+https://github.com/b-i-t-8/pyrtan)", egress: str = "any") -> None:
         if egress not in EGRESS_POLICIES:
             raise ValueError(f"egress policy must be one of {EGRESS_POLICIES}, got {egress!r}")
         self.user_agent = user_agent
@@ -189,18 +189,31 @@ class RecordedTransport:
 
     def request(self, method: str, url: str, headers: dict[str, str] | None = None, body: str | None = None, timeout: float = 10.0) -> Response:
         self.calls.append((method.upper(), url))
-        rec = self.responses.get(_key(method, url))
+        rec = self._take(_key(method, url), "response")
+        text = rec.get("body", "")
+        if not isinstance(text, str):
+            text = json.dumps(text)
+        return Response(int(rec.get("status", 200)), {k.lower(): v for k, v in rec.get("headers", {}).items()}, text, url, 0)
+
+    def perform(self, source: str, spec: dict[str, Any], timeout: float = 10.0, allowed: Any = None) -> dict[str, Any]:
+        """The other sources, from the same fixture: a record under
+        :func:`pyrtan.adapters.adapter_key` is what the node observes."""
+        from .adapters import adapter_key
+
+        key = adapter_key(source, spec)
+        self.calls.append((source, key))
+        return json.loads(json.dumps(self._take(key, "result")))
+
+    def _take(self, key: str, noun: str) -> dict[str, Any]:
+        rec = self.responses.get(key)
         if rec is None:
-            raise TransportError(f"no recorded response for {_key(method, url)}")
+            raise TransportError(f"no recorded {noun} for {key}")
         if isinstance(rec, list):
             # A sequence: consume in order, repeating the last.
             rec = rec.pop(0) if len(rec) > 1 else rec[0]
         if "error" in rec:
             raise TransportError(str(rec["error"]))
-        text = rec.get("body", "")
-        if not isinstance(text, str):
-            text = json.dumps(text)
-        return Response(int(rec.get("status", 200)), {k.lower(): v for k, v in rec.get("headers", {}).items()}, text, url, 0)
+        return rec
 
 
 @dataclass
@@ -209,12 +222,22 @@ class RecordingTransport:
     fixture for :class:`RecordedTransport`."""
 
     inner: Transport
+    adapters: Any = None
     recorded: dict[str, Any] = field(default_factory=dict)
 
     def request(self, method: str, url: str, headers: dict[str, str] | None = None, body: str | None = None, timeout: float = 10.0) -> Response:
         resp = self.inner.request(method, url, headers, body, timeout)
         self.recorded[_key(method, url)] = {"status": resp.status, "headers": resp.headers, "body": resp.body}
         return resp
+
+    def perform(self, source: str, spec: dict[str, Any], timeout: float = 10.0, allowed: Any = None) -> dict[str, Any]:
+        from .adapters import LocalAdapters, adapter_key
+
+        if self.adapters is None:
+            self.adapters = LocalAdapters()
+        observed = self.adapters.perform(source, spec, timeout, allowed)
+        self.recorded[adapter_key(source, spec)] = json.loads(json.dumps(observed))
+        return observed
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(self.recorded, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

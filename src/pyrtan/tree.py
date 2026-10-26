@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import conditions, extract as extractmod
+from . import adapters, conditions, extract as extractmod
 from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerError
 from .template import PLACEHOLDER, placeholders
 
@@ -163,6 +163,10 @@ class Tree:
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
     license: str = ""
     language: Language = field(default_factory=Language)
+    paths: list[str] = field(default_factory=list)      # what ``file`` nodes may reach
+    commands: list[str] = field(default_factory=list)   # what ``shell`` nodes may run
+    devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
+    topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
 
     def node(self, node_id: str) -> Node:
         try:
@@ -185,6 +189,37 @@ class Tree:
             elif host == allowed:
                 return True
         return False
+
+    def allowed(self, source: str, spec: dict[str, Any]) -> tuple[str, str] | None:
+        """Why a rendered request to ``source`` is outside this tree's
+        allow-list, as ``(reason, text)``, or None when it is inside."""
+        if source in ("http", "browser"):
+            url = str(spec.get("url", ""))
+            return None if self.host_allowed(url) else ("host-not-allowed", f"{url} is outside this tree's hosts {self.hosts}.")
+        if source == "file":
+            path = adapters.absolute_path(spec.get("path", ""))
+            return None if adapters.path_allowed(self.paths, path) else ("path-not-allowed", f"{path} is outside this tree's paths {self.paths}.")
+        if source == "shell":
+            cmd = str(spec.get("command", ""))
+            return None if adapters.command_allowed(self.commands, cmd) else ("command-not-allowed", f"{cmd!r} is not in this tree's commands {self.commands}.")
+        if source == "serial":
+            dev = str(spec.get("device", ""))
+            return None if adapters.device_allowed(self.devices, dev) else ("device-not-allowed", f"{dev} is outside this tree's devices {self.devices}.")
+        if source == "queue":
+            url = str(spec.get("url", ""))
+            try:
+                _, host, port = adapters.broker(url)
+            except ValueError as e:
+                return ("host-not-allowed", str(e))
+            if not self.host_allowed(f"mqtt://{host}:{port}/"):
+                return ("host-not-allowed", f"{host} is outside this tree's hosts {self.hosts}.")
+            topic = str(spec.get("topic", ""))
+            return None if adapters.topic_allowed(self.topics, topic) else ("topic-not-allowed", f"{topic!r} is outside this tree's topics {self.topics}.")
+        return None
+
+    def sources(self) -> list[str]:
+        """The forms of I/O this tree's nodes use."""
+        return sorted({s for n in self.nodes.values() if n.kind in ("observe", "act") for s in adapters.SOURCES if n.get(s) is not None})
 
     def bind_inputs(self, given: dict[str, Any]) -> dict[str, Any]:
         """Apply defaults, coerce types, and refuse unknown or missing inputs."""
@@ -211,6 +246,8 @@ class Tree:
             "description": self.description,
             "tags": self.tags,
             "hosts": self.hosts,
+            **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics") if getattr(self, k)},
+            "sources": self.sources(),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -251,6 +288,12 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     hosts = raw.get("hosts", [])
     if not isinstance(hosts, list) or not all(isinstance(h, str) and h for h in hosts):
         raise TreeError(f"{name}: 'hosts' must be a list of host names")
+    lists: dict[str, list[str]] = {}
+    for key, noun in (("paths", "paths or globs"), ("commands", "program names"), ("devices", "device paths or globs"), ("topics", "topic filters")):
+        value = raw.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+            raise TreeError(f"{name}: '{key}' must be a list of {noun}")
+        lists[key] = value
     tags = raw.get("tags", [])
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
         raise TreeError(f"{name}: 'tags' must be a list of strings")
@@ -317,7 +360,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, **lists)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))
@@ -397,7 +440,7 @@ def check(tree: Tree) -> list[Problem]:
         if node.kind == "set" and isinstance(node.get("set"), dict):
             produced.update(k.split(".")[0] for k in node.get("set"))
 
-    uses_http = False
+    used: set[str] = set()
     for node in tree.nodes.values():
         where = f"nodes.{node.id}"
         for target in node.targets():
@@ -409,15 +452,15 @@ def check(tree: Tree) -> list[Problem]:
             err(where, f"a {node.kind} node needs 'next'")
 
         if node.kind in ("observe", "act"):
-            http = node.get("http")
+            present = [s for s in adapters.SOURCES if node.get(s) is not None]
             frm = node.get("from")
             emit = node.get("emit")
-            ways = sum(1 for x in (http, frm, emit) if x is not None)
+            ways = len(present) + sum(1 for x in (frm, emit) if x is not None)
             if ways != 1:
-                err(where, f"an {node.kind} node needs exactly one of 'http', 'from' or 'emit'")
-            if http is not None:
-                uses_http = True
-                _check_http(tree, node, http, err, warn)
+                err(where, f"an {node.kind} node needs exactly one of {', '.join(repr(s) for s in adapters.SOURCES)}, 'from' or 'emit'")
+            for s in present:
+                used.add(s)
+                _SOURCE_CHECKS[s](tree, node, node.get(s), err, warn)
             if emit is not None:
                 if node.kind != "act":
                     err(where, "'emit' is an act, not an observation")
@@ -517,14 +560,133 @@ def check(tree: Tree) -> list[Problem]:
             elif head not in ("item", "index", "tree", "now", "env"):
                 err(where, f"template root {head!r} is not one of inputs, state, item, index, tree, now, env")
 
-    if uses_http and not tree.hosts:
-        err("hosts", "a tree that speaks HTTP must list the hosts it may reach")
-    if tree.hosts and not uses_http:
-        info("hosts", "hosts are listed but no node speaks HTTP")
+    for list_name, sources in _NEEDS.items():
+        have = getattr(tree, list_name)
+        using = sorted(used & sources)
+        if using and not have:
+            if using == ["http"]:
+                err("hosts", "a tree that speaks HTTP must list the hosts it may reach")
+            else:
+                err(list_name, f"a tree with {', '.join(using)} nodes must list the {list_name} it may reach")
+        if have and not using:
+            info(list_name, f"{list_name} are listed but no node uses them")
 
     if tree.start in tree.nodes:
         problems.extend(_check_graph(tree))
     return problems
+
+
+_NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}}
+
+
+def _literal(value: Any) -> str | None:
+    """The value when it is a string with no placeholder, else None."""
+    return value if isinstance(value, str) and not PLACEHOLDER.search(value) else None
+
+
+def _check_browser(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    where = f"nodes.{node.id}.browser"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str) or not spec["url"]:
+        err(where, "'browser' is a table with 'url' and optionally 'wait_for', 'wait_until', 'actions'")
+        return
+    head = PLACEHOLDER.split(spec["url"], 1)[0]
+    parsed = urllib.parse.urlsplit(head)
+    if parsed.scheme and parsed.hostname:
+        if parsed.scheme not in ("http", "https"):
+            err(where, f"scheme {parsed.scheme!r} is not http or https")
+        if not tree.host_allowed(head):
+            err(where, f"host {parsed.hostname!r} is not in this tree's hosts")
+    else:
+        warn(where, "the host is decided at run time; the runtime refuses hosts outside the list")
+    actions = spec.get("actions", [])
+    if not isinstance(actions, list):
+        err(where, "'actions' is a list of tables")
+        return
+    for i, a in enumerate(actions):
+        keys = set(a) & set(adapters.BROWSER_ACTIONS) if isinstance(a, dict) else set()
+        if len(keys) != 1:
+            err(f"{where}.actions[{i}]", f"an action is a table with exactly one of {', '.join(adapters.BROWSER_ACTIONS)}")
+        elif keys & {"fill", "press", "select"}:
+            k = keys.pop()
+            need = "value" if k != "press" else "key"
+            if not isinstance(a[k], dict) or "selector" not in a[k] or need not in a[k]:
+                err(f"{where}.actions[{i}]", f"'{k}' is a table with 'selector' and '{need}'")
+
+
+def _check_file(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    where = f"nodes.{node.id}.file"
+    if not isinstance(spec, dict) or not isinstance(spec.get("path"), str) or not spec["path"]:
+        err(where, "'file' is a table with 'path' and optionally 'tail' (to read), 'write' or 'append' (to change)")
+        return
+    writes = "write" in spec or "append" in spec
+    if writes and node.kind == "observe":
+        err(where, "a write changes things; make this an act node")
+    if not writes and node.kind == "act":
+        warn(where, "an act that only reads; an observe node would retry it safely")
+    if "write" in spec and "append" in spec:
+        err(where, "'write' or 'append', not both")
+    if spec.get("tail") is not None and not isinstance(spec["tail"], int) and not (isinstance(spec["tail"], str) and PLACEHOLDER.search(spec["tail"])):
+        err(where, "'tail' is a number of lines")
+    path = _literal(spec["path"])
+    if path is None:
+        warn(where, "the path is decided at run time; the runtime refuses paths outside the list")
+    elif tree.paths and not adapters.path_allowed(tree.paths, path):
+        err(where, f"{path!r} is not under this tree's paths")
+
+
+def _check_shell(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    where = f"nodes.{node.id}.shell"
+    if not isinstance(spec, dict) or not isinstance(spec.get("command"), str) or not spec["command"]:
+        err(where, "'shell' is a table with 'command' (a program name) and optionally 'args' (a list), 'stdin', 'env', 'cwd'")
+        return
+    if spec.get("args") is not None and not isinstance(spec["args"], list):
+        err(where, "'args' is a list; no shell reads the line, so there is nothing to quote")
+    cmd = _literal(spec["command"])
+    if cmd is None:
+        warn(where, "the command is decided at run time; the runtime refuses commands outside the list")
+    elif tree.commands and not adapters.command_allowed(tree.commands, cmd):
+        err(where, f"{cmd!r} is not in this tree's commands")
+
+
+def _check_serial(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    where = f"nodes.{node.id}.serial"
+    if not isinstance(spec, dict) or not isinstance(spec.get("device"), str) or not spec["device"]:
+        err(where, "'serial' is a table with 'device' and optionally 'baud', 'write', 'read_until' or 'read'")
+        return
+    if spec.get("baud") is not None and not isinstance(spec["baud"], int):
+        err(where, "'baud' is a number")
+    dev = _literal(spec["device"])
+    if dev is None:
+        warn(where, "the device is decided at run time; the runtime refuses devices outside the list")
+    elif tree.devices and not adapters.device_allowed(tree.devices, dev):
+        err(where, f"{dev!r} is not in this tree's devices")
+
+
+def _check_queue(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    where = f"nodes.{node.id}.queue"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str) or not isinstance(spec.get("topic"), str):
+        err(where, "'queue' is a table with 'url' (mqtt://host[:port]), 'topic' and, to send, 'publish'")
+        return
+    if "publish" in spec and node.kind == "observe":
+        err(where, "a publish changes things; make this an act node")
+    if "publish" not in spec and node.kind == "act":
+        warn(where, "an act that only waits for a message; an observe node would retry it safely")
+    url = _literal(spec["url"])
+    if url is None:
+        warn(where, "the broker is decided at run time; the runtime refuses hosts outside the list")
+    else:
+        try:
+            _, host, port = adapters.broker(url)
+        except ValueError as e:
+            err(where, str(e))
+        else:
+            if tree.hosts and not tree.host_allowed(f"mqtt://{host}:{port}/"):
+                err(where, f"host {host!r} is not in this tree's hosts")
+    topic = _literal(spec["topic"])
+    if topic is None:
+        warn(where, "the topic is decided at run time; the runtime refuses topics outside the list")
+    elif tree.topics and not adapters.topic_allowed(tree.topics, topic):
+        err(where, f"{topic!r} is not under this tree's topics")
 
 
 def _check_http(tree: Tree, node: Node, http: Any, err, warn) -> None:
@@ -555,6 +717,9 @@ def _check_http(tree: Tree, node: Node, http: Any, err, warn) -> None:
     headers = http.get("headers", {})
     if headers is not None and not isinstance(headers, dict):
         err(where, "'headers' is a table")
+
+
+_SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue}
 
 
 def _check_graph(tree: Tree) -> list[Problem]:

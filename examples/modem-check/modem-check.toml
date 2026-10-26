@@ -1,0 +1,53 @@
+# Whether a modem on a serial line answers AT. A serial node opens a device
+# at a baud rate, writes, and reads until a terminator or the timeout;
+# `devices` is the allow-list. An observe retries once on no answer.
+
+name = "modem-check"
+version = 1
+description = "Whether a modem on a serial line answers AT."
+tags = ["hardware", "serial"]
+license = "MIT"
+devices = ["/dev/ttyUSB*", "/dev/ttyACM*"]
+start = "at"
+
+[[triggers]]
+pattern = "is the modem up"
+[[triggers]]
+pattern = "is the modem on {device:word} up"
+
+[inputs.device]
+type = "str"
+default = "/dev/ttyUSB0"
+
+[nodes.at]
+kind = "observe"
+serial = { device = "{{ inputs.device }}", baud = 9600, write = "AT\r\n", read_until = "\n" }
+into = "s"                    # state.s = { device, baud, sent, body, bytes, complete, json, lines }
+timeout = 3
+retries = 1
+extract = [{ into = "answer", regex = "(OK|ERROR)" }]
+next = "answered"
+
+[nodes.answered]
+kind = "decide"
+on = "answer"
+branches = [
+  { when = { eq = "OK" }, then = "yes" },
+  { when = { eq = "ERROR" }, then = "error" },
+  { else = "odd" },
+]
+
+[nodes.yes]
+kind = "done"
+say = "The modem on {{ inputs.device }} is there."
+output = { device = "{{ inputs.device }}" }
+
+[nodes.error]
+kind = "fail"
+reason = "modem-error"
+say = "The modem on {{ inputs.device }} answered ERROR."
+
+[nodes.odd]
+kind = "fail"
+reason = "odd-answer"
+say = "{{ inputs.device }} answered {{ state.s.body | strip }} to AT."

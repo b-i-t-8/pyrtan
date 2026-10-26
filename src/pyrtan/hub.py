@@ -151,14 +151,17 @@ class Hub:
 
     def handout_trees(self) -> dict[str, Tree]:
         """The trees a trusted member may run: the ones this hub holds itself,
-        and the ones given it to hand out (``--handout``), by name."""
+        and the ones given it to hand out (``--handout``), by name. A member
+        is a browser: a tree that reads a file, runs a program, opens a
+        serial line, talks to a broker or drives a browser stays here."""
         out: dict[str, Tree] = {}
         for reg in (self.local.service.registry if self.local is not None else None, self.handout_registry):
             if reg is None:
                 continue
             reg.reload()
             for t in reg.trees():
-                out.setdefault(t.name, t)
+                if set(t.sources()) <= {"http"}:
+                    out.setdefault(t.name, t)
         return out
 
     def member_capabilities(self) -> list[dict[str, Any]]:

@@ -675,6 +675,18 @@ def test_trusted_member_runs_the_trees_its_hub_hands_out(tmp_path):
     (tmp_path / "h").mkdir()
     (tmp_path / "t" / "alpha.toml").write_text(ECHO.format(name="alpha", word="alpha"))
     (tmp_path / "h" / "gamma.toml").write_text(ECHO.format(name="gamma", word="gamma"))
+    (tmp_path / "h" / "box.toml").write_text('''
+name = "box"
+commands = ["uptime"]
+start = "up"
+[nodes.up]
+kind = "observe"
+shell = { command = "uptime" }
+next = "say"
+[nodes.say]
+kind = "done"
+say = "{{ state.last.stdout }}"
+''')
     from pyrtan.hub import serve_hub
 
     hub, srv = serve_hub(port=0, quiet=True, name="solo", trees=[tmp_path / "t"], handout=[tmp_path / "h"], federate=True, token="tok", poll_every=60)
@@ -692,7 +704,7 @@ def test_trusted_member_runs_the_trees_its_hub_hands_out(tmp_path):
         # The hub hands out its own trees and the --handout ones at once, in the mailbox after the Accept and the Announce.
         acts = phone.poll()
         assert [a["type"] for a in acts] == ["Accept", "Announce", "Keep", "Keep"]
-        assert sorted(phone.trees) == ["alpha", "gamma"] and phone.trees["gamma"]["name"] == "gamma"
+        assert sorted(phone.trees) == ["alpha", "gamma"] and phone.trees["gamma"]["name"] == "gamma"  # not "box": a phone has no shell
         assert all(h["confirmed"] for h in fed._handed[phone.id].values())
         assert fed.hand_out() == 0  # nothing new to give
         # What the member says it runs is filtered to what it was handed, with the hub's own triggers.

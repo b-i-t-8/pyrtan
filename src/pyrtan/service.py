@@ -58,6 +58,7 @@ from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
 from .trace import Trace
+from .adapters import LocalAdapters
 from .transport import Transport, UrllibTransport
 
 MAX_BODY = 1 << 20
@@ -153,7 +154,8 @@ class Service:
         self.token = token or None
         self.egress = egress
         self.started = time.time()
-        self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {})
+        adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress)
+        self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {}, adapters=adapters)
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
         self.unanswered = Unanswered()
         self.runs = 0

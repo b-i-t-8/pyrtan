@@ -1299,9 +1299,1103 @@
     "count": 2
    },
    "tree": "hacker-news"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "mount": "/"
+    },
+    "output": {
+     "mounted": "/",
+     "percent": 71
+    },
+    "say": "/ is 71% full.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "ran",
+       "node": "df",
+       "observed": {
+        "mounted": "/",
+        "percent": "71"
+       },
+       "summary": "shell df -P / -> exit 0; percent=71, mounted=/"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "number",
+       "node": "ran",
+       "observed": true,
+       "summary": "state.df.ok = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "level",
+       "node": "number",
+       "observed": {
+        "pct": 71
+       },
+       "summary": "pct=71"
+      },
+      {
+       "chosen": "lt 80",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fine",
+       "node": "level",
+       "observed": 71,
+       "summary": "state.pct = 71"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "fine",
+       "summary": "/ is 71% full."
+      }
+     ],
+     "tree": "disk-space"
+    },
+    "tree": "disk-space"
+   },
+   "inputs": {},
+   "intent": "how full is the disk",
+   "tree": "disk-space"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "mount": "/data"
+    },
+    "reason": "disk-full",
+    "say": "/data is 96% full.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "ran",
+       "node": "df",
+       "observed": {
+        "mounted": "/data",
+        "percent": "96"
+       },
+       "summary": "shell df -P /data -> exit 0; percent=96, mounted=/data"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "number",
+       "node": "ran",
+       "observed": true,
+       "summary": "state.df.ok = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "level",
+       "node": "number",
+       "observed": {
+        "pct": 96
+       },
+       "summary": "pct=96"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "full",
+       "node": "level",
+       "observed": 96,
+       "summary": "state.pct = 96"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "full",
+       "summary": "disk-full: /data is 96% full."
+      }
+     ],
+     "tree": "disk-space"
+    },
+    "tree": "disk-space"
+   },
+   "inputs": {
+    "mount": "/data"
+   },
+   "intent": "disk space on /data",
+   "tree": "disk-space"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "mount": "/nowhere"
+    },
+    "reason": "df-failed",
+    "say": "df could not measure /nowhere: df: /nowhere: No such file or directory",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "ran",
+       "node": "df",
+       "observed": {
+        "mounted": null,
+        "percent": null
+       },
+       "summary": "shell df -P /nowhere -> exit 1; percent=None, mounted=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "failed",
+       "node": "ran",
+       "observed": false,
+       "summary": "state.df.ok = False"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "failed",
+       "summary": "df-failed: df could not measure /nowhere: df: /nowhere: No such file or directory"
+      }
+     ],
+     "tree": "disk-space"
+    },
+    "tree": "disk-space"
+   },
+   "inputs": {
+    "mount": "/nowhere"
+   },
+   "intent": "disk space on /nowhere",
+   "tree": "disk-space"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "lines": 200,
+     "path": "/var/log/syslog"
+    },
+    "output": {
+     "errors": 2,
+     "lines": [
+      "Oct 25 12:00:00 nas pyrtan[1200]: error: weather: open-meteo answered 503",
+      "Oct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500"
+     ],
+     "path": "/var/log/syslog"
+    },
+    "say": "2 error line(s) in the last 5 of /var/log/syslog; latest: Oct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "exists",
+       "node": "read",
+       "observed": {
+        "errors": [
+         "Oct 25 12:00:00 nas pyrtan[1200]: error: weather: open-meteo answered 503",
+         "Oct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500"
+        ]
+       },
+       "summary": "file /var/log/syslog -> 48213 B; errors=['Oct 25 12:00:00 nas pyrtan[1200]: error: weather: open-meteo answered 503', '…"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "count",
+       "node": "exists",
+       "observed": true,
+       "summary": "state.log.exists = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "any",
+       "node": "count",
+       "observed": {
+        "n": 2,
+        "seen": 5
+       },
+       "summary": "n=2, seen=5"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "some",
+       "node": "any",
+       "observed": 2,
+       "summary": "state.n = 2"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "some",
+       "summary": "2 error line(s) in the last 5 of /var/log/syslog; latest: Oct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500"
+      }
+     ],
+     "tree": "log-errors"
+    },
+    "tree": "log-errors"
+   },
+   "inputs": {},
+   "intent": "errors in the log",
+   "tree": "log-errors"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "lines": 200,
+     "path": "/var/log/quiet.log"
+    },
+    "output": {
+     "errors": 0,
+     "path": "/var/log/quiet.log"
+    },
+    "say": "No error lines in the last 1 of /var/log/quiet.log.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "exists",
+       "node": "read",
+       "observed": {
+        "errors": []
+       },
+       "summary": "file /var/log/quiet.log -> 71 B; errors=[]"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "count",
+       "node": "exists",
+       "observed": true,
+       "summary": "state.log.exists = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "any",
+       "node": "count",
+       "observed": {
+        "n": 0,
+        "seen": 1
+       },
+       "summary": "n=0, seen=1"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "clean",
+       "node": "any",
+       "observed": 0,
+       "summary": "state.n = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "clean",
+       "summary": "No error lines in the last 1 of /var/log/quiet.log."
+      }
+     ],
+     "tree": "log-errors"
+    },
+    "tree": "log-errors"
+   },
+   "inputs": {
+    "path": "/var/log/quiet.log"
+   },
+   "intent": "errors in /var/log/quiet.log",
+   "tree": "log-errors"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "lines": 200,
+     "path": "/var/log/nothing.log"
+    },
+    "reason": "no-such-file",
+    "say": "/var/log/nothing.log is not on this box.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "exists",
+       "node": "read",
+       "observed": {
+        "errors": null
+       },
+       "summary": "file /var/log/nothing.log -> missing; errors=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "missing",
+       "node": "exists",
+       "observed": false,
+       "summary": "state.log.exists = False"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "missing",
+       "summary": "no-such-file: /var/log/nothing.log is not on this box."
+      }
+     ],
+     "tree": "log-errors"
+    },
+    "tree": "log-errors"
+   },
+   "inputs": {
+    "path": "/var/log/nothing.log"
+   },
+   "intent": "errors in /var/log/nothing.log",
+   "tree": "log-errors"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "lines": 200,
+     "path": "/etc/passwd"
+    },
+    "reason": "path-not-allowed",
+    "say": "read: /etc/passwd is outside this tree's paths ['/var/log'].",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "log-errors"
+    },
+    "tree": "log-errors"
+   },
+   "inputs": {
+    "path": "/etc/passwd"
+   },
+   "intent": "errors in /etc/passwd",
+   "tree": "log-errors"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "room": "kitchen"
+    },
+    "output": {
+     "room": "kitchen",
+     "temperature": 21.5,
+     "topic": "home/kitchen/temperature"
+    },
+    "say": "kitchen: 21.5°C.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/kitchen/temperature at mqtt://broker.local -> 1 message"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reading",
+       "node": "got",
+       "observed": true,
+       "summary": "state.q.received = True"
+      },
+      {
+       "chosen": "lt 26",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fine",
+       "node": "reading",
+       "observed": 21.5,
+       "summary": "state.q.json.temperature = 21.5"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "fine",
+       "summary": "kitchen: 21.5°C."
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "inputs": {
+    "room": "kitchen"
+   },
+   "intent": "temperature in the kitchen",
+   "tree": "room-temperature"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "room": "attic"
+    },
+    "output": {
+     "room": "attic",
+     "temperature": 31,
+     "topic": "home/attic/temperature"
+    },
+    "say": "attic: 31°C, warm.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/attic/temperature at mqtt://broker.local -> 1 message"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reading",
+       "node": "got",
+       "observed": true,
+       "summary": "state.q.received = True"
+      },
+      {
+       "chosen": "gte 26",
+       "depth": 0,
+       "kind": "decide",
+       "next": "warm",
+       "node": "reading",
+       "observed": 31,
+       "summary": "state.q.json.temperature = 31"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "warm",
+       "summary": "attic: 31°C, warm."
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "inputs": {
+    "room": "attic"
+   },
+   "intent": "how warm is the attic",
+   "tree": "room-temperature"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "room": "garage"
+    },
+    "reason": "no-reading",
+    "say": "Nothing on home/garage/temperature within 15 s; is the sensor publishing?",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/garage/temperature at mqtt://broker.local -> no message"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "quiet",
+       "node": "got",
+       "observed": false,
+       "summary": "state.q.received = False"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "quiet",
+       "summary": "no-reading: Nothing on home/garage/temperature within 15 s; is the sensor publishing?"
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "inputs": {
+    "room": "garage"
+   },
+   "intent": "temperature in the garage",
+   "tree": "room-temperature"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "room": "hall"
+    },
+    "output": {
+     "gap": {
+      "node": "reading",
+      "observed": null,
+      "on": "state.q.json.temperature",
+      "tree": "room-temperature"
+     }
+    },
+    "reason": "gap",
+    "say": "reading: no branch for state.q.json.temperature = <missing>.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "node": "reading",
+       "observed": null,
+       "on": "state.q.json.temperature",
+       "tree": "room-temperature"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/hall/temperature at mqtt://broker.local -> 1 message"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reading",
+       "node": "got",
+       "observed": true,
+       "summary": "state.q.received = True"
+      },
+      {
+       "depth": 0,
+       "kind": "decide",
+       "next": null,
+       "node": "reading",
+       "summary": "state.q.json.temperature = <missing>: no branch"
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "inputs": {
+    "room": "hall"
+   },
+   "intent": "temperature in the hall",
+   "tree": "room-temperature"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "room": "a-b"
+    },
+    "reason": "transport",
+    "say": "wait: no recorded result for queue mqtt://broker.local home/a-b/temperature",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "wait",
+       "summary": "queue home/a-b/temperature at mqtt://broker.local failed: no recorded result for queue mqtt://broker.local home/a-b/temperature"
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "inputs": {
+    "room": "a-b"
+   },
+   "tree": "room-temperature"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "url": "https://app.example/dashboard"
+    },
+    "output": {
+     "heading": "Welcome back, Barry",
+     "title": "Dashboard",
+     "url": "https://app.example/dashboard"
+    },
+    "say": "Dashboard — Welcome back, Barry",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "loaded",
+       "node": "open",
+       "observed": {
+        "heading": "Welcome back, Barry"
+       },
+       "summary": "browser https://app.example/dashboard -> 200; heading=Welcome back, Barry"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "found",
+       "node": "loaded",
+       "observed": true,
+       "summary": "state.page.ok = True"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "say",
+       "node": "found",
+       "observed": "Welcome back, Barry",
+       "summary": "state.heading = Welcome back, Barry"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "say",
+       "summary": "Dashboard — Welcome back, Barry"
+      }
+     ],
+     "tree": "rendered-headline"
+    },
+    "tree": "rendered-headline"
+   },
+   "inputs": {
+    "url": "https://app.example/dashboard"
+   },
+   "intent": "headline of https://app.example/dashboard",
+   "tree": "rendered-headline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "url": "https://app.example/empty"
+    },
+    "reason": "no-heading",
+    "say": "https://app.example/empty rendered without an h1.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "loaded",
+       "node": "open",
+       "observed": {
+        "heading": null
+       },
+       "summary": "browser https://app.example/empty -> 200; heading=None"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "found",
+       "node": "loaded",
+       "observed": true,
+       "summary": "state.page.ok = True"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "found",
+       "summary": "state.heading = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-heading: https://app.example/empty rendered without an h1."
+      }
+     ],
+     "tree": "rendered-headline"
+    },
+    "tree": "rendered-headline"
+   },
+   "inputs": {
+    "url": "https://app.example/empty"
+   },
+   "intent": "what does https://app.example/empty say",
+   "tree": "rendered-headline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "url": "https://app.example/gone"
+    },
+    "reason": "unexpected-response",
+    "say": "https://app.example/gone answered 404.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "loaded",
+       "node": "open",
+       "observed": {
+        "heading": "Not found"
+       },
+       "summary": "browser https://app.example/gone -> 404; heading=Not found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "not-ok",
+       "node": "loaded",
+       "observed": false,
+       "summary": "state.page.ok = False"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "not-ok",
+       "summary": "unexpected-response: https://app.example/gone answered 404."
+      }
+     ],
+     "tree": "rendered-headline"
+    },
+    "tree": "rendered-headline"
+   },
+   "inputs": {
+    "url": "https://app.example/gone"
+   },
+   "intent": "headline of https://app.example/gone",
+   "tree": "rendered-headline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "device": "/dev/ttyUSB0"
+    },
+    "output": {
+     "device": "/dev/ttyUSB0"
+    },
+    "say": "The modem on /dev/ttyUSB0 is there.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "answered",
+       "node": "at",
+       "observed": {
+        "answer": "OK"
+       },
+       "summary": "serial /dev/ttyUSB0 -> 4 B; answer=OK"
+      },
+      {
+       "chosen": "eq 'OK'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "yes",
+       "node": "answered",
+       "observed": "OK",
+       "summary": "state.answer = OK"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "yes",
+       "summary": "The modem on /dev/ttyUSB0 is there."
+      }
+     ],
+     "tree": "modem-check"
+    },
+    "tree": "modem-check"
+   },
+   "inputs": {},
+   "intent": "is the modem up",
+   "tree": "modem-check"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "device": "/dev/ttyUSB1"
+    },
+    "reason": "transport",
+    "say": "at: /dev/ttyUSB1: no answer within 3 s",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "at",
+       "summary": "serial /dev/ttyUSB1 failed: /dev/ttyUSB1: no answer within 3 s"
+      }
+     ],
+     "tree": "modem-check"
+    },
+    "tree": "modem-check"
+   },
+   "inputs": {
+    "device": "/dev/ttyUSB1"
+   },
+   "intent": "is the modem on /dev/ttyUSB1 up",
+   "tree": "modem-check"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "device": "/dev/ttyACM0"
+    },
+    "reason": "modem-error",
+    "say": "The modem on /dev/ttyACM0 answered ERROR.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "answered",
+       "node": "at",
+       "observed": {
+        "answer": "ERROR"
+       },
+       "summary": "serial /dev/ttyACM0 -> 16 B; answer=ERROR"
+      },
+      {
+       "chosen": "eq 'ERROR'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "error",
+       "node": "answered",
+       "observed": "ERROR",
+       "summary": "state.answer = ERROR"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "error",
+       "summary": "modem-error: The modem on /dev/ttyACM0 answered ERROR."
+      }
+     ],
+     "tree": "modem-check"
+    },
+    "tree": "modem-check"
+   },
+   "inputs": {
+    "device": "/dev/ttyACM0"
+   },
+   "intent": "is the modem on /dev/ttyACM0 up",
+   "tree": "modem-check"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "device": "/dev/ttyS0"
+    },
+    "reason": "device-not-allowed",
+    "say": "at: /dev/ttyS0 is outside this tree's devices ['/dev/ttyUSB*', '/dev/ttyACM*'].",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "modem-check"
+    },
+    "tree": "modem-check"
+   },
+   "inputs": {
+    "device": "/dev/ttyS0"
+   },
+   "intent": "is the modem on /dev/ttyS0 up",
+   "tree": "modem-check"
   }
  ],
  "trees": {
+  "disk-space": {
+   "commands": [
+    "df"
+   ],
+   "description": "How full a filesystem is, from df on the box this tree runs on.",
+   "inputs": {
+    "mount": {
+     "default": "/",
+     "description": "A mount point, or any path on the filesystem to measure",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "disk-space",
+   "nodes": {
+    "df": {
+     "extract": [
+      {
+       "group": 1,
+       "into": "percent",
+       "regex": "(\\d+)%"
+      },
+      {
+       "group": 1,
+       "into": "mounted",
+       "regex": "%\\s+(\\S+)\\s*$"
+      }
+     ],
+     "into": "df",
+     "kind": "observe",
+     "next": "ran",
+     "shell": {
+      "args": [
+       "-P",
+       "{{ inputs.mount }}"
+      ],
+      "command": "df"
+     }
+    },
+    "failed": {
+     "kind": "fail",
+     "reason": "df-failed",
+     "say": "df could not measure {{ inputs.mount }}: {{ state.df.stderr | strip }}"
+    },
+    "fine": {
+     "kind": "done",
+     "output": {
+      "mounted": "{{ state.mounted }}",
+      "percent": "{{ state.pct }}"
+     },
+     "say": "{{ state.mounted }} is {{ state.pct }}% full."
+    },
+    "full": {
+     "kind": "fail",
+     "reason": "disk-full",
+     "say": "{{ state.mounted }} is {{ state.pct }}% full."
+    },
+    "level": {
+     "branches": [
+      {
+       "then": "fine",
+       "when": {
+        "lt": 80
+       }
+      },
+      {
+       "then": "tight",
+       "when": {
+        "lt": 95
+       }
+      },
+      {
+       "else": "full"
+      }
+     ],
+     "kind": "decide",
+     "on": "pct"
+    },
+    "number": {
+     "kind": "set",
+     "next": "level",
+     "set": {
+      "pct": "{{ state.percent | int }}"
+     }
+    },
+    "ran": {
+     "branches": [
+      {
+       "then": "number",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "failed"
+      }
+     ],
+     "kind": "decide",
+     "on": "df.ok"
+    },
+    "tight": {
+     "kind": "done",
+     "output": {
+      "mounted": "{{ state.mounted }}",
+      "percent": "{{ state.pct }}"
+     },
+     "say": "{{ state.mounted }} is {{ state.pct }}% full; make room soon."
+    }
+   },
+   "start": "df",
+   "tags": [
+    "ops",
+    "box",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[how] full is the disk"
+    },
+    {
+     "pattern": "disk space"
+    },
+    {
+     "pattern": "disk space on {mount:word}"
+    }
+   ],
+   "version": 1
+  },
   "github-release": {
    "description": "The latest release of a GitHub repository.",
    "hosts": [
@@ -1675,6 +2769,421 @@
    "triggers": [
     {
      "pattern": "hacker news item {id:int}"
+    }
+   ],
+   "version": 1
+  },
+  "log-errors": {
+   "description": "Error lines in the tail of a log file on this box.",
+   "inputs": {
+    "lines": {
+     "default": 200,
+     "description": "How many lines from the end to look at",
+     "max": 5000,
+     "min": 1,
+     "type": "int"
+    },
+    "path": {
+     "default": "/var/log/syslog",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "log-errors",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "clean",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "else": "some"
+      }
+     ],
+     "kind": "decide",
+     "on": "n"
+    },
+    "clean": {
+     "kind": "done",
+     "output": {
+      "errors": 0,
+      "path": "{{ inputs.path }}"
+     },
+     "say": "No error lines in the last {{ state.seen }} of {{ inputs.path }}."
+    },
+    "count": {
+     "kind": "set",
+     "next": "any",
+     "set": {
+      "n": "{{ state.errors | length }}",
+      "seen": "{{ state.log.lines | length }}"
+     }
+    },
+    "exists": {
+     "branches": [
+      {
+       "then": "count",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "missing"
+      }
+     ],
+     "kind": "decide",
+     "on": "log.exists"
+    },
+    "missing": {
+     "kind": "fail",
+     "reason": "no-such-file",
+     "say": "{{ inputs.path }} is not on this box."
+    },
+    "read": {
+     "extract": [
+      {
+       "all": true,
+       "into": "errors",
+       "regex": "(?im)^.*\\berror\\b.*$"
+      }
+     ],
+     "file": {
+      "path": "{{ inputs.path }}",
+      "tail": "{{ inputs.lines }}"
+     },
+     "into": "log",
+     "kind": "observe",
+     "next": "exists"
+    },
+    "some": {
+     "kind": "done",
+     "output": {
+      "errors": "{{ state.n }}",
+      "lines": "{{ state.errors }}",
+      "path": "{{ inputs.path }}"
+     },
+     "say": "{{ state.n }} error line(s) in the last {{ state.seen }} of {{ inputs.path }}; latest: {{ state.errors | last | strip }}"
+    }
+   },
+   "paths": [
+    "/var/log"
+   ],
+   "start": "read",
+   "tags": [
+    "ops",
+    "box",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "errors in the log"
+    },
+    {
+     "pattern": "errors in {path:word}"
+    }
+   ],
+   "version": 1
+  },
+  "modem-check": {
+   "description": "Whether a modem on a serial line answers AT.",
+   "devices": [
+    "/dev/ttyUSB*",
+    "/dev/ttyACM*"
+   ],
+   "inputs": {
+    "device": {
+     "default": "/dev/ttyUSB0",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "modem-check",
+   "nodes": {
+    "answered": {
+     "branches": [
+      {
+       "then": "yes",
+       "when": {
+        "eq": "OK"
+       }
+      },
+      {
+       "then": "error",
+       "when": {
+        "eq": "ERROR"
+       }
+      },
+      {
+       "else": "odd"
+      }
+     ],
+     "kind": "decide",
+     "on": "answer"
+    },
+    "at": {
+     "extract": [
+      {
+       "into": "answer",
+       "regex": "(OK|ERROR)"
+      }
+     ],
+     "into": "s",
+     "kind": "observe",
+     "next": "answered",
+     "retries": 1,
+     "serial": {
+      "baud": 9600,
+      "device": "{{ inputs.device }}",
+      "read_until": "\n",
+      "write": "AT\r\n"
+     },
+     "timeout": 3
+    },
+    "error": {
+     "kind": "fail",
+     "reason": "modem-error",
+     "say": "The modem on {{ inputs.device }} answered ERROR."
+    },
+    "odd": {
+     "kind": "fail",
+     "reason": "odd-answer",
+     "say": "{{ inputs.device }} answered {{ state.s.body | strip }} to AT."
+    },
+    "yes": {
+     "kind": "done",
+     "output": {
+      "device": "{{ inputs.device }}"
+     },
+     "say": "The modem on {{ inputs.device }} is there."
+    }
+   },
+   "start": "at",
+   "tags": [
+    "hardware",
+    "serial"
+   ],
+   "triggers": [
+    {
+     "pattern": "is the modem up"
+    },
+    {
+     "pattern": "is the modem on {device:word} up"
+    }
+   ],
+   "version": 1
+  },
+  "rendered-headline": {
+   "description": "The main heading of a page that needs a script to render, through a real browser.",
+   "hosts": [
+    "*"
+   ],
+   "inputs": {
+    "url": {
+     "pattern": "^https?://.+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "rendered-headline",
+   "nodes": {
+    "found": {
+     "branches": [
+      {
+       "then": "say",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "none"
+      }
+     ],
+     "kind": "decide",
+     "on": "heading"
+    },
+    "loaded": {
+     "branches": [
+      {
+       "then": "found",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "not-ok"
+      }
+     ],
+     "kind": "decide",
+     "on": "page.ok"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-heading",
+     "say": "{{ state.page.url }} rendered without an h1."
+    },
+    "not-ok": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "{{ inputs.url }} answered {{ state.page.status }}."
+    },
+    "open": {
+     "browser": {
+      "url": "{{ inputs.url }}",
+      "wait_for": "h1"
+     },
+     "extract": [
+      {
+       "css": "h1",
+       "into": "heading"
+      }
+     ],
+     "into": "page",
+     "kind": "observe",
+     "next": "loaded",
+     "retries": 0,
+     "timeout": 30
+    },
+    "say": {
+     "kind": "done",
+     "output": {
+      "heading": "{{ state.heading | strip }}",
+      "title": "{{ state.page.title }}",
+      "url": "{{ state.page.url }}"
+     },
+     "say": "{{ state.page.title }} — {{ state.heading | strip }}"
+    }
+   },
+   "start": "open",
+   "tags": [
+    "web",
+    "browser",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "headline of {url:url}"
+    },
+    {
+     "pattern": "what does {url:url} say"
+    }
+   ],
+   "version": 1
+  },
+  "room-temperature": {
+   "description": "The temperature a room's sensor last published, over MQTT.",
+   "hosts": [
+    "broker.local"
+   ],
+   "inputs": {
+    "room": {
+     "default": "kitchen",
+     "pattern": "^[a-z0-9-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "room-temperature",
+   "nodes": {
+    "cold": {
+     "kind": "done",
+     "output": {
+      "room": "{{ inputs.room }}",
+      "temperature": "{{ state.q.json.temperature }}",
+      "topic": "{{ state.q.message.topic }}"
+     },
+     "say": "{{ inputs.room }}: {{ state.q.json.temperature }}°C, cold."
+    },
+    "fine": {
+     "kind": "done",
+     "output": {
+      "room": "{{ inputs.room }}",
+      "temperature": "{{ state.q.json.temperature }}",
+      "topic": "{{ state.q.message.topic }}"
+     },
+     "say": "{{ inputs.room }}: {{ state.q.json.temperature }}°C."
+    },
+    "got": {
+     "branches": [
+      {
+       "then": "reading",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "quiet"
+      }
+     ],
+     "kind": "decide",
+     "on": "q.received"
+    },
+    "quiet": {
+     "kind": "fail",
+     "reason": "no-reading",
+     "say": "Nothing on home/{{ inputs.room }}/temperature within 15 s; is the sensor publishing?"
+    },
+    "reading": {
+     "branches": [
+      {
+       "then": "cold",
+       "when": {
+        "lt": 16
+       }
+      },
+      {
+       "then": "fine",
+       "when": {
+        "lt": 26
+       }
+      },
+      {
+       "then": "warm",
+       "when": {
+        "gte": 26
+       }
+      }
+     ],
+     "kind": "decide",
+     "on": "q.json.temperature"
+    },
+    "wait": {
+     "into": "q",
+     "kind": "observe",
+     "next": "got",
+     "queue": {
+      "topic": "home/{{ inputs.room }}/temperature",
+      "url": "mqtt://broker.local"
+     },
+     "retries": 0,
+     "timeout": 15
+    },
+    "warm": {
+     "kind": "done",
+     "output": {
+      "room": "{{ inputs.room }}",
+      "temperature": "{{ state.q.json.temperature }}",
+      "topic": "{{ state.q.message.topic }}"
+     },
+     "say": "{{ inputs.room }}: {{ state.q.json.temperature }}°C, warm."
+    }
+   },
+   "start": "wait",
+   "tags": [
+    "home",
+    "mqtt"
+   ],
+   "topics": [
+    "home/+/temperature"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] temperature in the {room:word}"
+    },
+    {
+     "pattern": "how warm is the {room:word}"
     }
    ],
    "version": 1

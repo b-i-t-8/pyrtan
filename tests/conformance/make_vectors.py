@@ -43,6 +43,26 @@ CASES: list[dict] = [
     {"intent": "weather in Paris"},
     {"tree": "hacker-news-item", "inputs": {"id": 101}},
     {"tree": "hacker-news", "inputs": {"count": 2}},
+    # The other sources, answered by the same fixture.
+    {"intent": "how full is the disk"},
+    {"intent": "disk space on /data"},
+    {"intent": "disk space on /nowhere"},
+    {"intent": "errors in the log"},
+    {"intent": "errors in /var/log/quiet.log"},
+    {"intent": "errors in /var/log/nothing.log"},
+    {"intent": "errors in /etc/passwd"},
+    {"intent": "temperature in the kitchen"},
+    {"intent": "how warm is the attic"},
+    {"intent": "temperature in the garage"},
+    {"intent": "temperature in the hall"},
+    {"tree": "room-temperature", "inputs": {"room": "a-b"}},
+    {"intent": "headline of https://app.example/dashboard"},
+    {"intent": "what does https://app.example/empty say"},
+    {"intent": "headline of https://app.example/gone"},
+    {"intent": "is the modem up"},
+    {"intent": "is the modem on /dev/ttyUSB1 up"},
+    {"intent": "is the modem on /dev/ttyACM0 up"},
+    {"intent": "is the modem on /dev/ttyS0 up"},
 ]
 
 

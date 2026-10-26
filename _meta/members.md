@@ -163,7 +163,10 @@ gives each trusted member every tree it should run as a `Keep` of
 `--handout DIR` (`$PYRTAN_HANDOUT`), which are trees the hub hands out
 and does not run itself. The member's `Kept` confirms; a changed tree is
 sent again. The member holds them in its store like any blob, so they
-survive a reload, and announces their names as its capabilities. The hub
+survive a reload, and announces their names as its capabilities. Only
+trees whose sources are `http` are handed out: a phone has no files,
+programs, serial lines or broker sockets of the box's, and no browser of
+its own to drive, so those stay on the hub (`io.md`). The hub
 takes the names it handed out and ignores the rest, and the triggers it
 routes by are its own copy's, never the member's word.
 
