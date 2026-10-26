@@ -13,6 +13,12 @@ Standard library only; no pyrtan import, so it runs before anything is
 installed.
 
     python3 site/snapshot.py SEEDS OUT [--previous URL_OR_FILE ...]
+                             [--reports OUT --previous-reports URL_OR_FILE ...]
+
+With ``--reports`` it also asks each seed for ``/reports``, the gap
+reports hubs that opted in (``--report-gaps``) gossip for catalog trees,
+merges them the same way, and writes ``rendezvous/reports.json``; the
+catalog page shows them beside each tree.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 TTL = 7 * 86400
+REPORT_TTL = 30 * 86400
 TIMEOUT = 8.0
 
 
@@ -58,15 +65,52 @@ def merge(into: dict[str, dict[str, Any]], entries: Any, via: str, now: float) -
     return taken
 
 
+def merge_reports(into: dict[str, dict[str, Any]], rows: Any, now: float) -> int:
+    """One row per gap: the hub's view already sums reporters, so a newer
+    or larger row for the same gap replaces an older one."""
+    taken = 0
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict) or not isinstance(r.get("id"), str) or "@" not in r["id"] or not isinstance(r.get("node"), str):
+            continue
+        try:
+            last = min(float(r.get("last", 0)), now)
+            count = max(1, int(r.get("count", 1)))
+            reporters = max(1, int(r.get("reporters", 1)))
+        except (TypeError, ValueError):
+            continue
+        if now - last >= REPORT_TTL:
+            continue
+        key = json.dumps([r["id"], r["node"], r.get("on"), r.get("observed")], sort_keys=True, ensure_ascii=False, default=str)
+        current = into.get(key)
+        if current is not None and (current["last"], current["count"]) >= (last, count):
+            continue
+        observed = r.get("observed")
+        into[key] = {"id": r["id"][:120], "node": r["node"][:80], "on": str(r.get("on", ""))[:120], "observed": observed if isinstance(observed, (str, int, float, bool)) or observed is None else str(observed)[:80], "count": count, "reporters": reporters, "last": last}
+        taken += 1
+    return taken
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("seeds", help="seeds.json, a path or URL")
     ap.add_argument("out", help="where to write directory.json")
     ap.add_argument("--previous", action="append", default=[], help="an earlier directory.json to keep entries from (URL or path; repeatable, first that answers wins)")
+    ap.add_argument("--reports", default=None, help="also write the gap reports the seeds carry to this reports.json")
+    ap.add_argument("--previous-reports", action="append", default=[], help="an earlier reports.json to keep rows from (URL or path; repeatable, first that answers wins)")
     args = ap.parse_args(argv)
     now = time.time()
     hubs: dict[str, dict[str, Any]] = {}
     report: dict[str, Any] = {"answered": [], "silent": [], "previous": None}
+    reports: dict[str, dict[str, Any]] = {}
+    if args.reports:
+        for source in args.previous_reports:
+            try:
+                prev = fetch(source)
+            except Exception:
+                continue
+            if isinstance(prev, dict) and isinstance(prev.get("reports"), list):
+                merge_reports(reports, prev["reports"], now)
+                break
 
     for source in args.previous:
         try:
@@ -94,6 +138,13 @@ def main(argv: list[str] | None = None) -> int:
             report["answered"].append(seed)
         else:
             report["silent"].append({"seed": seed, "error": "not a directory"})
+        if args.reports:
+            try:
+                r = fetch(f"{seed}/reports")
+                if isinstance(r, dict):
+                    merge_reports(reports, r.get("reports"), now)
+            except Exception:
+                pass
 
     out = {
         "pyrtan-directory": 1,
@@ -105,6 +156,12 @@ def main(argv: list[str] | None = None) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
     print(f"snapshot: {len(out['hubs'])} hub(s); {len(report['answered'])} seed(s) answered, {len(report['silent'])} silent" + (f"; kept entries from {report['previous']}" if report["previous"] else ""))
+    if args.reports:
+        rows = sorted(reports.values(), key=lambda r: (-r["count"], -r["last"], r["id"]))
+        rpath = Path(args.reports)
+        rpath.parent.mkdir(parents=True, exist_ok=True)
+        rpath.write_text(json.dumps({"pyrtan-reports": 1, "as_of": out["as_of"], "count": len(rows), "reports": rows}, indent=2) + "\n", encoding="utf-8")
+        print(f"snapshot: {len(rows)} gap report(s) -> {rpath}")
     return 0
 
 

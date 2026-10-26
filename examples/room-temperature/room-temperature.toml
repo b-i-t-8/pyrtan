@@ -4,7 +4,8 @@
 # checked at run time when they come from the sentence.
 
 name = "room-temperature"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "The temperature a room's sensor last published, over MQTT."
 tags = ["home", "mqtt"]
 license = "MIT"

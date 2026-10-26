@@ -12,7 +12,7 @@ from pyrtan.cli import main
 from pyrtan.federation import Federation, Remote, sign, verify
 from pyrtan.hub import Hub
 from pyrtan.service import Server, Service, http_json
-from conftest import EXAMPLES, FIXTURES
+from conftest import EXAMPLES, FIXTURES, ROOT
 
 ECHO = """
 name = "{name}"
@@ -757,3 +757,96 @@ say = "{{ state.last.stdout }}"
     finally:
         hub.stop()
         srv.stop()
+
+
+GAPPY = '''
+name = "gappy"
+version = 2
+namespace = "pyrtan"
+description = "a tree with a decide that covers one value"
+start = "go"
+
+[inputs.v]
+type = "int"
+
+[nodes.go]
+kind = "set"
+set = { x = "{{ inputs.v }}" }
+next = "pick"
+
+[nodes.pick]
+kind = "decide"
+on = "x"
+branches = [{ when = { eq = 1 }, then = "one" }]
+
+[nodes.one]
+kind = "done"
+say = "one"
+'''
+
+
+def test_gap_reports_travel_with_announces_when_a_hub_opts_in(tmp_path):
+    (tmp_path / "g").mkdir()
+    (tmp_path / "g" / "gappy.toml").write_text(GAPPY)
+    (tmp_path / "g" / "plain.toml").write_text(ECHO.format(name="plain", word="plain"))
+    from pyrtan.hub import serve_hub
+
+    a_hub, a_srv = serve_hub(port=0, quiet=True, name="reporter", trees=[tmp_path / "g"], federate=True, report_gaps=True, poll_every=60)
+    b_hub, b_srv = serve_hub(port=0, quiet=True, name="carrier", federate=True, poll_every=60, state=str(tmp_path / "b.json"))
+    try:
+        # Two gaps on the catalog tree (namespace + version), seen twice and once.
+        for v in (7, 7, 9):
+            out = http_json("POST", f"{a_srv.url}/run", {"tree": "gappy", "inputs": {"v": v}})[1]
+            assert out["reason"] == "gap"
+        own = sorted(a_hub.gap_reports(), key=lambda r: r["observed"])
+        assert [(r["id"], r["node"], r["on"], r["observed"], r["count"]) for r in own] == [("pyrtan/gappy@2", "pick", "state.x", 7, 2), ("pyrtan/gappy@2", "pick", "state.x", 9, 1)]
+        _, view = http_json("GET", f"{a_srv.url}/reports")  # public, like /directory
+        assert view["reporting"] is True and view["count"] == 2 and view["reports"][0] == {"id": "pyrtan/gappy@2", "node": "pick", "on": "state.x", "observed": 7, "count": 2, "reporters": 1, "last": view["reports"][0]["last"]}
+        # B follows A: A's announce carries the reports; B keeps them, says who reported, and passes them on.
+        assert http_json("POST", f"{b_srv.url}/follow", {"url": a_srv.url})[0] == 200
+        _, bview = http_json("GET", f"{b_srv.url}/reports")
+        assert bview["reporting"] is False and bview["count"] == 2 and bview["reports"][0]["reporters"] == 1
+        assert {r["reporter"] for r in b_hub.federation.reports.values()} == {a_srv.url}
+        assert any(r["id"] == "pyrtan/gappy@2" for r in b_hub.federation.report_gossip())
+        # The same gap reported by a second hub counts that hub too; B's own announce (not opted in) carries only what it heard.
+        b_hub.federation.merge_reports([{"id": "pyrtan/gappy@2", "node": "pick", "on": "state.x", "observed": 7, "count": 5, "last": time.time()}], via="http://other.example")
+        row = next(r for r in http_json("GET", f"{b_srv.url}/reports")[1]["reports"] if r["observed"] == 7)
+        assert row["count"] == 7 and row["reporters"] == 2
+        # Shaping: never an input, no id outside namespace/name@version, no future, no old news, long values summarised.
+        now = time.time()
+        assert b_hub.federation.merge_reports([{"id": "gappy", "node": "pick", "on": "x", "observed": 1}, {"id": "pyrtan/gappy@2", "node": "pick", "on": "x", "observed": 1, "last": now - 60 * 86400}, "junk"], via="x") == 0
+        assert b_hub.federation.merge_reports([{"id": "a/b@1", "node": "n", "on": "o", "observed": "v" * 200, "last": now + 1e6, "count": "3"}], via="http://x") == 1
+        shaped = next(r for r in b_hub.federation.reports.values() if r["id"] == "a/b@1")
+        assert shaped["observed"] == "<str>" and shaped["count"] == 3 and shaped["last"] <= time.time() and shaped["reporter"] == "http://x"
+        assert b_hub.federation.merge_reports([{"id": "a/b@1", "node": "n", "on": "o", "observed": {"k": 1}, "reporter": "https://r.example/"}], via="http://x") == 1
+        assert any(r["reporter"] == "https://r.example" and r["observed"] == "<dict>" for r in b_hub.federation.reports.values())
+        # Reports survive a restart through the state file.
+        b_hub.federation._save()
+        again = Federation(b_srv.url, state=str(tmp_path / "b.json"))
+        assert {r["id"] for r in again.reports.values()} == {"pyrtan/gappy@2", "a/b@1"}
+        # A tree without a namespace reports nothing.
+        assert not any(r["id"].endswith("/plain@1") for r in a_hub.gap_reports())
+    finally:
+        a_hub.stop(); a_srv.stop(); b_hub.stop(); b_srv.stop()
+
+
+def test_reports_command_and_snapshot(two, tmp_path, capsys, monkeypatch):
+    a, b = two
+    a.fed.report_gaps = True
+    a.fed.own_reports = lambda: [{"id": "pyrtan/weather@1", "node": "code", "on": "state.code", "observed": 99, "count": 4, "last": time.time()}]
+    assert main(["reports", "--at", a.url]) == 0
+    assert "pyrtan/weather@1 code: state.code = 99  ×4" in capsys.readouterr().out
+    assert main(["reports", "nobody/x", "--at", a.url]) == 0 and "no gap reports" in capsys.readouterr().out
+    assert main(["reports", "--at", a.url, "--json"]) == 0 and json.loads(capsys.readouterr().out)["reports"][0]["id"] == "pyrtan/weather@1"
+    # The site's snapshot asks the seeds for /reports and bakes reports.json; the command reads that when no hub is given.
+    import subprocess, sys as _sys
+
+    seeds = tmp_path / "seeds.json"
+    seeds.write_text(json.dumps({"hubs": [a.url]}))
+    out = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(tmp_path / "directory.json"), "--reports", str(tmp_path / "reports.json")], capture_output=True, text=True, cwd=str(ROOT))
+    assert out.returncode == 0, out.stderr
+    baked = json.loads((tmp_path / "reports.json").read_text())
+    assert baked["count"] == 1 and baked["reports"][0]["id"] == "pyrtan/weather@1" and baked["reports"][0]["count"] == 4
+    monkeypatch.setenv("PYRTAN_REPORTS", str(tmp_path / "reports.json"))
+    monkeypatch.delenv("PYRTAN_AT", raising=False)
+    assert main(["reports"]) == 0 and "pyrtan/weather@1 code" in capsys.readouterr().out

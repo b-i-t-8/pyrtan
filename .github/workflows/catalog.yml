@@ -1,0 +1,31 @@
+# The catalog gate: every pull request that touches a tree runs the same
+# checks `pyrtan publish` ran locally, with what git knows added: which
+# files changed, who opened the pull request, and what version each tree
+# had on main. A maintainer merges when it is green; the pages workflow
+# publishes on merge.
+
+name: catalog
+
+on:
+  pull_request:
+    paths:
+      - "catalog/**"
+      - "examples/**"
+      - "site/gate.py"
+      - "src/pyrtan/catalog.py"
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run pytest -q
+      - run: uv run pyrtan check examples catalog --quiet
+      - run: uv run python site/gate.py --base "origin/${{ github.base_ref }}" --author "${{ github.event.pull_request.user.login }}"

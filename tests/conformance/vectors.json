@@ -2282,6 +2282,7 @@
    },
    "license": "MIT",
    "name": "disk-space",
+   "namespace": "pyrtan",
    "nodes": {
     "df": {
      "extract": [
@@ -2394,7 +2395,7 @@
      "pattern": "disk space on {mount:word}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "github-release": {
    "description": "The latest release of a GitHub repository.",
@@ -2410,6 +2411,7 @@
    },
    "license": "MIT",
    "name": "github-release",
+   "namespace": "pyrtan",
    "nodes": {
     "fetch": {
      "extract": [
@@ -2516,7 +2518,7 @@
      "pattern": "latest {repo:word} release"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "hacker-news": {
    "description": "Top stories on Hacker News, from its public API.",
@@ -2534,6 +2536,7 @@
    },
    "license": "MIT",
    "name": "hacker-news",
+   "namespace": "pyrtan",
    "nodes": {
     "any": {
      "branches": [
@@ -2642,7 +2645,7 @@
      "pattern": "top {count:int} stories on hacker news"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "hacker-news-item": {
    "description": "One Hacker News item by id: title, url, score, author.",
@@ -2658,6 +2661,7 @@
    },
    "license": "MIT",
    "name": "hacker-news-item",
+   "namespace": "pyrtan",
    "nodes": {
     "fetch": {
      "extract": [
@@ -2771,7 +2775,7 @@
      "pattern": "hacker news item {id:int}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "log-errors": {
    "description": "Error lines in the tail of a log file on this box.",
@@ -2790,6 +2794,7 @@
    },
    "license": "MIT",
    "name": "log-errors",
+   "namespace": "pyrtan",
    "nodes": {
     "any": {
      "branches": [
@@ -2885,7 +2890,7 @@
      "pattern": "errors in {path:word}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "modem-check": {
    "description": "Whether a modem on a serial line answers AT.",
@@ -2901,6 +2906,7 @@
    },
    "license": "MIT",
    "name": "modem-check",
+   "namespace": "pyrtan",
    "nodes": {
     "answered": {
      "branches": [
@@ -2973,7 +2979,7 @@
      "pattern": "is the modem on {device:word} up"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "rendered-headline": {
    "description": "The main heading of a page that needs a script to render, through a real browser.",
@@ -2988,6 +2994,7 @@
    },
    "license": "MIT",
    "name": "rendered-headline",
+   "namespace": "pyrtan",
    "nodes": {
     "found": {
      "branches": [
@@ -3070,7 +3077,7 @@
      "pattern": "what does {url:url} say"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "room-temperature": {
    "description": "The temperature a room's sensor last published, over MQTT.",
@@ -3086,6 +3093,7 @@
    },
    "license": "MIT",
    "name": "room-temperature",
+   "namespace": "pyrtan",
    "nodes": {
     "cold": {
      "kind": "done",
@@ -3186,7 +3194,7 @@
      "pattern": "how warm is the {room:word}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "site-status": {
    "description": "Whether a web site answers, and how quickly.",
@@ -3202,6 +3210,7 @@
    },
    "license": "MIT",
    "name": "site-status",
+   "namespace": "pyrtan",
    "nodes": {
     "erroring": {
      "kind": "fail",
@@ -3299,7 +3308,7 @@
      "pattern": "[check] status of {host:host}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "weather": {
    "description": "Current weather for a place, from Open-Meteo.",
@@ -3331,6 +3340,7 @@
    },
    "license": "MIT",
    "name": "weather",
+   "namespace": "pyrtan",
    "nodes": {
     "clear": {
      "kind": "set",
@@ -3591,7 +3601,7 @@
      "pattern": "how [hot|cold|warm] is it in {place}"
     }
    ],
-   "version": 1
+   "version": 2
   }
  }
 }

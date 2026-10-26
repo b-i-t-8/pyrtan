@@ -17,6 +17,7 @@ A tree is one TOML file. This is the whole of it.
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
+| `namespace` | for a catalog | Who publishes the tree (lowercase letters, digits, dashes). The catalog id is `namespace/name`; a hub reports a tree's gaps to its author only when it has one. |
 | `triggers` | no | Sentences the tree answers to (below). |
 | `inputs` | no | What the tree needs (below). |
 | `nodes` | yes | The nodes (below). |

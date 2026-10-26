@@ -306,9 +306,13 @@ Five trees, all against real public APIs, all tested offline:
    rules it reads a page, and the trace reads the same. One fixture
    answers for every source, in both runtimes. Design in
    [`io.md`](io.md).
-8. **v0.8: the catalog grows up.** Namespaces, publishing through pull
-   requests with the checker as the gate, and opt-in gap reporting from
-   hubs back to a tree's author, carried as another federation topic.
+8. **v0.8, built: the catalog grows up.** Namespaces (`namespace/name`,
+   the tree's own line), publishing through pull requests with the
+   checker as the gate (`pyrtan publish`, `site/gate.py`, the `catalog`
+   workflow, `OWNERS` per namespace), and opt-in gap reporting
+   (`--report-gaps`) carried as a federation topic like the directory,
+   baked hourly into pyrtan.com and shown beside each catalog tree.
+   Design in [`platform.md`](platform.md) §2.8.
 9. **Beside the swarm, never inside it:** an authoring aid that reads gaps
    and drafts the branch for a person to accept.
 

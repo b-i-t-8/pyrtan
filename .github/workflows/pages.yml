@@ -1,7 +1,8 @@
 # pyrtan.com: this repository's GitHub Pages site. On every push to main
 # and once an hour, build the landing page, the console (from this
-# checkout's pyrtan), the catalog (from examples/), the seed list and a
-# snapshot of the directory as the seeds know it, and publish them. Set the
+# checkout's pyrtan), the catalog (from examples/ and catalog/, through the
+# gate), the seed list and a snapshot of the directory and of the gap
+# reports as the seeds know them, and publish them. Set the
 # repository's Pages source to "GitHub Actions" and its custom domain to
 # pyrtan.com; site/CNAME carries the domain.
 

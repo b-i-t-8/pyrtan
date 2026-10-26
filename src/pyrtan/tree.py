@@ -163,6 +163,7 @@ class Tree:
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
     license: str = ""
     language: Language = field(default_factory=Language)
+    namespace: str = ""                                 # who published it: the catalog id is namespace/name
     paths: list[str] = field(default_factory=list)      # what ``file`` nodes may reach
     commands: list[str] = field(default_factory=list)   # what ``shell`` nodes may run
     devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
@@ -189,6 +190,11 @@ class Tree:
             elif host == allowed:
                 return True
         return False
+
+    @property
+    def id(self) -> str:
+        """``namespace/name`` in a catalog; just the name without one."""
+        return f"{self.namespace}/{self.name}" if self.namespace else self.name
 
     def allowed(self, source: str, spec: dict[str, Any]) -> tuple[str, str] | None:
         """Why a rendered request to ``source`` is outside this tree's
@@ -243,6 +249,7 @@ class Tree:
         return {
             "name": self.name,
             "version": self.version,
+            **({"namespace": self.namespace} if self.namespace else {}),
             "description": self.description,
             "tags": self.tags,
             "hosts": self.hosts,
@@ -300,6 +307,9 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     license_ = raw.get("license", "")
     if not isinstance(license_, str):
         raise TreeError(f"{name}: 'license' must be a string such as \"MIT\" (an SPDX identifier)")
+    namespace = raw.get("namespace", "")
+    if not isinstance(namespace, str) or (namespace and not NAME.match(namespace)):
+        raise TreeError(f"{name}: 'namespace' must be lowercase letters, digits and dashes (who publishes the tree), got {namespace!r}")
 
     try:
         language = Language.from_raw(raw.get("language"), "language")
@@ -360,7 +370,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, **lists)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, **lists)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))

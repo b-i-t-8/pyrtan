@@ -3,7 +3,8 @@
 # `devices` is the allow-list. An observe retries once on no answer.
 
 name = "modem-check"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "Whether a modem on a serial line answers AT."
 tags = ["hardware", "serial"]
 license = "MIT"

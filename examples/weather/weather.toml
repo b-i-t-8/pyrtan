@@ -3,7 +3,8 @@
 # own decision so a failure says which hop failed.
 
 name = "weather"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "Current weather for a place, from Open-Meteo."
 tags = ["weather", "read-only"]
 license = "MIT"

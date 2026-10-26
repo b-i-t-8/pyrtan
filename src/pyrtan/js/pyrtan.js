@@ -540,7 +540,7 @@
     constructor(raw) {
       this.raw = raw;
       this.name = raw.name; this.version = raw.version || 1; this.description = raw.description || "";
-      this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || "";
+      this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || ""; this.namespace = raw.namespace || "";
       for (const k of LIST_NAMES) this[k] = raw[k] || [];
       this.language = raw.language || {};
       this.triggers = (raw.triggers || []).map((t) => (typeof t === "string" ? { pattern: t } : t));
@@ -553,6 +553,7 @@
       for (const [id, spec] of Object.entries(raw.nodes || {})) this.nodes[id] = { id, kind: spec.kind, spec, get: (k, d) => (spec[k] !== undefined ? spec[k] : d), next: spec.next };
     }
     node(id) { const n = this.nodes[id]; if (!n) throw new TreeError(`${this.name}: no node ${pyrepr(id)}`); return n; }
+    get id() { return this.namespace ? `${this.namespace}/${this.name}` : this.name; }
     hostAllowed(url) {
       let host = "";
       try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return false; }
@@ -607,7 +608,9 @@
         if (s.description) d.description = s.description;
         inputs[n] = d;
       }
-      const cap = { name: this.name, version: this.version, description: this.description, tags: this.tags, hosts: this.hosts };
+      const cap = { name: this.name, version: this.version };
+      if (this.namespace) cap.namespace = this.namespace;
+      Object.assign(cap, { description: this.description, tags: this.tags, hosts: this.hosts });
       for (const k of LIST_NAMES) if (this[k].length) cap[k] = this[k];
       return Object.assign(cap, { sources: this.sources(), license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs });
     }
@@ -905,5 +908,5 @@
     return outcome(d.status || "error", d.tree || fallbackTree, { say: d.say === undefined ? null : d.say, output: d.output === undefined ? null : d.output, reason: d.reason === undefined ? null : d.reason, question: d.question === undefined ? null : d.question, snapshot: d.snapshot === undefined ? null : d.snapshot, trace, inputs: d.inputs || {} });
   }
 
-  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.7.0" };
+  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.8.0" };
 });

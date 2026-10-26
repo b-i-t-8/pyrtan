@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Phase 1 built, v0.2.** Tokens, CORS, persistent gaps, the egress policy, the catalog client and the console are in this repository and tested. The site is this repository's GitHub Pages deployment, described in [`../site/README.md`](../site/README.md). Hosting is designed, not built. |
+| **Status** | **Phases 1 and 2 built (v0.2, v0.8).** Tokens, CORS, persistent gaps, the egress policy, the catalog client and the console (Phase 1); namespaces, publishing by pull request through the gate, and gap reports gossiped back to authors (Phase 2, §2.8). The site is this repository's GitHub Pages deployment, described in [`../site/README.md`](../site/README.md). Hosting is designed, not built. |
 | **Date** | 2026-10-25 |
 | **Decision** | pyrtan.com is three separate things on one invariant: a static catalog of trees anyone can pull, a static console that talks only to the public hub API, and (later) paid hosting that runs the unmodified open-source hub per tenant. A caller cannot tell a hosted hub from a self-hosted one, so every piece works for both. |
 | **Where** | This repository for everything open: the runtime, the client, the console, the catalog (`examples/`) and the site (`site/`, published by the `pages` workflow). A private repository for the control plane, when there is one. |
@@ -100,6 +100,46 @@ one; `pyrtan index` leaves out a tree without one unless told otherwise.
 Trees are data, not part of the program, so the AGPL does not reach them;
 a declared licence is what lets a stranger use what they pulled.
 
+Since v0.8 a catalog tree also carries a `namespace`: who publishes it.
+The id is `namespace/name`; `pyrtan pull weather` takes the one there is
+and asks when two namespaces have it; `pyrtan pull barry/weather` says
+which. The index is built over several directories with `--copy`, which
+lays the files out as `namespace/name.toml` so the served catalog has one
+shape whatever the sources look like.
+
+### 2.8 Publishing and gap reports (`catalog.py`, `federation.py`; built, v0.8)
+
+**Publishing is a pull request.** The repository holds `examples/` (the
+`pyrtan` namespace) and `catalog/<namespace>/<name>.toml`, each namespace
+with an `OWNERS` file of GitHub logins. `pyrtan publish FILE --into
+CHECKOUT --owner LOGIN` places the file, writes `OWNERS` for a new
+namespace, and runs the gate; the `catalog` workflow runs the same gate
+on every pull request with what git adds: the changed files, the
+author, the version each tree had on `main`. The gate (`catalog.gate`,
+`site/gate.py`) refuses a tree that does not load clean, lacks a licence
+or a namespace, sits under the wrong directory or file name, shares an id
+with another, is changed by someone not in its namespace's `OWNERS`, or
+changed without a version bump. A maintainer merges; the `pages`
+workflow publishes. There is no account, no API and no model in the
+review; the "first small API" Phase 2 expected turned out to be GitHub's
+pull request, which already exists.
+
+**Gaps come back to the author** as a federation topic, the way the
+directory does. A hub started with `--report-gaps` shapes the gaps its
+catalog trees met into reports (`namespace/name@version`, node, the path
+decided on, the value no branch covered, count, when; a value longer
+than eighty characters or not a scalar becomes its type; never the
+inputs or the rest of the state) and puts them in its announces. Every
+federated hub keeps what it hears, one row per reporter and gap, with
+the merge rules the directory uses (newer wins, nothing from the future,
+thirty days, two thousand rows), passes it on, and serves `/reports`
+publicly with counts and reporters summed. The site's snapshot asks the
+seeds for `/reports` hourly and bakes `rendezvous/reports.json`; the
+catalog page shows each tree's gaps beside it; `pyrtan reports
+NAMESPACE/NAME` reads a hub or the baked file. A tree without a namespace
+reports nothing: there is nobody to report to. Opting in is the
+operator's, per hub, and off by default.
+
 ### 2.5 The console (`page.py`; built)
 
 One HTML file, no build, no external assets. Served by a hub or service
@@ -152,11 +192,12 @@ fixtures and runs the same commands on their own box.
    repository. The site: pyrtan.com as static pages, `/console/` from
    `pyrtan console --out`, `/catalog/` from the catalog repository's CI.
    Hosting needs nothing yet.
-2. **Phase 2.** Namespaces in the catalog (`someone/tree`), publishing
-   through pull requests with the checker as the gate, and opt-in gap
-   reporting: a hub that holds a catalog tree can send that tree's gaps to
-   the catalog, so an author learns where reality disagreed with their
-   tree across every hub that runs it. This needs the first small API.
+2. **Phase 2 (built, v0.8).** Namespaces in the catalog
+   (`someone/tree`), publishing through pull requests with the checker as
+   the gate, and opt-in gap reporting carried through the federation to
+   pyrtan.com, so an author learns where reality disagreed with their
+   tree across every hub that runs it. No API was needed after all: the
+   pull request and the gossip were enough (§2.8).
 3. **Phase 3.** The control plane: per-tenant hubs, secrets, hosted watch,
    retention, billing.
 
