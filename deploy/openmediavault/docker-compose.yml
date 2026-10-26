@@ -57,6 +57,15 @@ services:
     volumes:
       - hub-state:/state
       # - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/handout:/handout   # with PYRTAN_HANDOUT above: trees the phones run
+    # Trees that read files, run programs or open serial lines reach this
+    # container, not the NAS: mount what they may see (read-only where you
+    # can) and pass the devices through; the tree's own paths/commands/
+    # devices lists are the allow-lists. PYRTAN_EGRESS: public closes all
+    # three. Browser trees need an image with Playwright (pyrtan[browser]).
+    # volumes:
+    #   - /var/log:/var/log:ro
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0
 
   news:
     <<: *pyrtan

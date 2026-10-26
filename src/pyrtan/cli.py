@@ -48,6 +48,7 @@ from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
+from .adapters import LocalAdapters
 from .transport import EGRESS_POLICIES, RecordedTransport, RecordingTransport, UrllibTransport
 from .tree import check, load_tree
 
@@ -74,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="print the outcome as JSON")
     p.add_argument("--no-trace", action="store_true", help="do not print the trace")
     p.add_argument("--replay", help="answer HTTP from this fixture instead of the network")
-    p.add_argument("--record", help="save every HTTP response to this fixture")
+    p.add_argument("--record", help="save every response (HTTP and the other sources) to this fixture")
     p.add_argument("--hub", help="forward trees not held here to this hub or service")
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
@@ -270,7 +271,8 @@ def cmd_list(args: argparse.Namespace) -> int:
         print(json.dumps({"trees": reg.capabilities(), "errors": reg.errors}, indent=2, ensure_ascii=False))
         return 0
     for tree in reg.trees():
-        print(f"{tree.name}  v{tree.version}  {tree.description}")
+        via = ", ".join(s for s in tree.sources() if s != "http")
+        print(f"{tree.name}  v{tree.version}  {tree.description}" + (f"  [{via}]" if via else ""))
         for t in tree.triggers:
             print(f"    {t.pattern}")
     for path, err in reg.errors.items():
@@ -299,11 +301,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     for path, err in reg.errors.items():
         print(f"pyrtan: {path}: {err}", file=sys.stderr)
     transport: Any = RecordedTransport.from_file(args.replay) if args.replay else UrllibTransport(egress=args.egress)
+    adapters: Any = transport if args.replay else LocalAdapters(egress=args.egress)
     recorder = None
     if args.record:
-        recorder = RecordingTransport(transport)
-        transport = recorder
-    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_kv(args.env))
+        recorder = RecordingTransport(transport, adapters)
+        transport = adapters = recorder
+    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_kv(args.env), adapters=adapters)
     if args.tree:
         outcome = runner.run_tree(args.tree, _kv(args.input))
     else:

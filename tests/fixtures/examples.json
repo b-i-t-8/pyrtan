@@ -1,17 +1,316 @@
 {
-  "GET https://hacker-news.firebaseio.com/v0/topstories.json": {"status": 200, "body": [101, 102, 103]},
-  "GET https://hacker-news.firebaseio.com/v0/item/101.json": {"status": 200, "body": {"id": 101, "type": "story", "title": "Pyrtan 0.1", "url": "https://example.org/p", "score": 42, "by": "alice"}},
-  "GET https://hacker-news.firebaseio.com/v0/item/102.json": {"status": 200, "body": {"id": 102, "type": "story", "title": "Ask HN: self post", "score": 7, "by": "x"}},
-  "GET https://hacker-news.firebaseio.com/v0/item/103.json": {"status": 200, "body": {"id": 103, "type": "comment", "by": "y", "text": "a comment"}},
-  "GET https://hacker-news.firebaseio.com/v0/item/999.json": {"status": 200, "body": null},
-  "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json": {"status": 200, "body": {"results": [{"name": "Oslo", "country": "Norway", "latitude": 59.91, "longitude": 10.75}]}},
-  "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json": {"status": 200, "body": {"generationtime_ms": 0.5}},
-  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius": {"status": 200, "body": {"current_units": {"temperature_2m": "°C"}, "current": {"temperature_2m": 4.2, "relative_humidity_2m": 80, "wind_speed_10m": 12.3, "weather_code": 61}}},
-  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit": {"status": 200, "body": {"current_units": {"temperature_2m": "°F"}, "current": {"temperature_2m": 39.6, "relative_humidity_2m": 80, "wind_speed_10m": 12.3, "weather_code": 0}}},
-  "GET https://example.com/": {"status": 200, "body": "<html><head><title>Example Domain</title></head><body><h1>Example Domain</h1></body></html>"},
-  "GET https://broken.example/": {"status": 503, "body": "down"},
-  "GET https://teapot.example/": {"status": 418, "body": "short and stout"},
-  "GET https://api.github.com/repos/b-i-t-8/pyrtan/releases/latest": {"status": 200, "body": {"tag_name": "v0.1.0", "name": "First", "published_at": "2026-10-24T00:00:00Z", "html_url": "https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0", "prerelease": false}},
-  "GET https://api.github.com/repos/b-i-t-8/nothing/releases/latest": {"status": 404, "body": {"message": "Not Found"}},
-  "GET https://api.github.com/repos/b-i-t-8/busy/releases/latest": {"status": 403, "body": {"message": "API rate limit exceeded"}}
+  "GET https://hacker-news.firebaseio.com/v0/topstories.json": {
+    "status": 200,
+    "body": [
+      101,
+      102,
+      103
+    ]
+  },
+  "GET https://hacker-news.firebaseio.com/v0/item/101.json": {
+    "status": 200,
+    "body": {
+      "id": 101,
+      "type": "story",
+      "title": "Pyrtan 0.1",
+      "url": "https://example.org/p",
+      "score": 42,
+      "by": "alice"
+    }
+  },
+  "GET https://hacker-news.firebaseio.com/v0/item/102.json": {
+    "status": 200,
+    "body": {
+      "id": 102,
+      "type": "story",
+      "title": "Ask HN: self post",
+      "score": 7,
+      "by": "x"
+    }
+  },
+  "GET https://hacker-news.firebaseio.com/v0/item/103.json": {
+    "status": 200,
+    "body": {
+      "id": 103,
+      "type": "comment",
+      "by": "y",
+      "text": "a comment"
+    }
+  },
+  "GET https://hacker-news.firebaseio.com/v0/item/999.json": {
+    "status": 200,
+    "body": null
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Oslo",
+          "country": "Norway",
+          "latitude": 59.91,
+          "longitude": 10.75
+        }
+      ]
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "generationtime_ms": 0.5
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius": {
+    "status": 200,
+    "body": {
+      "current_units": {
+        "temperature_2m": "°C"
+      },
+      "current": {
+        "temperature_2m": 4.2,
+        "relative_humidity_2m": 80,
+        "wind_speed_10m": 12.3,
+        "weather_code": 61
+      }
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit": {
+    "status": 200,
+    "body": {
+      "current_units": {
+        "temperature_2m": "°F"
+      },
+      "current": {
+        "temperature_2m": 39.6,
+        "relative_humidity_2m": 80,
+        "wind_speed_10m": 12.3,
+        "weather_code": 0
+      }
+    }
+  },
+  "GET https://example.com/": {
+    "status": 200,
+    "body": "<html><head><title>Example Domain</title></head><body><h1>Example Domain</h1></body></html>"
+  },
+  "GET https://broken.example/": {
+    "status": 503,
+    "body": "down"
+  },
+  "GET https://teapot.example/": {
+    "status": 418,
+    "body": "short and stout"
+  },
+  "GET https://api.github.com/repos/b-i-t-8/pyrtan/releases/latest": {
+    "status": 200,
+    "body": {
+      "tag_name": "v0.1.0",
+      "name": "First",
+      "published_at": "2026-10-24T00:00:00Z",
+      "html_url": "https://github.com/b-i-t-8/pyrtan/releases/tag/v0.1.0",
+      "prerelease": false
+    }
+  },
+  "GET https://api.github.com/repos/b-i-t-8/nothing/releases/latest": {
+    "status": 404,
+    "body": {
+      "message": "Not Found"
+    }
+  },
+  "GET https://api.github.com/repos/b-i-t-8/busy/releases/latest": {
+    "status": 403,
+    "body": {
+      "message": "API rate limit exceeded"
+    }
+  },
+  "shell df -P /": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1        100000000 71000000  29000000      71% /\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "Filesystem     1024-blocks     Used Available Capacity Mounted on",
+      "/dev/sda1        100000000 71000000  29000000      71% /"
+    ],
+    "elapsed_ms": 4,
+    "body": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1        100000000 71000000  29000000      71% /\n"
+  },
+  "shell df -P /data": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/data"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "Filesystem     1024-blocks     Used Available Capacity Mounted on",
+      "/dev/sdb1        400000000 384000000 16000000      96% /data"
+    ],
+    "elapsed_ms": 4,
+    "body": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n"
+  },
+  "shell df -P /nowhere": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/nowhere"
+    ],
+    "status": 1,
+    "ok": false,
+    "stdout": "",
+    "stderr": "df: /nowhere: No such file or directory\n",
+    "json": null,
+    "lines": [],
+    "elapsed_ms": 3,
+    "body": ""
+  },
+  "file /var/log/syslog": {
+    "path": "/var/log/syslog",
+    "exists": true,
+    "size": 48213,
+    "modified": "2026-10-25T12:01:02Z",
+    "body": "Oct 25 11:58:01 nas systemd[1]: Started Daily apt download activities.\nOct 25 11:59:14 nas smartd[812]: Device: /dev/sda, SMART Usage Attribute: 194 Temperature_Celsius changed from 112 to 111\nOct 25 12:00:00 nas pyrtan[1200]: error: weather: open-meteo answered 503\nOct 25 12:00:30 nas kernel: usb 1-1: new high-speed USB device number 4\nOct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500",
+    "json": null,
+    "lines": [
+      "Oct 25 11:58:01 nas systemd[1]: Started Daily apt download activities.",
+      "Oct 25 11:59:14 nas smartd[812]: Device: /dev/sda, SMART Usage Attribute: 194 Temperature_Celsius changed from 112 to 111",
+      "Oct 25 12:00:00 nas pyrtan[1200]: error: weather: open-meteo answered 503",
+      "Oct 25 12:00:30 nas kernel: usb 1-1: new high-speed USB device number 4",
+      "Oct 25 12:01:02 nas pyrtan[1200]: ERROR site-status: broken.example answered 500"
+    ]
+  },
+  "file /var/log/quiet.log": {
+    "path": "/var/log/quiet.log",
+    "exists": true,
+    "size": 71,
+    "modified": "2026-10-25T09:00:00Z",
+    "body": "Oct 25 09:00:00 nas cron[400]: (root) CMD (run-parts /etc/cron.hourly)",
+    "json": null,
+    "lines": [
+      "Oct 25 09:00:00 nas cron[400]: (root) CMD (run-parts /etc/cron.hourly)"
+    ]
+  },
+  "file /var/log/nothing.log": {
+    "path": "/var/log/nothing.log",
+    "exists": false,
+    "size": null,
+    "modified": null,
+    "body": null,
+    "json": null,
+    "lines": []
+  },
+  "queue mqtt://broker.local home/kitchen/temperature": {
+    "url": "mqtt://broker.local",
+    "topic": "home/kitchen/temperature",
+    "received": true,
+    "message": {
+      "topic": "home/kitchen/temperature",
+      "body": "{\"temperature\": 21.5, \"unit\": \"C\"}",
+      "json": {
+        "temperature": 21.5,
+        "unit": "C"
+      }
+    },
+    "body": "{\"temperature\": 21.5, \"unit\": \"C\"}",
+    "json": {
+      "temperature": 21.5,
+      "unit": "C"
+    }
+  },
+  "queue mqtt://broker.local home/attic/temperature": {
+    "url": "mqtt://broker.local",
+    "topic": "home/attic/temperature",
+    "received": true,
+    "message": {
+      "topic": "home/attic/temperature",
+      "body": "{\"temperature\": 31}",
+      "json": {
+        "temperature": 31
+      }
+    },
+    "body": "{\"temperature\": 31}",
+    "json": {
+      "temperature": 31
+    }
+  },
+  "queue mqtt://broker.local home/garage/temperature": {
+    "url": "mqtt://broker.local",
+    "topic": "home/garage/temperature",
+    "received": false,
+    "message": null,
+    "body": null,
+    "json": null
+  },
+  "queue mqtt://broker.local home/hall/temperature": {
+    "url": "mqtt://broker.local",
+    "topic": "home/hall/temperature",
+    "received": true,
+    "message": {
+      "topic": "home/hall/temperature",
+      "body": "warm-ish",
+      "json": null
+    },
+    "body": "warm-ish",
+    "json": null
+  },
+  "browser https://app.example/dashboard": {
+    "url": "https://app.example/dashboard",
+    "status": 200,
+    "ok": true,
+    "title": "Dashboard",
+    "body": "<!doctype html><html><head><title>Dashboard</title></head><body><div id=\"root\"><nav>Home</nav><h1>Welcome back, Barry</h1><p>3 alerts</p></div></body></html>",
+    "elapsed_ms": 812
+  },
+  "browser https://app.example/empty": {
+    "url": "https://app.example/empty",
+    "status": 200,
+    "ok": true,
+    "title": "Empty",
+    "body": "<html><head><title>Empty</title></head><body><div id=\"root\"></div></body></html>",
+    "elapsed_ms": 300
+  },
+  "browser https://app.example/gone": {
+    "url": "https://app.example/gone",
+    "status": 404,
+    "ok": false,
+    "title": "Not found",
+    "body": "<html><body><h1>Not found</h1></body></html>",
+    "elapsed_ms": 200
+  },
+  "serial /dev/ttyUSB0 \"AT\\r\\n\"": {
+    "device": "/dev/ttyUSB0",
+    "baud": 9600,
+    "sent": 4,
+    "body": "OK\r\n",
+    "bytes": 4,
+    "complete": true,
+    "json": null,
+    "lines": [
+      "OK"
+    ]
+  },
+  "serial /dev/ttyUSB1 \"AT\\r\\n\"": {
+    "error": "/dev/ttyUSB1: no answer within 3 s"
+  },
+  "serial /dev/ttyACM0 \"AT\\r\\n\"": {
+    "device": "/dev/ttyACM0",
+    "baud": 9600,
+    "sent": 4,
+    "body": "+CME ERROR: 10\r\n",
+    "bytes": 16,
+    "complete": true,
+    "json": null,
+    "lines": [
+      "+CME ERROR: 10"
+    ]
+  }
 }

@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from . import conditions
+from .adapters import SOURCES, LocalAdapters, brief_result, what
 from .extract import extract
 from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
@@ -102,6 +103,11 @@ class Runner:
     max_steps: int = MAX_STEPS
     max_depth: int = MAX_DEPTH
     emitted: list[dict[str, Any]] = field(default_factory=list)
+    adapters: Any = None  # the other sources (file, shell, serial, queue, browser); a recorded transport answers for them too
+
+    def __post_init__(self) -> None:
+        if self.adapters is None:
+            self.adapters = self.transport if hasattr(self.transport, "perform") else LocalAdapters()
 
     # ------------------------------------------------------------ entry points
 
@@ -225,27 +231,34 @@ class Runner:
     def _observe_or_act(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, *, retry: bool):
         state = scope["state"]
         into = node.get("into", "last")
-        http = node.get("http")
-        if http is not None:
-            req = render(http, scope)
-            method = str(req.get("method", "GET")).upper()
-            url = str(req["url"])
-            if not tree.host_allowed(url):
-                return Outcome("error", tree.name, reason="host-not-allowed", say=f"{node.id}: {url} is outside this tree's hosts {tree.hosts}.")
-            headers = {str(k): str(v) for k, v in (req.get("headers") or {}).items()}
-            body = req.get("body")
-            if body is not None and not isinstance(body, str):
-                import json as _json
-
-                body = _json.dumps(body)
-                headers.setdefault("Content-Type", "application/json")
+        source_name = next((s for s in SOURCES if node.get(s) is not None), None)
+        if source_name is not None:
+            spec = render(node.get(source_name), scope)
+            problem = tree.allowed(source_name, spec)
+            if problem is not None:
+                return Outcome("error", tree.name, reason=problem[0], say=f"{node.id}: {problem[1]}")
             timeout = float(node.get("timeout", DEFAULT_TIMEOUT))
+            if source_name == "http":
+                method = str(spec.get("method", "GET")).upper()
+                url = str(spec["url"])
+                headers = {str(k): str(v) for k, v in (spec.get("headers") or {}).items()}
+                body = spec.get("body")
+                if body is not None and not isinstance(body, str):
+                    import json as _json
+
+                    body = _json.dumps(body)
+                    headers.setdefault("Content-Type", "application/json")
+                label = f"{method} {url}"
+                call = lambda: self.transport.request(method, url, headers, body, timeout).to_state()  # noqa: E731
+            else:
+                label = f"{source_name} {what(source_name, spec)}"
+                call = lambda: self.adapters.perform(source_name, spec, timeout, tree.host_allowed)  # noqa: E731
             attempts = 1 + int(node.get("retries", DEFAULT_RETRIES)) if retry else 1
             last_error: str | None = None
-            resp = None
+            observed = None
             for attempt in range(attempts):
                 try:
-                    resp = self.transport.request(method, url, headers, body, timeout)
+                    observed = call()
                     break
                 except TransportError as e:
                     last_error = str(e)
@@ -253,13 +266,12 @@ class Runner:
                         break  # a policy refusal does not change on retry
                     if attempt + 1 < attempts:
                         time.sleep(min(0.2 * (attempt + 1), 1.0))
-            if resp is None:
-                trace.add(Step(node.id, node.kind, f"{method} {url} failed: {last_error}"))
+            if observed is None:
+                trace.add(Step(node.id, node.kind, f"{label} failed: {last_error}"))
                 return Outcome("error", tree.name, reason="transport", say=f"{node.id}: {last_error}")
-            observed = resp.to_state()
             _put(state, into, observed)
             source = observed
-            summary = f"{method} {url} -> {resp.status}"
+            summary = f"{label} -> {brief_result(source_name, observed)}"
         else:
             frm = node.get("from")
             source_val = resolve(_state_path(frm), scope)

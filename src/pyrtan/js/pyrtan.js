@@ -8,8 +8,9 @@
  * What differs, and is written down here rather than hidden:
  * - `float` in a condition's `type` means any number here; JSON has no
  *   distinct float, so 4.0 and 4 are the same value.
- * - CSS extraction uses the host's selector engine (DOMParser) plus
- *   `:contains(text)`; in a host without a DOM, a css extract is MISSING.
+ * - HTML is read by a port of the Python runtime's own parser and selector
+ *   subset, not the host's DOM, so a page reads the same everywhere; named
+ *   character references beyond the common ones are left as written.
  * - Regular expressions are the host's; the subset trees use is common.
  * - There is no intent matching here: a member runs the tree its hub
  *   already chose. `delegate` goes to the resolver (the hub).
@@ -219,43 +220,170 @@
   }
   const holds = (cond, value) => Object.keys(cond).every((k) => test(k, cond[k], value));
 
-  // ------------------------------------------------------------ html (host engine)
+  // ------------------------------------------------------------ html
+  // The Python runtime's own document model and selector subset (html.py),
+  // here too, so a page reads the same on a service and on a member, and
+  // the same in node: tag, #id, .class, [attr], [attr=v], [attr^=v],
+  // [attr$=v], [attr*=v], :first-child, :last-child, :nth-child(n),
+  // :contains(text), descendant and > combinators, and , groups.
+  const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
   const INLINE = new Set(["a", "abbr", "b", "bdi", "bdo", "cite", "code", "data", "dfn", "em", "i", "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var", "del", "ins"]);
-  function textOf(el) {
-    const parts = [];
-    for (const child of el.childNodes) {
-      if (child.nodeType === 3) parts.push(child.nodeValue);
-      else if (child.nodeType === 1) parts.push(INLINE.has(child.tagName.toLowerCase()) ? textOf(child) : " " + textOf(child) + " ");
-    }
-    return parts.join("").replace(/\s+/g, " ").trim();
+  const RAW_TEXT = new Set(["script", "style"]);
+  const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", copy: "©", reg: "®", trade: "™", hellip: "…", mdash: "—", ndash: "–", laquo: "«", raquo: "»", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", bull: "•", middot: "·", deg: "°", euro: "€", pound: "£", yen: "¥", cent: "¢", times: "×", divide: "÷", plusmn: "±", frac12: "½", eacute: "é", egrave: "è", agrave: "à", ccedil: "ç", ouml: "ö", auml: "ä", uuml: "ü", szlig: "ß", ntilde: "ñ", aring: "å", oslash: "ø", aelig: "æ" };
+  function unescapeHtml(text) {
+    if (!text.includes("&")) return text;
+    return text.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*);?/g, (m, body) => {
+      if (body[0] === "#") { const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10); return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m; }
+      return body in ENTITIES ? ENTITIES[body] : m;
+    });
   }
-  function selectAll(rootEl, selector) {
-    // The host's engine, plus :contains(text) and a group of them.
-    const out = [];
-    for (const part of splitGroups(selector)) {
-      const m = /^(.*?)\s*:contains\((?:"([^"]*)"|'([^']*)'|([^)]*))\)\s*$/.exec(part);
-      if (m) {
-        const base = m[1].trim() || "*", needle = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4];
-        for (const el of rootEl.querySelectorAll(base)) if (textOf(el).includes(needle) && !out.includes(el)) out.push(el);
-      } else {
-        for (const el of rootEl.querySelectorAll(part)) if (!out.includes(el)) out.push(el);
+  class Element {
+    constructor(tag, attrs, parent) { this.tag = tag; this.attrs = attrs || {}; this.children = []; this.parent = parent || null; }
+    get text() {
+      const parts = [];
+      for (const child of this.children) {
+        if (typeof child === "string") parts.push(child);
+        else parts.push(INLINE.has(child.tag) ? child.text : " " + child.text + " ");
       }
+      return parts.join("").replace(/\s+/g, " ").trim();
     }
+    get classes() { return (this.attrs.class || "").split(/\s+/).filter(Boolean); }
+    getAttribute(name) { return name in this.attrs ? this.attrs[name] : null; }
+    elements() { return this.children.filter((c) => typeof c !== "string"); }
+    *descendants() { for (const child of this.elements()) { yield child; yield* child.descendants(); } }
+    select(selector) { return select(this, selector); }
+  }
+  const ATTR = /\s*([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/y;
+  function parseHtml(text) {
+    const root = new Element("document");
+    const stack = [root];
+    let pos = 0;
+    const n = text.length;
+    const addText = (t) => { if (t) stack[stack.length - 1].children.push(unescapeHtml(t)); };
+    while (pos < n) {
+      const lt = text.indexOf("<", pos);
+      if (lt < 0) { addText(text.slice(pos)); break; }
+      addText(text.slice(pos, lt));
+      if (text.startsWith("<!--", lt)) { const e = text.indexOf("-->", lt + 4); pos = e < 0 ? n : e + 3; continue; }
+      if (text[lt + 1] === "!" || text[lt + 1] === "?") { const e = text.indexOf(">", lt); pos = e < 0 ? n : e + 1; continue; }
+      if (text[lt + 1] === "/") {
+        const e = text.indexOf(">", lt);
+        const tag = text.slice(lt + 2, e < 0 ? n : e).trim().toLowerCase();
+        pos = e < 0 ? n : e + 1;
+        for (let i = stack.length - 1; i > 0; i--) if (stack[i].tag === tag) { stack.length = i; break; }
+        continue;
+      }
+      const m = /^<([a-zA-Z][^\s\/>]*)/.exec(text.slice(lt, lt + 200));
+      if (!m) { addText("<"); pos = lt + 1; continue; }
+      const tag = m[1].toLowerCase();
+      let p = lt + m[0].length;
+      const attrs = {};
+      while (p < n) {
+        const ws = /\s*/y; ws.lastIndex = p; ws.exec(text); p = ws.lastIndex;
+        if (text[p] === ">" || text.startsWith("/>", p) || p >= n) break;
+        ATTR.lastIndex = p;
+        const am = ATTR.exec(text);
+        if (!am) { p++; continue; }
+        p = ATTR.lastIndex;
+        const name = am[1].toLowerCase();
+        if (name !== "/") attrs[name] = unescapeHtml(am[2] !== undefined ? am[2] : am[3] !== undefined ? am[3] : am[4] !== undefined ? am[4] : "");
+      }
+      const selfClosing = text.startsWith("/>", p);
+      pos = p >= n ? n : p + (selfClosing ? 2 : 1);
+      const el = new Element(tag, attrs, stack[stack.length - 1]);
+      stack[stack.length - 1].children.push(el);
+      if (selfClosing || VOID.has(tag)) continue;
+      if (RAW_TEXT.has(tag)) {
+        const close = text.toLowerCase().indexOf("</" + tag, pos);
+        const raw = text.slice(pos, close < 0 ? n : close);
+        if (raw) el.children.push(raw);
+        if (close < 0) { pos = n; continue; }
+        const e = text.indexOf(">", close); pos = e < 0 ? n : e + 1;
+        continue;
+      }
+      stack.push(el);
+    }
+    return root;
+  }
+  class SelectorError extends Error {}
+  const SEL_TOKEN = /([a-zA-Z][a-zA-Z0-9\-]*|\*)|#([\w\-]+)|\.([\w\-]+)|\[([\w\-:]+)(?:([\^$*]?=)(["']?)([^\]"']*)\6)?\]|:(first-child|last-child|nth-child\(\d+\)|contains\((["']?)([^)"']*)\9\))/y;
+  function parseCompound(text) {
+    const simple = { tag: null, id: null, classes: [], attrs: [], pseudos: [] };
+    text = text.trim();
+    if (!text) throw new SelectorError("empty selector part");
+    let pos = 0;
+    while (pos < text.length) {
+      SEL_TOKEN.lastIndex = pos;
+      const m = SEL_TOKEN.exec(text);
+      if (!m) throw new SelectorError(`cannot parse selector near ${pyrepr(text.slice(pos))}`);
+      pos = SEL_TOKEN.lastIndex;
+      if (m[1]) { if (simple.tag) throw new SelectorError(`two tags in one compound selector: ${pyrepr(text)}`); simple.tag = m[1].toLowerCase(); }
+      else if (m[2]) simple.id = m[2];
+      else if (m[3]) simple.classes.push(m[3]);
+      else if (m[4]) simple.attrs.push([m[4].toLowerCase(), m[5] || "", m[7] === undefined ? null : m[7]]);
+      else if (m[8]) simple.pseudos.push(m[8].startsWith("contains(") ? "contains:" + m[10] : m[8]);
+    }
+    return simple;
+  }
+  function compileSelector(selector) {
+    const groups = [];
+    for (let alt of String(selector).split(",")) {
+      alt = alt.trim();
+      if (!alt) throw new SelectorError(`empty alternative in ${pyrepr(selector)}`);
+      const chain = [];
+      let comb = " ";
+      for (const part of alt.split(/\s*(>)\s*|\s+/)) {
+        if (part === undefined || part === "") continue;
+        if (part === ">") { comb = ">"; continue; }
+        chain.push([comb, parseCompound(part)]);
+        comb = " ";
+      }
+      if (!chain.length) throw new SelectorError(`nothing to match in ${pyrepr(selector)}`);
+      groups.push(chain);
+    }
+    return groups;
+  }
+  function simpleMatches(simple, el) {
+    if (simple.tag && simple.tag !== "*" && el.tag !== simple.tag) return false;
+    if (simple.id && el.attrs.id !== simple.id) return false;
+    if (simple.classes.length) { const have = new Set(el.classes); if (!simple.classes.every((c) => have.has(c))) return false; }
+    for (const [name, op, val] of simple.attrs) {
+      if (!(name in el.attrs)) return false;
+      const have = el.attrs[name];
+      if (op === "=" && have !== val) return false;
+      if (op === "^=" && !have.startsWith(val || "")) return false;
+      if (op === "$=" && !have.endsWith(val || "")) return false;
+      if (op === "*=" && !have.includes(val || "")) return false;
+    }
+    for (const p of simple.pseudos) {
+      if (p.startsWith("contains:")) { if (!el.text.includes(p.slice(9))) return false; continue; }
+      const siblings = el.parent ? el.parent.elements() : [el];
+      if (p === "first-child") { if (siblings[0] !== el) return false; }
+      else if (p === "last-child") { if (siblings[siblings.length - 1] !== el) return false; }
+      else if (p.startsWith("nth-child(")) { const k = parseInt(p.slice(10, -1), 10); if (!(k > 0 && k <= siblings.length && siblings[k - 1] === el)) return false; }
+      else throw new SelectorError(`unknown pseudo-class :${p}`);
+    }
+    return true;
+  }
+  function chainMatches(el, chain) {
+    const [comb, simple] = chain[chain.length - 1];
+    if (!simpleMatches(simple, el)) return false;
+    if (chain.length === 1) return true;
+    const rest = chain.slice(0, -1);
+    if (comb === ">") return el.parent !== null && el.parent.tag !== "document" && chainMatches(el.parent, rest);
+    for (let anc = el.parent; anc !== null && anc.tag !== "document"; anc = anc.parent) if (chainMatches(anc, rest)) return true;
+    return false;
+  }
+  function select(rootEl, selector) {
+    const compiled = compileSelector(selector);
+    const out = [];
+    const seen = new Set();
+    for (const el of rootEl.descendants()) for (const chain of compiled) if (chainMatches(el, chain) && !seen.has(el)) { seen.add(el); out.push(el); break; }
     return out;
   }
-  function splitGroups(selector) {
-    const parts = []; let depth = 0, cur = "";
-    for (const ch of selector) { if (ch === "(") depth++; if (ch === ")") depth--; if (ch === "," && depth === 0) { parts.push(cur.trim()); cur = ""; } else cur += ch; }
-    if (cur.trim()) parts.push(cur.trim());
-    return parts;
-  }
-  const html = {
-    parse(text) {
-      if (typeof DOMParser === "undefined") return null;
-      const doc = new DOMParser().parseFromString(text, "text/html");
-      return doc.documentElement;
-    },
-  };
+  const selectAll = select;
+  const textOf = (el) => el.text;
+  const html = { parse: parseHtml, select, compileSelector, Element, SelectorError };
 
   // ------------------------------------------------------------ extract
   function extract(entry, source, cache) {
@@ -274,7 +402,7 @@
       const text = textSource(entry, source);
       if (isMissing(text)) return MISSING;
       let doc = cache && cache.get(text);
-      if (!doc) { doc = html.parse(text); if (!doc) return MISSING; if (cache) cache.set(text, doc); }
+      if (!doc) { doc = html.parse(text); if (cache) cache.set(text, doc); }
       const found = selectAll(doc, entry.css);
       if (entry.all) return found.map((el) => elementValue(entry, el));
       if (!found.length) return MISSING;
@@ -304,6 +432,90 @@
     return textOf(el);
   }
 
+  // ------------------------------------------------------------ sources and their allow-lists
+  // The other forms of I/O (file, shell, serial, queue, browser) live on a
+  // service; a member refuses them unless a recorded fixture answers for
+  // them. The allow-list checks and the fixture keys are the Python ones.
+  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue"];
+  const LIST_NAMES = ["paths", "commands", "devices", "topics"];
+  const MQTT_PORTS = { mqtt: 1883, mqtts: 8883 };
+  function absolutePath(path) {
+    path = String(path);
+    const parts = path.split("/"), out = [];
+    for (const part of parts) { if (part === "" || part === ".") continue; if (part === "..") out.pop(); else out.push(part); }
+    return (path.startsWith("/") ? "/" : "") + out.join("/");
+  }
+  function globMatch(pattern, text) {
+    let re = "";
+    for (const ch of pattern) re += ch === "*" ? ".*" : ch === "?" ? "." : ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("^" + re + "$").test(text);
+  }
+  function pathAllowed(patterns, path) {
+    const target = absolutePath(path);
+    for (let pat of patterns) {
+      if (pat === "*") return true;
+      pat = absolutePath(pat);
+      if (/[*?[]/.test(pat)) { if (globMatch(pat, target)) return true; }
+      else if (target === pat || target.startsWith(pat.replace(/\/+$/, "") + "/")) return true;
+    }
+    return false;
+  }
+  function commandAllowed(commands, command) {
+    command = String(command);
+    for (const entry of commands) {
+      if (entry === "*") return true;
+      if (entry.includes("/")) { if (absolutePath(command) === absolutePath(entry)) return true; }
+      else if (command === entry || command.split("/").pop() === entry) return true;
+    }
+    return false;
+  }
+  const deviceAllowed = (devices, device) => devices.some((d) => d === "*" || globMatch(d, String(device)));
+  function topicAllowed(topics, topic) {
+    const parts = String(topic).split("/");
+    for (const entry of topics) {
+      if (entry === "*" || entry === "#") return true;
+      const pat = entry.split("/");
+      let ok = true, i = 0;
+      for (; i < pat.length; i++) {
+        const seg = pat[i];
+        if (seg === "#") { ok = ok && i <= parts.length; break; }
+        if (i >= parts.length || (seg !== "+" && seg !== "*" && seg !== parts[i])) { ok = false; break; }
+      }
+      if (i === pat.length) ok = ok && pat.length === parts.length;
+      if (ok) return true;
+    }
+    return false;
+  }
+  function broker(url) {
+    const m = /^(mqtts?):\/\/([^/:?#]+)(?::(\d+))?/.exec(String(url));
+    if (!m) throw new Error(`${pyrepr(String(url))} is not mqtt://host[:port] or mqtts://host[:port]`);
+    return [m[1], m[2], m[3] ? Number(m[3]) : MQTT_PORTS[m[1]]];
+  }
+  const arg = (a) => (typeof a === "string" ? a : pyJson(a));
+  function adapterKey(source, spec) {
+    if (source === "file") return `file ${"write" in spec ? "write " : "append" in spec ? "append " : ""}${spec.path}`;
+    if (source === "shell") return "shell " + [String(spec.command)].concat((spec.args || []).map(arg)).join(" ");
+    if (source === "serial") { const w = spec.write; return `serial ${spec.device}` + (w === undefined || w === null || w === "" ? "" : ` ${JSON.stringify(String(w))}`); }
+    if (source === "queue") return `queue ${"publish" in spec ? "publish " : ""}${spec.url} ${spec.topic}`;
+    if (source === "browser") return `browser ${spec.url}`;
+    throw new Error(source);
+  }
+  function what(source, spec) {
+    if (source === "file") return String(spec.path);
+    if (source === "shell") return [String(spec.command)].concat((spec.args || []).map(arg)).join(" ");
+    if (source === "serial") return String(spec.device);
+    if (source === "queue") return `${spec.topic} at ${spec.url}`;
+    return String(spec.url);
+  }
+  function briefResult(source, observed) {
+    if (source === "http" || source === "browser") return pyStr(observed.status === undefined ? null : observed.status);
+    if (source === "file") return "written" in observed ? `wrote ${observed.written} B` : observed.exists ? `${observed.size} B` : "missing";
+    if (source === "shell") return `exit ${observed.status}`;
+    if (source === "serial") return `${observed.bytes} B`;
+    if (source === "queue") return "published" in observed ? `published ${observed.published} B` : observed.received ? "1 message" : "no message";
+    return "ok";
+  }
+
   // ------------------------------------------------------------ trees
   const INPUT_TYPES = ["str", "int", "float", "bool", "list", "dict"];
   function inferType(v) { return isBool(v) ? "bool" : isNum(v) ? (Number.isInteger(v) ? "int" : "float") : Array.isArray(v) ? "list" : isObj(v) ? "dict" : "str"; }
@@ -329,6 +541,7 @@
       this.raw = raw;
       this.name = raw.name; this.version = raw.version || 1; this.description = raw.description || "";
       this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || "";
+      for (const k of LIST_NAMES) this[k] = raw[k] || [];
       this.language = raw.language || {};
       this.triggers = (raw.triggers || []).map((t) => (typeof t === "string" ? { pattern: t } : t));
       this.inputs = {};
@@ -351,6 +564,25 @@
         else if (host === allowed) return true;
       }
       return false;
+    }
+    allowed(source, spec) {
+      if (source === "http" || source === "browser") { const url = String(spec.url === undefined ? "" : spec.url); return this.hostAllowed(url) ? null : ["host-not-allowed", `${url} is outside this tree's hosts ${pyrepr(this.hosts)}.`]; }
+      if (source === "file") { const path = absolutePath(spec.path === undefined ? "" : spec.path); return pathAllowed(this.paths, path) ? null : ["path-not-allowed", `${path} is outside this tree's paths ${pyrepr(this.paths)}.`]; }
+      if (source === "shell") { const cmd = String(spec.command === undefined ? "" : spec.command); return commandAllowed(this.commands, cmd) ? null : ["command-not-allowed", `${pyrepr(cmd)} is not in this tree's commands ${pyrepr(this.commands)}.`]; }
+      if (source === "serial") { const dev = String(spec.device === undefined ? "" : spec.device); return deviceAllowed(this.devices, dev) ? null : ["device-not-allowed", `${dev} is outside this tree's devices ${pyrepr(this.devices)}.`]; }
+      if (source === "queue") {
+        let host, port;
+        try { [, host, port] = broker(spec.url === undefined ? "" : spec.url); } catch (e) { return ["host-not-allowed", e.message]; }
+        if (!this.hostAllowed(`mqtt://${host}:${port}/`)) return ["host-not-allowed", `${host} is outside this tree's hosts ${pyrepr(this.hosts)}.`];
+        const topic = String(spec.topic === undefined ? "" : spec.topic);
+        return topicAllowed(this.topics, topic) ? null : ["topic-not-allowed", `${pyrepr(topic)} is outside this tree's topics ${pyrepr(this.topics)}.`];
+      }
+      return null;
+    }
+    sources() {
+      const out = new Set();
+      for (const n of Object.values(this.nodes)) if (n.kind === "observe" || n.kind === "act") for (const s of SOURCES) if (n.spec[s] !== undefined && n.spec[s] !== null) out.add(s);
+      return [...out].sort();
     }
     bindInputs(given) {
       given = given || {};
@@ -375,7 +607,9 @@
         if (s.description) d.description = s.description;
         inputs[n] = d;
       }
-      return { name: this.name, version: this.version, description: this.description, tags: this.tags, hosts: this.hosts, license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs };
+      const cap = { name: this.name, version: this.version, description: this.description, tags: this.tags, hosts: this.hosts };
+      for (const k of LIST_NAMES) if (this[k].length) cap[k] = this[k];
+      return Object.assign(cap, { sources: this.sources(), license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs });
     }
   }
 
@@ -414,6 +648,15 @@
       if (typeof text !== "string") text = pyJson(text);
       const headers = {}; for (const [k, v] of Object.entries(rec.headers || {})) headers[k.toLowerCase()] = v;
       return new Response(rec.status === undefined ? 200 : Number(rec.status), headers, text, url, 0);
+    }
+    async perform(source, spec) {
+      const key = adapterKey(source, spec);
+      this.calls.push([source, key]);
+      let rec = this.responses[key];
+      if (rec === undefined) throw new TransportError(`no recorded result for ${key}`);
+      if (Array.isArray(rec)) rec = rec.length > 1 ? rec.shift() : rec[0];
+      if ("error" in rec) throw new TransportError(String(rec.error));
+      return JSON.parse(JSON.stringify(rec));
     }
   }
 
@@ -462,6 +705,8 @@
       this.trees = {};
       for (const t of opts.trees || []) this.add(t);
       this.transport = opts.transport || new FetchTransport();
+      // The other sources: a fixture answers for them; a live member has none and says so.
+      this.adapters = opts.adapters || (typeof this.transport.perform === "function" ? this.transport : null);
       this.resolver = opts.resolver || null;   // {runTree(name, inputs, depth), runIntent(text, depth)} -> outcome dicts
       this.env = opts.env || {};
       this.clock = opts.clock || (() => new Date());
@@ -535,27 +780,37 @@
       return this.observeOrAct(tree, node, scope, trace, false);
     }
     async observeOrAct(tree, node, scope, trace, retry) {
-      const state = scope.state, into = node.get("into", "last"), http = node.get("http");
+      const state = scope.state, into = node.get("into", "last");
+      const sourceName = SOURCES.find((s) => node.spec[s] !== undefined && node.spec[s] !== null);
       let source, summary;
-      if (http !== undefined && http !== null) {
-        const req = render(http, scope);
-        const method = String(req.method || "GET").toUpperCase(), url = String(req.url);
-        if (!tree.hostAllowed(url)) return outcome("error", tree.name, { reason: "host-not-allowed", say: `${node.id}: ${url} is outside this tree's hosts ${pyrepr(tree.hosts)}.` });
-        const headers = {}; for (const [k, v] of Object.entries(req.headers || {})) headers[String(k)] = String(v);
-        let body = req.body;
-        if (body !== undefined && body !== null && typeof body !== "string") { body = JSON.stringify(body); if (!("Content-Type" in headers)) headers["Content-Type"] = "application/json"; }
+      if (sourceName !== undefined) {
+        const spec = render(node.get(sourceName), scope);
+        const problem = tree.allowed(sourceName, spec);
+        if (problem) return outcome("error", tree.name, { reason: problem[0], say: `${node.id}: ${problem[1]}` });
         const timeout = Number(node.get("timeout", DEFAULT_TIMEOUT));
+        let label, call;
+        if (sourceName === "http") {
+          const method = String(spec.method || "GET").toUpperCase(), url = String(spec.url);
+          const headers = {}; for (const [k, v] of Object.entries(spec.headers || {})) headers[String(k)] = String(v);
+          let body = spec.body;
+          if (body !== undefined && body !== null && typeof body !== "string") { body = JSON.stringify(body); if (!("Content-Type" in headers)) headers["Content-Type"] = "application/json"; }
+          label = `${method} ${url}`;
+          call = async () => (await this.transport.request(method, url, headers, body === undefined ? null : body, timeout)).toState();
+        } else {
+          label = `${sourceName} ${what(sourceName, spec)}`;
+          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not on a member; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : "devices")}.` });
+          call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
+        }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
-        let lastError = null, resp = null;
+        let lastError = null, observed = null;
         for (let attempt = 0; attempt < attempts; attempt++) {
-          try { resp = await this.transport.request(method, url, headers, body === undefined ? null : body, timeout); break; }
+          try { observed = await call(); break; }
           catch (e) { if (!(e instanceof TransportError)) throw e; lastError = e.message; if (attempt + 1 < attempts) await sleep(Math.min(200 * (attempt + 1), 1000)); }
         }
-        if (!resp) { trace.add(step(node.id, node.kind, `${method} ${url} failed: ${lastError}`)); return outcome("error", tree.name, { reason: "transport", say: `${node.id}: ${lastError}` }); }
-        const observed = resp.toState();
+        if (observed === null) { trace.add(step(node.id, node.kind, `${label} failed: ${lastError}`)); return outcome("error", tree.name, { reason: "transport", say: `${node.id}: ${lastError}` }); }
         put(state, into, observed);
         source = observed;
-        summary = `${method} ${url} -> ${resp.status}`;
+        summary = `${label} -> ${briefResult(sourceName, observed)}`;
       } else {
         const frm = node.get("from");
         const sourceVal = resolve(statePath(frm), scope);
@@ -650,5 +905,5 @@
     return outcome(d.status || "error", d.tree || fallbackTree, { say: d.say === undefined ? null : d.say, output: d.output === undefined ? null : d.output, reason: d.reason === undefined ? null : d.reason, question: d.question === undefined ? null : d.question, snapshot: d.snapshot === undefined ? null : d.snapshot, trace, inputs: d.inputs || {} });
   }
 
-  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, version: "0.6.0" };
+  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.7.0" };
 });

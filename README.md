@@ -52,6 +52,10 @@ uv tool install git+https://github.com/b-i-t-8/pyrtan      # or: pip install git
 pyrtan --version
 ```
 
+Trees that drive a browser need the one optional extra, Playwright:
+`pip install 'pyrtan[browser]'` and `playwright install chromium` (or
+point `PYRTAN_BROWSER` at a Chromium you have).
+
 From a checkout, `uv sync` then `uv run pyrtan …`, and `uv run pytest`.
 
 ## A tree
@@ -113,6 +117,38 @@ list with a limit, through another tree or a local sub-flow), `delegate`
 (hand a sentence or a tree name to the swarm), `ask` (pause for an input),
 `done` and `fail`. Trees do not loop; `pyrtan check` refuses a cycle. The
 whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
+
+## Forms of I/O
+
+HTTP is one source. An `observe` or `act` node may instead name a file,
+a program, a serial line, a queue or a browser, and every one of them
+follows the rule `hosts` set: the tree lists what the source may reach,
+`pyrtan check` refuses a literal outside the list, the runtime refuses a
+templated one, and nothing else is reachable.
+
+```toml
+commands = ["df"]
+[nodes.df]
+kind = "observe"
+shell = { command = "df", args = ["-P", "{{ inputs.mount }}"] }     # one program, arguments as a list, no shell in between
+into = "df"                                                          # status (exit code), ok, stdout, stderr, body, json, lines
+extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
+```
+
+| Source | Allow-list | Example |
+| :-- | :-- | :-- |
+| `file = { path, tail }` or `{ path, write / append }` | `paths` | [`log-errors`](examples/log-errors/log-errors.toml): error lines in the tail of a log |
+| `shell = { command, args }` | `commands` | [`disk-space`](examples/disk-space/disk-space.toml): how full a filesystem is |
+| `serial = { device, baud, write, read_until }` | `devices` | [`modem-check`](examples/modem-check/modem-check.toml): does the modem answer AT |
+| `queue = { url, topic }` or `{ …, publish }` | `hosts`, `topics` | [`room-temperature`](examples/room-temperature/room-temperature.toml): a sensor's last reading over MQTT |
+| `browser = { url, wait_for, actions }` | `hosts` | [`rendered-headline`](examples/rendered-headline/rendered-headline.toml): the heading of a page that needs a script to render |
+
+The trace reads the same whichever source a node used (`shell df -P / ->
+exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
+for all of them, so every example runs offline in the test suite and the
+same vectors hold in the JavaScript runtime. A service started with
+`--egress public` refuses files, programs and serial lines outright: a
+hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 
 ## The command
 
@@ -369,15 +405,16 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.6.0. The core, the service, the hub, the command, the console, the
+0.7.0. The core, the service, the hub, the command, the console, the
 catalog client, the language rules, federation between hubs, the
 gossiped directory, members (a browser or a phone as part of the swarm),
 the blobs they keep and the trees they run (`pyrtan.js`, conformant with
-the Python runtime) are built and tested; HTTP is the one form of I/O the core speaks; a swarm can
-require a token, keep its gaps, refuse private addresses, and follow
-other swarms. Not yet built: further adapters (a browser for pages that need
-a script to render; files, shells, serial lines, message queues),
-persistent storage for unanswered sentences, `pyrtan watch`, and hosting.
+the Python runtime), and six forms of I/O (HTTP, a browser, files,
+programs, serial lines, MQTT queues), each behind an allow-list, are
+built and tested; a swarm can require a token, keep its gaps, refuse
+private addresses and its own box, and follow other swarms. Not yet
+built: persistent storage for unanswered sentences, `pyrtan watch`, and
+hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

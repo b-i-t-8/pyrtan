@@ -1,0 +1,65 @@
+# Error lines in the tail of a log on the box this tree runs on. A file node
+# reads a path (whole, or its last `tail` lines); `paths` is the allow-list,
+# and a path from the sentence is refused at run time when it falls outside
+# /var/log, ".." included.
+
+name = "log-errors"
+version = 1
+description = "Error lines in the tail of a log file on this box."
+tags = ["ops", "box", "read-only"]
+license = "MIT"
+paths = ["/var/log"]
+start = "read"
+
+[[triggers]]
+pattern = "errors in the log"
+[[triggers]]
+pattern = "errors in {path:word}"
+
+[inputs.path]
+type = "str"
+default = "/var/log/syslog"
+
+[inputs.lines]
+type = "int"
+default = 200
+min = 1
+max = 5000
+description = "How many lines from the end to look at"
+
+[nodes.read]
+kind = "observe"
+file = { path = "{{ inputs.path }}", tail = "{{ inputs.lines }}" }
+into = "log"                  # state.log = { path, exists, size, modified, body, json, lines }
+extract = [{ into = "errors", regex = "(?im)^.*\\berror\\b.*$", all = true }]
+next = "exists"
+
+[nodes.exists]
+kind = "decide"
+on = "log.exists"
+branches = [{ when = { eq = true }, then = "count" }, { else = "missing" }]
+
+[nodes.count]
+kind = "set"
+set = { n = "{{ state.errors | length }}", seen = "{{ state.log.lines | length }}" }
+next = "any"
+
+[nodes.any]
+kind = "decide"
+on = "n"
+branches = [{ when = { eq = 0 }, then = "clean" }, { else = "some" }]
+
+[nodes.clean]
+kind = "done"
+say = "No error lines in the last {{ state.seen }} of {{ inputs.path }}."
+output = { path = "{{ inputs.path }}", errors = 0 }
+
+[nodes.some]
+kind = "done"
+say = "{{ state.n }} error line(s) in the last {{ state.seen }} of {{ inputs.path }}; latest: {{ state.errors | last | strip }}"
+output = { path = "{{ inputs.path }}", errors = "{{ state.n }}", lines = "{{ state.errors }}" }
+
+[nodes.missing]
+kind = "fail"
+reason = "no-such-file"
+say = "{{ inputs.path }} is not on this box."

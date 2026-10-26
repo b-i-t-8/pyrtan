@@ -86,3 +86,54 @@ def test_github_release(runner):
 def test_fixture_fails_loudly_on_unforeseen_request(runner):
     out = runner.run_intent("weather in Paris")
     assert out.status == "error" and out.reason == "transport"
+
+
+def test_disk_space_over_a_shell(runner):
+    out = runner.run_intent("how full is the disk")
+    assert out.status == "done" and out.say == "/ is 71% full." and out.output == {"mounted": "/", "percent": 71}
+    assert out.trace.steps[1].summary == "shell df -P / -> exit 0; percent=71, mounted=/"
+    assert runner.run_intent("disk space on /data").reason == "disk-full"
+    failed = runner.run_intent("disk space on /nowhere")
+    assert failed.status == "failed" and failed.reason == "df-failed" and "No such file" in failed.say
+
+
+def test_log_errors_from_a_file(runner):
+    out = runner.run_intent("errors in the log")
+    assert out.status == "done" and out.say.startswith("2 error line(s) in the last 5 of /var/log/syslog; latest: ") and out.output["errors"] == 2
+    assert runner.run_intent("errors in /var/log/quiet.log").say == "No error lines in the last 1 of /var/log/quiet.log."
+    assert runner.run_intent("errors in /var/log/nothing.log").reason == "no-such-file"
+    # The path from the sentence is checked against the tree's paths before anything is read.
+    out = runner.run_intent("errors in /etc/passwd")
+    assert out.status == "error" and out.reason == "path-not-allowed" and [s.kind for s in out.trace.steps] == ["intent"]
+
+
+def test_room_temperature_from_a_queue(runner):
+    assert runner.run_intent("temperature in the kitchen").say == "kitchen: 21.5°C."
+    assert runner.run_intent("how warm is the attic").say == "attic: 31°C, warm."
+    assert runner.run_intent("temperature in the garage").reason == "no-reading"
+    gap = runner.run_intent("temperature in the hall")  # a payload that is not JSON: a gap, not a guess
+    assert gap.status == "error" and gap.reason == "gap" and gap.trace.gaps[0]["node"] == "reading"
+    assert runner.run_tree("room-temperature", {"room": "a-b"}).status == "error"  # fixture has nothing for it
+
+
+def test_rendered_headline_through_a_browser(runner):
+    out = runner.run_intent("headline of https://app.example/dashboard")
+    assert out.status == "done" and out.say == "Dashboard — Welcome back, Barry" and out.output["heading"] == "Welcome back, Barry"
+    assert out.trace.steps[1].summary == "browser https://app.example/dashboard -> 200; heading=Welcome back, Barry"
+    assert runner.run_intent("what does https://app.example/empty say").reason == "no-heading"
+    assert runner.run_intent("headline of https://app.example/gone").reason == "unexpected-response"
+
+
+def test_modem_check_over_serial(runner):
+    assert runner.run_intent("is the modem up").say == "The modem on /dev/ttyUSB0 is there."
+    silent = runner.run_intent("is the modem on /dev/ttyUSB1 up")
+    assert silent.status == "error" and silent.reason == "transport" and "no answer within 3 s" in silent.say
+    assert runner.run_intent("is the modem on /dev/ttyACM0 up").reason == "modem-error"
+    assert runner.run_intent("is the modem on /dev/ttyS0 up").reason == "device-not-allowed"
+
+
+def test_capabilities_name_the_sources_and_lists(examples):
+    caps = {t["name"]: t for t in examples.capabilities()}
+    assert caps["disk-space"]["sources"] == ["shell"] and caps["disk-space"]["commands"] == ["df"] and "paths" not in caps["disk-space"]
+    assert caps["room-temperature"]["sources"] == ["queue"] and caps["room-temperature"]["topics"] == ["home/+/temperature"]
+    assert caps["weather"]["sources"] == ["http"] and caps["modem-check"]["devices"] == ["/dev/ttyUSB*", "/dev/ttyACM*"]

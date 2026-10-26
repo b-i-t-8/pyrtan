@@ -9,7 +9,11 @@ A tree is one TOML file. This is the whole of it.
 | `name` | yes | Lowercase letters, digits and dashes. The tree's identity in the swarm. |
 | `description` | should | One line. Shown by `pyrtan list` and in `/capabilities`. |
 | `version` | no | Positive integer, default 1. |
-| `hosts` | if any node speaks HTTP | The hosts the tree may reach: exact names, `*.example.com`, or `*` for a tree whose host comes from its input. |
+| `hosts` | if any node speaks HTTP, drives a browser or talks to a queue | The hosts the tree may reach: exact names, `*.example.com`, or `*` for a tree whose host comes from its input. |
+| `paths` | if any node reads or writes a file | Absolute paths or globs (`/var/log/*`); a directory covers everything under it; `*` is everything. |
+| `commands` | if any node runs a program | Program names (`df`) or full paths (`/usr/bin/df`); `*` is everything. |
+| `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
+| `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -147,6 +151,33 @@ Selectors support tag, `#id`, `.class`, `[attr]`, `[attr=v]`, `[attr^=v]`,
 `[attr$=v]`, `[attr*=v]`, `:first-child`, `:last-child`, `:nth-child(n)`,
 `:contains(text)`, the descendant and `>` combinators, and `,` groups.
 Anything else fails `pyrtan check`.
+
+### The other sources
+
+Instead of `http`, an `observe` or `act` may name one of these; each
+needs the matching allow-list at the top of the tree, checked at load
+time when the value is literal and at run time when it is templated. The
+result lands under `into` and `extract` reads it the same way (every
+source leaves `body`). The design is in [`io.md`](io.md).
+
+```toml
+file   = { path = "/var/log/syslog", tail = 200 }                 # observe: path, exists, size, modified, body, json, lines
+file   = { path = "./notes.txt", append = "visited\n" }          # act: … plus written  (or write = "…")
+shell  = { command = "df", args = ["-P", "/"] }                    # command, args, status (exit code), ok, stdout, stderr, body, json, lines
+serial = { device = "/dev/ttyUSB0", baud = 9600, write = "AT\r\n", read_until = "\n" }   # device, baud, sent, body, bytes, complete, json, lines
+queue  = { url = "mqtt://broker.local", topic = "home/kitchen/temperature" }               # observe: received, message { topic, body, json }, body, json
+queue  = { url = "mqtt://broker.local", topic = "home/kitchen/light", publish = "on" }     # act: … plus published
+browser = { url = "https://app.example/", wait_for = "h1", actions = [{ click = "#more" }, { fill = { selector = "#q", value = "x" } }] }  # url, status, ok, title, body (rendered), elapsed_ms
+```
+
+`shell` runs one program with its arguments as a list; no shell reads the
+line. `serial` reads until `read_until`, `read` bytes or `timeout`.
+`queue` is MQTT 3.1.1 at QoS 0; `mqtts://` for TLS, `username` and
+`password` if the broker wants them. `browser` needs Playwright
+(`pip install 'pyrtan[browser]'`); its actions are `click`, `fill`,
+`press`, `select`, `wait_for` and `wait` (ms), and a navigation to a host
+outside `hosts` fails the node. A service started with `--egress public`
+refuses `file`, `shell` and `serial` altogether.
 
 ### `act`: change
 
