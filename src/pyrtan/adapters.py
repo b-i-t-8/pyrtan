@@ -678,3 +678,125 @@ def _version() -> str:
     from . import __version__
 
     return __version__
+
+
+# ---------------------------------------------------------------- streams, for watches
+# A watch holds a line open and hands each message or line to a callback
+# until told to stop. Errors are reported through the callback's twin and
+# the caller reconnects; nothing here retries on its own.
+
+
+def mqtt_stream(spec: dict[str, Any], on_message: Callable[[dict[str, Any]], None], stop: threading.Event, egress: str = "any", timeout: float = 10.0) -> None:
+    """Subscribe to ``spec['topic']`` at ``spec['url']`` and call
+    ``on_message({"topic", "body", "json"})`` for each PUBLISH until
+    ``stop`` is set. Pings the broker at half the keepalive. Raises
+    :class:`TransportError` when the connection is lost."""
+    url = str(spec.get("url", ""))
+    topic = str(spec.get("topic", ""))
+    try:
+        scheme, host, port = broker(url)
+    except ValueError as e:
+        raise TransportError(str(e)) from None
+    check_egress(f"http://{host}:{port}/", egress)
+    keepalive = 60
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout)
+    except OSError as e:
+        raise TransportError(f"{url}: {e.strerror or e}") from e
+    try:
+        if scheme == "mqtts":
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+        client_id = str(spec.get("client_id") or f"pyrtan-watch-{os.getpid()}-{int(time.time() * 1000) % 100000}")
+        user, password = spec.get("username"), spec.get("password")
+        flags = 0x02 | (0x80 if user else 0) | (0x40 if password else 0)
+        body = _mqtt_str("MQTT") + bytes([4, flags]) + struct.pack(">H", keepalive) + _mqtt_str(client_id)
+        if user:
+            body += _mqtt_str(str(user))
+        if password:
+            body += _mqtt_str(str(password))
+        sock.sendall(_mqtt_packet(0x10, body))
+        ack = _mqtt_read(sock, time.monotonic() + timeout)
+        if ack is None or ack[0] != 2 or len(ack[2]) < 2 or ack[2][1] != 0:
+            raise TransportError(f"{url}: the broker did not accept the connection")
+        sock.sendall(_mqtt_packet(0x82, struct.pack(">H", 1) + _mqtt_str(topic) + b"\x00"))
+        last_ping = time.monotonic()
+        while not stop.is_set():
+            pkt = _mqtt_read(sock, time.monotonic() + 1.0)
+            if pkt is not None:
+                ptype, pflags, pbody = pkt
+                if ptype == 9 and len(pbody) >= 3 and pbody[2] == 0x80:
+                    raise TransportError(f"{url}: the broker refused the subscription to {topic!r}")
+                if ptype == 3:
+                    tlen = struct.unpack(">H", pbody[:2])[0]
+                    mtopic = pbody[2:2 + tlen].decode("utf-8", errors="replace")
+                    rest = pbody[2 + tlen:]
+                    qos = (pflags >> 1) & 3
+                    if qos:
+                        pid, rest = rest[:2], rest[2:]
+                        if qos == 1:
+                            sock.sendall(_mqtt_packet(0x40, pid))
+                    text = rest.decode("utf-8", errors="replace")
+                    on_message({"topic": mtopic, "body": text, "json": _json(text)})
+            if time.monotonic() - last_ping > keepalive / 2:
+                sock.sendall(_mqtt_packet(0xC0, b""))
+                last_ping = time.monotonic()
+        try:
+            sock.sendall(_mqtt_packet(0xE0, b""))
+        except OSError:
+            pass
+    except OSError as e:
+        raise TransportError(f"{url}: {e.strerror or e}") from e
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
+def serial_lines(spec: dict[str, Any], on_line: Callable[[str], None], stop: threading.Event) -> None:
+    """Hold ``spec['device']`` open and call ``on_line`` for each unit
+    ending in ``read_until`` (default newline) until ``stop`` is set.
+    Raises :class:`TransportError` when the device fails."""
+    try:
+        import termios
+    except ImportError:  # pragma: no cover
+        raise TransportError("serial lines need a POSIX system") from None
+    device = str(spec.get("device", ""))
+    baud = int(spec.get("baud", 9600))
+    terminator = str(spec.get("read_until", "\n")).encode("utf-8") or b"\n"
+    speed = getattr(termios, f"B{baud}", None)
+    if speed is None:
+        raise TransportError(f"{device}: {baud} baud is not a rate this system knows")
+    try:
+        fd = os.open(device, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    except OSError as e:
+        raise TransportError(f"{device}: {e.strerror or e}") from e
+    buf = b""
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[0] &= ~(termios.IXON | termios.IXOFF | termios.ICRNL | termios.INLCR | termios.IGNCR | termios.ISTRIP)
+        attrs[1] &= ~termios.OPOST
+        attrs[2] = (attrs[2] & ~(termios.PARENB | termios.CSTOPB | termios.CSIZE)) | termios.CS8 | termios.CLOCAL | termios.CREAD
+        attrs[3] &= ~(termios.ICANON | termios.ECHO | termios.ECHOE | termios.ISIG | termios.IEXTEN)
+        attrs[4] = attrs[5] = speed
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        while not stop.is_set():
+            ready, _, _ = select.select([fd], [], [], 0.5)
+            if not ready:
+                continue
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                continue
+            except OSError as e:
+                raise TransportError(f"{device}: {e.strerror or e}") from e
+            if not chunk:
+                raise TransportError(f"{device}: closed")
+            buf += chunk
+            while terminator in buf:
+                line, buf = buf.split(terminator, 1)
+                on_line(line.decode("utf-8", errors="replace"))
+            if len(buf) > MAX_READ:
+                buf = b""
+    finally:
+        os.close(fd)

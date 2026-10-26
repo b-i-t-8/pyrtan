@@ -164,6 +164,7 @@ class Tree:
     license: str = ""
     language: Language = field(default_factory=Language)
     namespace: str = ""                                 # who published it: the catalog id is namespace/name
+    watches: list[dict[str, Any]] = field(default_factory=list)  # when this tree runs on its own: a clock, a file, a topic, a serial line
     paths: list[str] = field(default_factory=list)      # what ``file`` nodes may reach
     commands: list[str] = field(default_factory=list)   # what ``shell`` nodes may run
     devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
@@ -223,6 +224,9 @@ class Tree:
             return None if adapters.topic_allowed(self.topics, topic) else ("topic-not-allowed", f"{topic!r} is outside this tree's topics {self.topics}.")
         return None
 
+    def watch_kinds(self) -> list[str]:
+        return [next(k for k in WATCH_KINDS if k in w) for w in self.watches]
+
     def sources(self) -> list[str]:
         """The forms of I/O this tree's nodes use."""
         return sorted({s for n in self.nodes.values() if n.kind in ("observe", "act") for s in adapters.SOURCES if n.get(s) is not None})
@@ -255,6 +259,7 @@ class Tree:
             "hosts": self.hosts,
             **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics") if getattr(self, k)},
             "sources": self.sources(),
+            **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -310,6 +315,9 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     namespace = raw.get("namespace", "")
     if not isinstance(namespace, str) or (namespace and not NAME.match(namespace)):
         raise TreeError(f"{name}: 'namespace' must be lowercase letters, digits and dashes (who publishes the tree), got {namespace!r}")
+    watches = raw.get("watches", [])
+    if not isinstance(watches, list) or not all(isinstance(w, dict) for w in watches):
+        raise TreeError(f"{name}: 'watches' is a list of tables ([[watches]])")
 
     try:
         language = Language.from_raw(raw.get("language"), "language")
@@ -370,7 +378,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, **lists)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))
@@ -570,6 +578,9 @@ def check(tree: Tree) -> list[Problem]:
             elif head not in ("item", "index", "tree", "now", "env"):
                 err(where, f"template root {head!r} is not one of inputs, state, item, index, tree, now, env")
 
+    for i, w in enumerate(tree.watches):
+        used.update(_check_watch(tree, i, w, err, warn))
+
     for list_name, sources in _NEEDS.items():
         have = getattr(tree, list_name)
         using = sorted(used & sources)
@@ -587,6 +598,89 @@ def check(tree: Tree) -> list[Problem]:
 
 
 _NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}}
+WATCH_KINDS = ("every", "file", "queue", "serial")
+WATCH_ROOTS = ("event", "env", "now")
+
+
+def _watch_what(w: dict[str, Any]) -> str:
+    if "every" in w:
+        return str(w["every"])
+    if "file" in w:
+        return str(w["file"])
+    if "queue" in w and isinstance(w["queue"], dict):
+        return f"{w['queue'].get('topic')} at {w['queue'].get('url')}"
+    if "serial" in w and isinstance(w["serial"], dict):
+        return str(w["serial"].get("device"))
+    return "?"
+
+
+def _check_watch(tree: Tree, i: int, w: dict[str, Any], err, warn) -> set[str]:
+    """A watch is static: no template reaches a path, a topic or a device,
+    so every one is checked here against the tree's lists. Returns the
+    sources it uses, for the allow-list bookkeeping."""
+    from .nlp import ParseError, parse_duration
+
+    where = f"watches[{i}]"
+    kinds = [k for k in WATCH_KINDS if k in w]
+    if len(kinds) != 1:
+        err(where, f"a watch is exactly one of {', '.join(WATCH_KINDS)}, with optional 'inputs' and 'name'")
+        return set()
+    kind = kinds[0]
+    used: set[str] = set()
+    if kind == "every":
+        value = w["every"]
+        try:
+            seconds = int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else parse_duration(str(value))
+        except (ParseError, ValueError):
+            seconds = 0
+        if seconds < 1:
+            err(where, f"'every' is a duration such as \"5m\" or \"1 hour\", got {value!r}")
+    elif kind == "file":
+        path = w["file"]
+        if not isinstance(path, str) or not path or PLACEHOLDER.search(path):
+            err(where, "'file' is a literal path; a watch cannot be decided at run time")
+        elif tree.paths and not adapters.path_allowed(tree.paths, path):
+            err(where, f"{path!r} is not under this tree's paths")
+        used.add("file")
+    elif kind == "queue":
+        spec = w["queue"]
+        if not isinstance(spec, dict) or not isinstance(spec.get("url"), str) or not isinstance(spec.get("topic"), str) or PLACEHOLDER.search(spec["url"] + spec["topic"]):
+            err(where, "'queue' is a table with literal 'url' and 'topic'")
+        else:
+            try:
+                _, host, port = adapters.broker(spec["url"])
+            except ValueError as e:
+                err(where, str(e))
+            else:
+                if tree.hosts and not tree.host_allowed(f"mqtt://{host}:{port}/"):
+                    err(where, f"host {host!r} is not in this tree's hosts")
+            if tree.topics and not adapters.topic_allowed(tree.topics, spec["topic"]):
+                err(where, f"{spec['topic']!r} is not under this tree's topics")
+        used.add("queue")
+    elif kind == "serial":
+        spec = w["serial"]
+        if not isinstance(spec, dict) or not isinstance(spec.get("device"), str) or PLACEHOLDER.search(spec["device"]):
+            err(where, "'serial' is a table with a literal 'device' and optionally 'baud', 'read_until'")
+        elif tree.devices and not adapters.device_allowed(tree.devices, spec["device"]):
+            err(where, f"{spec['device']!r} is not in this tree's devices")
+        used.add("serial")
+    inputs = w.get("inputs", {})
+    if not isinstance(inputs, dict):
+        err(where, "'inputs' is a table of input = value (templates may read event, env and now)")
+        inputs = {}
+    for k, v in inputs.items():
+        if k not in tree.inputs:
+            err(where, f"input {k!r} is not declared")
+        for expr in placeholders(v):
+            head = expr.split("|")[0].strip().split(".")[0].split("[")[0]
+            if head not in WATCH_ROOTS:
+                err(where, f"template root {head!r} is not one of {', '.join(WATCH_ROOTS)}")
+    for k, spec in tree.inputs.items():
+        if spec.required and spec.default is None and k not in inputs:
+            err(where, f"input {k!r} is required and the watch does not give it")
+    if w.get("name") is not None and not isinstance(w["name"], str):
+        err(where, "'name' is a string")
+    return used
 
 
 def _literal(value: Any) -> str | None:

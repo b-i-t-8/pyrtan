@@ -119,7 +119,7 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None) -> None:
         self.name = name
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
@@ -129,7 +129,7 @@ class Hub:
         if local is not None:
             self.hold(local)
         self.federation: Federation | None = None
-        self.unanswered = Unanswered()
+        self.unanswered = Unanswered(path=unanswered)
         self._reports: list[dict[str, Any]] = []
         self._reports_at = 0.0
         self.started = time.time()
@@ -242,6 +242,24 @@ class Hub:
 
     def stop(self) -> None:
         self._stop.set()
+        if self.local is not None:
+            self.local.service.stop()
+
+    def watches(self) -> dict[str, Any]:
+        """This hub's own trees' watches, then each service's."""
+        out: list[dict[str, Any]] = []
+        if self.local is not None and self.local.service.watcher is not None:
+            out.extend({**w, "peer": "local"} for w in self.local.service.watcher.status()["watches"])
+        for peer in list(self.peers.values()):
+            if peer.link == "down":
+                continue
+            try:
+                status, body = http_json("GET", f"{peer.url}/watches", timeout=5.0, token=self.token)
+            except Exception:
+                continue
+            if status == 200 and isinstance(body, dict):
+                out.extend({**w, "peer": peer.url} for w in body.get("watches", []))
+        return {"count": len(out), "watches": out}
 
     # ------------------------------------------------------------ lookup
 
@@ -525,6 +543,8 @@ class Hub:
             return 200, self.gaps()
         if method == "GET" and path == "/unanswered":
             return 200, self.unanswered_all()
+        if method == "GET" and path == "/watches":
+            return 200, self.watches()
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/manifest.webmanifest":
@@ -534,7 +554,7 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
@@ -584,9 +604,11 @@ def serve_hub(
     store: str | None = None,
     replicas: int = 2,
     report_gaps: bool = False,
+    unanswered: str | Path | None = None,
+    watch: bool = False,
 ) -> tuple[Hub, Server]:
-    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None)
+    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)

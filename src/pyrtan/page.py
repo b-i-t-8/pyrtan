@@ -102,6 +102,7 @@ PAGE = r"""<!doctype html>
     <a href="#ask" data-tab="ask">Ask</a>
     <a href="#trees" data-tab="trees">Trees</a>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
+    <a href="#watches" data-tab="watches">Watches</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
@@ -136,6 +137,12 @@ PAGE = r"""<!doctype html>
       <p class="mute" style="font-size:14px;margin-top:0">This hub is <code id="fed-id"></code>. It routes to the hubs it follows; hubs that follow it receive its announcements and may ask it.</p>
       <div class="card"><table id="hubs"><thead><tr><th>Link</th><th>Hub</th><th>Relation</th><th>Trees</th></tr></thead><tbody></tbody></table></div>
     </div>
+  </section>
+
+  <section id="tab-watches" hidden>
+    <h2>Watches</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">Trees that run on their own: a clock, a file, a topic or a serial line starts them (<code>[[watches]]</code> in the tree, <code>--watch</code> on the service). Each row is what the watch last did; a path that changed between two runs of the same watch is how you learn a site changed before anyone asked.</p>
+    <div class="card"><table id="watches"><thead><tr><th>Watch</th><th>On</th><th>Fired</th><th>Last run</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <section id="tab-gaps" hidden>
@@ -246,6 +253,7 @@ function showTab(name) {
   for (const s of document.querySelectorAll("main > section[id^=tab-]")) s.hidden = s.id !== "tab-" + name;
   if (name === "peers") loadPeers();
   if (name === "gaps") loadGaps();
+  if (name === "watches") loadWatches();
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
@@ -360,6 +368,21 @@ async function loadPeers() {
     }
     if (!hb.children.length) hb.innerHTML = `<tr><td colspan="4" class="mute">Following nobody, followed by nobody. <code>pyrtan follow https://other-hub --at ${esc(base || location.origin)}</code>.</td></tr>`;
   }
+}
+
+async function loadWatches() {
+  let w; try { w = await json("watches"); } catch (e) { problem(e.message, true); return; }
+  const body = $("#watches tbody"); body.innerHTML = "";
+  for (const x of w.watches || []) {
+    const last = x.last || {};
+    const when = x.last_at ? new Date(x.last_at * 1000).toLocaleTimeString() : "never";
+    const changed = x.path_changed_at ? `<div class="mute">path changed ${esc(new Date(x.path_changed_at * 1000).toLocaleString())}: <code>${esc((x.previous_path||[]).join(" > "))}</code> → <code>${esc((x.path||[]).join(" > "))}</code></div>` : "";
+    const err = x.last_error ? `<div class="mute">error: ${esc(x.last_error)}</div>` : "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><code>${esc(x.name)}</code>${x.peer && x.peer !== "local" ? `<div class="mute">${esc(x.peer)}</div>` : ""}</td><td>${esc(x.kind)} <code>${esc(x.what)}</code></td><td>${esc(x.fires||0)}× <span class="mute">${esc(when)}</span></td><td>${last.status ? `<span class="status ${esc(last.status)}">${esc(last.status)}</span>${last.reason ? ` <span class="mute">(${esc(last.reason)})</span>` : ""} ${esc(last.say||"")}` : '<span class="mute">not yet</span>'}${changed}${err}</td>`;
+    body.appendChild(tr);
+  }
+  if (!(w.watches || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nothing watched. Give a tree <code>[[watches]]</code> and start the service with <code>--watch</code>.</td></tr>`;
 }
 
 async function loadGaps() {

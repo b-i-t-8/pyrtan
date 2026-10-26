@@ -3194,7 +3194,18 @@
      "pattern": "how warm is the {room:word}"
     }
    ],
-   "version": 2
+   "version": 2,
+   "watches": [
+    {
+     "inputs": {
+      "room": "kitchen"
+     },
+     "queue": {
+      "topic": "home/kitchen/temperature",
+      "url": "mqtt://broker.local"
+     }
+    }
+   ]
   },
   "site-status": {
    "description": "Whether a web site answers, and how quickly.",
@@ -3308,7 +3319,16 @@
      "pattern": "[check] status of {host:host}"
     }
    ],
-   "version": 2
+   "version": 2,
+   "watches": [
+    {
+     "every": "15m",
+     "inputs": {
+      "host": "example.com"
+     },
+     "name": "example.com"
+    }
+   ]
   },
   "weather": {
    "description": "Current weather for a place, from Open-Meteo.",

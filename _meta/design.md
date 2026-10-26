@@ -274,10 +274,9 @@ Five trees, all against real public APIs, all tested offline:
    gaps persisted to a file per service, an opt-in egress policy, the
    console with a peers view off `/peers`, and the catalog (`pyrtan
    search`, `pull`, `index`) with `version` pinning a pull. Design in
-   [`platform.md`](platform.md). Still to come from the original v0.2: a
-   `pyrtan watch` that re-runs a set of sentences on a schedule and
-   reports when a path changes (the way to learn a site has changed before
-   a person does).
+   [`platform.md`](platform.md). The `pyrtan watch` the original v0.2
+   promised (re-run on a schedule, report when a path changes) came in
+   v0.9, as `[[watches]]`.
 3. **v0.3, built: sentences read by rules, and hubs that follow each
    other.** The language rules and typed slots (§3, "Reading a
    sentence"), and federation in the shape of ActivityPub: a hub follows
@@ -313,8 +312,18 @@ Five trees, all against real public APIs, all tested offline:
    (`--report-gaps`) carried as a federation topic like the directory,
    baked hourly into pyrtan.com and shown beside each catalog tree.
    Design in [`platform.md`](platform.md) §2.8.
-9. **Beside the swarm, never inside it:** an authoring aid that reads gaps
-   and drafts the branch for a person to accept.
+9. **v0.9, built: watches, and growing from a gap.** A tree carries
+   `[[watches]]`: a clock, a file, a topic or a serial line starts a run
+   (`watch.py`; `--watch` on a service or hub, `pyrtan watch` alone), the
+   trace begins with a `watch` step, and `/watches` says what each last
+   did and whether the path changed between runs. Beside the swarm, never
+   inside it: `pyrtan grow` reads gaps (a service, a file, the
+   federation's reports) and drafts the branch each asks for by rules
+   (`grow.py`: a missing value, the hole between ranges, else the value),
+   `--apply` writes it into the file, and a person says what it means.
+   Unanswered sentences persist with `--unanswered FILE`.
+10. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+    across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
 
