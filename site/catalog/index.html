@@ -25,26 +25,33 @@
 <body>
 <main>
   <h1>Pyrtan catalog</h1>
-  <p class="lede">Trees you can pull into your own swarm. Each is one TOML file, checked by the repository's tests, with the licence its author chose. <code>pyrtan pull NAME</code> verifies the file against <a href="index.json">index.json</a> before writing it.</p>
+  <p class="lede">Trees you can pull into your own swarm. Each is one TOML file, checked by the repository's tests, with the licence its author chose, under the namespace of whoever published it. <code>pyrtan pull NAMESPACE/NAME</code> verifies the file against <a href="index.json">index.json</a> before writing it. Where hubs that opted in have met a value a tree had no branch for, the <a href="../rendezvous/reports.json">gap reports</a> say so beside it.</p>
   <input type="search" id="q" placeholder="filter: weather, github, read-only…" autocomplete="off">
   <div id="list"><p class="mute">Loading index.json…</p></div>
-  <footer>To add a tree, open a pull request that puts it under <code>examples/</code> with a <code>license</code> line. <a href="../">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a></footer>
+  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan/tree/main/catalog">how</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a></footer>
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let trees = [];
+let trees = [], reports = [];
+const idOf = (t) => t.id || (t.namespace ? `${t.namespace}/${t.name}` : t.name);
 function render() {
   const q = document.getElementById("q").value.toLowerCase().split(/\s+/).filter(Boolean);
   const list = document.getElementById("list"); list.innerHTML = "";
-  const shown = trees.filter(t => { const hay = [t.name, t.description, ...(t.tags||[]), ...(t.hosts||[]), ...(t.triggers||[])].join(" ").toLowerCase(); return q.every(w => hay.includes(w)); });
+  const shown = trees.filter(t => { const hay = [idOf(t), t.description, ...(t.tags||[]), ...(t.hosts||[]), ...(t.sources||[]), ...(t.triggers||[])].join(" ").toLowerCase(); return q.every(w => hay.includes(w)); });
   for (const t of shown) {
+    const id = idOf(t);
+    const reach = (t.hosts||[]).concat((t.sources||[]).filter(s => s !== "http"));
+    const mine = reports.filter(r => String(r.id).split("@")[0] === id);
+    const seen = mine.reduce((n, r) => n + (r.count||1), 0), hubs = Math.max(0, ...mine.map(r => r.reporters||1));
+    const gaps = mine.length ? `<details><summary class="mute">${seen} gap${seen === 1 ? "" : "s"} reported by ${hubs} hub${hubs === 1 ? "" : "s"}: a value no branch covered</summary>${mine.map(r => `<div><code>${esc(r.node)}</code> ${esc(r.on)} = <code>${esc(JSON.stringify(r.observed))}</code> <span class="mute">×${esc(r.count||1)}${r.id.includes("@") ? " · v" + esc(r.id.split("@")[1]) : ""}</span></div>`).join("")}</details>` : "";
     const d = document.createElement("div"); d.className = "card";
-    d.innerHTML = `<h2><code>${esc(t.name)}</code><small>v${esc(t.version)} · ${esc(t.license||"no licence")}${(t.hosts||[]).length ? " · " + esc(t.hosts.join(", ")) : ""}</small></h2><div class="mute">${esc(t.description||"")}</div>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}<pre>pyrtan pull ${esc(t.name)}</pre><div class="mute"><a href="${esc(t.path)}">${esc(t.path)}</a> · sha256 ${esc((t.sha256||"").slice(0, 12))}…</div>`;
+    d.innerHTML = `<h2><code>${esc(id)}</code><small>v${esc(t.version)} · ${esc(t.license||"no licence")}${reach.length ? " · " + esc(reach.join(", ")) : ""}</small></h2><div class="mute">${esc(t.description||"")}</div>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}<pre>pyrtan pull ${esc(id)}</pre>${gaps}<div class="mute"><a href="${esc(t.path)}">${esc(t.path)}</a> · sha256 ${esc((t.sha256||"").slice(0, 12))}…</div>`;
     list.appendChild(d);
   }
   if (!shown.length) list.innerHTML = `<p class="mute">Nothing matches.</p>`;
 }
 fetch("index.json").then(r => r.json()).then(i => { trees = i.trees || []; document.title = `Pyrtan catalog · ${trees.length} trees`; render(); }).catch(e => { document.getElementById("list").innerHTML = `<p class="mute">Could not load index.json: ${esc(e)}</p>`; });
+fetch("../rendezvous/reports.json").then(r => r.ok ? r.json() : null).then(j => { if (j && j.reports) { reports = j.reports; render(); } }).catch(() => {});
 document.getElementById("q").addEventListener("input", render);
 </script>
 </body>

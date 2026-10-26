@@ -4,7 +4,8 @@
 # /var/log, ".." included.
 
 name = "log-errors"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "Error lines in the tail of a log file on this box."
 tags = ["ops", "box", "read-only"]
 license = "MIT"

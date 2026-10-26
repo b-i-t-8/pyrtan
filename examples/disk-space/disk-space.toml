@@ -6,7 +6,8 @@
 # altogether: a hosted box is not lent out.
 
 name = "disk-space"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "How full a filesystem is, from df on the box this tree runs on."
 tags = ["ops", "box", "read-only"]
 license = "MIT"

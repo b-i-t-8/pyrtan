@@ -2,7 +2,8 @@
 # optional token from the service's env and a decision on the status code.
 
 name = "github-release"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "The latest release of a GitHub repository."
 tags = ["github", "read-only"]
 license = "MIT"

@@ -3,7 +3,8 @@
 # allows any host on purpose, with the wildcard spelled out.
 
 name = "site-status"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "Whether a web site answers, and how quickly."
 tags = ["ops", "read-only"]
 license = "MIT"

@@ -34,6 +34,7 @@ included, so a stranger cannot join the swarm) and presents it to peers.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import threading
 from pathlib import Path
 import time
@@ -129,6 +130,8 @@ class Hub:
             self.hold(local)
         self.federation: Federation | None = None
         self.unanswered = Unanswered()
+        self._reports: list[dict[str, Any]] = []
+        self._reports_at = 0.0
         self.started = time.time()
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -136,7 +139,7 @@ class Hub:
 
     # ------------------------------------------------------------ federation
 
-    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True, listed: bool = False, store: str | None = None, replicas: int = 2) -> Federation:
+    def federate(self, advertise: str, *, secret: str | None = None, state: str | None = None, open_follows: bool = True, listed: bool = False, store: str | None = None, replicas: int = 2, report_gaps: bool = False) -> Federation:
         """Give this hub an identity other hubs can follow. ``advertise`` is
         the URL they reach it at. ``store`` is where it keeps blobs, its own
         and others'; ``replicas`` how many keepers each of its own should have."""
@@ -145,7 +148,7 @@ class Hub:
             "gaps": lambda: self.gaps()["gaps"],
             "unanswered": lambda: self.unanswered_all()["unanswered"],
         }
-        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.announced_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto)
+        self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.announced_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto, report_gaps=report_gaps, own_reports=self.gap_reports)
         self.federation.handout = self.handout_trees
         return self.federation
 
@@ -400,6 +403,29 @@ class Hub:
                 out.extend({**g, "peer": peer.url} for g in body.get("gaps", []))
         return {"gaps": out}
 
+    def gap_reports(self) -> list[dict[str, Any]]:
+        """This hub's gaps for catalog trees (the ones with a namespace),
+        as reports: id, node, on, observed, count, last. Cached a minute;
+        the announce heartbeat reads it."""
+        now = time.time()
+        if now - self._reports_at < 60:
+            return self._reports
+        ids = {t["name"]: f"{t['namespace']}/{t['name']}@{t.get('version', 1)}" for t in self.announced_capabilities() if t.get("namespace") and t.get("name")}
+        rows: dict[str, dict[str, Any]] = {}
+        for g in self.gaps()["gaps"]:
+            tree_id = ids.get(str(g.get("tree")))
+            if tree_id is None:
+                continue
+            key = json.dumps([tree_id, g.get("node"), g.get("on"), g.get("observed")], sort_keys=True, ensure_ascii=False, default=str)
+            row = rows.get(key)
+            if row is None:
+                rows[key] = {"id": tree_id, "node": g.get("node"), "on": g.get("on"), "observed": g.get("observed"), "count": int(g.get("count", 1)), "last": float(g.get("last_seen", now))}
+            else:
+                row["count"] += int(g.get("count", 1))
+                row["last"] = max(row["last"], float(g.get("last_seen", now)))
+        self._reports, self._reports_at = list(rows.values()), now
+        return self._reports
+
     def unanswered_all(self) -> dict[str, Any]:
         """This hub's unanswered sentences, then each peer's own (a peer
         without a hub keeps its own record; one with a hub leaves it here)."""
@@ -448,6 +474,8 @@ class Hub:
                 return 200, fed.actor()
             if method == "GET" and path == "/directory":
                 return 200, fed.directory()
+            if method == "GET" and path == "/reports":
+                return 200, fed.reports_view()
             if method == "POST" and path == "/inbox":
                 return fed.handle_inbox(body, headers, trusted=bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token))
             if method == "GET" and path in ("/following", "/followers"):
@@ -508,7 +536,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/register"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -555,12 +583,13 @@ def serve_hub(
     egress: str = "any",
     store: str | None = None,
     replicas: int = 2,
+    report_gaps: bool = False,
 ) -> tuple[Hub, Server]:
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
-        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas)
+        hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
         hub.add_peer(url)
     for url in follow or []:

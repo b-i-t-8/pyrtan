@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--listed", action="store_true", default=os.environ.get("PYRTAN_LISTED", "").lower() in ("1", "true", "yes"), help="put this hub in the directory it gossips, so others can find it (default $PYRTAN_LISTED)")
     p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
+    p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
     p.add_argument("--quiet", action="store_true")
 
     p = sub.add_parser("follow", help="follow another hub, through a running federated hub of yours")
@@ -172,6 +173,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     _token_arg(p, "the token the service or hub requires, if any")
 
+    p = sub.add_parser("reports", help="gaps reported across the federation for catalog trees, as a hub (or pyrtan.com) carries them")
+    p.add_argument("id", nargs="?", default=None, metavar="NAMESPACE/NAME", help="only this tree (any version)")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT"), help="a federated hub (default $PYRTAN_AT, else the snapshot at pyrtan.com)")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("unanswered", help="sentences nobody answered, each with the tree that would")
     p.add_argument("--at", help="a running service or hub")
     p.add_argument("--json", action="store_true")
@@ -189,15 +195,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("pull", help="fetch a tree from a catalog, verified against its index")
-    p.add_argument("spec", nargs="+", metavar="NAME[@VERSION]")
+    p.add_argument("spec", nargs="+", metavar="[NAMESPACE/]NAME[@VERSION]")
     p.add_argument("--dir", default=None, help="where to write (default: the first of $PYRTAN_TREES or ./trees)")
     p.add_argument("--catalog", default=None, help=f"catalog URL or directory (default $PYRTAN_CATALOG or {catalog_url()})")
     p.add_argument("--force", action="store_true", help="replace a file that exists and differs")
 
-    p = sub.add_parser("index", help="build a catalog index.json from a directory of trees")
-    p.add_argument("dir")
-    p.add_argument("--out", default=None, help="write the index here (default: DIR/index.json; '-' for stdout)")
+    p = sub.add_parser("index", help="build a catalog index.json from directories of trees")
+    p.add_argument("dir", nargs="+")
+    p.add_argument("--out", default=None, help="write the index here (default: DIR/index.json, or COPY/index.json with --copy; '-' for stdout)")
+    p.add_argument("--copy", metavar="DIR", default=None, help="copy every tree file into DIR as <namespace>/<name>.toml and describe that layout (needed with more than one source directory)")
     p.add_argument("--allow-unlicensed", action="store_true", help="index trees with no 'license' too")
+    p.add_argument("--require-namespace", action="store_true", help="leave out trees with no 'namespace'")
+
+    p = sub.add_parser("publish", help="put a tree into a checkout of the catalog repository, ready for a pull request")
+    p.add_argument("file", help="the tree file; it must carry 'namespace' and 'license'")
+    p.add_argument("--into", required=True, metavar="CHECKOUT", help="a checkout of github.com/b-i-t-8/pyrtan (or any repository with a catalog/ directory)")
+    p.add_argument("--owner", action="append", default=[], metavar="LOGIN", help="GitHub login(s) that own the namespace; needed when the namespace is new")
 
     p = sub.add_parser("console", help="write the console as one static HTML file, to host anywhere")
     p.add_argument("--out", required=True, help="the file to write ('-' for stdout)")
@@ -205,8 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
-        "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "console": cmd_console,
-        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory,
+        "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
+        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch,
     }
     return commands[args.command](args)
@@ -447,7 +460,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
         federate=args.federate or bool(args.advertise) or bool(follow) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, listed=args.listed,
         trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-        store=args.store, replicas=args.replicas,
+        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
@@ -487,6 +500,34 @@ def cmd_gaps(args: argparse.Namespace) -> int:
         peer = f" ({g['peer']})" if g.get("peer") else ""
         times = f" ×{g['count']}" if g.get("count", 1) > 1 else ""
         print(f"{g['tree']}.{g['node']}: {g['on']} = {json.dumps(g['observed'], ensure_ascii=False)}{times}{peer}")
+    return 0
+
+
+def cmd_reports(args: argparse.Namespace) -> int:
+    source = f"{args.at.rstrip('/')}/reports" if args.at else (os.environ.get("PYRTAN_REPORTS") or "https://pyrtan.com/rendezvous/reports.json")
+    try:
+        if source.startswith(("http://", "https://")):
+            status, body = http_json("GET", source)
+        else:
+            status, body = 200, json.loads(Path(source).read_text(encoding="utf-8"))  # a baked reports.json on disk
+    except Exception as e:
+        print(f"pyrtan: {source}: {e}", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {source} answered {status}", file=sys.stderr)
+        return 3
+    reports = [r for r in body.get("reports", []) if isinstance(r, dict)]
+    if args.id:
+        reports = [r for r in reports if str(r.get("id", "")).split("@")[0] == args.id]
+    if args.json:
+        print(json.dumps({"source": source, "reports": reports}, indent=2, ensure_ascii=False))
+        return 0
+    if not reports:
+        print(f"no gap reports at {source}" + (f" for {args.id}" if args.id else ""))
+        return 0
+    for r in reports:
+        who = f", {r['reporters']} hub(s)" if r.get("reporters", 1) > 1 else ""
+        print(f"{r['id']} {r['node']}: {r['on']} = {json.dumps(r.get('observed'), ensure_ascii=False)}  ×{r.get('count', 1)}{who}")
     return 0
 
 
@@ -695,8 +736,8 @@ def cmd_search(args: argparse.Namespace) -> int:
         print(f"nothing in {cat.base} matches {' '.join(args.words)!r}")
         return 1
     for e in found:
-        hosts = ", ".join(e.get("hosts", []))
-        print(f"{e['name']}@{e.get('version', '?')}  {e.get('description', '')}" + (f"  [{hosts}]" if hosts else ""))
+        reach = ", ".join(e.get("hosts", []) + [s for s in e.get("sources", []) if s != "http"])
+        print(f"{e.get('id', e['name'])}@{e.get('version', '?')}  {e.get('description', '')}" + (f"  [{reach}]" if reach else ""))
         for t in e.get("triggers", [])[:3]:
             print(f"    {t}")
     return 0
@@ -714,26 +755,56 @@ def cmd_pull(args: argparse.Namespace) -> int:
             worst = 1
             continue
         tree = load_tree(target)
-        print(f"{tree.name}@{tree.version} -> {target}" + (f"  (hosts: {', '.join(tree.hosts)})" if tree.hosts else ""))
+        reach = ", ".join(tree.hosts + [s for s in tree.sources() if s != "http"])
+        print(f"{tree.id}@{tree.version} -> {target}" + (f"  (reaches: {reach})" if reach else ""))
     return worst
 
 
 def cmd_index(args: argparse.Namespace) -> int:
-    root = Path(args.dir)
-    if not root.is_dir():
-        print(f"pyrtan: {root}: not a directory", file=sys.stderr)
+    roots = [Path(d) for d in args.dir]
+    for root in roots:
+        if not root.is_dir():
+            print(f"pyrtan: {root}: not a directory", file=sys.stderr)
+            return 2
+    if len(roots) > 1 and not args.copy:
+        print("pyrtan index: more than one directory needs --copy DIR, so the index has one place to point at", file=sys.stderr)
         return 2
-    index, problems = build_index(root, require_license=not args.allow_unlicensed)
+    index, problems = build_index(roots, require_license=not args.allow_unlicensed, copy_to=args.copy, require_namespace=args.require_namespace)
     for p in problems:
         print(f"{p}", file=sys.stderr)
     text = json.dumps(index, indent=2, ensure_ascii=False) + "\n"
     if args.out == "-":
         sys.stdout.write(text)
     else:
-        out = Path(args.out) if args.out else root / "index.json"
+        out = Path(args.out) if args.out else (Path(args.copy) if args.copy else roots[0]) / "index.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
-        print(f"wrote {out}: {index['count']} tree(s)" + (f", {len(problems)} left out" if problems else ""))
+        print(f"wrote {out}: {index['count']} tree(s)" + (f", copied to {args.copy}" if args.copy else "") + (f", {len(problems)} left out" if problems else ""))
     return 1 if problems else 0
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Copy a tree into a checkout's catalog/<namespace>/, write OWNERS for
+    a new namespace, run the gate, and say what to do next. The pull
+    request is the publishing; this prepares it."""
+    from .catalog import publish
+
+    try:
+        placed, notes = publish(args.file, args.into, owners=args.owner)
+    except CatalogError as e:
+        print(f"pyrtan publish: {e}", file=sys.stderr)
+        return 1
+    for n in notes:
+        print(n)
+    print(f"placed {placed}")
+    rel = placed.relative_to(Path(args.into).resolve())
+    print("next, from that checkout:")
+    print(f"  git checkout -b catalog/{rel.parent.name}-{rel.stem}")
+    print(f"  git add {rel.parent}")
+    print(f"  git commit -m \"catalog: {rel.parent.name}/{rel.stem}\"")
+    print("  git push -u origin HEAD")
+    print("then open a pull request; the catalog workflow runs the same gate and a maintainer merges.")
+    return 0
 
 
 def cmd_console(args: argparse.Namespace) -> int:

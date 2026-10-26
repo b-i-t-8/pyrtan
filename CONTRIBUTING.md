@@ -25,11 +25,27 @@ A tree that reads a page should prefer an API or a feed when the site offers
 one, and should decide on the status code before it decides on the body.
 
 A tree meant for the catalog at pyrtan.com carries a `license` line (an
-SPDX identifier; `MIT`, `Apache-2.0` or `CC0-1.0` are the usual choices).
-The catalog *is* `examples/`: the `pages` workflow indexes it and
-publishes it at <https://pyrtan.com/catalog/> on every push to `main`,
-so a tree merged here with a licence and a test is pullable the same
-day. See [`site/README.md`](site/README.md).
+SPDX identifier; `MIT`, `Apache-2.0` or `CC0-1.0` are the usual choices)
+and a `namespace` line (who publishes it; the catalog id is
+`namespace/name`). The repository's own examples are the `pyrtan`
+namespace. Everyone else publishes under `catalog/<namespace>/`:
+
+    pyrtan publish my-tree.toml --into . --owner <your GitHub login>
+    git checkout -b catalog/<namespace>-my-tree && git add catalog && git commit && git push -u origin HEAD
+
+then open a pull request. The `catalog` workflow runs the gate
+(`site/gate.py`): the tree loads clean, has a licence and a namespace,
+sits in its namespace's directory under its own name, no other tree has
+its id, only the namespace's `OWNERS` change it, and a changed file bumps
+its `version`. A test and a recording are welcome but not required for
+a namespace of your own; the gate is the review. A maintainer merges,
+and the `pages` workflow publishes it at <https://pyrtan.com/catalog/>
+the same day. See [`catalog/README.md`](catalog/README.md) and
+[`site/README.md`](site/README.md).
+
+Once it is out there, `pyrtan reports <namespace>/my-tree` shows the gaps
+hubs that opted in have met with it: the node, the value no branch
+covered, how often. That is the list of branches to write next.
 
 ## Changing the runtime
 

@@ -60,6 +60,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets as _secrets
 import threading
 import time
@@ -88,6 +89,9 @@ ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kep
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
+REPORT_TTL = 30 * 86400                # a gap report unheard of for this long is dropped
+REPORT_MAX = 2000
+REPORT_ID = re.compile(r"^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*@\d+$")  # namespace/name@version: a catalog tree
 HOLDER_FRESH = 86400.0                 # a holder confirmed within this counts toward the replicas
 ASK_WINDOW = 600.0                     # a member asked to keep within this counts as covered until it confirms
 SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
@@ -239,6 +243,28 @@ class Remote:
         return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)))
 
 
+def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any] | None:
+    """A report as carried: valid or nothing. ``reporter`` is who said it
+    first (the entry's own, else who we heard it from)."""
+    tree_id, node, on = e.get("id"), e.get("node"), e.get("on")
+    if not (isinstance(tree_id, str) and REPORT_ID.match(tree_id) and isinstance(node, str) and isinstance(on, str)):
+        return None
+    who = e.get("reporter") if isinstance(e.get("reporter"), str) and e.get("reporter", "").startswith(("http://", "https://")) else reporter
+    try:
+        count = max(1, int(e.get("count", 1)))
+        last = min(float(e.get("last", now)), now)
+    except (TypeError, ValueError):
+        return None
+    if now - last >= REPORT_TTL:
+        return None
+    observed = e.get("observed")
+    if isinstance(observed, str) and len(observed) > 80:
+        observed = "<str>"
+    elif not isinstance(observed, (str, int, float, bool)) and observed is not None:
+        observed = f"<{type(observed).__name__}>"
+    return {"reporter": who.rstrip("/"), "id": tree_id, "node": node[:80], "on": on[:120], "observed": observed, "count": count, "last": last}
+
+
 def heard(seen: float, now: float | None = None) -> str:
     """How recently a directory entry's hub announced, as gossip carried it."""
     age = (now if now is not None else time.time()) - seen
@@ -246,8 +272,11 @@ def heard(seen: float, now: float | None = None) -> str:
 
 
 class Federation:
-    def __init__(self, hub_id: str, *, name: str = "hub", secret: str | None = None, state: str | Path | None = None, open_follows: bool = True, capabilities: Callable[[], list[dict[str, Any]]] | None = None, listed: bool = False, store: BlobStore | str | Path | None = None, replicas: int = 2, auto_keys: dict[str, Callable[[], Any]] | None = None) -> None:
+    def __init__(self, hub_id: str, *, name: str = "hub", secret: str | None = None, state: str | Path | None = None, open_follows: bool = True, capabilities: Callable[[], list[dict[str, Any]]] | None = None, listed: bool = False, store: BlobStore | str | Path | None = None, replicas: int = 2, auto_keys: dict[str, Callable[[], Any]] | None = None, report_gaps: bool = False, own_reports: Callable[[], list[dict[str, Any]]] | None = None) -> None:
         self.id = hub_id.rstrip("/")
+        self.report_gaps = report_gaps        # opt in: our own catalog trees' gaps travel with our announces
+        self.own_reports = own_reports or (lambda: [])  # the hub's gaps for catalog trees, shaped for a report
+        self.reports: dict[str, dict[str, Any]] = {}    # heard gap reports: (reporter, id, node, on, observed) -> entry
         self.name = name
         self.secret = secret or None          # a shared federation secret: Follows must be signed with it
         self.open_follows = open_follows      # without a secret, whether strangers may follow
@@ -298,6 +327,7 @@ class Federation:
                 "followers": [r.to_state() for r in self.followers.values()],
                 "directory": list(self.directory_entries.values()),
                 "keeping": self.keeping,
+                "reports": list(self.reports.values()),
             }
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -314,6 +344,7 @@ class Federation:
         for d in data.get("followers", []):
             self.followers[d["url"]] = Remote.from_state(d)
         self.merge_directory(data.get("directory", []), via="state")
+        self.merge_reports(data.get("reports", []), via="state")
         keeping = data.get("keeping")
         if isinstance(keeping, dict):
             self.keeping = {k: v for k, v in keeping.items() if isinstance(v, dict) and isinstance(v.get("holders"), dict)}
@@ -392,6 +423,70 @@ class Federation:
         hubs.sort(key=lambda h: (h["id"] != self.id, {"up": 0, "stale": 1, "down": 2}[h["link"]], h["name"], h["id"]))
         return {"hub": self.id, "name": self.name, "listed": self.listed, "count": len(hubs), "hubs": hubs}
 
+    # ------------------------------------------------------------ gap reports
+    # A hub that opted in (--report-gaps) puts the gaps its catalog trees met
+    # into its announces: the tree's id (namespace/name@version), the node,
+    # the path decided on and the value no branch covered, with a count;
+    # never the inputs or the rest of the state. Every federated hub keeps
+    # what it hears and passes it on, like the directory, so the reports
+    # reach the seeds and the snapshot pyrtan.com bakes, where an author
+    # reads them beside the tree. Nothing is reported for a tree without a
+    # namespace: there is nobody to report to.
+
+    def report_gossip(self) -> list[dict[str, Any]]:
+        now = time.time()
+        own = []
+        if self.report_gaps:
+            for r in self.own_reports():
+                shaped = _shape_report(r, self.id, now)
+                if shaped:
+                    own.append(shaped)
+        with self._lock:
+            heard = [r for r in self.reports.values() if r["reporter"] != self.id and now - r["last"] < REPORT_TTL]
+        return own + sorted(heard, key=lambda r: -r["last"])
+
+    def merge_reports(self, entries: Any, via: str) -> int:
+        """Take reports heard from ``via``: one row per reporter and gap, a
+        newer ``last`` replaces an older one, nothing from the future is
+        believed, old news is dropped, the table stays bounded."""
+        if not isinstance(entries, list):
+            return 0
+        now = time.time()
+        changed = 0
+        with self._lock:
+            for e in entries:
+                shaped = _shape_report(e, via, now) if isinstance(e, dict) else None
+                if shaped is None or shaped["reporter"] == self.id:
+                    continue
+                key = json.dumps([shaped["reporter"], shaped["id"], shaped["node"], shaped["on"], shaped["observed"]], sort_keys=True, ensure_ascii=False)
+                current = self.reports.get(key)
+                if current is not None and (current["last"], current["count"]) >= (shaped["last"], shaped["count"]):
+                    continue
+                self.reports[key] = shaped
+                changed += 1
+            if len(self.reports) > REPORT_MAX:
+                for key in sorted(self.reports, key=lambda k: self.reports[k]["last"])[: len(self.reports) - REPORT_MAX]:
+                    del self.reports[key]
+        if changed:
+            self._save()
+        return changed
+
+    def reports_view(self) -> dict[str, Any]:
+        """Every gap report this hub carries, one row per gap with the
+        counts and reporters summed, most seen first."""
+        rows: dict[str, dict[str, Any]] = {}
+        for r in self.report_gossip():
+            key = json.dumps([r["id"], r["node"], r["on"], r["observed"]], sort_keys=True, ensure_ascii=False)
+            row = rows.get(key)
+            if row is None:
+                rows[key] = {"id": r["id"], "node": r["node"], "on": r["on"], "observed": r["observed"], "count": r["count"], "reporters": 1, "last": r["last"]}
+            else:
+                row["count"] += r["count"]
+                row["reporters"] += 1
+                row["last"] = max(row["last"], r["last"])
+        out = sorted(rows.values(), key=lambda r: (-r["count"], -r["last"], r["id"]))
+        return {"hub": self.id, "reporting": self.report_gaps, "count": len(out), "reports": out}
+
     # ------------------------------------------------------------ outgoing
 
     def _activity(self, type_: str, object_: Any, **extra: Any) -> dict[str, Any]:
@@ -399,6 +494,9 @@ class Federation:
 
     def _announcement(self, for_remote: Remote | None = None) -> dict[str, Any]:
         out = {"type": "Capabilities", "name": self.name, "trees": self.capabilities(), "directory": self.gossip()}
+        reports = self.report_gossip()
+        if reports:
+            out["reports"] = reports
         if for_remote is not None:
             out["kept"] = [b["key"] for b in self.store.list_kept(for_remote.url)]  # what we keep for them
         return out
@@ -425,6 +523,7 @@ class Federation:
             if activity.get("type") == "Announce":
                 # An inbox answers an Announce with its own gossip: one round trip, both directions.
                 self.merge_directory(answer.get("directory"), via=remote.url)
+                self.merge_reports(answer.get("reports"), via=remote.url)
             if activity.get("type") == "Keep" and answer.get("kept") == activity["object"].get("key"):
                 self.confirm(remote.url, activity["object"]["key"], activity["object"]["sha256"])
         return ok, None if ok else f"inbox answered {status}: {answer}", answer
@@ -835,11 +934,12 @@ class Federation:
                         names = {t.get("name") for t in obj.get("trees", []) if isinstance(t, dict)}
                         remote.trees = [handed[n].capability() for n in sorted(names & set(handed))]
             taken = self.merge_directory(obj.get("directory", []), via=actor)
+            self.merge_reports(obj.get("reports", []), via=actor)
             # What it keeps for us that we no longer have: ask for it back.
             wanted = [k for k in obj.get("kept", []) if isinstance(k, str) and not self.store.get_own(k)]
             for k in wanted[:20]:
                 self.deliver(remote, self._activity("Fetch", {"key": k}))
-            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip(), "kept": [b["key"] for b in self.store.list_kept(actor)]}
+            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip(), "reports": self.report_gossip(), "kept": [b["key"] for b in self.store.list_kept(actor)]}
         if kind == "Keep":
             obj = activity.get("object")
             if not isinstance(obj, dict) or "data" not in obj:

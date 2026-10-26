@@ -268,21 +268,44 @@ shows who follows whom. The design is in
 ## The catalog
 
 Trees other people wrote are at <https://pyrtan.com/catalog/>, a directory
-of static files anyone can mirror.
+of static files anyone can mirror. Every tree there is `namespace/name`:
+the namespace is who published it, so two people can each have a
+`weather`.
 
 ```
 pyrtan search weather
-pyrtan pull weather --dir trees
+pyrtan pull pyrtan/weather --dir trees     # a bare name is enough when one namespace has it
 pyrtan serve trees
 ```
 
 A pull checks the file's hash against the catalog's index, loads it as a
-tree, and checks the name and version inside before writing it; a file you
-have edited is not overwritten without `--force`. Point `--catalog` (or
-`$PYRTAN_CATALOG`) at a directory or URL of your own to use a private
-catalog; `pyrtan index DIR` builds one from any folder of trees. A tree in
-a catalog says what others may do with it in a `license` line (an SPDX
-identifier such as `MIT`).
+tree, and checks the name, namespace and version inside before writing
+it; a file you have edited is not overwritten without `--force`. Point
+`--catalog` (or `$PYRTAN_CATALOG`) at a directory or URL of your own to
+use a private catalog; `pyrtan index DIR...` builds one from any folders
+of trees (`--copy` lays them out as `namespace/name.toml`). A tree in a
+catalog says what others may do with it in a `license` line (an SPDX
+identifier such as `MIT`) and who publishes it in a `namespace` line.
+
+**Publishing is a pull request.** `pyrtan publish my-tree.toml --into
+<checkout of this repository> --owner <your GitHub login>` puts the file
+under `catalog/<namespace>/`, writes the namespace's `OWNERS` if it is
+new, and runs the gate; push the branch and open a pull request. The
+`catalog` workflow runs the same gate (every tree loads clean with a
+licence and a namespace, sits where its namespace and name say, ids are
+unique, only a namespace's owners change it, a changed file bumps its
+`version`), a maintainer merges, and the next build serves it. No
+account, no API, no model in the review: [`catalog/README.md`](catalog/README.md).
+
+**Gaps come back to the author.** A hub started with `--report-gaps`
+puts the gaps its catalog trees meet (the tree's `namespace/name@version`,
+the node, the path decided on and the value no branch covered, with a
+count; never the inputs) into its federation announces. Every federated
+hub carries and gossips them like the directory, `/reports` shows them,
+pyrtan.com bakes them hourly into `rendezvous/reports.json`, and the
+catalog page shows each tree's beside it, so `pyrtan reports
+pyrtan/weather` tells an author where reality disagreed with their tree
+across every swarm that opted in.
 
 ## Leaving the LAN
 
@@ -405,16 +428,17 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.7.0. The core, the service, the hub, the command, the console, the
-catalog client, the language rules, federation between hubs, the
-gossiped directory, members (a browser or a phone as part of the swarm),
-the blobs they keep and the trees they run (`pyrtan.js`, conformant with
-the Python runtime), and six forms of I/O (HTTP, a browser, files,
-programs, serial lines, MQTT queues), each behind an allow-list, are
-built and tested; a swarm can require a token, keep its gaps, refuse
-private addresses and its own box, and follow other swarms. Not yet
-built: persistent storage for unanswered sentences, `pyrtan watch`, and
-hosting.
+0.8.0. The core, the service, the hub, the command, the console, the
+catalog (namespaces, publishing by pull request through the gate, gap
+reports gossiped back to authors), the language rules, federation
+between hubs, the gossiped directory, members (a browser or a phone as
+part of the swarm), the blobs they keep and the trees they run
+(`pyrtan.js`, conformant with the Python runtime), and six forms of I/O
+(HTTP, a browser, files, programs, serial lines, MQTT queues), each
+behind an allow-list, are built and tested; a swarm can require a token,
+keep its gaps, refuse private addresses and its own box, and follow
+other swarms. Not yet built: persistent storage for unanswered
+sentences, `pyrtan watch`, and hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

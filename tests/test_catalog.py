@@ -71,9 +71,9 @@ def test_search_and_find(served):
     assert [e["name"] for e in cat.search("open-meteo")] == ["weather"]
     assert [e["name"] for e in cat.search("news stories")] == ["hacker-news"]
     assert cat.search("nothing like this") == []
-    assert cat.find("weather")["version"] == 1
-    assert cat.find("weather@1")["name"] == "weather"
-    with pytest.raises(CatalogError, match="has version 1, not 4"):
+    assert cat.find("weather")["version"] == 2
+    assert cat.find("weather@2")["name"] == "weather"
+    with pytest.raises(CatalogError, match="has version 2, not 4"):
         cat.find("weather@4")
     with pytest.raises(CatalogError, match="not in the catalog"):
         cat.find("nope")
@@ -131,11 +131,140 @@ def test_cli_index_search_pull(catalog_dir, served, tmp_path, capsys):
     assert main(["index", str(catalog_dir), "--out", str(out)]) == 0
     assert json.loads(out.read_text())["count"] == 10
     assert main(["search", "weather", "--catalog", served]) == 0
-    assert "weather@1" in capsys.readouterr().out
+    assert "weather@2" in capsys.readouterr().out
     assert main(["search", "zzz", "--catalog", served]) == 1
-    assert main(["pull", "site-status", "weather@1", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
+    assert main(["pull", "site-status", "weather@2", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
     assert (tmp_path / "t" / "site-status.toml").exists() and (tmp_path / "t" / "weather.toml").exists()
     assert main(["pull", "weather@9", "--catalog", served, "--dir", str(tmp_path / "t")]) == 1
     assert "not 9" in capsys.readouterr().err
     assert main(["console", "--out", str(tmp_path / "site" / "console.html")]) == 0
     assert "<title>Pyrtan</title>" in (tmp_path / "site" / "console.html").read_text()
+
+
+# ---------------------------------------------------------------- namespaces, the gate, publishing
+
+
+OTHER = '''
+name = "weather"
+version = 2
+namespace = "barry"
+description = "someone else's weather"
+license = "MIT"
+hosts = ["example.com"]
+start = "get"
+
+[nodes.get]
+kind = "observe"
+http = { url = "https://example.com/" }
+next = "say"
+
+[nodes.say]
+kind = "done"
+say = "ok"
+'''
+
+
+def test_namespaces_in_the_index_and_in_pulls(tmp_path):
+    src = tmp_path / "src"
+    (src / "examples").mkdir(parents=True)
+    shutil.copytree(EXAMPLES, src / "examples", dirs_exist_ok=True)
+    (src / "catalog" / "barry").mkdir(parents=True)
+    (src / "catalog" / "barry" / "weather.toml").write_text(OTHER)
+    out = tmp_path / "out"
+    index, problems = build_index([src / "examples", src / "catalog"], copy_to=out, require_namespace=True)
+    assert not problems, problems
+    ids = {e["id"]: e for e in index["trees"]}
+    assert ids["pyrtan/weather"]["path"] == "pyrtan/weather.toml" and ids["barry/weather"]["path"] == "barry/weather.toml"
+    assert (out / "pyrtan" / "weather.toml").exists() and (out / "barry" / "weather.toml").read_text() == OTHER
+    assert ids["pyrtan/disk-space"]["sources"] == ["shell"] and ids["pyrtan/disk-space"]["commands"] == ["df"]
+    (out / "index.json").write_text(json.dumps(index))
+    cat = Catalog(str(out))
+    # A bare name is enough when one namespace has it; with two, say which.
+    assert cat.find("github-release")["id"] == "pyrtan/github-release"
+    with pytest.raises(CatalogError, match="more than one namespace: barry/weather, pyrtan/weather"):
+        cat.find("weather")
+    assert cat.find("barry/weather")["version"] == 2 and cat.find("pyrtan/weather@2")["namespace"] == "pyrtan"
+    with pytest.raises(CatalogError, match="has version 2, not 9"):
+        cat.find("barry/weather@9")
+    with pytest.raises(CatalogError, match="not in the catalog"):
+        cat.find("nobody/weather")
+    assert [e["id"] for e in cat.search("barry")] == ["barry/weather"]
+    assert {e["id"] for e in cat.search("shell")} == {"pyrtan/disk-space"}
+    target = cat.pull("barry/weather", tmp_path / "trees")
+    assert target.name == "weather.toml" and target.read_text() == OTHER
+    # A file whose namespace is not the index's is refused.
+    (out / "barry" / "weather.toml").write_text(OTHER.replace('namespace = "barry"', 'namespace = "mallory"'))
+    index["trees"] = [dict(e, sha256=hashlib.sha256((out / e["path"]).read_bytes()).hexdigest()) if e["id"] == "barry/weather" else e for e in index["trees"]]
+    (out / "index.json").write_text(json.dumps(index))
+    with pytest.raises(CatalogError, match="namespace is 'mallory'"):
+        Catalog(str(out)).pull("barry/weather", tmp_path / "trees2")
+    # Two directories need a place to copy to; one does not.
+    with pytest.raises(ValueError):
+        build_index([src / "examples", src / "catalog"])
+    one, problems = build_index(src / "examples")
+    assert not problems and {e["path"] for e in one["trees"]} >= {"weather/weather.toml"}
+
+
+def test_gate_and_publish(tmp_path, capsys):
+    from pyrtan.catalog import gate, publish
+
+    repo = tmp_path / "repo"
+    shutil.copytree(EXAMPLES, repo / "examples")
+    (repo / "catalog").mkdir()
+    assert gate(repo) == []
+    # Publishing needs a namespace and a licence in the file, and an owner for a new namespace.
+    tree = tmp_path / "lan-printer.toml"
+    tree.write_text(OTHER.replace('name = "weather"', 'name = "lan-printer"').replace('namespace = "barry"\n', ""))
+    with pytest.raises(CatalogError, match='namespace = "you"'):
+        publish(tree, repo, owners=["barry"])
+    tree.write_text(OTHER.replace('name = "weather"', 'name = "lan-printer"'))
+    with pytest.raises(CatalogError, match="say who owns it"):
+        publish(tree, repo)
+    placed, notes = publish(tree, repo, owners=["@Barry"])
+    assert placed == (repo / "catalog" / "barry" / "lan-printer.toml").resolve() and notes == ["new namespace catalog/barry/ owned by barry"]
+    assert (repo / "catalog" / "barry" / "OWNERS").read_text().endswith("barry\n")
+    assert gate(repo) == []
+    # The same file again is a no-op; a changed file must bump its version.
+    assert publish(tree, repo)[1] == ["catalog/barry/lan-printer.toml already holds this exact file"]
+    tree.write_text(tree.read_text().replace('say = "ok"', 'say = "changed"'))
+    with pytest.raises(CatalogError, match="bump this file's version past it"):
+        publish(tree, repo)
+    tree.write_text(tree.read_text().replace("version = 2", "version = 3"))
+    assert publish(tree, repo, owners=["alice"])[1] == ["added alice to catalog/barry/OWNERS", "replaces version 2 with 3"]
+    # What the gate refuses.
+    bad = repo / "catalog" / "barry" / "weather.toml"
+    bad.write_text(OTHER.replace('namespace = "barry"', 'namespace = "pyrtan"'))
+    problems = [str(p) for p in gate(repo)]
+    assert any("catalog/barry/weather.toml: a tree with id 'pyrtan/weather' is already at" in p for p in problems)
+    assert any("sits under catalog/barry/" in p for p in problems)
+    bad.write_text(OTHER.replace('name = "weather"', 'name = "other"'))
+    assert any("its file must be other.toml" in p for p in [str(p) for p in gate(repo)])
+    bad.unlink()
+    (repo / "catalog" / "barry" / "notes.txt").write_text("x")
+    assert any("only <name>.toml files and OWNERS belong" in p for p in [str(p) for p in gate(repo)])
+    (repo / "catalog" / "barry" / "notes.txt").unlink()
+    (repo / "catalog" / "nobody").mkdir()
+    (repo / "catalog" / "nobody" / "t.toml").write_text(OTHER.replace('namespace = "barry"', 'namespace = "nobody"').replace('name = "weather"', 'name = "t"'))
+    assert any("needs an OWNERS file" in p for p in [str(p) for p in gate(repo)])
+    shutil.rmtree(repo / "catalog" / "nobody")
+    (repo / "examples" / "weather" / "weather.toml").write_text((repo / "examples" / "weather" / "weather.toml").read_text().replace('namespace = "pyrtan"', 'namespace = "barry"'))
+    assert any("published by 'pyrtan', not 'barry'" in p for p in [str(p) for p in gate(repo)])
+    shutil.copy(EXAMPLES / "weather" / "weather.toml", repo / "examples" / "weather" / "weather.toml")
+    assert gate(repo) == []
+    # Only owners change a namespace; a changed file bumps its version.
+    assert [str(p) for p in gate(repo, changed=["catalog/barry/lan-printer.toml"], author="mallory")] == ["catalog/barry/lan-printer.toml: mallory is not in catalog/barry/OWNERS; only a namespace's owners change it"]
+    assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="Alice") == []
+    assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="alice", base={"catalog/barry/lan-printer.toml": (3, b"older bytes")}) != []
+    assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="alice", base={"catalog/barry/lan-printer.toml": (2, b"older bytes")}) == []
+    assert gate(repo, base={"catalog/barry/gone.toml": (1, b"x")}) == []  # a removal is fine
+    # The command, and the index the site serves.
+    assert main(["publish", str(tree), "--into", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "placed" in out and "git checkout -b catalog/barry-lan-printer" in out
+    assert main(["index", str(repo / "examples"), str(repo / "catalog"), "--copy", str(tmp_path / "site"), "--require-namespace"]) == 0
+    served = json.loads((tmp_path / "site" / "index.json").read_text())
+    assert {e["id"] for e in served["trees"]} == {f"pyrtan/{n}" for n in ("weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check")} | {"barry/lan-printer"}
+    assert main(["index", str(repo / "examples"), str(repo / "catalog")]) == 2  # two roots need --copy
+    assert main(["search", "lan", "--catalog", str(tmp_path / "site")]) == 0 and "barry/lan-printer@3" in capsys.readouterr().out
+    assert main(["pull", "lan-printer", "--catalog", str(tmp_path / "site"), "--dir", str(tmp_path / "pulled")]) == 0
+    assert "barry/lan-printer@3 ->" in capsys.readouterr().out

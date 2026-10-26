@@ -6,7 +6,8 @@
 # outside `hosts`.
 
 name = "rendered-headline"
-version = 1
+version = 2
+namespace = "pyrtan"
 description = "The main heading of a page that needs a script to render, through a real browser."
 tags = ["web", "browser", "read-only"]
 license = "MIT"

@@ -8,9 +8,10 @@ static directory and publishes it.
 | :-- | :-- | :-- |
 | `/` | the landing page, with the live directory read from the seeds in the visitor's browser | `site/index.html` |
 | `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it); point it at any hub started with `--cors https://pyrtan.com`; its Member tab joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
-| `/catalog/` | the trees people can `pyrtan pull`, and `index.json` the command reads | `pyrtan index examples`, and the tree files |
+| `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, and `index.json` the command reads | `pyrtan index examples catalog --copy`, through `site/gate.py` |
 | `/rendezvous/seeds.json` | hubs to follow first | `site/rendezvous/seeds.json` |
 | `/rendezvous/directory.json` | a snapshot of the directory as the seeds know it, refreshed hourly | `site/snapshot.py` |
+| `/rendezvous/reports.json` | the gap reports the seeds carry for catalog trees, refreshed hourly | `site/snapshot.py --reports` |
 
 `site/build.sh out` builds the same thing locally; open `out/index.html`.
 
@@ -38,12 +39,22 @@ writes `trees/weather.toml`.
 
 ## The catalog
 
-The catalog is `examples/`. A tree goes in by pull request to this
-repository, under `examples/<name>/`, with a `license` line and a test
-in `tests/test_examples.py` against a recording (see
-[`CONTRIBUTING.md`](../CONTRIBUTING.md)). `pyrtan index` refuses a tree
-with no licence or a duplicate name, and the workflow runs the tests
-before it publishes, so what is at `/catalog/` always passes.
+The catalog is `examples/` (the `pyrtan` namespace) and `catalog/`
+(everyone else's, one directory per namespace with an `OWNERS` file),
+served as `/catalog/<namespace>/<name>.toml` beside `index.json`. A tree
+goes in by pull request: `pyrtan publish my-tree.toml --into <checkout>
+--owner <login>` places it and runs the gate, the `catalog` workflow runs
+the same gate on the pull request (`site/gate.py`: clean, licensed,
+namespaced, in the right place, unique id, changed only by an owner,
+version bumped), and a maintainer merges. The `pages` workflow runs the
+gate and the tests again before it publishes, so what is at `/catalog/`
+always passes. See [`catalog/README.md`](../catalog/README.md) and
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
+`rendezvous/reports.json` is baked beside the directory snapshot: the gap
+reports the seeds carry (from hubs that opted in with `--report-gaps`),
+merged hourly, which the catalog page shows beside each tree and `pyrtan
+reports` reads when given no hub.
 
 ## The seeds
 
