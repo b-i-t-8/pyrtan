@@ -318,6 +318,7 @@ class Broker:
         self.refuse = refuse
         self.published: list[tuple[str, bytes]] = []
         self.subscribed: list[str] = []
+        self.subscribers: list[tuple[socket.socket, str]] = []
         self.sock = socket.socket()
         self.sock.bind(("127.0.0.1", 0))
         self.sock.listen(5)
@@ -350,9 +351,12 @@ class Broker:
                     tlen = struct.unpack(">H", body[2:4])[0]
                     topic = body[4:4 + tlen].decode()
                     self.subscribed.append(topic)
+                    self.subscribers.append((conn, topic))
                     conn.sendall(_mqtt_packet(0x90, pid + b"\x00"))
                     if self.message is not None:
                         conn.sendall(_mqtt_packet(0x30, _mqtt_str(topic.replace("+", "kitchen")) + self.message))
+                elif ptype == 12:  # PINGREQ
+                    conn.sendall(_mqtt_packet(0xD0, b""))
                 elif ptype == 3:
                     tlen = struct.unpack(">H", body[:2])[0]
                     self.published.append((body[2:2 + tlen].decode(), body[2 + tlen:]))
@@ -360,6 +364,13 @@ class Broker:
                     return
         finally:
             conn.close()
+
+    def publish_to_subscribers(self, topic: str, payload: bytes) -> None:
+        for conn, _ in list(self.subscribers):
+            try:
+                conn.sendall(_mqtt_packet(0x30, _mqtt_str(topic) + payload))
+            except OSError:
+                pass
 
     def close(self):
         self.sock.close()

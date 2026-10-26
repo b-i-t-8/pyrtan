@@ -23,6 +23,13 @@ type = "str"
 pattern = "(?i)^[a-z0-9.\\-]+(:[0-9]+)?$"
 description = "A host name, with no scheme"
 
+# On its own, every quarter hour, for one host; `pyrtan watches` shows the
+# last run and whether the path changed since the run before (up -> down).
+[[watches]]
+name = "example.com"
+every = "15m"
+inputs = { host = "example.com" }
+
 [nodes.probe]
 kind = "observe"
 http = { method = "GET", url = "https://{{ inputs.host | lower }}/" }

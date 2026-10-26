@@ -23,6 +23,13 @@ type = "str"
 default = "kitchen"
 pattern = "^[a-z0-9-]+$"
 
+# Also on its own: every reading the kitchen's sensor publishes runs the
+# tree (the run then takes the next message on the topic; a watch on the
+# same topic as the tree reads is the simplest shape, not the only one).
+[[watches]]
+queue = { url = "mqtt://broker.local", topic = "home/kitchen/temperature" }
+inputs = { room = "kitchen" }
+
 [nodes.wait]
 kind = "observe"
 queue = { url = "mqtt://broker.local", topic = "home/{{ inputs.room }}/temperature" }

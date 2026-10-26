@@ -45,7 +45,11 @@ the same day. See [`catalog/README.md`](catalog/README.md) and
 
 Once it is out there, `pyrtan reports <namespace>/my-tree` shows the gaps
 hubs that opted in have met with it: the node, the value no branch
-covered, how often. That is the list of branches to write next.
+covered, how often. That is the list of branches to write next, and
+`pyrtan grow --reports --trees . --apply` drafts each one into the file
+by rules (the range of the hole a number fell into, `{ eq = … }`
+otherwise, a `fail` node to finish); you say what the value means and
+bump the version.
 
 ## Changing the runtime
 

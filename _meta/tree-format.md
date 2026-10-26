@@ -19,6 +19,7 @@ A tree is one TOML file. This is the whole of it.
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
 | `namespace` | for a catalog | Who publishes the tree (lowercase letters, digits, dashes). The catalog id is `namespace/name`; a hub reports a tree's gaps to its author only when it has one. |
 | `triggers` | no | Sentences the tree answers to (below). |
+| `watches` | no | When the tree runs on its own: a clock, a file, a topic or a serial line (below). |
 | `inputs` | no | What the tree needs (below). |
 | `nodes` | yes | The nodes (below). |
 
@@ -102,6 +103,32 @@ edit away from exactly one word in this tree's patterns be read as that
 word; a word close to two is left alone, because choosing would be a guess.
 The trace shows every correction (`typo: wether->weather`). A hub applies a
 tree's `[language]` when it routes, because `/capabilities` carries it.
+
+## Watches
+
+```toml
+[[watches]]
+name = "example.com"                 # optional; shown by pyrtan watches
+every = "15m"                        # a duration, or seconds
+inputs = { host = "example.com" }    # templates may read event, env and now
+
+[[watches]]
+file = "/var/log/syslog"             # fires with the lines appended since last time
+inputs = { text = "{{ event.body | strip }}", n = "{{ event.lines | length }}" }
+
+[[watches]]
+queue = { url = "mqtt://broker.local", topic = "home/+/temperature" }   # fires per message: event.topic, event.body, event.json
+
+[[watches]]
+serial = { device = "/dev/ttyUSB0", baud = 9600, read_until = "\n" }  # fires per line: event.body
+```
+
+Exactly one of `every`, `file`, `queue`, `serial`. A watch is static:
+no template reaches a path, a topic or a device, and `pyrtan check`
+holds each against the tree's `paths`, `hosts` and `topics`, `devices`.
+Every required input must be given or have a default. A watched run's
+trace begins with a `watch` step. `--watch` on a service or hub runs
+them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs
 

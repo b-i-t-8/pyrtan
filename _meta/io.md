@@ -132,7 +132,9 @@ of them being present.
 - **v0.7, this:** the five sources, their lists, their fixtures, the
   examples, the JavaScript runtime's own HTML reader (so css extracts
   agree on a service, in a browser and in node).
-- **Later:** a `watch` that runs a tree when a file, a topic or a serial
-  line speaks (the adapters are ready for it; the trigger is the design
-  still owed), and a serial line held open across nodes for devices with
-  a session.
+- **v0.9, built:** `[[watches]]`, a tree that runs when a file, a topic
+  or a serial line speaks, or on a clock (`watch.py`; the file is
+  polled, the queue and the serial line are held open as streams,
+  `adapters.mqtt_stream` and `adapters.serial_lines`).
+- **Later:** a serial line held open across the nodes of one run, for
+  devices with a session.

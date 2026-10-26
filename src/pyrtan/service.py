@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import sys
 import threading
 import time
 import urllib.error
@@ -58,6 +59,8 @@ from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
 from .trace import Trace
+from .tree import Tree
+from .watch import Watcher
 from .adapters import LocalAdapters
 from .transport import Transport, UrllibTransport
 
@@ -146,6 +149,8 @@ class Service:
         token: str | None = None,
         gaps: str | Path | GapStore | None = None,
         egress: str = "any",
+        unanswered: str | Path | None = None,
+        watch: bool = False,
     ) -> None:
         self.registry = registry
         self.name = name
@@ -157,15 +162,29 @@ class Service:
         adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress)
         self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {}, adapters=adapters)
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
-        self.unanswered = Unanswered()
+        self.unanswered = Unanswered(path=unanswered)
         self.runs = 0
         self._lock = threading.Lock()
+        self.watcher: Watcher | None = None
+        if watch:
+            self.watcher = Watcher(registry, self.run_watched, env=env or {}, egress=egress, after=None, note=lambda text: print(f"pyrtan: {text}", file=sys.stderr)).start()
+
+    def run_watched(self, tree: Tree, inputs: dict[str, Any], trace: Trace) -> Outcome:
+        """How a watch runs a tree: through the same runner and the same
+        bookkeeping as a request, with the watch step already on the trace."""
+        outcome = self.runner.run(tree, inputs, trace=trace)
+        self._finish(outcome, {})
+        return outcome
+
+    def stop(self) -> None:
+        if self.watcher is not None:
+            self.watcher.stop()
 
     # ------------------------------------------------------------ handlers
 
     def health(self) -> dict[str, Any]:
         self.registry.reload()
-        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "egress": self.egress, "uptime_s": int(time.time() - self.started)}
+        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "egress": self.egress, "uptime_s": int(time.time() - self.started), "watches": len(self.watcher) if self.watcher else 0}
         if self.gaps.error:
             health["gaps_file_error"] = self.gaps.error
         return health
@@ -228,6 +247,8 @@ class Service:
             return 200, {"gaps": self.gaps.all()}
         if method == "GET" and path == "/unanswered":
             return 200, {"unanswered": self.unanswered.to_list()}
+        if method == "GET" and path == "/watches":
+            return 200, self.watcher.status() if self.watcher else {"count": 0, "watches": [], "watching": False}
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/manifest.webmanifest":
@@ -237,7 +258,7 @@ class Service:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered"]}
+            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":
@@ -421,9 +442,11 @@ def serve(
     cors: list[str] | None = None,
     gaps: str | Path | None = None,
     egress: str = "any",
+    unanswered: str | Path | None = None,
+    watch: bool = False,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
-    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress)
+    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch)
     server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a

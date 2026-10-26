@@ -22,14 +22,18 @@ observes and how it decides.
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from . import conditions
 from .intent import Trigger, TriggerError, normalise
+from .tree import Tree, TreeError, check, load_tree
 
 # Words that carry no meaning for a tree's name: dropped from the name,
 # kept in the trigger (where "what's the" is worth matching literally).
@@ -233,26 +237,49 @@ class Unanswered:
     dropped. Lives in memory, like gaps; a restart forgets it.
     """
 
-    def __init__(self, limit: int = UNANSWERED_LIMIT) -> None:
+    def __init__(self, limit: int = UNANSWERED_LIMIT, path: "str | Path | None" = None) -> None:
         self.limit = limit
+        self.path = Path(path) if path else None
+        self.error: str | None = None
         self._entries: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()
+        if self.path is not None and self.path.exists():
+            try:
+                for line in self.path.read_text(encoding="utf-8").splitlines():
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(rec, dict) and isinstance(rec.get("text"), str):
+                        self._take(rec["text"], rec.get("peer"), int(rec.get("count", 1)), float(rec.get("last", time.time())), persist=False)
+            except OSError as e:
+                self.error = str(e)
 
     def record(self, text: str, peer: str | None = None) -> dict[str, Any]:
+        return self._take(text, peer, 1, time.time(), persist=True)
+
+    def _take(self, text: str, peer: str | None, count: int, when: float, *, persist: bool) -> dict[str, Any]:
         key = normalise(text).lower() or text
-        now = time.time()
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
-                entry = {"text": normalise(text) or text, "count": 0, "first": now, "last": now, "proposal": propose(text).to_dict()}
+                entry = {"text": normalise(text) or text, "count": 0, "first": when, "last": when, "proposal": propose(text).to_dict()}
                 if peer:
                     entry["peer"] = peer
                 self._entries[key] = entry
-            entry["count"] += 1
-            entry["last"] = now
+            entry["count"] += count
+            entry["last"] = max(entry["last"], when)
             while len(self._entries) > self.limit:
                 oldest = min(self._entries, key=lambda k: self._entries[k]["last"])
                 del self._entries[oldest]
+            if persist and self.path is not None:
+                try:
+                    self.path.parent.mkdir(parents=True, exist_ok=True)
+                    with self.path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps({"text": entry["text"], "peer": peer, "count": 1, "last": when}, ensure_ascii=False) + "\n")
+                    self.error = None
+                except OSError as e:
+                    self.error = str(e)
         return dict(entry)
 
     def to_list(self) -> list[dict[str, Any]]:
@@ -261,3 +288,174 @@ class Unanswered:
 
     def __len__(self) -> int:
         return len(self._entries)
+
+
+# ---------------------------------------------------------------- growing a tree from a gap
+
+
+@dataclass
+class Draft:
+    """A branch a gap asks for, drafted by rules: the condition that would
+    have taken the observed value, a new terminal node for it, and the
+    text of both. A person reads it, changes the node's kind and words to
+    what the value means, and keeps it. Nothing here decides anything."""
+
+    tree: str
+    node: str
+    on: str
+    observed: Any
+    when: dict[str, Any]
+    then: str
+    branch: str
+    node_text: str
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"tree": self.tree, "node": self.node, "on": self.on, "observed": self.observed, "when": self.when, "then": self.then, "branch": self.branch, "node_text": self.node_text, "reason": self.reason}
+
+    def render(self) -> str:
+        return f"# {self.tree}: in [nodes.{self.node}], add to branches (before the else, if any):\n  {self.branch}\n\n{self.node_text}"
+
+
+def draft_branch(tree: Tree, gap: dict[str, Any]) -> Draft | None:
+    """The branch a gap on ``tree`` asks for, or None when the gap names
+    no decide node of this tree or a branch already covers the value
+    (the file is newer than the gap).
+
+    Rules: a missing value asks for ``{ exists = false }``; a number that
+    falls in a hole between the ``between`` ranges or ``eq`` points the
+    node already has asks for the range of that hole; anything else asks
+    for ``{ eq = value }`` (``{ type = ... }`` for a value a report could
+    only carry as its type). The new node is a ``fail`` that says what
+    was seen; the author decides what it means."""
+    node = tree.nodes.get(str(gap.get("node", "")))
+    if node is None or node.kind != "decide":
+        return None
+    on = str(gap.get("on") or node.get("on") or "")
+    observed = gap.get("observed")
+    branches = [b for b in (node.get("branches") or []) if isinstance(b, dict)]
+    if any("when" in b and conditions.holds(b["when"], observed) for b in branches):
+        return None
+    when, reason = _condition_for(observed, branches)
+    then = _unique_node(tree, f"{node.id}-{_slug(observed)}")
+    slug = _slug(observed)
+    branch = "{ when = " + _toml_inline(when) + f', then = "{then}" }},'
+    node_text = (
+        f"# Drafted by pyrtan grow from a gap: {on} = {json.dumps(observed, ensure_ascii=False)} had no branch.\n"
+        f"# Decide what that value means: keep this as a fail, or make it a done, a set, an observe...\n"
+        f"[nodes.{then}]\n"
+        f'kind = "fail"\n'
+        f'reason = "{_slug(observed, 40) or "unhandled"}"\n'
+        f'say = "{_toml_str(on)} was {_toml_str(json.dumps(observed, ensure_ascii=False))}; nobody has said what that means yet."\n'
+    )
+    return Draft(tree.name, node.id, on, observed, when, then, branch, node_text, reason)
+
+
+def _condition_for(observed: Any, branches: list[dict[str, Any]]) -> tuple[dict[str, Any], str]:
+    if observed is None:
+        return {"exists": False}, "the value was missing"
+    if isinstance(observed, str) and observed.startswith("<") and observed.endswith(">") and observed[1:-1] in ("str", "dict", "list", "int", "float", "bool"):
+        return {"type": observed[1:-1]}, "a report carries a long or structured value as its type"
+    if isinstance(observed, (int, float)) and not isinstance(observed, bool):
+        covered: list[tuple[float, float]] = []
+        for b in branches:
+            w = b.get("when") if isinstance(b, dict) else None
+            if not isinstance(w, dict):
+                continue
+            if "between" in w and isinstance(w["between"], list) and len(w["between"]) == 2:
+                try:
+                    covered.append((float(w["between"][0]), float(w["between"][1])))
+                except (TypeError, ValueError):
+                    pass
+            elif "eq" in w and isinstance(w["eq"], (int, float)) and not isinstance(w["eq"], bool):
+                covered.append((float(w["eq"]), float(w["eq"])))
+        if covered and isinstance(observed, int):
+            below = [hi for lo, hi in covered if hi < observed]
+            above = [lo for lo, hi in covered if lo > observed]
+            if below and above and all(float(x).is_integer() for x in below + above):
+                lo, hi = int(max(below)) + 1, int(min(above)) - 1
+                if lo <= hi:
+                    return {"between": [lo, hi]}, f"the value falls in the hole between {int(max(below))} and {int(min(above))}, which the ranges around it leave open"
+    return {"eq": observed}, "the value itself"
+
+
+def _unique_node(tree: Tree, base: str) -> str:
+    name = base
+    n = 2
+    while name in tree.nodes:
+        name = f"{base}-{n}"
+        n += 1
+    return name
+
+
+def _slug(value: Any, limit: int = 24) -> str:
+    text = "missing" if value is None else str(value).lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return (text[:limit].rstrip("-") or "value")
+
+
+def _toml_inline(cond: dict[str, Any]) -> str:
+    return "{ " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in cond.items()) + " }"
+
+
+def _toml_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    return '"' + _toml_str(str(v)) + '"'
+
+
+def _toml_str(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def apply_draft(path: str | Path, draft: Draft) -> str:
+    """Write a draft into the tree file: the branch into the node's
+    ``branches`` list (before its ``else``), the node at the end. The file
+    must load clean afterwards, else it is put back and :class:`TreeError`
+    raised. Returns the new text."""
+    path = Path(path)
+    original = path.read_text(encoding="utf-8")
+    lines = original.splitlines(keepends=True)
+    header = f"[nodes.{draft.node}]"
+    start = next((i for i, l in enumerate(lines) if l.strip() == header), None)
+    if start is None:
+        raise TreeError(f"{path}: no {header} table")
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+    b = next((i for i in range(start, end) if re.match(r"^\s*branches\s*=\s*\[", lines[i])), None)
+    if b is None:
+        raise TreeError(f"{path}: {header} has no branches list")
+    indent = "  "
+    if "]" in lines[b].split("[", 1)[1]:
+        # A one-line list.
+        head, tail = lines[b].rsplit("]", 1)
+        m = re.search(r",?\s*\{\s*else\s*=", head)
+        if m:
+            head = head[: m.start()] + ", " + draft.branch.rstrip(",") + head[m.start():]
+        else:
+            head = head.rstrip().rstrip(",") + ", " + draft.branch.rstrip(",")
+        lines[b] = head + "]" + tail
+    else:
+        close = next(i for i in range(b + 1, end) if lines[i].strip().startswith("]"))
+        else_line = next((i for i in range(b + 1, close) if re.match(r"^\s*\{\s*else\s*=", lines[i])), None)
+        at = else_line if else_line is not None else close
+        if at > b + 1:
+            indent = re.match(r"^\s*", lines[at - 1 if else_line is None else at]).group(0) or indent
+        lines.insert(at, f"{indent}{draft.branch}\n")
+    text = "".join(lines)
+    if not text.endswith("\n"):
+        text += "\n"
+    text += "\n" + draft.node_text
+    path.write_text(text, encoding="utf-8")
+    try:
+        tree = load_tree(path)
+        errors = [p for p in check(tree) if p.level == "error"]
+        if errors:
+            raise TreeError("; ".join(f"{p.where}: {p.message}" for p in errors))
+    except TreeError as e:
+        path.write_text(original, encoding="utf-8")
+        raise TreeError(f"{path}: the draft did not fit the file ({e}); nothing changed") from e
+    return text

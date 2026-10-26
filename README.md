@@ -331,6 +331,38 @@ tree and splits into many without the callers changing. A tree that
 routes it to whichever peer can; the peer's steps come back inside the
 caller's trace.
 
+## Watches: trees that run on their own
+
+A tree may carry `[[watches]]`: a clock, a file, a topic or a serial line
+starts a run without anyone asking, with `inputs` rendered from what
+spoke (`event`), `env` and `now`.
+
+```toml
+[[watches]]
+name = "example.com"
+every = "15m"
+inputs = { host = "example.com" }
+
+[[watches]]
+file = "/var/log/syslog"                                   # each time lines are appended
+inputs = { text = "{{ event.body | strip }}" }
+
+[[watches]]
+queue = { url = "mqtt://broker.local", topic = "home/+/temperature" }   # each message
+```
+
+`pyrtan serve trees --watch` (or `pyrtan hub --trees trees --watch`) runs
+them beside the service; `pyrtan watch trees` runs them alone and prints
+each run. A watched run's trace begins with a `watch` step, the way an
+asked run's begins with `intent`. `/watches` and `pyrtan watches --at URL`
+show each watch, what it last did, and, for a watch that runs the same
+tree again and again, whether the **path changed** between two runs:
+`site-status` going from `up` to `erroring` on a clock is how you learn a
+site changed before anyone asks. Watches are static: the path, topic or
+device is literal in the file and checked against the tree's lists by
+`pyrtan check`, and a service started `--egress public` watches no file
+and no serial line.
+
 ## When no service in the swarm answers
 
 A sentence nobody answers is not a dead end; it is the next tree. The hub
@@ -356,6 +388,27 @@ fills in what it observes and how it decides; a service serving that
 directory picks the file up the moment it is saved. No model drafts
 anything: the proposal is derived from the words by rules, and the demo page
 shows the same proposal and the same command whenever nothing answers.
+
+A **gap** gets the same treatment one level down. `pyrtan grow` reads
+gaps (from a running service or hub, a `--gaps` file, or the federation's
+reports for your catalog trees) and drafts, by rules, the branch each one
+asks for: `{ exists = false }` for a missing value, the range of the hole
+a number fell into between the ranges the node already has, `{ eq = … }`
+otherwise, and a new `fail` node that says what was seen. `--apply`
+writes it into the file, which must still check clean; the person then
+says what the value means.
+
+```
+$ pyrtan grow --at http://127.0.0.1:8700 --trees trees --apply
+# weather: in [nodes.sky], add to branches (before the else, if any):
+  { when = { between = [68, 70] }, then = "sky-70" },
+...
+# why: the value falls in the hole between 67 and 71, which the ranges around it leave open
+# written into trees/weather.toml; now edit [nodes.sky-70] to say what the value means
+```
+
+Unanswered sentences survive a restart too, with `--unanswered FILE` on a
+service or hub.
 
 ## Sentences
 
@@ -428,17 +481,18 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.8.0. The core, the service, the hub, the command, the console, the
+0.9.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, the gossiped directory, members (a browser or a phone as
 part of the swarm), the blobs they keep and the trees they run
-(`pyrtan.js`, conformant with the Python runtime), and six forms of I/O
+(`pyrtan.js`, conformant with the Python runtime), six forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each
-behind an allow-list, are built and tested; a swarm can require a token,
-keep its gaps, refuse private addresses and its own box, and follow
-other swarms. Not yet built: persistent storage for unanswered
-sentences, `pyrtan watch`, and hosting.
+behind an allow-list, watches (a tree that runs when a clock, a file, a
+topic or a serial line speaks), and `pyrtan grow` (the branch a gap asks
+for, drafted by rules) are built and tested; a swarm can require a
+token, keep its gaps and unanswered sentences, refuse private addresses
+and its own box, and follow other swarms. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

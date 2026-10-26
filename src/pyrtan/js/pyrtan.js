@@ -612,7 +612,10 @@
       if (this.namespace) cap.namespace = this.namespace;
       Object.assign(cap, { description: this.description, tags: this.tags, hosts: this.hosts });
       for (const k of LIST_NAMES) if (this[k].length) cap[k] = this[k];
-      return Object.assign(cap, { sources: this.sources(), license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs });
+      cap.sources = this.sources();
+      const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
+      if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
+      return Object.assign(cap, { license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs });
     }
   }
 
@@ -908,5 +911,5 @@
     return outcome(d.status || "error", d.tree || fallbackTree, { say: d.say === undefined ? null : d.say, output: d.output === undefined ? null : d.output, reason: d.reason === undefined ? null : d.reason, question: d.question === undefined ? null : d.question, snapshot: d.snapshot === undefined ? null : d.snapshot, trace, inputs: d.inputs || {} });
   }
 
-  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.8.0" };
+  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.9.0" };
 });
