@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyrtan</title>
-<meta name="description" content="Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees. No model in the loop.">
+<meta name="description" content="Open-source automation built on decision trees you can read. It answers like an assistant, with no AI model inside.">
 <meta name="theme-color" content="#c2410c">
 <script src="theme.js"></script>
 <style>
@@ -42,13 +42,13 @@
 <body>
 <main>
   <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span></h1>
-  <p class="lede">Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees. It answers like an assistant. Inside, there is no model.</p>
+  <p class="lede">Open-source automation built on decision trees you can read. Ask it something and it answers like an assistant, but there is no AI model inside.</p>
 
   <div class="actions">
     <a class="primary" href="console/">Open the console</a>
     <a href="catalog/">Browse the catalog</a>
-    <a href="#directory">The directory</a>
-    <a href="source/">Browse the source</a>
+    <a href="#directory">See the hubs</a>
+    <a href="source/">Read the source</a>
   </div>
 
 <pre>$ pyrtan run "what's the weather in Oslo" --trees examples
@@ -59,14 +59,14 @@ trace: weather
   sky (decide) [between [51, 67]]: state.code = 61 -> rain
   reply (done): Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.</pre>
 
-  <h2>The trade</h2>
-  <p>A model generalises to sentences nobody wrote a tree for; Pyrtan does not, and says so. In return every run is deterministic, costs nothing, works offline against recorded responses, cannot reach a host its author did not list, and can always explain itself: the trace names each observation and the condition that chose each branch.</p>
+  <h2>Why trees instead of a model</h2>
+  <p>An AI model can handle questions nobody planned for. Pyrtan can't, and it tells you so. In return, every answer is repeatable and free, works offline, only reaches the sites you allow, and shows exactly how it was reached.</p>
 
   <div class="grid">
-    <div class="card"><h3>Trees</h3><p>One TOML file: the sentences it answers to, the hosts it may touch, what it observes, how it decides. No code, no loops, no model.</p></div>
-    <div class="card"><h3>Swarm</h3><p>Services hold trees; a hub routes between them and shows each peer's <code>link</code>. One process or many, the callers never change.</p></div>
-    <div class="card"><h3>Gaps</h3><p>A decision that meets a value no branch covers is recorded, not guessed at. The list of gaps is the list of what to write next.</p></div>
-    <div class="card"><h3>Catalog</h3><p>Trees others wrote, as static files anyone can mirror. <code>pyrtan pull NAME</code> verifies the file against the index before writing it.</p></div>
+    <div class="card"><h3>Trees</h3><p>A tree is one TOML file: the questions it answers, the sites it may reach, and how it decides. No code to write.</p></div>
+    <div class="card"><h3>Swarm</h3><p>Services run trees. A hub connects them and shows which ones are up. Run one process or many; nothing else changes.</p></div>
+    <div class="card"><h3>Gaps</h3><p>When a tree meets a case it doesn't cover, Pyrtan writes it down instead of guessing. That list tells you what to add next.</p></div>
+    <div class="card"><h3>Catalog</h3><p>Trees other people wrote. <code>pyrtan pull NAME</code> downloads one and checks it before saving it.</p></div>
   </div>
 
   <h2>Install</h2>
@@ -74,22 +74,23 @@ trace: weather
 pyrtan search weather
 pyrtan pull weather --dir trees
 pyrtan serve trees --port 8701                            # then open http://127.0.0.1:8701/</pre>
-  <p>Python 3.12 or later, no runtime dependencies. Runs on a laptop, a NAS or a container; <a href="https://github.com/b-i-t-8/pyrtan/blob/main/deploy/README.md">deployment notes</a>.</p>
+  <p>Needs Python 3.12 or later and nothing else. Runs on a laptop, a NAS or a container. See the <a href="https://github.com/b-i-t-8/pyrtan/blob/main/deploy/README.md">deployment notes</a>.</p>
 
   <h2>The console</h2>
-  <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
+  <p>Every hub has a web console at <code>/</code>. You can also use it here at <a href="console/">pyrtan.com/console</a>: start your hub with <code>--token</code> and <code>--cors https://pyrtan.com</code>, then connect to it from anywhere. Your browser talks to your hub directly; nothing passes through this site.</p>
 
   <h2 id="directory">The directory</h2>
-  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This is the <a href="rendezvous/network.json">default network</a>, the one <code>pyrtan join</code> puts a hub in; any hub can also start a network of its own and share its invite, and a private network's hubs never show here. pyrtan.com runs no hub of its own: it is static pages. This page asks the hubs on its <a href="rendezvous/hubs.json">hub list</a> from your browser and shows what they know; when none answers, it shows the <a href="rendezvous/directory.json">snapshot</a> pyrtan.com takes every hour from every hub it can reach. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
-  <div class="card"><table id="hubs"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the hubs…</td></tr></tbody></table></div>
+  <p>Hubs find each other without a central server. Start a hub with <code>--listed</code> and it tells the hubs it is connected to, which pass the word on. Below are the hubs in the <a href="rendezvous/network.json">default network</a>, the one <code>pyrtan join</code> uses. You can also start a private network of your own; its hubs don't show up here.</p>
+  <p>This list comes live from the hubs on the <a href="rendezvous/hubs.json">hub list</a>. If none of them answer, you see the <a href="rendezvous/directory.json">hourly snapshot</a> instead. To use a hub, connect to it from your own.</p>
+  <div class="card"><table id="hubs"><thead><tr><th>Status</th><th>Hub</th><th>Trees</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the hubs…</td></tr></tbody></table></div>
 <pre>pyrtan hub --federate --advertise https://your-hub --listed --token …   # your hub, behind a tunnel or TLS
-pyrtan join --at https://your-hub --token …                             # be in the default network
-pyrtan network new home --at https://your-hub --token …                 # or start your own: prints its invite
-pyrtan directory                                                        # who the swarm knows</pre>
-  <p>To be on the hub list, add your hub's URL to <code>site/rendezvous/hubs.json</code> by pull request. It need not be up all the time: the hourly snapshot keeps the directory from every hub it can reach.</p>
+pyrtan join --at https://your-hub --token …                             # join the default network
+pyrtan network new home --at https://your-hub --token …                 # or start your own; prints an invite
+pyrtan directory                                                        # list the hubs you know of</pre>
+  <p>To add your hub to the hub list, open a pull request adding its URL to <code>site/rendezvous/hubs.json</code>. It doesn't need to be online all the time.</p>
 
   <h2>Hosting</h2>
-  <p>Self-hosting is the product. A hosted option, running the same open-source hub per customer with secrets, retention, scheduled re-runs and alerts around it, is planned; it will speak the same API, so a swarm can move either way without changing a caller.</p>
+  <p>Self-hosting comes first. A hosted version is planned: the same open-source hub, run for you, with secrets, scheduled runs and alerts. It will use the same API, so you can move between the two at any time.</p>
 
   <footer>Pyrtan v__VERSION__. Trees you write are your own.</footer>
 </main>
@@ -113,11 +114,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">
   let source = answered ? `live from ${answered} listed hub${answered > 1 ? "s" : ""}` : "";
   if (!answered) {
     // Nobody on the list answered (or the list is empty): the hourly snapshot.
-    const why = listed.length ? "no listed hub answered from this browser" : "no hubs listed yet";
+    const why = listed.length ? "no listed hub answered" : "no hubs listed yet";
     try {
       const snap = await (await fetch("rendezvous/directory.json")).json();
       for (const h of snap.hubs || []) if (!seen.has(h.id) || seen.get(h.id).seen < h.seen) seen.set(h.id, h);
-      source = `${why}; snapshot as of ${snap.as_of || "?"}`;
+      source = `${why}; showing the snapshot from ${snap.as_of || "?"}`;
     } catch (e) { note.textContent = `${why[0].toUpperCase() + why.slice(1)}, and there is no snapshot yet.`; return; }
   }
   const now = Date.now() / 1000;
@@ -130,7 +131,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">
     tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code><div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td><a href="console/?hub=${encodeURIComponent(h.id)}">open in console</a></td></tr>`;
     body.appendChild(tr);
   }
-  if (!hubs.length) body.innerHTML = `<tr><td colspan="4" class="mute">${esc(source)}: nobody heard of yet. Add your hub to the hub list.</td></tr>`;
+  if (!hubs.length) body.innerHTML = `<tr><td colspan="4" class="mute">${esc(source)}: no hubs yet. Add yours to the hub list.</td></tr>`;
 })();
 </script>
 </body>
