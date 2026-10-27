@@ -1,6 +1,6 @@
 {
   "pyrtan-network": 1,
-  "about": "The default network: `pyrtan join` with no invite (or `pyrtan hub --join default`) puts a hub in it and follows the first seed in seeds.json that answers, then the snapshot's hubs. Its secret is public on purpose: it names the network rather than guarding it, so anyone may join, and following stays one-directional trust. A network of your own is `pyrtan network new NAME`; its invite is yours to share.",
+  "about": "The default network: `pyrtan join` with no invite (or `pyrtan hub --join default`) puts a hub in it and follows the first hub in hubs.json that answers, then the snapshot's hubs. Its secret is public on purpose: it names the network rather than guarding it, so anyone may join, and following stays one-directional trust. A network of your own is `pyrtan network new NAME`; its invite is yours to share.",
   "name": "pyrtan",
   "secret": "public-default-network-of-pyrtan-com"
 }

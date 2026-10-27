@@ -21,7 +21,9 @@ Endpoints:
 
 With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
 stranger here or at a hub it follows, or a bot made of the trees it routes
-to; see :mod:`pyrtan.chat`.
+to; see :mod:`pyrtan.chat`. ``--chat-public`` opens the lobby to callers
+without the hub's token, who meet people only: a bot runs trees, and the
+token is what guards them.
 
 Federated (``--federate``), a hub also answers ``GET /actor``, ``POST
 /inbox``, ``POST /follow`` and ``/unfollow`` (operator), ``GET /following``,
@@ -60,8 +62,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import __version__
-from .chat import Lobby
-from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_seed, parse_invite, sign
+from .chat import Lobby, is_chat_path
+from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_hub, parse_invite, sign
 from . import identity
 from .grants import Grants, ability_for, parse_may
 from .identity import IdentityError
@@ -141,12 +143,13 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, grants: Grants | None = None, audience: str | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None) -> None:
         self.name = name
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
         self._audience = audience
-        self.lobby = Lobby(self) if chat else None
+        self.lobby = Lobby(self, typing=chat_typing) if chat or chat_public else None
+        self.chat_public = chat_public  # callers without the token may chat, with people only
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
         self.token = token or None
@@ -198,6 +201,8 @@ class Hub:
             return None, set(), (401, {"status": "error", "reason": "unsigned", "say": f"The key signature does not hold: {e}."})
         may = self.grants.may(signer)
         needed = ability_for(method, path)
+        if needed == "chat" and self.chat_public:
+            needed = None  # a public lobby takes a key it grants nothing as a guest, as it takes a caller with no key
         if self.token and needed is not None and needed not in may:
             granted = f"it may {', '.join(sorted(may))}" if may else "this hub grants it nothing"
             return signer, may, (403, {"status": "error", "reason": "not-granted", "say": f"{identity.short(signer.root)} may not {needed} here: {granted}."})
@@ -533,6 +538,10 @@ class Hub:
                 out.extend({**u, "peer": peer.url} for u in body.get("unanswered", []))
         return {"unanswered": out}
 
+    def _trusted(self, headers: dict[str, str], may: set[str] | frozenset[str] = frozenset()) -> bool:
+        """Whether the caller holds this hub's token (always, when it has none), or a key it grants chat: who meets bots in the lobby."""
+        return not self.token or bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token) or "chat" in may
+
     def route(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         body = body or {}
         headers = headers or {}
@@ -670,10 +679,10 @@ class Hub:
             return 200, self.unanswered_all()
         if method == "GET" and path == "/watches":
             return 200, self.watches()
-        if path == "/chat" or path.startswith("/chat/"):
+        if is_chat_path(path):
             if self.lobby is None:
                 return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
-            return self.lobby.route(method, path, body)
+            return self.lobby.route(method, path, body, guest=not self._trusted(headers, may))
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/manifest.webmanifest":
@@ -685,10 +694,10 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json"]
             if self.lobby is not None:
-                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/next", "/chat/leave"]
+                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
-            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "audience": self.audience, "grants": len(self.grants), "endpoints": endpoints}
+            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -714,14 +723,15 @@ def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
     """Join a network from an invite (``name:secret[@hub]``), or the default
     network pyrtan.com publishes when ``invite`` is empty or ``default``,
     and follow a hub in it. When the default network cannot be read, the
-    first live seed is followed outside any network, as before networks."""
+    first listed hub that answers is followed outside any network, as
+    before networks."""
     if invite in (None, "", "default"):
         net = default_network()
         hubs = bootstrap_candidates()
         if net is None:
-            url = first_live_seed()
+            url = first_live_hub()
             if url is None:
-                return 200, {"status": "error", "reason": "no-network", "say": "Cannot read the default network, and no seed or snapshot hub answers; give an invite or a hub URL."}
+                return 200, {"status": "error", "reason": "no-network", "say": "Cannot read the default network, and no listed or snapshot hub answers; give an invite or a hub URL."}
             try:
                 remote = fed.follow(url)
             except ValueError as e:
@@ -779,6 +789,8 @@ def serve_hub(
     chat: bool = False,
     allow: list[str] | None = None,
     grants: str | None = None,
+    chat_typing: bool = True,
+    chat_public: bool = False,
 ) -> tuple[Hub, Server]:
     """Start a hub. ``allow`` holds ``WHO=ABILITIES`` grants, made before it answers
     anything (a name is resolved now; IdentityError if it cannot be); ``grants`` is
@@ -792,8 +804,8 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, grants=granted)
-    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), keyed=True).start()
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted)
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
     if federate or advertise or join:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)

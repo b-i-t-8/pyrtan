@@ -155,7 +155,7 @@ accepts any number, CSS selection is the browser's `DOMParser` plus a
 decides whether the hub puts its trees, and the sentences they answer,
 on a device: a keeper holds copies, a trusted device acts. The console
 sends the token it was connected with, so joining from the hub's own
-console with the token entered is enough. Since 0.12 a member may
+console with the token entered is enough. Since 0.14 a member may
 instead follow as a key (`identity.md` §7): one whose root the hub
 grants `run` is trusted the same way (`trusted_by: key`), and is dropped
 when its note, its root's document or the grant says it may no longer

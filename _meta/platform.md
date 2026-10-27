@@ -134,7 +134,7 @@ federated hub keeps what it hears, one row per reporter and gap, with
 the merge rules the directory uses (newer wins, nothing from the future,
 thirty days, two thousand rows), passes it on, and serves `/reports`
 publicly with counts and reporters summed. The site's snapshot asks the
-seeds for `/reports` hourly and bakes `rendezvous/reports.json`; the
+listed hubs, and every hub they know of, for `/reports` hourly and bakes `rendezvous/reports.json`; the
 catalog page shows each tree's gaps beside it; `pyrtan reports
 NAMESPACE/NAME` reads a hub or the baked file. A tree without a namespace
 reports nothing: there is nobody to report to. Opting in is the
@@ -159,13 +159,14 @@ says so and points at the hub's own `/`, which is the same console.
 
 ### 2.6 The rendezvous (built; nothing runs)
 
-pyrtan.com runs nothing. Hubs find each other through the directory
-every federated hub keeps and gossips ([`federation.md`](federation.md)
-§7); the site publishes `rendezvous/seeds.json`, a static list of hubs
-to follow first, and its page reads the live directory from those seeds
-in the visitor's browser. The first seed is the author's own NAS,
-reachable through a tunnel. A hosted hub, when there is one, is just
-another seed.
+pyrtan.com runs nothing: it is static files on GitHub Pages, and runs no
+hub of its own. Hubs find each other through the directory every
+federated hub keeps and gossips ([`federation.md`](federation.md) §7);
+the site publishes `rendezvous/hubs.json`, a static list of hubs their
+operators added by pull request, and its page reads the live directory
+from them in the visitor's browser, falling back to the snapshot GitHub
+bakes hourly. A hosted hub, when there is one, goes on the list like
+any other.
 
 ### 2.7 Hosting (designed)
 

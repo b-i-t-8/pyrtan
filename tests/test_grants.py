@@ -373,3 +373,20 @@ def test_a_hub_with_grants_needs_the_extra(monkeypatch, root):
     monkeypatch.setitem(sys.modules, "cryptography.hazmat.primitives.asymmetric", None)
     with pytest.raises(IdentityError, match=r"pyrtan\[identity\]"):
         serve_hub(port=0, quiet=True, allow=[f"{root.id}=ask"])
+
+
+def test_a_public_lobby_takes_an_ungranted_key_as_a_guest(tmp_path, root, phone):
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "echo.toml").write_text(ECHO)
+    h, srv = serve_hub(port=0, quiet=True, trees=[tmp_path / "t"], token="tok", chat_public=True, poll_every=60)
+    try:
+        h.grants.allow(root.id, ["chat"])
+        stranger, friend = Caller(srv.url, phone), Caller(srv.url, root)
+        status, body = stranger("POST", "/chat/start", {"want": "bot"})
+        assert status == 403 and body.get("reason") == "bots-need-token"      # a guest: people only, not refused outright
+        assert stranger("POST", "/chat/start", {"want": "people"})[0] == 200
+        assert stranger("POST", "/intent", {"text": "echo hi"})[0] == 403   # the rest of the hub is still closed
+        assert friend("POST", "/chat/start", {"want": "bot"})[0] == 200       # granted chat: meets bots
+    finally:
+        h.stop()
+        srv.stop()

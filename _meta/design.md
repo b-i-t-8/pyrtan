@@ -284,7 +284,8 @@ Five trees, all against real public APIs, all tested offline:
    as the only trust. Design in [`federation.md`](federation.md).
 4. **v0.4, built: no server anywhere.** The directory hubs find each
    other by is kept and gossiped by every federated hub, with a static
-   seed list at pyrtan.com in place of a rendezvous hub; a hub can hold
+   list of hubs at pyrtan.com in place of a rendezvous hub (then
+   `seeds.json`, now `hubs.json`); a hub can hold
    trees itself (`--trees`), so a federated swarm can be one process.
 5. **v0.5, built: members and what they keep.** A browser or a phone
    joins a hub through a mailbox, carries the directory, and keeps the
@@ -331,7 +332,7 @@ Five trees, all against real public APIs, all tested offline:
   shared bearer token, presented by services on registration and by the
   hub on every forward, with `/register` behind it. mTLS, and a token per
   service rather than per swarm, wait for a swarm that needs them. For
-  people and their devices, 0.12 answers it with identities: a key per
+  people and their devices, 0.14 answers it with identities: a key per
   person, and per-hub grants of what each may do (`identity.md` §7).
 - **What a tree's `version` governs.** In the catalog it is what a pull
   pins. On the hub it is still undecided: a hub could prefer the highest

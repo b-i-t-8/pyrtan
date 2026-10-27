@@ -27,14 +27,35 @@ activity. A hub answers a ``Meet`` only from a hub that follows it, pairs
 it only with its own seats, and never passes one on: one hop, as
 everywhere in the federation.
 
+**Typing.** While a person types, their client says so (``/chat/typing``)
+and the stranger sees "Stranger is typing…"; while a bot's trees run, its
+partner sees "Bot is thinking…". It is a state, never an event: it goes out
+on its own after five seconds without news, and with the next line. It
+is shown both ways or not at all: a seat with the indicator off
+(``typing_indicator: false``) neither shares its typing nor sees anyone
+else's, and a hub started ``--no-chat-typing`` has it off for everyone.
+Across hubs it travels as ``Typing``, at most every two seconds, and the
+logs leave it out.
+
+**Public lobbies.** The lobby follows the hub's token: a bot runs trees,
+and the token is what guards them. A hub started ``--chat-public`` keeps
+its token for everything else and opens ``/chat`` to callers without it,
+as *guests*: a guest meets people (here, or on a hub this one follows)
+and never a bot. ``want: bot`` from a guest is refused, and ``anyone`` is
+read as ``people``. A hub with no token has no guests: anyone may meet a
+bot there, as anyone may ask it at ``/intent``.
+
 Endpoints, all POST with a JSON body except the first:
 
-``GET  /chat``        how many are waiting and talking; whether bots and other hubs are in reach
-``POST /chat/start``  ``{"want": "anyone"|"people"|"bot", "interests": [...]}``: a seat
-``POST /chat/poll``   ``{"seat", "after": n, "wait": s}``: the events after ``n``, waiting up to ``s`` s for one
-``POST /chat/say``    ``{"seat", "text"}``
-``POST /chat/next``   ``{"seat"}``: end this conversation and wait for the next, with the same wishes
-``POST /chat/leave``  ``{"seat"}``
+``GET  /chat``           how many are waiting and talking; whether bots, other hubs and typing are in reach
+``POST /chat/start``     ``{"want": "anyone"|"people"|"bot", "interests": [...], "typing_indicator": true}``: a seat
+``POST /chat/poll``      ``{"seat", "after": n, "wait": s, "partner_typing": bool}``: the events after ``n``, waiting
+                         up to ``s`` s for one, or for the partner's typing to differ from what the client shows
+``POST /chat/say``       ``{"seat", "text"}``
+``POST /chat/typing``    ``{"seat", "typing": bool}``: this person is (or stopped) typing
+``POST /chat/settings``  ``{"seat", "typing_indicator": bool}``
+``POST /chat/next``      ``{"seat"}``: end this conversation and wait for the next, with the same wishes
+``POST /chat/leave``     ``{"seat"}``
 
 What it refuses: keeping anything. A conversation lives in memory while
 someone is in it; a seat nobody polls for a minute is let go and its
@@ -70,8 +91,14 @@ EVENTS_MAX = 200      # events a seat holds for a client that has not polled
 SEATS_MAX = 500
 INTERESTS_MAX = 5
 BURST, REFILL = 5.0, 1.0   # lines: a burst of five, then one a second
+TYPING_TTL = 5.0      # an indicator nobody refreshes goes out after this long
+TYPING_EVERY = 2.0    # how often "still typing" travels to another hub
 REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 INTEREST = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
+
+
+def is_chat_path(path: str) -> bool:
+    return path == "/chat" or path.startswith("/chat/")
 
 
 def interests_of(value: Any) -> list[str]:
@@ -146,6 +173,7 @@ class Far:
     remote: "Remote"
     ref: str
     hub: str
+    typing: bool = True   # whether its hub takes Typing; one from before it refuses the activity
 
     def view(self) -> dict[str, Any]:
         return {"kind": "stranger", "hub": self.hub}
@@ -157,6 +185,7 @@ class Seat:
     ref: str          # what another hub calls it; never the id
     want: str
     interests: list[str]
+    bots: bool = True        # may meet a bot: false for a guest of a public lobby
     since: float = field(default_factory=time.time)
     seen: float = field(default_factory=time.time)
     state: str = "waiting"   # waiting | talking | ended | left
@@ -166,6 +195,9 @@ class Seat:
     asked: float = 0.0       # when it last asked the hubs we follow
     busy: bool = False       # asking them now: nobody else may pair it meanwhile
     botless: bool = False    # told there is no bot to meet
+    typing: bool = True      # the indicator: share this person's typing, and see the partner's
+    heard: float = 0.0       # until when the partner reads as typing (or thinking) to this seat
+    told: tuple[bool, float] = (False, 0.0)   # the typing last sent to a partner on another hub, and when
     allowance: float = BURST
     allowance_at: float = field(default_factory=time.time)
 
@@ -175,19 +207,21 @@ class Seat:
 
 
 class Lobby:
-    def __init__(self, hub: "Hub") -> None:
+    def __init__(self, hub: "Hub", *, typing: bool = True) -> None:
         self.hub = hub
+        self.typing = typing   # the hub's switch: off, nobody's typing is shared
         self.seats: dict[str, Seat] = {}
         self.refs: dict[str, Seat] = {}
         self.cond = threading.Condition(threading.RLock())
         self.bot_after = BOT_AFTER
         self.meet_every = MEET_EVERY
         self.seat_idle = SEAT_IDLE
+        self.typing_ttl = TYPING_TTL
         self._parts: list[tuple["Remote", str, str]] = []   # Parts to send once the lock is let go: (remote, to, from)
 
     # ------------------------------------------------------------ views
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, guest: bool = False) -> dict[str, Any]:
         with self.cond:
             self._sweep()
             seats = list(self.seats.values())
@@ -196,13 +230,48 @@ class Lobby:
             "status": "ok",
             "waiting": sum(1 for s in seats if s.state == "waiting"),
             "talking": sum(1 for s in seats if s.state == "talking"),
-            "bots": sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
+            "bots": 0 if guest else sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
             "hubs": sum(1 for r in fed.following.values() if r.link != "down") if fed is not None else 0,
+            "typing": self.typing,
         }
 
     def _view(self, seat: Seat, after: int) -> dict[str, Any]:
         events = [e for e in seat.events if e["n"] > after]
-        return {"status": "ok", "seat": seat.id, **seat.view(), "events": events, "after": seat.n}
+        return {"status": "ok", "seat": seat.id, **seat.view(), "bots": seat.bots, "typing_indicator": self._shows(seat), "partner_typing": self._partner_typing(seat), "events": events, "after": seat.n}
+
+    # ------------------------------------------------------------ typing
+
+    def _shows(self, seat: Seat) -> bool:
+        return self.typing and seat.typing
+
+    def _partner_typing(self, seat: Seat) -> bool:
+        return self._shows(seat) and seat.state == "talking" and seat.heard > time.time()
+
+    def _hear(self, seat: Seat, until: float) -> None:
+        seat.heard = until
+        self.cond.notify_all()
+
+    def _tell_far(self, seat: Seat, typing: bool, *, force: bool = False) -> tuple[Far, dict[str, Any]] | None:
+        """The Typing to send the stranger on another hub, if one is due:
+        on a change, or every couple of seconds while it holds."""
+        p = seat.partner
+        if not isinstance(p, Far) or not p.typing:
+            return None
+        now = time.time()
+        last, at = seat.told
+        if not force and typing == last and (not typing or now - at < TYPING_EVERY):
+            return None
+        seat.told = (typing, now)
+        return p, {"to": p.ref, "from": seat.ref, "typing": typing}
+
+    def _send_typing(self, due: tuple[Far, dict[str, Any]] | None) -> None:
+        fed = self.hub.federation
+        if due is None or fed is None:
+            return
+        far, obj = due
+        ok, _, _ = fed.deliver(far.remote, fed._activity("Typing", obj))
+        if not ok:
+            far.typing = False  # a hub that will not take it is not asked again in this conversation
 
     # ------------------------------------------------------------ events
 
@@ -323,8 +392,9 @@ class Lobby:
     def _end(self, seat: Seat) -> None:
         """End the seat's conversation, and tell its partner."""
         p = seat.partner
+        seat.heard, seat.told = 0.0, (False, 0.0)
         if isinstance(p, Seat):
-            p.partner, p.state = None, "ended"
+            p.partner, p.state, p.heard = None, "ended", 0.0
             self._add(p, "system", "Stranger has disconnected.")
         elif isinstance(p, Far):
             self._parts.append((p.remote, p.ref, seat.ref))
@@ -365,15 +435,19 @@ class Lobby:
                 seat.seen = time.time()
             return seat
 
-    def start(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def start(self, body: dict[str, Any], guest: bool = False) -> tuple[int, dict[str, Any]]:
         want = body.get("want", "anyone")
         if want not in WANTS:
             return 400, {"status": "error", "reason": "bad-request", "say": f"want is one of {', '.join(WANTS)}."}
+        if guest and want == "bot":
+            return 403, {"status": "error", "reason": "bots-need-token", "say": "Without this hub's token you meet people only: a bot runs the hub's trees."}
+        if guest:
+            want = "people"
         with self.cond:
             self._sweep()
             if len(self.seats) >= SEATS_MAX:
                 return 503, {"status": "error", "reason": "lobby-full", "say": f"The lobby is full ({SEATS_MAX} seats); try again in a minute."}
-            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")))
+            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest)
             self.seats[seat.id] = seat
             self.refs[seat.ref] = seat
             self._add(seat, "system", "Looking for a bot…" if want == "bot" else "Looking for someone you can chat with…")
@@ -390,6 +464,9 @@ class Lobby:
             wait = min(max(float(body.get("wait") or 0), 0.0), POLL_MAX)
         except (TypeError, ValueError):
             return 400, {"status": "error", "reason": "bad-request", "say": "wait is a number of seconds."}
+        # Only a client that says what it shows is woken by typing; any other
+        # would be answered at once, again and again, while the partner types.
+        shown = bool(body["partner_typing"]) if "partner_typing" in body else None
         deadline = time.time() + wait
         while True:
             with self.cond:
@@ -399,9 +476,11 @@ class Lobby:
             with self.cond:
                 now = time.time()
                 # A seat that left while this poll waited gets its last view, state "left".
-                if seat.id not in self.seats or any(e["n"] > after for e in seat.events) or now >= deadline:
+                if seat.id not in self.seats or any(e["n"] > after for e in seat.events) or now >= deadline or (shown is not None and self._partner_typing(seat) != shown):
                     return 200, self._view(seat, after)
                 nap = deadline - now
+                if shown and now < seat.heard < float("inf"):
+                    nap = min(nap, seat.heard - now)  # wake when the indicator goes out
                 if seat.state == "waiting":
                     # Wake to ask the hubs we follow again, or to meet a bot.
                     if self.hub.federation is not None and self.hub.federation.following:
@@ -431,7 +510,9 @@ class Lobby:
             seat.allowance -= 1
             event = self._add(seat, "you", text)
             partner = seat.partner
+            seat.told = (False, now)  # the line ends the typing, here and on the other hub
             if isinstance(partner, Seat):
+                partner.heard = 0.0
                 self._add(partner, "stranger", text)
         if isinstance(partner, Far):
             fed = self.hub.federation
@@ -457,11 +538,51 @@ class Lobby:
             self.refs[seat.ref] = seat
             seat.state, seat.since, seat.asked = "waiting", time.time(), 0.0
             seat.botless = False
+            if isinstance(body.get("typing_indicator"), bool):
+                seat.typing = body["typing_indicator"]
             self._add(seat, "system", "Looking for a bot…" if seat.want == "bot" else "Looking for someone you can chat with…")
         self._flush()
         self._advance(seat)
         with self.cond:
             return 200, self._view(seat, _int(body.get("after")))
+
+    def typed(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """This person is typing (``typing: true``, sent again every couple
+        of seconds while they are) or stopped. Shared only when both the hub
+        and this seat have the indicator on; ``shared`` says whether it was."""
+        seat = self._seat(body)
+        if seat is None:
+            return 404, _gone()
+        typing = body.get("typing") is True
+        with self.cond:
+            if not self._shows(seat) or seat.state != "talking":
+                return 200, {"status": "ok", "shared": False}
+            p = seat.partner
+            if isinstance(p, Seat):
+                self._hear(p, time.time() + self.typing_ttl if typing else 0.0)
+            due = self._tell_far(seat, typing)
+        self._send_typing(due)
+        return 200, {"status": "ok", "shared": True}
+
+    def settings(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        seat = self._seat(body)
+        if seat is None:
+            return 404, _gone()
+        if not isinstance(body.get("typing_indicator"), bool):
+            return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"seat\": \"…\", \"typing_indicator\": true|false}."}
+        due = None
+        with self.cond:
+            seat.typing = body["typing_indicator"]
+            if not seat.typing:
+                # Off now: whatever the partner was shown of this person's typing goes out.
+                if isinstance(seat.partner, Seat):
+                    self._hear(seat.partner, 0.0)
+                if seat.told[0]:
+                    due = self._tell_far(seat, False, force=True)
+            self.cond.notify_all()
+            view = self._view(seat, _int(body.get("after")))
+        self._send_typing(due)
+        return 200, view
 
     def leave(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         seat = self._seat(body)
@@ -482,6 +603,9 @@ class Lobby:
 
     def _bot_answer(self, seat: Seat, bot: Bot, text: str) -> None:
         with bot.lock:  # one line at a time, in order: a question waits for its answer
+            with self.cond:
+                if seat.partner is bot:
+                    self._hear(seat, float("inf"))  # thinking, until its line
             if bot.snapshot is not None:
                 snapshot, bot.snapshot = bot.snapshot, None
                 _, answer = self.hub.resume({"snapshot": snapshot, "answer": text})
@@ -505,13 +629,14 @@ class Lobby:
         with self.cond:
             if seat.partner is not bot:
                 return  # the stranger moved on while the bot was thinking
+            seat.heard = 0.0
             extra = {k: answer[k] for k in ("status", "reason", "tree", "peer", "via", "output", "trace") if answer.get(k) is not None}
             self._add(seat, "bot", text, **extra)
 
     # ------------------------------------------------------------ federation
 
     def on_activity(self, kind: str, remote: "Remote", obj: Any, *, follower: bool) -> tuple[int, dict[str, Any]]:
-        """A ``Meet``, ``Say`` or ``Part`` from a hub we share a secret with.
+        """A ``Meet``, ``Say``, ``Typing`` or ``Part`` from a hub we share a secret with.
         A ``Meet`` only from one that follows us: being followed is what lets
         a hub ask."""
         try:
@@ -545,27 +670,33 @@ class Lobby:
             if seat is None or not isinstance(p, Far) or p.remote.url != remote.url or p.ref != frm:
                 return 404, {"status": "error", "reason": "no-such-seat", "say": "No conversation here with that stranger."}
             if kind == "Part":
-                seat.partner, seat.state = None, "ended"
+                seat.partner, seat.state, seat.heard = None, "ended", 0.0
                 self._add(seat, "system", "Stranger has disconnected.")
+                return 200, {"status": "ok"}
+            if kind == "Typing":
+                # Their hub sends it only when their indicator is on; ours shows it only when this seat's is.
+                self._hear(seat, time.time() + self.typing_ttl if obj.get("typing") is True else 0.0)
                 return 200, {"status": "ok"}
             text = obj.get("text")
             if not isinstance(text, str) or not text.strip() or len(text) > LINE_MAX:
                 return 400, {"status": "error", "reason": "bad-activity", "say": f"A Say carries a line of at most {LINE_MAX} characters."}
+            seat.heard = 0.0
             self._add(seat, "stranger", text.strip())
             return 200, {"status": "ok"}
 
     # ------------------------------------------------------------ routing
 
-    def route(self, method: str, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def route(self, method: str, path: str, body: dict[str, Any], *, guest: bool = False) -> tuple[int, dict[str, Any]]:
+        """``guest``: the caller lacks the hub's token, and came in because the lobby is public."""
         if method == "GET" and path == "/chat":
             try:
-                return 200, self.stats()
+                return 200, self.stats(guest)
             finally:
                 self._flush()
-        handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/next": self.next, "/chat/leave": self.leave}
+        handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/typing": self.typed, "/chat/settings": self.settings, "/chat/next": self.next, "/chat/leave": self.leave}
         if method == "POST" and path in handlers:
             try:
-                return handlers[path](body)
+                return self.start(body, guest) if path == "/chat/start" else handlers[path](body)
             finally:
                 self._flush()  # the Parts an ending owes another hub, sent once no lock is held
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
