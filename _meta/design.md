@@ -330,7 +330,9 @@ Five trees, all against real public APIs, all tested offline:
 - **Authentication between services.** v0.2 answers the first half: a
   shared bearer token, presented by services on registration and by the
   hub on every forward, with `/register` behind it. mTLS, and a token per
-  service rather than per swarm, wait for a swarm that needs them.
+  service rather than per swarm, wait for a swarm that needs them. For
+  people and their devices, 0.12 answers it with identities: a key per
+  person, and per-hub grants of what each may do (`identity.md` §7).
 - **What a tree's `version` governs.** In the catalog it is what a pull
   pins. On the hub it is still undecided: a hub could prefer the highest
   version of a name across peers, or refuse to route to a peer whose

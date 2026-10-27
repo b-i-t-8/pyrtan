@@ -1,0 +1,245 @@
+{
+ "accept": [
+  "pyr:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyb",
+  "PYR:H3RKRJZIHSZP24UJIPNKCJ7PBHSIGBY2RNF4NGN2IURPBGYUZ7PGYOYB"
+ ],
+ "canonical": [
+  {
+   "canonical": "null",
+   "value": null
+  },
+  {
+   "canonical": "true",
+   "value": true
+  },
+  {
+   "canonical": "0",
+   "value": 0
+  },
+  {
+   "canonical": "-12",
+   "value": -12
+  },
+  {
+   "canonical": "12345678901",
+   "value": 12345678901
+  },
+  {
+   "canonical": "\"\"",
+   "value": ""
+  },
+  {
+   "canonical": "\"plain\"",
+   "value": "plain"
+  },
+  {
+   "canonical": "\"é ü 日本 🙂\"",
+   "value": "é ü 日本 🙂"
+  },
+  {
+   "canonical": "\"quote \\\" back \\\\ slash\\nline\"",
+   "value": "quote \" back \\ slash\nline"
+  },
+  {
+   "canonical": "[]",
+   "value": []
+  },
+  {
+   "canonical": "{}",
+   "value": {}
+  },
+  {
+   "canonical": "[1,\"two\",[3]]",
+   "value": [
+    1,
+    "two",
+    [
+     3
+    ]
+   ]
+  },
+  {
+   "canonical": "{\"a\":{\"c\":null,\"d\":[]},\"b\":1}",
+   "value": {
+    "a": {
+     "c": null,
+     "d": []
+    },
+    "b": 1
+   }
+  },
+  {
+   "canonical": "{\"text\":\"echo hi\",\"trace\":true}",
+   "value": {
+    "text": "echo hi",
+    "trace": true
+   }
+  }
+ ],
+ "ids": [
+  {
+   "id": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+   "key": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+  },
+  {
+   "id": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+   "key": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c"
+  },
+  {
+   "id": "pyr:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyb",
+   "key": "3ee2a8a7283cb2fd728943daa127ef09e483071a8b4bc699ba4522f09b14cfde"
+  }
+ ],
+ "note": {
+  "device": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+  "expires": 1793086400,
+  "issued": 1792999900,
+  "label": "browser",
+  "may": [
+   "ask",
+   "chat"
+  ],
+  "pyrtan-device": 1,
+  "root": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+  "sig": "arxqTAmJMOLXe5n3Q6MXMSZsWI_ym_k7fgEpAAR1Re0xmpiPX5FARkW82tGipVkRDhB15ZNCYUlHNSH6i0bUCg"
+ },
+ "refuse": [
+  "pyr:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoy",
+  "pyr:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyba",
+  "pyx:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyb",
+  "pyr:h3rkrj1ihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyb",
+  "pyr:h3rkrjzihszp24ujbpnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoyb",
+  "pyr:h3rkrjzihszp24ujipnkcj7pbhsigby2rnf4ngn2iurpbgyuz7pgyoaa"
+ ],
+ "requests": [
+  {
+   "audience": "https://hub.example/",
+   "body": {
+    "text": "echo hi"
+   },
+   "date": 1793000000,
+   "headers": {
+    "X-Pyrtan-Date": "1793000000",
+    "X-Pyrtan-Key": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+    "X-Pyrtan-Key-Signature": "FVcGwg8YxUaItpxD3ALJuZL1Uamf9adrUlOkQDUAFLr4_tvHKEgvza_0JcY8XOXdZN0JQK9OH2rcr9Xvd8zTDg"
+   },
+   "message": "pyrtan-req-v1\nhttps://hub.example\nPOST\n/intent\n1793000000\nce589f747ff772b9aecfb4bafcd8bb94493ab00a4bf7feffa4f6dd6e24677a3d",
+   "method": "POST",
+   "note": null,
+   "path": "/intent",
+   "public": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+   "seed": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+  },
+  {
+   "audience": "https://hub.example/",
+   "body": null,
+   "date": 1793000000,
+   "headers": {
+    "X-Pyrtan-Date": "1793000000",
+    "X-Pyrtan-Key": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+    "X-Pyrtan-Key-Signature": "9vtzBA9xhTlCJOKS_60_BRyX3BA38S_v42pOgSi09SnnB74kaKjDcAv1QMBR0kWKyKaLhkBvFfD_ufWUzC4WBQ"
+   },
+   "message": "pyrtan-req-v1\nhttps://hub.example\nGET\n/capabilities\n1793000000\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "method": "GET",
+   "note": null,
+   "path": "/capabilities",
+   "public": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+   "seed": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+  },
+  {
+   "audience": "https://hub.example/",
+   "body": {
+    "interests": [
+     "disk"
+    ],
+    "want": "bot"
+   },
+   "date": 1793000000,
+   "headers": {
+    "X-Pyrtan-Date": "1793000000",
+    "X-Pyrtan-Device": "eyJkZXZpY2UiOiJweXI6aHZhYnBxN2lpb2V2dmV2eGJrdHUyZzM2eHNvanFsZ3BmM2NqbmRnYXp2azdja3h1bXlnZjJsYWIiLCJleHBpcmVzIjoxNzkzMDg2NDAwLCJpc3N1ZWQiOjE3OTI5OTk5MDAsImxhYmVsIjoiYnJvd3NlciIsIm1heSI6WyJhc2siLCJjaGF0Il0sInB5cnRhbi1kZXZpY2UiOjEsInJvb3QiOiJweXI6MjVuanFhbWN3ZWZscHZrbDczajRzemFoaGlob2M0eHQza3RjZ2pucGFpbmdyNXloa2VuYW9vYWIiLCJzaWciOiJhcnhxVEFtSk1PTFhlNW4zUTZNWE1TWnNXSV95bV9rN2ZnRXBBQVIxUmUweG1waVBYNUZBUmtXODJ0R2lwVmtSRGhCMTVaTkNZVWxITlNINmkwYlVDZyJ9",
+    "X-Pyrtan-Key": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+    "X-Pyrtan-Key-Signature": "hKSmmVOh-U73snPh1SfQ096hPLy9igoDZ7IFM-HgLJu1JIaS-g4Idl3IMEcAIpMAixOTOpWDO9WaN8H0JotBBg"
+   },
+   "message": "pyrtan-req-v1\nhttps://hub.example\nPOST\n/chat/start\n1793000000\n2b7ce39f3cbf208d4b7cec0538d5abca5e9b3dda798e64397758a217658b57bd",
+   "method": "POST",
+   "note": {
+    "device": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+    "expires": 1793086400,
+    "issued": 1792999900,
+    "label": "browser",
+    "may": [
+     "ask",
+     "chat"
+    ],
+    "pyrtan-device": 1,
+    "root": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+    "sig": "arxqTAmJMOLXe5n3Q6MXMSZsWI_ym_k7fgEpAAR1Re0xmpiPX5FARkW82tGipVkRDhB15ZNCYUlHNSH6i0bUCg"
+   },
+   "path": "/chat/start",
+   "public": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+   "seed": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+  },
+  {
+   "audience": "https://hub.example/",
+   "body": {
+    "actor": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+    "inbox": "mailbox",
+    "name": "café",
+    "secret": "abababababababababababababababababababababababababababababababab",
+    "type": "Follow"
+   },
+   "date": 1793000000,
+   "headers": {
+    "X-Pyrtan-Date": "1793000000",
+    "X-Pyrtan-Device": "eyJkZXZpY2UiOiJweXI6aHZhYnBxN2lpb2V2dmV2eGJrdHUyZzM2eHNvanFsZ3BmM2NqbmRnYXp2azdja3h1bXlnZjJsYWIiLCJleHBpcmVzIjoxNzkzMDg2NDAwLCJpc3N1ZWQiOjE3OTI5OTk5MDAsImxhYmVsIjoiYnJvd3NlciIsIm1heSI6WyJhc2siLCJjaGF0Il0sInB5cnRhbi1kZXZpY2UiOjEsInJvb3QiOiJweXI6MjVuanFhbWN3ZWZscHZrbDczajRzemFoaGlob2M0eHQza3RjZ2pucGFpbmdyNXloa2VuYW9vYWIiLCJzaWciOiJhcnhxVEFtSk1PTFhlNW4zUTZNWE1TWnNXSV95bV9rN2ZnRXBBQVIxUmUweG1waVBYNUZBUmtXODJ0R2lwVmtSRGhCMTVaTkNZVWxITlNINmkwYlVDZyJ9",
+    "X-Pyrtan-Key": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+    "X-Pyrtan-Key-Signature": "arxD-TYXAPgGMKeycTJVoGEyzHG0n4neLrDeZ077O7CLEkJ_W_NLDp9iZXcQKClAKSYAtnHBYzqs2-i_x6sZBQ"
+   },
+   "message": "pyrtan-req-v1\nhttps://hub.example\nPOST\n/inbox\n1793000000\n23e571b2b8b27e38e99a2b67de666f8ed1b165ccbb9a92cd9e4efd8e1ee3fd47",
+   "method": "POST",
+   "note": {
+    "device": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
+    "expires": 1793086400,
+    "issued": 1792999900,
+    "label": "browser",
+    "may": [
+     "ask",
+     "chat"
+    ],
+    "pyrtan-device": 1,
+    "root": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
+    "sig": "arxqTAmJMOLXe5n3Q6MXMSZsWI_ym_k7fgEpAAR1Re0xmpiPX5FARkW82tGipVkRDhB15ZNCYUlHNSH6i0bUCg"
+   },
+   "path": "/inbox",
+   "public": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+   "seed": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+  }
+ ],
+ "sha3_256": [
+  {
+   "in": "",
+   "out": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a"
+  },
+  {
+   "in": "616263",
+   "out": "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+  },
+  {
+   "in": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+   "out": "9b04c091da96b997afb8f2585d608aebe9c4a904f7d52c8f28c7e4d2dd9fba5f"
+  },
+  {
+   "in": "787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+   "out": "c150125edc74b56fb5cbfdd024fabe20ea5a99bd3c97305bbf7cb55885c106fe"
+  },
+  {
+   "in": "78787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+   "out": "5bc276bac9c582508b8fa9b3949e7ed9b6e584ee4d2925b29a426b9931ba1486"
+  },
+  {
+   "in": "7878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+   "out": "2f25a6351abe05e289a0a3e65fef42db7d5fc314936bdee4f6d54d04fb20a609"
+  }
+ ]
+}

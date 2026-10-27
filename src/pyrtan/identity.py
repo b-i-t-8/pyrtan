@@ -187,6 +187,11 @@ def _ed25519():
     return ed25519
 
 
+def require_signatures() -> None:
+    """IdentityError, saying how to install the extra, if this pyrtan cannot sign or verify."""
+    _ed25519()
+
+
 def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 

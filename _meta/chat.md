@@ -35,8 +35,11 @@ the hub's order. A seat nobody polls for a minute is let go and its
 partner told, which is how a closed tab ends a conversation.
 
 The lobby follows the hub's access rule: with a token, only callers with
-the token chat. That is deliberate. A bot runs trees, so a lobby open to
-callers the hub would refuse at `/intent` would be a way round the token.
+the token chat, or with a key the hub grants `chat` (`identity.md` §7).
+That is deliberate. A bot runs trees, so a lobby open to callers the hub
+would refuse at `/intent` would be a way round the token; for the same
+reason a `chat` grant reaches the bots too, and is to be given to whom
+the operator would let ask.
 A hub that wants strangers from the internet runs without a token, as
 every hub that serves strangers already does.
 

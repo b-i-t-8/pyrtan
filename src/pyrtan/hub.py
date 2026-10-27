@@ -640,6 +640,9 @@ class Hub:
         if method == "GET" and path == "/allow":
             return 200, {"grants": self.grants.view(), "audience": self.audience}
         if method == "POST" and path in ("/allow", "/disallow"):
+            if not operator:
+                # Even on a hub with no token: a grant of run makes a trusted member, which an open hub never had.
+                return 403, {"status": "error", "reason": "not-granted", "say": "Grants change only with the operator's token or a key granted operate; a hub with no token takes them from --allow at start."}
             who = body.get("who")
             if not isinstance(who, str):
                 return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"who\": \"pyr:…\" or \"name@domain\"" + (", \"may\": [\"ask\", ...]}." if path == "/allow" else "}.")}
@@ -782,6 +785,8 @@ def serve_hub(
     where the list is kept (default: beside ``state``, else in memory)."""
     from .grants import parse_spec
     specs = [parse_spec(a) for a in allow or []]
+    if specs:
+        identity.require_signatures()  # a grant nobody could prove is refused at start, not at the first request
     keep = grants or (str(Path(state).with_name("grants.json")) if state else None)
     granted = Grants(keep)
     for who, may in specs:

@@ -297,6 +297,11 @@ def test_a_hub_with_no_token_only_asks_who(tmp_path, root):
         assert http_json("GET", f"{srv.url}/api")[1]["audience"] == srv.url.rstrip("/")
         as_root = Caller(srv.url, root)
         assert as_root("GET", "/peers")[0] == 200                  # open hub: a key is who, not a permission
+        # But nobody grants themselves anything there: that would make a trusted member, which an open hub never had.
+        assert http_json("POST", f"{srv.url}/allow", {"who": root.id, "may": ["run"]})[0] == 403
+        assert as_root("POST", "/allow", {"who": root.id, "may": ["run"]})[0] == 403
+        h.grants.allow(root.id, ["operate"])
+        assert as_root("POST", "/allow", {"who": root.id, "may": ["operate", "run"]})[0] == 200
         bad = identity.sign_request(root, "https://elsewhere.example", "GET", "/peers", None)
         assert http_json("GET", f"{srv.url}/peers", headers=bad)[0] == 401
     finally:
@@ -315,3 +320,56 @@ def test_hub_flags(tmp_path, root, capsys):
         srv.stop()
     with pytest.raises(IdentityError):
         serve_hub(port=0, quiet=True, allow=["nobody@127.0.0.1:9=ask"])
+
+
+# ---------------------------------------------------------------- the console, in a browser
+
+
+def _node_playwright() -> bool:
+    import shutil
+    import subprocess
+    if shutil.which("node") is None:
+        return False
+    return subprocess.run(["node", "-e", "require('playwright')"], capture_output=True).returncode == 0
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="needs node with playwright, and a Chromium")
+def test_the_console_holds_a_key_asks_and_joins_as_it(hub):
+    """tests/browser/console_identity.cjs: the page makes a key, takes the note our root signs
+    for it, keeps it across a reload, asks with no token, and joins as a trusted member."""
+    import subprocess
+    from conftest import ROOT
+    h, srv = hub
+    root = identity.Key.generate()
+    h.grants.allow(root.id, ["ask", "run"])
+    p = subprocess.Popen(["node", str(ROOT / "tests" / "browser" / "console_identity.cjs"), srv.url.rstrip("/")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, cwd=str(ROOT))
+    said: dict[str, str] = {}
+    try:
+        for line in p.stdout:  # a Chromium helper may hold the pipe open after node exits: stop at the last line
+            word, _, rest = line.rstrip("\n").partition(" ")
+            said[word] = rest
+            if word == "DEVICE":
+                p.stdin.write(json.dumps(identity.make_device(root, rest, ["ask", "chat", "run"], label="browser")) + "\n")
+                p.stdin.flush()
+            if word in ("JOINED", "ERROR", "PAGEERROR"):
+                break
+    finally:
+        try:
+            p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    assert "ERROR" not in said and "PAGEERROR" not in said, said
+    device = said["DEVICE"]
+    assert identity.normal(device) == device
+    assert root.id in said["PAIRED"] and said["KEPT"] == device
+    assert said["ASKED"] == "echo: from the browser"
+    assert said["JOINED"].startswith(device) and "trusted" in said["JOINED"]
+    member = h.federation.followers[device]
+    assert (member.trusted, member.trusted_by, member.identity, member.device) == (True, "key", root.id, device)
+
+
+def test_a_hub_with_grants_needs_the_extra(monkeypatch, root):
+    import sys
+    monkeypatch.setitem(sys.modules, "cryptography.hazmat.primitives.asymmetric", None)
+    with pytest.raises(IdentityError, match=r"pyrtan\[identity\]"):
+        serve_hub(port=0, quiet=True, allow=[f"{root.id}=ask"])

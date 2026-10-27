@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Two steps built** (§10): identifiers, the three documents, signing and checking, and `pyrtan id`; then names (§6): resolving and pinning, `/.well-known/pyrtan/` for any domain, and pyrtan.com's names by pull request. Everything on the wire (§7) is proposed, not built. |
+| **Status** | **Built, three steps** (§10): identifiers, the three documents and `pyrtan id`; names (§6), resolved, pinned and served, with pyrtan.com's by pull request; and the wire (§7): signed requests, grants on hubs, members as identities, and the console's device key. What is left is in §10, *Later*. |
 | **Date** | 2026-10-27 |
 | **Decision** | A person (or a hub, or a device) is a public key. The identifier is that key, written so that anyone can check a signature from it without asking anybody. Domains, hubs and onion services are where an identity can be *reached* and what it can be *called*, never what it *is*: `pyr:<key>` is the identity, `pyr:<key>@host` says where to find it, and `alice@pyrtan.com` is a name a domain vouches for. pyrtan.com hands out names by pull request, as one name provider among any number. An identity grants nothing by itself: each hub keeps its own list of who may do what. |
-| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. Proposed: `src/pyrtan/federation.py` and `hub.py` (signed requests, grants), `src/pyrtan/page.py` (the console's device key), `site/names/` and `site/gate.py` (pyrtan.com's names), `/.well-known/pyrtan/` on any domain. |
+| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. `src/pyrtan/grants.py` (who may do what on a hub), `src/pyrtan/hub.py`, `federation.py` and `service.py` (signed requests, `/allow`, `/identity`, members as identities), `src/pyrtan/js/identity.js` and `page.py` (the console's key), `tests/test_grants.py`, `tests/conformance/identity.json` and `identity.cjs`, `tests/browser/console_identity.cjs`. |
 
 ## 0. The brief
 
@@ -182,17 +182,21 @@ phone's console) gets its own key, and the root signs a note for it:
   refused; the root renews by signing a new one.
 - **Revocation** is the device id in the identity document's `revoked`,
   under a newer `updated`. A hub that holds the document re-reads it
-  (from a route, or its keepers) at least hourly and on any request from
-  a device it has not seen in a day; a revoked device's links are dropped
-  and its requests refused.
+  (from the name's domain and the document's routes) at least hourly and
+  on any request from a device it has not seen in a day, and takes a
+  newer one pushed to it (`pyrtan id push --at HUB`) at once; a revoked
+  device's links are dropped and its requests refused.
 - **A root may also sign requests itself.** That is the simple case for
   one machine; devices are for everything else.
 
 The console's device key is a non-extractable `CryptoKey` in IndexedDB.
-Pairing a phone: the console makes its key and shows the device
-identifier (and a QR code of it); `pyrtan id device add pyr:… --may
-chat,run --label phone` on the machine with the root prints the note; the
-console takes it pasted or scanned, or picks it up from the root's hub.
+Pairing a phone: the console's Identity tab makes its key and shows the
+device identifier and the command to run; `pyrtan id device add pyr:…
+--may chat,run --label phone` on the machine with the root prints the
+note; the console takes it pasted. An unpaired key signs as itself, so a
+hub can also grant the key directly. A QR code of the identifier, and
+picking the note up from the root's hub instead of pasting it, are
+later (§10).
 
 ## 6. Names
 
@@ -289,34 +293,62 @@ the five-minute window is the same as HMAC's. The hub checks the
 signature, the device note (signed by its root, unexpired, not revoked),
 and then its grants.
 
-**Grants.** A hub keeps a list, in its state file and from
-`--allow`:
+The audience is the hub's federation id, or the URL it was started at
+(`--advertise`, else its own address), and `GET /api` names it, so a
+client asks once and signs for it. The body is the canonical JSON the
+request carries; a `POST` with no body is signed as `{}`, which is what
+the hub reads it as. A bad signature is refused (401) on any hub. On a
+hub with a token, a good one may do what its root is granted and nothing
+else (403 otherwise, naming what it may do); on a hub without a token,
+where anyone may do anything, a key only says who is asking, which is
+what decides whether a member it signs for is trusted.
+
+**Grants.** A hub keeps a list (`grants.json` beside its `--state`, or
+`--grants FILE`, or in memory), from `--allow` at start and from its
+operator at `/allow`:
 
 ```
 pyrtan hub --allow alice@pyrtan.com=ask,run --allow pyr:…=operate
+pyrtan allow bob@example.org --may chat --at HUB        # GET/POST /allow
+pyrtan allowed --at HUB
+pyrtan disallow bob@example.org --at HUB                # POST /disallow
 ```
 
 A name is resolved and pinned when the grant is made; from then on the
-grant is held against the identifier. What a request may do is the
-grant's abilities intersected with the device note's `may`:
+grant is held against the identifier, and the name is never resolved
+again. `/allow` and `/disallow` need the token or a key granted
+`operate`, even on a hub with no token: a grant of `run` makes a trusted
+member, which an open hub never had, so there grants come only from
+`--allow` at start. What a request may do is the grant's abilities intersected with
+the device note's `may` (`grants.py`, `ability_for` says which a path
+needs):
 
 | Ability | What it lets the identity do on this hub | What it stands in for today |
 | :-- | :-- | :-- |
 | `ask` | `/intent`, `/run`, `/resume` on a hub behind a token | the token, for asking |
-| `chat` | a seat in a lobby behind a token | the token, for chat |
+| `chat` | a seat in a lobby behind a token; its bots answer what `/intent` would, so it is as good as `ask` | the token, for chat |
 | `run` | follow as a member and be handed trees (`members.md` §7) | joining with the token |
 | `operate` | everything the token allows | the token |
 
 The bearer token keeps working. A hub may have a token, grants, both or
 neither; a request with no key headers is judged exactly as it is today.
+`POST /identity` takes a granted root's newer document from anyone (it
+is signed); `GET /.well-known/pyrtan/id/<56>.json` serves the documents
+the hub holds, so a hub is a route for the identities it grants. The
+CLI signs with `--sign` (or `$PYRTAN_SIGN`) on every command that calls
+a hub, as the root key in `$PYRTAN_IDENTITY`; device keys for the CLI
+are later.
 
 **Members.** A member may follow with its device key as its actor id.
 The `Follow` is signed with the key as well as carrying the pair secret
 as now; once accepted, the link runs on HMAC exactly as today, and the
 key is not needed again until the hub re-reads the identity document.
 That keeps signatures off the polling path and leaves `members.md` §2
-otherwise unchanged. A member whose root holds `run` is trusted; one
-without is a keeper.
+otherwise unchanged. A member whose root holds `run` is trusted
+(`trusted_by: key`); one without is a keeper that says who it is. When
+its note expires, its root's document revokes it, or its root loses
+`run`, the hub drops the link; a member trusted by the token is not
+touched.
 
 **Hubs.** A hub may have a root key too: `/actor` gains `key` and a
 signature over `{id, key}`. A follower pins the key. A hub that moves
@@ -335,18 +367,21 @@ hub that checks Alice with a shared secret can also forge Alice.
   the way Playwright is `pyrtan[browser]`. Imported lazily by
   `identity.py`. Without it, encoding and checking identifiers still
   works (§2); `pyrtan id new`, signing and verifying say how to install
-  the extra; a hub started with a `pyr:` or name grant refuses to start,
-  loudly, rather than accept nothing; a hub with no grants ignores key
-  headers and behaves as today. Pyrtan's core stays standard-library
+  the extra; a hub started with any `--allow` refuses to start, loudly,
+  rather than hold grants nobody could prove; a hub without it answers a
+  key-signed request 401, saying why, and everything else as before. Pyrtan's core stays standard-library
   only, as `CONTRIBUTING.md` requires; identity is opt-in at each hub,
   and so is its dependency.
 - **The browser: WebCrypto's `Ed25519`,** shipped in all three engines,
   available only in secure contexts. The console at
-  `https://pyrtan.com/console/` and on any hub behind TLS has it; a
-  console served over plain `http://` on a LAN does not, and falls back
-  to today's anonymous member. That is the same limit that made the
-  console carry its own SHA-256 and HMAC (`members.md` §2), and it is
-  said in the Member tab rather than worked around.
+  `https://pyrtan.com/console/`, on any hub behind TLS, and on
+  `localhost` has it; a console served over plain `http://` to a LAN
+  address does not, and falls back to the token and today's anonymous
+  member. That is the same limit that made the console carry its own
+  SHA-256 and HMAC (`members.md` §2), and it is said in the Identity tab
+  rather than worked around. SHA3-256, for the identifier's checksum, is
+  not in WebCrypto at all, so `identity.js` carries it, beside the
+  SHA-256 the console already had.
 - **The fallback, if the dependency proves a problem:** a verify-only
   Ed25519 in pure Python, from RFC 8032's reference code. Verifying
   handles no secret, so timing does not leak anything; the risk is
@@ -398,14 +433,23 @@ hub that checks Alice with a shared secret can also forge Alice.
   `catalog` workflow passing the author's numeric id, and the `pages`
   build serving the names. pyrtan.com hands out names; nothing yet
   grants by them.
-- **Third: hubs.** Signed requests, `--allow` and grants, members
-  following with a device key, revocation refresh, the console's device
-  key and pairing, with conformance vectors (`tests/conformance/`) so the
-  console's checking agrees with Python's: the console needs SHA3-256 for
-  the checksum, which WebCrypto does not offer, so it carries its own,
-  as it carries SHA-256 today. This is the step that replaces handing out
-  the token.
-- **Later:** hub keys in `/actor` and moves; a chat seat that opts in to
+- **Third, built: hubs.** `identity.py` signs and verifies requests;
+  `grants.py` keeps the grants, their documents and their refresh; the
+  hub checks keys against its audience, enforces the abilities behind a
+  token, takes `/allow`, `/disallow` and `/identity`, serves
+  `/.well-known/pyrtan/id/`, trusts members by key and drops them when
+  that lapses; `pyrtan hub --allow/--grants`, `pyrtan allow`, `allowed`,
+  `disallow`, `id push`, and `--sign`. The console: `identity.js`
+  (SHA3-256, identifiers, canonical JSON, request signing with WebCrypto,
+  the key in IndexedDB), inlined; the Identity tab; `api()` signing; a
+  member joining as the key. `tests/conformance/identity.json` holds
+  what Python says, and `identity.cjs` checks that `identity.js` says the
+  same, signatures included; `tests/browser/console_identity.cjs` drives
+  the console in Chromium end to end (a key, a note, a reload, an answer
+  with no token, a trusted member). This is the step that replaces
+  handing out the token.
+- **Later:** a QR code for pairing, and the note picked up from the
+  root's hub; device keys for the CLI; hub keys in `/actor` and moves; a chat seat that opts in to
   showing a verified name (chat stays anonymous by default, and still
   keeps nothing); reaching `.onion` locators, which needs a SOCKS proxy
   the transport does not have and an egress rule for it (`io.md`);

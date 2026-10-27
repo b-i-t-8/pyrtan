@@ -15,6 +15,13 @@ from elsewhere (it finds out by asking ``api`` on its own origin), it shows
 a connect box for a hub URL and a token, keeps them in the browser's local
 storage, and sends the token as a bearer. The hub must then allow the
 console's origin with ``--cors``. No external assets, no build step.
+
+On a hub of 0.12 or later its Identity tab makes a key for this browser
+(``identity.js``, inlined: WebCrypto's Ed25519, non-extractable, kept in
+IndexedDB) and takes the device note ``pyrtan id device add`` prints;
+from then on it signs what it sends the hub with that key, and a member
+joined from here follows as it. A page served over plain ``http://`` to
+anything but localhost has no WebCrypto, holds no key, and says so.
 """
 
 from __future__ import annotations
@@ -29,6 +36,8 @@ from . import __version__
 PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf-8")
 # The wordmark's colour picker, inlined into the console and copied beside pyrtan.com's pages.
 THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
+# Identifiers, canonical JSON and request signing, inlined into the console (_meta/identity.md).
+IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding="utf-8")
 
 PAGE = r"""<!doctype html>
 <html lang="en">
@@ -41,6 +50,7 @@ PAGE = r"""<!doctype html>
 <script src="pyrtan.js"></script>
 <meta name="theme-color" content="#c2410c">
 <script>__THEME__</script>
+<script>__IDENTITY__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
@@ -125,6 +135,7 @@ PAGE = r"""<!doctype html>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
+    <a href="#identity" data-tab="identity" id="identity-tab" hidden>Identity</a>
     <a href="#chat" data-tab="chat" id="chat-tab" hidden>Chat</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
@@ -217,6 +228,29 @@ PAGE = r"""<!doctype html>
     </div>
   </section>
 
+  <section id="tab-identity" hidden>
+    <h2>This browser's key</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">A key made here, kept here (the browser holds it and will not hand it over, not even to this page), and used to sign what this console sends the hub. Pair it with your identity and the hub gives it what it grants you, capped by what the note lets this browser do; or grant the key itself, <code>pyrtan allow pyr:… --may chat</code>. A member joined from here follows as this key.</p>
+    <div class="card">
+      <div id="ident-none" class="notice" hidden>This page cannot hold a key: it needs a secure page (https, or localhost) in a browser with Ed25519 in WebCrypto. It still asks, chats and joins, without a key: with the hub's token, or as an anonymous member.</div>
+      <div id="ident-off" hidden>
+        <button type="button" id="ident-make">Make a key for this browser</button>
+      </div>
+      <div id="ident-on" hidden>
+        <div><span class="status done">key</span> <code id="ident-id"></code></div>
+        <div class="mute" style="font-size:14px;margin:6px 0" id="ident-paired"></div>
+        <form id="ident-note-form" style="margin:10px 0">
+          <div class="mute" style="font-size:14px;margin-bottom:6px">On the machine with your identity: <code id="ident-howto"></code>, then paste what it prints here.</div>
+          <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
+        </form>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+          <label><input type="checkbox" id="ident-sign"> sign requests to this hub with it</label>
+          <button type="button" class="quiet" id="ident-forget">Forget this key</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="tab-chat" hidden>
     <h2>Talk to a stranger</h2>
     <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
@@ -276,10 +310,13 @@ const store = {
 // base: "" when this page is served by a Pyrtan (relative URLs); otherwise the hub URL the person gave.
 let base = "", token = "", remote = false, isHub = false;
 
-function api(path, init) {
+async function api(path, init) {
   const headers = Object.assign({"Accept": "application/json"}, (init && init.headers) || {});
   if (token) headers["Authorization"] = "Bearer " + token;
   const url = base ? base.replace(/\/+$/, "") + "/" + path : path;
+  const method = ((init && init.method) || "GET").toUpperCase();
+  const body = init && init.body ? JSON.parse(init.body) : (method === "POST" ? {} : null);
+  Object.assign(headers, await ident.headers(method, "/" + path.split("?")[0].replace(/^\/+/, ""), body));
   return fetch(url, Object.assign({}, init, {headers}));
 }
 async function json(path, init) {
@@ -288,6 +325,59 @@ async function json(path, init) {
   return r.json();
 }
 function problem(msg, bad) { $("#problem").innerHTML = msg ? `<div class="notice${bad ? " bad" : ""}">${esc(msg)}</div>` : ""; }
+
+// ---------------------------------------------------------------- identity
+// This browser's key: made and held by crypto.subtle (non-extractable, in
+// IndexedDB), paired with a root by a device note, used to sign requests
+// for the hub's audience (named at /api). See identity.js.
+const ident = {
+  ok: null, key: null, audience: null, sign: true,
+  async init() {
+    this.ok = await PyrtanIdentity.available();
+    if (this.ok) { try { this.key = await PyrtanIdentity.store.get(); } catch (e) { this.key = null; } }
+    try { this.sign = localStorage.getItem("pyrtan.identity.sign") !== "off"; } catch (e) {}
+    this.render();
+  },
+  active() { return !!(this.ok && this.key && this.sign && this.audience); },
+  async headers(method, path, body) {
+    if (!this.active()) return {};
+    return PyrtanIdentity.signRequest(this.key, this.audience, method, path, body, this.key.note || null);
+  },
+  async make() {
+    const k = await PyrtanIdentity.generate();
+    this.key = {id: k.id, privateKey: k.privateKey, publicKey: k.publicKey, note: null, made: Date.now()};
+    await PyrtanIdentity.store.put(this.key);
+    this.render();
+  },
+  async useNote(text) {
+    let note; try { note = JSON.parse(text); } catch (e) { problem("The note is JSON: paste the line pyrtan id device add printed.", true); return; }
+    const bad = PyrtanIdentity.noteProblem(note, this.key.id);
+    if (bad) { problem(bad, true); return; }
+    this.key.note = note; await PyrtanIdentity.store.put(this.key); problem(""); this.render();
+  },
+  async forget() {
+    if (!confirm("Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.")) return;
+    await PyrtanIdentity.store.put(null); this.key = null; this.render();
+  },
+  render() {
+    if (!$("#tab-identity")) return;
+    $("#ident-none").hidden = this.ok !== false;
+    $("#ident-off").hidden = !this.ok || !!this.key;
+    $("#ident-on").hidden = !this.ok || !this.key;
+    if (!this.key) return;
+    $("#ident-id").textContent = this.key.id;
+    const n = this.key.note;
+    $("#ident-paired").innerHTML = n
+      ? `speaks for <code>${esc(n.root)}</code> · may ${esc(n.may.join(", ") || "nothing")} · until ${esc(new Date(n.expires * 1000).toLocaleDateString())}${n.label ? " · " + esc(n.label) : ""}`
+      : "not paired: it signs as itself, so a hub grants this key, or nothing";
+    $("#ident-howto").textContent = `pyrtan id device add ${this.key.id} --may ask,chat,run --label browser`;
+    $("#ident-sign").checked = this.sign;
+  },
+};
+$("#ident-make").addEventListener("click", () => ident.make().catch((e) => problem("Could not make a key: " + e.message, true)));
+$("#ident-note-form").addEventListener("submit", (e) => { e.preventDefault(); ident.useNote($("#ident-note").value.trim()); });
+$("#ident-forget").addEventListener("click", () => ident.forget());
+$("#ident-sign").addEventListener("change", (e) => { ident.sign = e.target.checked; try { localStorage.setItem("pyrtan.identity.sign", ident.sign ? "on" : "off"); } catch (err) {} });
 
 function showTab(name) {
   for (const a of document.querySelectorAll("#tabs a")) { if (a.dataset.tab === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
@@ -298,6 +388,7 @@ function showTab(name) {
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
+  if (name === "identity") ident.render();
   if (name === "chat") chat.count();
 }
 
@@ -362,6 +453,8 @@ async function load() {
   $("#peers-tab").hidden = !isHub;
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
+  ident.audience = a.audience || null;
+  $("#identity-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   member.hub = a.federation || null;
   if (member.hub) member.start();
@@ -501,27 +594,10 @@ $("#connect-form").addEventListener("submit", (e) => {
 // ---------------------------------------------------------------- member
 // A browser as a federation actor without an inbox. Everything it sends is
 // signed the way hubs sign: HMAC-SHA256 over method, path, date and the
-// SHA-256 of the canonical JSON body. SHA-256 and HMAC are written out here
-// because crypto.subtle is not available on a plain http:// LAN address.
-const sha256 = (() => {
-  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
-  return (bytes) => {
-    const l = bytes.length, bitLen = l * 8, padded = new Uint8Array(((l + 9 + 63) >> 6) << 6);
-    padded.set(bytes); padded[l] = 0x80;
-    const dv = new DataView(padded.buffer); dv.setUint32(padded.length - 4, bitLen >>> 0); dv.setUint32(padded.length - 8, Math.floor(bitLen / 4294967296));
-    let h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-    const w = new Uint32Array(64);
-    for (let o = 0; o < padded.length; o += 64) {
-      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
-      for (let i = 16; i < 64; i++) { const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15] >>> 3), s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2] >>> 10); w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0; }
-      let [a,b,c,d,e,f,g,hh] = h;
-      for (let i = 0; i < 64; i++) { const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25), ch = (e & f) ^ (~e & g), t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0, S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) >>> 0; hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0; }
-      h = h.map((v, i) => (v + [a,b,c,d,e,f,g,hh][i]) >>> 0);
-    }
-    return new Uint8Array(h.flatMap(v => [v >>> 24 & 255, v >>> 16 & 255, v >>> 8 & 255, v & 255]));
-  };
-})();
+// SHA-256 of the canonical JSON body. HMAC is written out here (and SHA-256
+// in identity.js) because crypto.subtle is not available on a plain http://
+// LAN address. With a key (the Identity tab), it follows as that key.
+const {sha256, canonical} = PyrtanIdentity;
 const enc = new TextEncoder();
 const hex = (b) => Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
 function hmac(keyText, msgBytes) {
@@ -530,11 +606,6 @@ function hmac(keyText, msgBytes) {
   const ipad = k.map(x => x ^ 0x36), opad = k.map(x => x ^ 0x5c);
   const inner = sha256(new Uint8Array([...ipad, ...msgBytes]));
   return hex(sha256(new Uint8Array([...opad, ...inner])));
-}
-function canonical(v) {
-  if (v === null || typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
-  return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
 }
 function signHeaders(secret, actor, method, path, body) {
   const date = String(Math.floor(Date.now() / 1000));
@@ -569,15 +640,17 @@ const member = {
   },
   activity(type, object, extra) { return Object.assign({type, id: this.me.id + "/activities/" + randomHex(8), actor: this.me.id, published: new Date().toISOString().replace(/\.\d+Z$/, "Z"), object}, extra || {}); },
   async join(name, fedSecret) {
-    this.me = {id: "urn:pyrtan:member:" + randomHex(16), secret: randomHex(32), name: name || "browser", state: "pending", listed: true, joined: Date.now(), trusted: false};
+    const keyed = ident.active();
+    this.me = {id: keyed ? ident.key.id : "urn:pyrtan:member:" + randomHex(16), secret: randomHex(32), name: name || "browser", state: "pending", listed: true, joined: Date.now(), trusted: false};
     this.save();
     const act = this.activity("Follow", this.hub, {secret: this.me.secret, inbox: "mailbox", name: this.me.name});
     const headers = Object.assign({"Accept": "application/json", "Content-Type": "application/json"}, signHeaders(fedSecret || this.me.secret, this.me.id, "POST", "/inbox", act));
+    if (keyed) Object.assign(headers, await ident.headers("POST", "/inbox", act));  // a hub that grants this key, or its root, run makes it trusted
     if (token) headers["Authorization"] = "Bearer " + token;  // the operator's token makes this device trusted: it runs the hub's trees
     const r = await fetch((base ? base.replace(/\/+$/, "") : "") + "/inbox", {method: "POST", headers, body: canonical(act)});
     const data = await r.json().catch(() => ({}));
     if (r.status !== 202) { this.me = null; this.save(); this.note(`follow refused: ${data.say || r.status}`); problem(`The hub did not take the follow: ${data.say || r.status}`, true); this.render(); return; }
-    this.me.trusted = !!data.trusted; this.save();
+    this.me.trusted = !!data.trusted; this.me.identity = data.identity || null; this.save();
     this.note(`followed ${this.hub}` + (this.me.trusted ? " as a trusted device" : ""));
     await this.poll();
     this.start();
@@ -654,7 +727,7 @@ const member = {
     $("#member-id").textContent = this.me.id; $("#member-state").textContent = this.me.state;
     $("#member-name-shown").textContent = this.me.name; $("#member-polled").textContent = this.me.polled ? new Date(this.me.polled).toLocaleTimeString() : "never";
     $("#member-listed").checked = !!this.me.listed;
-    $("#member-trust").textContent = this.me.trusted ? "trusted: runs the hub's trees" : "keeper only (join with the hub's token to run trees)";
+    $("#member-trust").textContent = this.me.trusted ? "trusted: runs the hub's trees" + (this.me.identity ? ` (as ${PyrtanIdentity.short(this.me.identity)})` : "") : "keeper only (join with the hub's token, or as a key it grants run, to run trees)";
     const tb = $("#member-trees tbody"); tb.innerHTML = "";
     const sel = $("#member-run-tree"); const chosen = sel.value; sel.innerHTML = "";
     for (const t of this.capabilities()) {
@@ -765,11 +838,11 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab
 window.addEventListener("pagehide", () => chat.leave(true));
 
 $("#forget").addEventListener("click", () => { store.clear(); base = ""; token = ""; $("#hub-url").value = ""; $("#hub-token").value = ""; $("#who").textContent = "not connected"; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); });
-load();
+ident.init().finally(load);
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS)
 
 MANIFEST = json.dumps({
     "name": "Pyrtan",
