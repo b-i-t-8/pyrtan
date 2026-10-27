@@ -308,7 +308,7 @@ def test_cli_check_identifiers(tmp_path, capsys):
     code, out, _ = run(capsys, "id", "check", f"{VECTOR}@hub.example")
     assert code == 0 and "well-formed address" in out and RFC8032[0][1] in out
     code, out, _ = run(capsys, "id", "check", "alice@pyrtan.com")
-    assert code == 0 and "a name" in out
+    assert code == 0 and "well-formed name" in out and "pyrtan id resolve alice@pyrtan.com" in out
     code, _, err = run(capsys, "id", "check", VECTOR[:-3] + "zab")
     assert code == 1 and "pyrtan id:" in err
 

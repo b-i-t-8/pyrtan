@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **First step built** (§10): identifiers, the three documents, signing and checking, and `pyrtan id`. Names at pyrtan.com (§6) and everything on the wire (§7) are proposed, not built. |
+| **Status** | **Two steps built** (§10): identifiers, the three documents, signing and checking, and `pyrtan id`; then names (§6): resolving and pinning, `/.well-known/pyrtan/` for any domain, and pyrtan.com's names by pull request. Everything on the wire (§7) is proposed, not built. |
 | **Date** | 2026-10-27 |
 | **Decision** | A person (or a hub, or a device) is a public key. The identifier is that key, written so that anyone can check a signature from it without asking anybody. Domains, hubs and onion services are where an identity can be *reached* and what it can be *called*, never what it *is*: `pyr:<key>` is the identity, `pyr:<key>@host` says where to find it, and `alice@pyrtan.com` is a name a domain vouches for. pyrtan.com hands out names by pull request, as one name provider among any number. An identity grants nothing by itself: each hub keeps its own list of who may do what. |
-| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `pyrtan id` in `src/pyrtan/cli.py`, `tests/test_identity.py`. Proposed: `src/pyrtan/federation.py` and `hub.py` (signed requests, grants), `src/pyrtan/page.py` (the console's device key), `site/names/` and `site/gate.py` (pyrtan.com's names), `/.well-known/pyrtan/` on any domain. |
+| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. Proposed: `src/pyrtan/federation.py` and `hub.py` (signed requests, grants), `src/pyrtan/page.py` (the console's device key), `site/names/` and `site/gate.py` (pyrtan.com's names), `/.well-known/pyrtan/` on any domain. |
 
 ## 0. The brief
 
@@ -219,7 +219,10 @@ is signing it; both have to agree.
 the domain to serve.
 
 **Pinning.** The first identity a name resolves to is remembered (in the
-hub's state file, the console's storage, `~/.config/pyrtan/`). A later
+hub's state file, the console's storage, `pins.json` beside the CLI's
+key). `pyrtan id resolve alice@example.org` resolves, pins and shows the
+identity document if the domain serves one; `--repin` takes a changed
+answer; `pyrtan id pins` lists them and `--forget` drops one. A later
 answer naming a different identity is not followed: it is shown beside
 the pinned one, and the operator re-pins by hand. This is SSH's
 known-hosts rule, and it is what makes a domain's word safe to take:
@@ -229,8 +232,9 @@ old answer notices.
 **pyrtan.com's names.** GitHub Pages serves `/.well-known/` like any other
 path and sends `Access-Control-Allow-Origin: *`, so the console can
 resolve names from a browser. The names are files in this repository,
-`site/names/<login>.json`, each a name claim plus two fields only
-pyrtan.com uses:
+`site/names/<login>.json`, each a name claim with two rules only
+pyrtan.com adds, and beside it, optionally, `site/names/<login>.id.json`,
+the identity's document:
 
 - the name is the author's **GitHub login**, lowercased. One person, one
   name, no disputes to judge, and GitHub has already checked it;
@@ -238,18 +242,28 @@ pyrtan.com uses:
   renames, so the gate (`site/gate.py`, run by the `catalog` workflow as
   it is for namespaces) checks the pull request author's *numeric* id
   (`github.event.pull_request.user.id`) against the file, not the login.
-  A new file must be added by that user; a changed or removed one
-  likewise, or by a maintainer.
+  A new name must be the author's own login carrying the author's id; a
+  name, or its document, is changed or removed only by the account whose
+  id the claim carried on the base branch, and its `github` never
+  changes. One name per account. To follow a rename, remove the old name
+  and add the new one in the same pull request. A maintainer may merge
+  over the gate to remove a name on request or for abuse.
 
-The gate also checks the claim's signature and the identifier's
-checksum. The `pages` build publishes each claim at
+The gate also checks every claim's signature, that it is for
+`<its file's name>@pyrtan.com`, and that a document beside it is signed
+by the same key. `pyrtan id name alice@pyrtan.com --into <checkout>`
+writes both files, looking the numeric id up from the login (or taking
+`--github`), and runs the gate. The `pages` build runs `pyrtan id
+wellknown site/names --domain pyrtan.com`, which publishes each claim at
 `/.well-known/pyrtan/name/<login>.json`, an index of all of them at
-`/.well-known/pyrtan/names.json` for mirrors, and, if the file carries
-one, the identity's latest document at `/.well-known/pyrtan/id/<56>.json`.
-A change is live within the hour, the build's cadence.
+`/.well-known/pyrtan/names.json` for mirrors, and each document at
+`/.well-known/pyrtan/id/<56>.json`. A change is live within the hour,
+the build's cadence. The Pages upload stays on
+`actions/upload-pages-artifact@v3`: v4 leaves out dot-directories.
 
-**Other domains** do the same by serving the same paths; nothing about
-them is pyrtan.com's business. An operator can serve names from their own
+**Other domains** do the same by serving the same paths, and `pyrtan id
+wellknown DIR --domain D --out SITE` builds them from a directory of
+claims; nothing about them is pyrtan.com's business. An operator can serve names from their own
 hub. An onion service can serve names to anyone who fetches over Tor.
 
 ## 7. On the wire
@@ -377,9 +391,13 @@ hub that checks Alice with a shared secret can also forge Alice.
   600, beside `identity.json`. Tested with RFC 8032's vectors and the
   vector in §2; CI installs the extra so signing is tested, and the
   suite still passes without it.
-- **Second: names.** `site/names/`, the gate's checks, the build's
-  `/.well-known/pyrtan/` output, `pyrtan id resolve alice@pyrtan.com`,
-  pinning. pyrtan.com hands out names; nothing yet grants by them.
+- **Second, built: names.** `names.py`: resolving, pins, building
+  `/.well-known/pyrtan/` from a directory of claims, and pyrtan.com's
+  gate; `pyrtan id resolve`, `pins`, `wellknown`, `name --into`;
+  `site/names/` with its README, `site/gate.py --author-id`, the
+  `catalog` workflow passing the author's numeric id, and the `pages`
+  build serving the names. pyrtan.com hands out names; nothing yet
+  grants by them.
 - **Third: hubs.** Signed requests, `--allow` and grants, members
   following with a device key, revocation refresh, the console's device
   key and pairing, with conformance vectors (`tests/conformance/`) so the

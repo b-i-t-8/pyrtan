@@ -176,7 +176,8 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees; what a catalog's CI runs. |
 | `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere. |
-| `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve, `id check` checks an identifier or any of those documents, `id show` shows them. |
+| `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
+| `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
 
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
 `Authorization: Bearer` on everything but `/health` and the console, and
@@ -326,9 +327,19 @@ pyrtan id name alice@pyrtan.com --github <your numeric GitHub id>
 pyrtan id check pyr:…@hub.example
 ```
 
-This is the first step: identifiers, the signed documents (the identity
-document, device notes, name claims) and the command. Names at
-pyrtan.com and grants on hubs come next. The design is in
+`pyrtan id resolve alice@pyrtan.com` fetches the claim the domain serves
+at `/.well-known/pyrtan/name/alice.json`, checks that the key signed it,
+and pins the answer: if the domain later names a different key, you are
+told rather than switched. Any domain can serve names (`pyrtan id
+wellknown DIR --domain D` builds the files). pyrtan.com hands out
+`<your GitHub login>@pyrtan.com` by pull request: `pyrtan id name
+<login>@pyrtan.com --into <checkout>`, then a pull request from that
+account, and the gate checks the account's numeric id
+([`site/names/README.md`](site/names/README.md)).
+
+Built so far: identifiers, the signed documents (the identity document,
+device notes, name claims), names and pins, and the command. Grants on
+hubs come next. The design is in
 [`_meta/identity.md`](_meta/identity.md).
 
 ## The catalog
@@ -576,7 +587,7 @@ slot refused. The whole set of rules is in
 ```
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
-                service, hub, federation, identity, page (the console),
+                service, hub, federation, identity, names, page (the console),
                 catalog, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
@@ -605,9 +616,9 @@ topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), and the chat lobby (strangers on the hub and the
 hubs it follows, and bots made of trees) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
-and its own box, and follow other swarms. Identities (keys, device notes
-and name claims, `pyrtan id`) are built as far as their first step;
-names at pyrtan.com and grants on hubs are not. Not yet built: hosting.
+and its own box, and follow other swarms. Identities (keys, device notes,
+name claims, names at pyrtan.com and pins, `pyrtan id`) are built;
+grants on hubs are not yet. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

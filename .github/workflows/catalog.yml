@@ -1,8 +1,10 @@
 # The catalog gate: every pull request that touches a tree runs the same
 # checks `pyrtan publish` ran locally, with what git knows added: which
 # files changed, who opened the pull request, and what version each tree
-# had on main. A maintainer merges when it is green; the pages workflow
-# publishes on merge.
+# had on main. The same gate judges names under site/names/: a new name is
+# the author's own login with the author's numeric GitHub id, and only that
+# account changes it. A maintainer merges when it is green; the pages
+# workflow publishes on merge.
 
 name: catalog
 
@@ -13,6 +15,9 @@ on:
       - "examples/**"
       - "site/gate.py"
       - "src/pyrtan/catalog.py"
+      - "site/names/**"
+      - "src/pyrtan/names.py"
+      - "src/pyrtan/identity.py"
 
 permissions:
   contents: read
@@ -28,4 +33,4 @@ jobs:
       - run: uv sync --extra identity   # the identity tests sign and verify
       - run: uv run pytest -q
       - run: uv run pyrtan check examples catalog --quiet
-      - run: uv run python site/gate.py --base "origin/${{ github.base_ref }}" --author "${{ github.event.pull_request.user.login }}"
+      - run: uv run python site/gate.py --base "origin/${{ github.base_ref }}" --author "${{ github.event.pull_request.user.login }}" --author-id "${{ github.event.pull_request.user.id }}"

@@ -27,6 +27,7 @@
     pyrtan index  DIR [--out FILE]           build a catalog index from a directory
     pyrtan console --out FILE                write the console as one static HTML file
     pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
+    pyrtan id     resolve NAME@DOMAIN        what identity a name is, pinned the first time
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
 bearer token, ``--cors ORIGIN`` to let a browser elsewhere call them, and
@@ -297,8 +298,20 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("host", help="a host[:port] or <56>.onion")
     q = ids.add_parser("name", help="sign a claim that you are name@domain, for the domain to serve")
     q.add_argument("name", metavar="NAME@DOMAIN")
-    q.add_argument("--github", type=int, metavar="USER_ID", help="your numeric GitHub user id, for a name at pyrtan.com")
-    q.add_argument("--out", help="write the claim here (default: stdout)")
+    q.add_argument("--github", type=int, metavar="USER_ID", help="your numeric GitHub user id, for a name at pyrtan.com (with --into, looked up from the name when omitted)")
+    where = q.add_mutually_exclusive_group()
+    where.add_argument("--out", help="write the claim here (default: stdout)")
+    where.add_argument("--into", type=Path, metavar="CHECKOUT", help="put the claim and your identity document into a checkout of this repository's site/names/, ready for a pull request")
+    q = ids.add_parser("resolve", help="what identity a name@domain is, pinned the first time")
+    q.add_argument("name", metavar="NAME@DOMAIN")
+    q.add_argument("--repin", action="store_true", help="accept a different identity than the one pinned")
+    q.add_argument("--json", action="store_true", help="print the claim, and the identity document if the domain serves one")
+    q = ids.add_parser("pins", help="the names you have resolved, and the identity each is pinned to")
+    q.add_argument("--forget", metavar="NAME@DOMAIN", help="drop a pin, so the next resolve takes what the domain says")
+    q = ids.add_parser("wellknown", help="build /.well-known/pyrtan/ from a directory of name claims, for any domain to serve")
+    q.add_argument("names", type=Path, metavar="DIR", help="<name>.json claims, and <name>.id.json identity documents")
+    q.add_argument("--domain", required=True, help="the domain that will serve them; every claim must be for it")
+    q.add_argument("--out", type=Path, required=True, help="the site's root; .well-known/pyrtan/ is written under it")
     for q in ids.choices.values():
         q.add_argument("--dir", type=Path, default=None, help="where your key and document live (default $PYRTAN_IDENTITY or ~/.config/pyrtan/identity)")
 
@@ -1292,6 +1305,7 @@ def cmd_id(args: argparse.Namespace) -> int:
         return {
             "new": _id_new, "show": _id_show, "check": _id_check, "device": _id_device,
             "revoke": _id_revoke, "route": _id_route, "name": _id_name,
+            "resolve": _id_resolve, "pins": _id_pins, "wellknown": _id_wellknown,
         }[args.id_command](args, directory)
     except IdentityError as e:
         print(f"pyrtan id: {e}", file=sys.stderr)
@@ -1363,7 +1377,7 @@ def _id_check(args: argparse.Namespace, directory: Path) -> int:
     if thing != "-" and not Path(thing).is_file():
         parsed = identity.parse(thing)
         if parsed.form == "name":
-            print(f"{parsed}: a name; resolving it at {parsed.domain} comes with the names step (_meta/identity.md §6)")
+            print(f"{parsed}: a well-formed name; `pyrtan id resolve {parsed}` asks {parsed.domain} who it is")
         else:
             print(f"{parsed}: a well-formed {parsed.form}, key {identity.decode(parsed.id).hex()}")
         return 0
@@ -1418,17 +1432,83 @@ def _id_route(args: argparse.Namespace, directory: Path) -> int:
 
 
 def _id_name(args: argparse.Namespace, directory: Path) -> int:
-    from . import identity
-    key, _ = _id_load(directory)
-    extra = {"github": args.github} if args.github is not None else {}
+    from . import identity, names
+    key, doc = _id_load(directory)
+    github = args.github
+    if args.into and github is None:
+        local = identity.parse(args.name).name
+        github = names.github_id(local)
+        print(f"GitHub says {local} is user {github}", file=sys.stderr)
+    extra = {"github": github} if github is not None else {}
     claim = identity.make_name(key, args.name, **extra)
     text = json.dumps(claim, indent=2, ensure_ascii=False) + "\n"
+    if args.into:
+        written = names.place(args.into, claim, doc)
+        problems = names.gate(args.into)
+        for p in problems:
+            print(f"gate: {p}", file=sys.stderr)
+        if problems:
+            return 1
+        print("wrote " + " and ".join(str(w) for w in written))
+        print(f"now: git checkout -b names/{claim['name']} && git add {names.NAMES_DIR} && git commit && git push -u origin HEAD, and open a pull request from the GitHub account {claim['name']}")
+        return 0
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"wrote {args.out}: {claim['id']} claims {claim['name']}@{claim['domain']}; the domain serves it at /.well-known/pyrtan/name/{claim['name']}.json")
     else:
         sys.stdout.write(text)
     return 0
+
+
+def _id_resolve(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity, names
+    claim = names.resolve(args.name)
+    name, ident = f"{claim['name']}@{claim['domain']}", claim["id"]
+    pins = names.Pins(directory / "pins.json")
+    verdict, pinned = pins.compare(name, ident), pins.get(name)
+    if verdict == "changed" and not args.repin:
+        print(f"pyrtan id: {name} now says it is {ident}", file=sys.stderr)
+        print(f"           but it was pinned to {pinned['id']} on {time.strftime('%Y-%m-%d', time.localtime(pinned['first']))}", file=sys.stderr)
+        print("           the domain changed its answer, or someone is answering for it. If you know why, pyrtan id resolve --repin", file=sys.stderr)
+        return 1
+    pins.pin(name, ident)
+    pins.save()
+    doc = names.fetch_identity(ident, claim["domain"])
+    if args.json:
+        print(json.dumps({"claim": claim, "identity": doc}, indent=2, ensure_ascii=False))
+        return 0
+    since = {"new": "pinned now", "same": f"as pinned since {time.strftime('%Y-%m-%d', time.localtime(pinned['first'])) if pinned else ''}", "changed": "re-pinned"}[verdict]
+    print(f"{name} is {ident} ({since})")
+    if doc:
+        print("routes: " + (", ".join(doc["routes"]) or "none") + f"; {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
+    return 0
+
+
+def _id_pins(args: argparse.Namespace, directory: Path) -> int:
+    from . import names
+    pins = names.Pins(directory / "pins.json")
+    if args.forget:
+        if not pins.forget(args.forget):
+            print(f"pyrtan id: {args.forget} is not pinned", file=sys.stderr)
+            return 1
+        pins.save()
+        print(f"forgot {args.forget}; the next resolve takes what its domain says")
+        return 0
+    if not pins.names:
+        print("no pins yet: pyrtan id resolve NAME@DOMAIN")
+    for name, pin in sorted(pins.names.items()):
+        print(f"{name:32} {pin['id']}  since {time.strftime('%Y-%m-%d', time.localtime(pin['first']))}")
+    return 0
+
+
+def _id_wellknown(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity, names
+    domain = identity.check_host(args.domain.lower())
+    count, problems = names.build_wellknown(args.names, args.out, domain)
+    for p in problems:
+        print(f"wellknown: {p} (left out)", file=sys.stderr)
+    print(f"wrote {count} name(s) for {domain} under {args.out / names.WELL_KNOWN}")
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":

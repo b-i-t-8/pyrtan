@@ -14,6 +14,7 @@ static directory and publishes it.
 | `/rendezvous/seeds.json` | hubs to follow first | `site/rendezvous/seeds.json` |
 | `/rendezvous/directory.json` | a snapshot of the default network's directory, from every hub the build can reach, refreshed hourly | `site/snapshot.py` |
 | `/rendezvous/reports.json` | the gap reports the seeds carry for catalog trees, refreshed hourly | `site/snapshot.py --reports` |
+| `/.well-known/pyrtan/` | names: `name/<login>.json` (a claim signed by the identity it names), `id/<56>.json` (identity documents), `names.json` (every claim), for `pyrtan id resolve <login>@pyrtan.com` | `pyrtan id wellknown site/names`, after `site/gate.py`; see [`names/README.md`](names/README.md) |
 
 `site/build.sh out` builds the same thing locally; open `out/index.html`.
 
