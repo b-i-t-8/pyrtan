@@ -213,7 +213,7 @@ GET  /peers    (hub only)</pre>
     </div>
   </section>
 
-  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
+  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://pyrtan.com/source/">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);

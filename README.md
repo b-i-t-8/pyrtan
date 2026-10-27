@@ -476,7 +476,8 @@ _meta/          the design record, the tree format reference, and the
 deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
                 and a systemd unit
 site/           pyrtan.com: the landing page, the seed list, the catalog
-                viewer, and the build the pages workflow publishes
+                viewer, the source browser (files, releases, branches and
+                history), and the build the pages workflow publishes
 ```
 
 ## Status
