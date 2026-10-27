@@ -1,5 +1,7 @@
 {
   "pyrtan-seeds": 1,
   "about": "Hubs to follow first. `pyrtan follow` with no URL takes the first that answers /actor. Add yours by pull request to the site repository; a seed is any federated hub whose operator keeps it up and started it with --listed and --cors https://pyrtan.com.",
-  "hubs": []
+  "hubs": [
+    "https://seed.pyrtan.com"
+  ]
 }

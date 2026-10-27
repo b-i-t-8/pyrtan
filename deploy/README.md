@@ -1,7 +1,8 @@
 # Running the demo on OpenMediaVault
 
 Two ways. Docker through OMV's Compose plugin is the one that fits the box;
-the systemd unit is for running it bare on the host.
+the systemd unit is for running it bare on the host. (The seed hub at
+`seed.pyrtan.com` runs on Fly.io instead; see [`fly/README.md`](fly/README.md).)
 
 Replace `<nas-ip>` below with your NAS's address on the LAN. Both end with
 the demo page at `http://<nas-ip>:8700/` (Docker) or `http://<nas-ip>:8701/`
