@@ -46,7 +46,7 @@ from typing import Any
 
 from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
-from .federation import bootstrap_candidates, first_live_seed
+from .federation import bootstrap_candidates
 from .grow import Proposal, propose
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry, default_paths
@@ -59,7 +59,7 @@ from .tree import TreeError, check, load_tree
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="pyrtan", description="A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees.")
+    parser = argparse.ArgumentParser(prog="pyrtan", description="A core set of expandable services that act on all forms of I/O through inspectable decision trees.")
     parser.add_argument("--version", action="version", version=f"pyrtan {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -162,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     _access_args(p)
     p.add_argument("--federate", action="store_true", help="answer /actor and /inbox so other hubs can follow this one, and follow others")
     p.add_argument("--advertise", default=os.environ.get("PYRTAN_ADVERTISE"), help="the URL other hubs reach this hub at (implies --federate; default $PYRTAN_ADVERTISE, else this host and port)")
-    p.add_argument("--follow", action="append", default=[h for h in os.environ.get("PYRTAN_FOLLOW", "").replace(",", " ").split() if h], metavar="URL", help="a hub to follow on start (repeatable; default $PYRTAN_FOLLOW; 'seed' means the first live seed)")
+    p.add_argument("--follow", action="append", default=[h for h in os.environ.get("PYRTAN_FOLLOW", "").replace(",", " ").split() if h], metavar="URL", help="a hub to follow on start (repeatable; default $PYRTAN_FOLLOW; 'seed' means join the default network, as --join default)")
+    p.add_argument("--join", action="append", default=[h for h in os.environ.get("PYRTAN_JOIN", "").replace(",", " ").split() if h], metavar="INVITE", help="a network to be in on start: 'default' for the public one pyrtan.com publishes, or an invite NAME:SECRET[@HUB] (repeatable; default $PYRTAN_JOIN)")
     p.add_argument("--federation-secret", default=os.environ.get("PYRTAN_FEDERATION_SECRET"), help="only hubs that sign their Follow with this secret may follow (default $PYRTAN_FEDERATION_SECRET; without it, follows are open)")
     p.add_argument("--closed", action="store_true", help="take no follows at all (this hub can still follow others)")
     p.add_argument("--state", metavar="FILE", default=os.environ.get("PYRTAN_STATE"), help="keep who this hub follows and is followed by, and the directory, in this file across restarts (default $PYRTAN_STATE)")
@@ -174,9 +175,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--quiet", action="store_true")
 
     p = sub.add_parser("follow", help="follow another hub, through a running federated hub of yours")
-    p.add_argument("url", nargs="?", default=None, help="the other hub's URL (default: the first live seed from $PYRTAN_RENDEZVOUS, $PYRTAN_SEEDS or pyrtan.com)")
+    p.add_argument("url", nargs="?", default=None, help="the other hub's URL (default: join the default network, as `pyrtan join`)")
+    p.add_argument("--network", help="follow it in this network of yours, so the directory heard over the link stays in it")
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
     p.add_argument("--listed", action="store_true", help="also put your hub in the directory it gossips, so others can find it")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("join", help="put your hub in a network: the default one from pyrtan.com, or one an invite names")
+    p.add_argument("invite", nargs="?", default="default", help="NAME:SECRET[@HUB] from `pyrtan network new` on another hub, or 'default' (the default)")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--listed", action="store_true", help="also put your hub in the directory it gossips, so others can find it")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("network", help="the networks your hub is in: start one, list them with their invites, leave one")
+    p.add_argument("action", choices=["new", "list", "leave"])
+    p.add_argument("name", nargs="?", help="the network's name (new, leave)")
+    p.add_argument("--public", action="store_true", help="new: show this network's part of the directory to anyone, not only to you")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--json", action="store_true")
     _token_arg(p, "your hub's token, if any")
 
     p = sub.add_parser("unfollow", help="stop following a hub")
@@ -262,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
-        "follow": cmd_follow, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
+        "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch,
     }
     return commands[args.command](args)
@@ -759,19 +775,12 @@ def _from_report(r: dict[str, Any]) -> dict[str, Any]:
 def cmd_hub(args: argparse.Namespace) -> int:
     from .hub import serve_hub
 
-    follow = []
-    for url in args.follow:
-        if url == "seed":
-            seed = first_live_seed()
-            if seed is None:
-                print("pyrtan hub: no seed answers; nothing followed", file=sys.stderr)
-                continue
-            url = seed
-        follow.append(url)
+    follow = [url for url in args.follow if url != "seed"]
+    join = list(args.join) + (["default"] if "seed" in args.follow and "default" not in args.join else [])
     hub, server = serve_hub(
         args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
-        federate=args.federate or bool(args.advertise) or bool(follow) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
-        state=args.state, open_follows=not args.closed, follow=follow, listed=args.listed,
+        federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
+        state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
         trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
         store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat,
     )
@@ -849,14 +858,62 @@ def cmd_reports(args: argparse.Namespace) -> int:
 
 
 def cmd_follow(args: argparse.Namespace) -> int:
-    url = args.url
-    if not url:
-        url = first_live_seed()
-        if url is None:
-            tried = bootstrap_candidates()
-            print("pyrtan follow: no seed or snapshot hub answers" + (f" (tried {', '.join(tried)})" if tried else " (none listed; set $PYRTAN_SEEDS or $PYRTAN_RENDEZVOUS)") + "; give a hub URL", file=sys.stderr)
-            return 3
-    return _hub_post(args, "/follow", {"url": url, "listed": bool(args.listed)}, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']}); it routes there once accepted" + (" and is listed in the directory" if b.get("listed") else ""))
+    if not args.url:
+        if args.network:
+            print("pyrtan follow: --network needs a hub URL to follow", file=sys.stderr)
+            return 2
+        args.invite = "default"
+        return cmd_join(args)
+    payload = {"url": args.url, "listed": bool(args.listed)}
+    if args.network:
+        payload["network"] = args.network
+    return _hub_post(args, "/follow", payload, lambda b: f"{args.at} now follows {b['following']['url']} ({b['following']['state']})" + (f" in {args.network}" if args.network else "") + "; it routes there once accepted" + (" and is listed in the directory" if b.get("listed") else ""))
+
+
+def cmd_join(args: argparse.Namespace) -> int:
+    def said(b: dict[str, Any]) -> str:
+        lines = [f"{args.at}: {b.get('say')}" + (" and listed in the directory" if args.listed else "")]
+        if b.get("invite") and not b.get("public"):
+            lines.append(f"invite others: pyrtan join {b['invite']}")
+        return "\n".join(lines)
+
+    code = _hub_post(args, "/join", {"invite": args.invite, "listed": bool(args.listed)}, said)
+    if code == 1 and args.invite == "default":
+        tried = bootstrap_candidates()
+        print("pyrtan join: no seed or snapshot hub answers" + (f" (tried {', '.join(tried)})" if tried else " (none listed; set $PYRTAN_SEEDS or $PYRTAN_RENDEZVOUS)") + "; give an invite or a hub URL", file=sys.stderr)
+        return 3
+    return code
+
+
+def cmd_network(args: argparse.Namespace) -> int:
+    if args.action in ("new", "leave") and not args.name:
+        print(f"pyrtan network {args.action}: give the network's name", file=sys.stderr)
+        return 2
+    if args.action == "new":
+        return _hub_post(args, "/networks", {"name": args.name, "public": bool(args.public)}, lambda b: f"{args.at} is in {b['network']} ({b['id']}), a network of one.\ninvite others: pyrtan join {b['invite']}\nthe invite holds the network's secret: share it only with the hubs you want in it")
+    if args.action == "leave":
+        return _hub_post(args, "/leave", {"network": args.name}, lambda b: f"{args.at} left {args.name}" if b.get("left") else f"{args.at} was not in {args.name}")
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("GET", f"{at}/networks", token=args.token)
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} is not a federated hub ({status})", file=sys.stderr)
+        return 3
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    nets = body.get("networks", [])
+    print(f"{at} is in {len(nets)} network(s)")
+    for n in nets:
+        print(f"{n['name']:16} {n['id']}  {'public' if n['public'] else 'private'}  following {len(n['following'])}, followed by {len(n['followers'])}")
+        print(f"    invite: {n['invite']}")
+    return 0
 
 
 def cmd_keep(args: argparse.Namespace) -> int:

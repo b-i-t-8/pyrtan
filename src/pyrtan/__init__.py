@@ -1,5 +1,5 @@
-"""Pyrtan: a core set of expandable services that act on all forms of I/O through hardcoded,
-inspectable decision trees.
+"""Pyrtan: a core set of expandable services that act on all forms of I/O through inspectable
+decision trees.
 
 The public surface is small on purpose:
 
@@ -33,4 +33,4 @@ __all__ = [
     "Response",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"

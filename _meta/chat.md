@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.10.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. |
+| **Status** | **Built, v0.11.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. |
 | **Date** | 2026-10-27 |
 | **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing is kept. |
 | **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
@@ -130,12 +130,12 @@ meanwhile; two seats that ask each other's hubs at once both get
   order, one at a time, and a reply for a conversation that has moved on
   is dropped.
 - Two hubs on different versions: one without a lobby answers a `Meet`
-  `no-chat`, one from before v0.10 refuses the activity type; either is
+  `no-chat`, one from before v0.11 refuses the activity type; either is
   `met: false` to the asker.
 
 ## 6. Sequencing
 
-- **v0.10, built:** the lobby, bots, strangers across a follow, the Chat
+- **v0.11, built:** the lobby, bots, strangers across a follow, the Chat
   tab, `pyrtan chat`, `small-talk`, `trigger_inputs`.
 - **Later:** "Stranger is typing…" (a transient field on the poll, and a
   `Typing` activity across hubs); a member's lobby that works offline

@@ -220,6 +220,9 @@ def test_demo_page_is_served_by_service_and_hub(example_service):
         assert resp.headers.get_content_type() == "text/html"
         page = resp.read()
         assert b"<title>Pyrtan</title>" in page and f"console v{__version__}".encode() in page
+        # The wordmark's two halves pick their own colours; the picker is inline, not another request.
+        assert b'data-theme-part="pyr">Pyr<' in page and b'data-theme-part="tan">tan<' in page
+        assert b"__THEME__" not in page and b'localStorage.getItem(KEY)' in page
     status, api = http_json("GET", f"{server.url}/api")
     assert status == 200 and api["pyrtan"] == "service"
     hub = Hub()

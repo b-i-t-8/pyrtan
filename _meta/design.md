@@ -1,4 +1,4 @@
-# Design — Pyrtan: a core set of expandable services that act on all forms of I/O through hardcoded decision trees
+# Design — Pyrtan: a core set of expandable services that act on all forms of I/O through inspectable decision trees
 
 | | |
 |---|---|

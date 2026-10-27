@@ -912,5 +912,5 @@
     return outcome(d.status || "error", d.tree || fallbackTree, { say: d.say === undefined ? null : d.say, output: d.output === undefined ? null : d.output, reason: d.reason === undefined ? null : d.reason, question: d.question === undefined ? null : d.question, snapshot: d.snapshot === undefined ? null : d.snapshot, trace, inputs: d.inputs || {} });
   }
 
-  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.9.0" };
+  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.10.0" };
 });

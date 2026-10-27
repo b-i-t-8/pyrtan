@@ -5,9 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyrtan catalog</title>
 <meta name="description" content="Trees you can pull into your own Pyrtan swarm, checked and indexed from the repository.">
+<meta name="theme-color" content="#c2410c">
+<script src="../theme.js"></script>
 <style>
-  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --accent:#2b5db8; --soft:#f1efe9 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --accent:#7fa6f0; --soft:#222420 } }
+  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  :root { --accent:var(--pyr); --accent-fg:var(--pyr-fg) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
   main { max-width:920px; margin:0 auto; padding:32px 16px 64px }
@@ -19,16 +22,19 @@
   code { font:13px ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--soft); padding:1px 5px; border-radius:4px }
   pre { margin:8px 0 0; padding:8px 12px; background:var(--soft); border-radius:8px; font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto }
   a { color:var(--accent) }
+  .pyr { color:var(--pyr) } .tan { color:var(--tan) }
+  :focus-visible { outline:2px solid var(--tan); outline-offset:2px }
+  ::selection { background:var(--tan); color:var(--tan-fg) }
   footer { color:var(--mute); font-size:13px; margin-top:32px }
 </style>
 </head>
 <body>
 <main>
-  <h1>Pyrtan catalog</h1>
+  <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span> catalog</h1>
   <p class="lede">Trees you can pull into your own swarm. Each is one TOML file, checked by the repository's tests, with the licence its author chose, under the namespace of whoever published it. <code>pyrtan pull NAMESPACE/NAME</code> verifies the file against <a href="index.json">index.json</a> before writing it. Where hubs that opted in have met a value a tree had no branch for, the <a href="../rendezvous/reports.json">gap reports</a> say so beside it.</p>
   <input type="search" id="q" placeholder="filter: weather, github, read-only…" autocomplete="off">
   <div id="list"><p class="mute">Loading index.json…</p></div>
-  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan/tree/main/catalog">how</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a></footer>
+  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="../source/blob/catalog/README.md.html">how</a> · <a href="../source/">source</a></footer>
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
