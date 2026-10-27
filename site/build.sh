@@ -9,6 +9,8 @@ rm -rf "$out"
 mkdir -p "$out/console" "$out/catalog" "$out/rendezvous"
 out="$(cd "$out" && pwd)"
 cp site/index.html site/CNAME "$out/"
+# The wordmark's colour picker, shared by the landing page and the catalog (the console inlines it).
+cp src/pyrtan/js/theme.js "$out/"
 cp site/rendezvous/seeds.json "$out/rendezvous/"
 # The directory as the seeds know it now, keeping the last published
 # snapshot's entries when a seed is down (SNAPSHOT_PREVIOUS may add more).

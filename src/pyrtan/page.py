@@ -26,6 +26,8 @@ from . import __version__
 
 # The tree runtime in JavaScript, served beside the console so a member can run trees.
 PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf-8")
+# The wordmark's colour picker, inlined into the console and copied beside pyrtan.com's pages.
+THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
 
 PAGE = r"""<!doctype html>
 <html lang="en">
@@ -36,10 +38,12 @@ PAGE = r"""<!doctype html>
 <meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, find the gaps, and join a hub as a member that keeps its blobs.">
 <link rel="manifest" href="manifest.webmanifest">
 <script src="pyrtan.js"></script>
-<meta name="theme-color" content="#2b5db8">
+<meta name="theme-color" content="#c2410c">
+<script>__THEME__</script>
 <style>
-  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --accent:#2b5db8; --accent-fg:#fff; --soft:#f1efe9 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --accent:#7fa6f0; --accent-fg:#101318; --soft:#222420 } }
+  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  :root { --accent:var(--pyr); --accent-fg:var(--pyr-fg) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
   main { max-width:920px; margin:0 auto; padding:24px 16px 64px }
@@ -48,6 +52,7 @@ PAGE = r"""<!doctype html>
   h2 { font-size:17px; margin:24px 0 8px }
   nav { display:flex; gap:4px; flex-wrap:wrap; margin:12px 0 16px }
   nav a { padding:6px 12px; border-radius:999px; color:var(--fg); text-decoration:none; border:1px solid var(--line); background:var(--card); font-size:14px }
+  nav a:hover { border-color:var(--tan) }
   nav a[aria-current=page] { background:var(--accent); color:var(--accent-fg); border-color:var(--accent) }
   section[hidden] { display:none }
   p.lede { color:var(--mute); margin:0 0 16px }
@@ -72,13 +77,16 @@ PAGE = r"""<!doctype html>
   .notice.bad { border-color:var(--bad) }
   footer { color:var(--mute); font-size:13px; margin-top:32px }
   footer a, .card a { color:var(--accent) }
+  .pyr { color:var(--pyr) } .tan { color:var(--tan) }
+  :focus-visible { outline:2px solid var(--tan); outline-offset:2px }
+  ::selection { background:var(--tan); color:var(--tan-fg) }
   @media (max-width:560px) { table thead { display:none } table td { display:block; border-top:0 } table tr { display:block; border-top:1px solid var(--line); padding:6px 0 } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Pyrtan <small id="who">…</small></h1>
+    <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
   <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
@@ -648,7 +656,7 @@ load();
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS)
 
 MANIFEST = json.dumps({
     "name": "Pyrtan",
@@ -658,8 +666,8 @@ MANIFEST = json.dumps({
     "scope": "./",
     "display": "standalone",
     "background_color": "#fbfaf7",
-    "theme_color": "#2b5db8",
-    "icons": [{"src": "data:image/svg+xml," + urllib.parse.quote('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#2b5db8"/><path d="M18 46V18h14a9 9 0 0 1 0 18h-8" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>'), "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
+    "theme_color": "#c2410c",
+    "icons": [{"src": "data:image/svg+xml," + urllib.parse.quote('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#c2410c"/><path d="M18 46V18h14a9 9 0 0 1 0 18h-8" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>'), "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
 }, indent=2)
 
 # The service worker keeps the console shell so the page opens offline (a
