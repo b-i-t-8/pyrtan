@@ -2,8 +2,9 @@
 # and once an hour, build the landing page, the console (from this
 # checkout's pyrtan), the source browser (files, releases, branches and
 # history from git), the catalog (from examples/ and catalog/, through the
-# gate), the seed list and a snapshot of the directory and of the gap
-# reports as the seeds know them, and publish them. Set the
+# gate), the hub list and a snapshot of the directory and of the gap
+# reports as the hubs on it, and every hub they know of, know them, and
+# publish them. pyrtan.com runs no hub: these static files are all of it. Set the
 # repository's Pages source to "GitHub Actions" and its custom domain to
 # pyrtan.com; site/CNAME carries the domain.
 
@@ -14,7 +15,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "23 * * * *"   # hourly: refresh rendezvous/directory.json from the seeds
+    - cron: "23 * * * *"   # hourly: refresh rendezvous/directory.json from the hub list
 
 permissions:
   contents: read

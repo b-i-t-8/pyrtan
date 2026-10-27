@@ -440,3 +440,57 @@ def test_cli_shows_the_indicator_unless_told_not_to(examples_hub, capsys, monkey
         assert "thinking" not in out and "Bot: Deterministic" in out
     finally:
         srv.stop()
+
+
+def test_a_public_lobby_lets_strangers_in_without_the_token_and_without_bots(tmp_path):
+    from pyrtan.hub import serve_hub
+
+    (tmp_path / "greeter.toml").write_text(GREETER)
+    hub, srv = serve_hub(port=0, quiet=True, name="pub", token="sekrit", trees=[tmp_path], chat_public=True)
+    call = lambda method, path, body=None, token=None: http_json(method, f"{srv.url}{path}", body, token=token)
+    try:
+        # The lobby answers without the token; nothing else does.
+        status, stats = call("GET", "/chat")
+        assert status == 200 and stats["bots"] == 0
+        assert call("GET", "/chat", token="sekrit")[1]["bots"] == 1
+        assert call("POST", "/intent", {"text": "greet me"})[0] == 401
+        assert call("GET", "/gaps")[0] == 401
+        _, api = call("GET", "/api")
+        assert api["chat"] is True and api["chat_public"] is True and api["chat_bots"] is False
+        assert call("GET", "/api", token="sekrit")[1]["chat_bots"] is True
+
+        # A guest meets people only: no bot on asking, and none after waiting.
+        status, out = call("POST", "/chat/start", {"want": "bot"})
+        assert status == 403 and out["reason"] == "bots-need-token"
+        hub.lobby.bot_after = 0
+        _, guest = call("POST", "/chat/start", {"want": "anyone"})
+        assert guest["want"] == "people" and guest["bots"] is False
+        _, view = call("POST", "/chat/poll", {"seat": guest["seat"], "after": guest["after"], "wait": 0.3})
+        assert view["state"] == "waiting"
+        _, other = call("POST", "/chat/start", {"want": "people"})
+        assert other["state"] == "talking"
+        assert call("POST", "/chat/say", {"seat": other["seat"], "text": "hi from outside"})[0] == 200
+        _, view = call("POST", "/chat/poll", {"seat": guest["seat"], "after": view["after"]})
+        assert texts(view["events"], "stranger") == ["hi from outside"]
+
+        # With the token, the same lobby has bots.
+        _, member = call("POST", "/chat/start", {"want": "bot"}, token="sekrit")
+        assert member["state"] == "talking" and member["partner"]["kind"] == "bot" and member["bots"] is True
+    finally:
+        hub.stop()
+        srv.stop()
+
+
+def test_a_lobby_that_is_not_public_follows_the_token(tmp_path):
+    from pyrtan.hub import serve_hub
+
+    hub, srv = serve_hub(port=0, quiet=True, name="closed", token="sekrit", chat=True)
+    try:
+        assert http_json("GET", f"{srv.url}/chat")[0] == 401
+        assert http_json("POST", f"{srv.url}/chat/start", {"want": "people"})[0] == 401
+        _, api = http_json("GET", f"{srv.url}/api")
+        assert api["chat_public"] is False and api["chat_bots"] is False
+        assert http_json("GET", f"{srv.url}/chat", token="sekrit")[0] == 200
+    finally:
+        hub.stop()
+        srv.stop()

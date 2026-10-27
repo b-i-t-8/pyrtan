@@ -1,6 +1,6 @@
 #!/bin/sh
 # Assemble pyrtan.com into one static directory: the landing page, the
-# console, the catalog (built from examples/ and catalog/), the seed list, the source. Run from the
+# console, the catalog (built from examples/ and catalog/), the hub list, the source. Run from the
 # repository root with pyrtan installed (`uv run site/build.sh`); the Pages
 # workflow runs the same thing.
 set -eu
@@ -16,12 +16,12 @@ version="$(pyrtan --version | cut -d' ' -f2)"
 sed "s/__VERSION__/$version/g" site/index.html > "$out/index.html"
 # The wordmark's colour picker, shared by the landing page and the catalog (the console inlines it).
 cp src/pyrtan/js/theme.js "$out/"
-cp site/rendezvous/seeds.json site/rendezvous/network.json "$out/rendezvous/"
-# The directory as the hubs know it now (the seeds, then every hub the
+cp site/rendezvous/hubs.json site/rendezvous/network.json "$out/rendezvous/"
+# The directory as the hubs know it now (the hub list, then every hub the
 # last snapshot or a hub names), the default network's part only, keeping
 # the last published snapshot's entries for hubs that are down
 # (SNAPSHOT_PREVIOUS may add more).
-python3 site/snapshot.py site/rendezvous/seeds.json "$out/rendezvous/directory.json" \
+python3 site/snapshot.py site/rendezvous/hubs.json "$out/rendezvous/directory.json" \
   --network site/rendezvous/network.json \
   --previous https://pyrtan.com/rendezvous/directory.json \
   --previous https://b-i-t-8.github.io/pyrtan/rendezvous/directory.json \

@@ -137,7 +137,7 @@ then answers for all of them. Rejected: it would route to hubs nobody
 chose. **A rendezvous hub that holds the directory** (v0.3) was built
 and then replaced: it was a server, and the point of a swarm is that
 there is none. What stands is §7: a directory every hub keeps and
-gossips, a static seed list, and routing that only ever follows an
+gossips, a static hub list, and routing that only ever follows an
 operator's follow.
 
 **Multi-hop routing.** Announcing transitive capabilities with a hop
@@ -206,34 +206,38 @@ Each entry remembers `via`, the hub it was last heard from.
 **Reading it.** `GET /directory` (public) on any federated hub lists what
 that hub knows, each entry with `link` computed from `seen`: `up` within
 ten minutes, `stale` within a day, `down` after. `pyrtan directory` asks
-your own hub first and falls back to the seeds; the console shows it on
-every federated hub; the page at pyrtan.com asks the seeds from the
-visitor's browser.
+your own hub first and falls back to the hub list; the console shows it
+on every federated hub; the page at pyrtan.com asks the listed hubs from
+the visitor's browser.
 
-**Seeds.** pyrtan.com publishes `rendezvous/seeds.json`, a static list
-of hub URLs maintained by pull request, the role of a torrent's bootstrap
-nodes. `pyrtan join` (and `pyrtan follow` with no URL) puts a hub in the
-default network (§7a) and follows the first seed whose `/actor` answers;
-`pyrtan hub --join default` (or `--follow seed`) does the same on start.
-A seed is an ordinary federated hub in the default network, up when its
-operator's box is; nothing needs it to be up always (below). `$PYRTAN_SEEDS` points at another list (a URL or a file),
-`$PYRTAN_RENDEZVOUS` at one hub.
+**The hub list.** pyrtan.com runs no hub. It publishes
+`rendezvous/hubs.json`, a static list of hub URLs maintained by pull
+request, the role of a torrent's bootstrap nodes, and it is the only way
+pyrtan.com learns that a hub exists. `pyrtan join` (and `pyrtan follow`
+with no URL) puts a hub in the default network (§7a) and follows the
+first listed hub whose `/actor` answers; `pyrtan hub --join default`
+does the same on start. A listed hub is an ordinary federated hub in
+the default network, up when its operator's box is; nothing needs it to
+be up always (below). `$PYRTAN_HUB_LIST` points at another list (a URL
+or a file), `$PYRTAN_RENDEZVOUS` at one hub. (Until v0.13 this was
+`seeds.json`, and pyrtan.com briefly ran a hub of its own on Fly.io; both
+are gone.)
 
-**The snapshot.** Seeds are home boxes, and home boxes go off. So the
-site's build, which GitHub runs on every push and once an hour, asks each
-seed's `/directory`, then every other hub it knows of (from the last
+**The snapshot.** Listed hubs are home boxes, and home boxes go off. So
+the site's build, which GitHub runs on every push and once an hour, asks
+each listed hub's `/directory`, then every other hub it knows of (from the last
 snapshot, and from what the hubs it asked named), in parallel rounds up
 to a bound, and bakes the merged answer into `rendezvous/directory.json`
 with the time, keeping the default network's part of each directory (and
 what was heard outside any network), keeping the last snapshot's entries
 for hubs that did not answer and dropping anything a week old
-(`site/snapshot.py`, standard library, no pyrtan). The build is the
-seed's directory work, done by GitHub: the directory stays current while
-any listed hub is up, whether or not a seed is. The landing page
-shows it when no seed answers the visitor's browser; `pyrtan directory`
-falls back to it; `pyrtan follow` with no URL tries its hubs after the
-seeds (`$PYRTAN_SNAPSHOT` overrides). A new hub can therefore bootstrap
-from any listed hub that is up, and the only way the directory is empty
+(`site/snapshot.py`, standard library, no pyrtan). The build does the
+directory work a central hub would, done by GitHub: the directory stays
+current while any hub it knows of is up, listed or not. The landing page
+shows it when no listed hub answers the visitor's browser; `pyrtan
+directory` falls back to it; `pyrtan follow` with no URL tries its hubs
+after the listed ones (`$PYRTAN_SNAPSHOT` overrides). A new hub can
+therefore bootstrap from any hub the snapshot knows of that is up, and the only way the directory is empty
 is if nobody has been up for a week. Nothing of ours polls: GitHub does.
 
 **What an entry is not.** A hub two follows away cannot verify who made
