@@ -496,8 +496,6 @@ and its own box, and follow other swarms. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 
-Pyrtan is a product of [Hillvon.io](https://hillvon.io).
-
 ## License
 
 Pyrtan is free software under the GNU Affero General Public License,
