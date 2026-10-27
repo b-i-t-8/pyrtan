@@ -424,7 +424,8 @@ def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
     assert snap["seeds"]["previous"] == str(old)
     ids = [h["id"] for h in snap["hubs"]]
     assert b.url in ids and "http://gone.example" in ids and "http://ancient.example" not in ids  # live from the seed, kept from the snapshot, expired
-    assert next(h for h in snap["hubs"] if h["id"] == b.url)["via"] == a.url
+    # B was named by A, so it was asked too, and its own word on itself is the newest.
+    assert snap["seeds"]["crawled"]["answered"] == [b.url] and next(h for h in snap["hubs"] if h["id"] == b.url)["via"] == b.url
 
     def cli(*argv):
         code = main(list(argv))
@@ -850,3 +851,179 @@ def test_reports_command_and_snapshot(two, tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("PYRTAN_REPORTS", str(tmp_path / "reports.json"))
     monkeypatch.delenv("PYRTAN_AT", raising=False)
     assert main(["reports"]) == 0 and "pyrtan/weather@1 code" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- networks
+
+
+def test_invites_and_network_ids():
+    from pyrtan.federation import Network, network_id, parse_invite
+
+    net, hub = parse_invite("home:abcdefghijklmnop1234@https://nas.example.ts.net/")
+    assert (net.name, net.secret, hub) == ("home", "abcdefghijklmnop1234", "https://nas.example.ts.net")
+    assert parse_invite("home:abcdefghijklmnop1234")[1] is None
+    assert net.invite("https://x/") == "home:abcdefghijklmnop1234@https://x" and net.invite() == "home:abcdefghijklmnop1234"
+    for bad in ("home", "Home:abcdefghijklmnop1234", "home:short", "home:abcdefghijklmnop1234@ftp://x", ""):
+        with pytest.raises(ValueError):
+            parse_invite(bad)
+    # The id comes from name and secret: same name, other secret, another network; and it holds neither.
+    assert network_id("home", "a" * 20) != network_id("home", "b" * 20) == Network("home", "b" * 20).id
+    assert "a" * 20 not in network_id("home", "a" * 20)
+
+
+def test_a_hub_starts_a_network_and_others_join_by_invite(tmp_path):
+    from pyrtan.federation import Network
+
+    for n in "abc":
+        (tmp_path / n).mkdir()
+        (tmp_path / n / f"{n}x.toml").write_text(ECHO.format(name=f"{n}x", word=f"{n}x"))
+    a = Swarm("a", tmp_path / "a", token="token-a", open_follows=False)  # takes no follows outside its networks
+    b = Swarm("b", tmp_path / "b", token="token-b")
+    c = Swarm("c", tmp_path / "c")
+    try:
+        status, made = a.post("/networks", {"name": "home"})
+        assert status == 200 and made["network"] == "home" and made["invite"].startswith("home:") and made["invite"].endswith(f"@{a.url}")
+        assert a.post("/networks", {"name": "home"})[0] == 400 and a.post("/networks", {"name": "Not OK"})[0] == 400
+        assert a.fed.following == {} and a.fed.followers == {}  # a network of one
+        # B joins by invite: it is in home, follows A in it, and routes to A's trees.
+        status, joined = b.post("/join", {"invite": made["invite"]})
+        assert status == 200 and joined["network"] == "home" and joined["following"]["url"] == a.url and joined["following"]["state"] == "accepted"
+        assert b.fed.following[a.url].network == a.fed.networks["home"].id == a.fed.followers[b.url].network
+        assert b.post("/intent", {"text": "ax hi"})[1]["say"] == "ax: hi"
+        # Outside the network A takes nobody (it is --closed); in another network of the same name, nobody either.
+        assert c.fed.follow(a.url).state == "pending" and "closed" in c.fed.following[a.url].last_error
+        c.fed.add_network(Network("home", "another-secret-entirely"))
+        assert c.fed.follow(a.url, network="home").state == "pending"
+        assert "not-in-network" in c.fed.following[a.url].last_error
+        # A Follow naming home's id but signed with another secret is refused as unsigned.
+        forged = {"type": "Follow", "id": "x", "actor": c.url, "object": a.url, "secret": "p" * 32, "inbox": f"{c.url}/inbox", "network": a.fed.networks["home"].id}
+        status, answer = http_json("POST", f"{a.url}/inbox", forged, headers=sign("another-secret-entirely", c.url, "POST", "/inbox", forged))
+        assert status == 401 and answer["reason"] == "unsigned"
+        # The invite lets C in, and joining again changes nothing; a name taken by another network is refused.
+        assert c.post("/leave", {"network": "home"})[1]["left"] is True and c.url not in a.fed.followers
+        status, joined = c.post("/join", {"invite": made["invite"]})
+        assert status == 200 and joined["following"]["state"] == "accepted"
+        assert c.post("/join", {"invite": made["invite"]})[1]["following"]["url"] == a.url
+        assert c.post("/join", {"invite": "home:yet-another-secret-xyz"})[0] == 400
+        assert c.post("/join", {"invite": "nonsense"})[1]["reason"] == "bad-invite"
+        # An invite with no hub: in the network, following nobody.
+        status, alone = b.post("/join", {"invite": "solo:abcdefghijklmnopqrstu"})
+        assert status == 200 and alone["following"] is None and "network of one" in alone["say"]
+        _, view = b.get("/networks")
+        assert {n["name"]: n["following"] for n in view["networks"]} == {"home": [a.url], "solo": []}
+        assert all(n["invite"].endswith(f"@{b.url}") for n in view["networks"])
+        assert http_json("GET", f"{b.url}/networks")[0] == 401  # the invites are the operator's
+        # Leaving cuts the links made in it, both ways, and forgets it.
+        assert b.post("/leave", {"network": "home"})[1]["left"] is True
+        assert a.url not in b.fed.following and b.url not in a.fed.followers and "home" not in b.fed.networks
+        assert b.post("/leave", {"network": "home"})[1]["left"] is False
+    finally:
+        for s in (a, b, c):
+            s.stop()
+
+
+def test_a_private_network_never_reaches_the_public_directory(tmp_path):
+    from pyrtan.federation import Network
+
+    for n in "abc":
+        (tmp_path / n).mkdir()
+        (tmp_path / n / f"{n}x.toml").write_text(ECHO.format(name=f"{n}x", word=f"{n}x"))
+    public = Network("pyrtan", "public-default-network-of-pyrtan-com", public=True)
+    a = Swarm("a", tmp_path / "a", listed=True)
+    b = Swarm("b", tmp_path / "b", token="token-b")
+    c = Swarm("c", tmp_path / "c", listed=True)
+    try:
+        # A is in the public network; B joins it through A. C starts "home", and B joins that too.
+        a.fed.add_network(public)
+        assert b.fed.join(Network(public.name, public.secret, public=True), [a.url]).state == "accepted"
+        home = c.fed.create_network("home")
+        assert b.fed.join(Network("home", home.secret), [c.url]).state == "accepted"
+        b.hub.refresh_all()
+        # B hears A in the public network and C in home, and passes each on only within its own network.
+        heard = {e["id"]: e["network"] for e in b.fed.directory_entries.values()}
+        assert heard == {a.url: public.id, c.url: home.id}
+        assert c.url not in {h["id"] for h in a.fed.directory()["hubs"]}
+        assert a.url not in {h["id"] for h in c.fed.directory()["hubs"]}
+        assert [e["id"] for e in b.fed.gossip(public.id)] == [a.url] and [e["id"] for e in b.fed.gossip(home.id)] == [c.url]
+        # B's public /directory shows the public network; the operator also sees home.
+        _, shown = http_json("GET", f"{b.url}/directory")
+        assert {h["id"] for h in shown["hubs"]} == {a.url} and shown["networks"] == {public.id: "pyrtan"}
+        _, full = b.get("/directory")
+        assert {h["id"]: h["networks"] for h in full["hubs"]} == {a.url: [public.id], c.url: [home.id]}
+        assert full["networks"] == {public.id: "pyrtan", home.id: "home"}
+        # The directory blob B's keepers hold is the public part only.
+        assert {e["id"] for e in b.fed.directory_backup()} == {a.url}
+        # State keeps networks and the tags; an entry of a network since left is not taken back.
+        state = tmp_path / "b-state.json"
+        b.fed.state_path = state
+        b.fed._save()
+        again = Federation(b.url, state=state)
+        assert set(again.networks) == {"pyrtan", "home"} and again.networks["pyrtan"].public
+        assert {e["id"]: e["network"] for e in again.directory_entries.values()} == {a.url: public.id, c.url: home.id}
+        stale = json.loads(state.read_text())
+        stale["networks"] = [n for n in stale["networks"] if n["name"] != "home"]
+        state.write_text(json.dumps(stale))
+        assert {e["id"] for e in Federation(b.url, state=state).directory_entries.values()} == {a.url}
+    finally:
+        for s in (a, b, c):
+            s.stop()
+
+
+def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys):
+    import subprocess
+    import sys as _sys
+
+    from pyrtan.federation import default_network
+    from pyrtan.hub import serve_hub
+
+    a, b = two
+
+    def run(*argv):
+        code = main(list(argv))
+        out = capsys.readouterr()
+        return code, out.out, out.err
+
+    network = ROOT / "site" / "rendezvous" / "network.json"
+    monkeypatch.setenv("PYRTAN_NETWORK", str(network))
+    seeds = tmp_path / "seeds.json"
+    seeds.write_text(json.dumps({"hubs": ["http://127.0.0.1:9", b.url]}))
+    monkeypatch.setenv("PYRTAN_SEEDS", str(seeds))
+    monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "no-snapshot.json"))
+    monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
+    default = default_network()
+    assert default is not None and default.name == "pyrtan" and default.public
+    # The first hub in the default network is a network of one: nobody to follow yet.
+    code, out, _ = run("join", "--at", b.url, "--token", "token-b", "--listed")
+    assert code == 0 and "in pyrtan; no hub in it accepted a follow yet" in out and b.fed.following == {}
+    # `pyrtan follow` with no URL is `pyrtan join`: A is in the default network, following the seed in it.
+    code, out, _ = run("follow", "--at", a.url, "--token", "token-a")
+    assert code == 0 and f"in pyrtan, following {b.url}" in out and "invite others" not in out  # a public network needs no invite
+    assert a.fed.following[b.url].network == default.id
+    code, out, _ = run("network", "list", "--at", a.url, "--token", "token-a")
+    assert code == 0 and f"pyrtan           {default.id}  public  following 1" in out
+    # Its own network, by command: the invite, then another hub joins with it.
+    code, out, _ = run("network", "new", "home", "--at", b.url, "--token", "token-b")
+    invite = next(line.split("pyrtan join ", 1)[1] for line in out.splitlines() if "pyrtan join " in line)
+    assert code == 0 and invite.startswith("home:") and invite.endswith(f"@{b.url}")
+    code, out, _ = run("join", invite, "--at", a.url, "--token", "token-a")
+    assert code == 0 and "in home" in out and a.fed.following[b.url].network == b.fed.networks["home"].id
+    assert run("follow", "--at", a.url, "--token", "token-a", "--network", "home")[0] == 2  # a network needs a hub to follow in it
+    code, out, _ = run("network", "leave", "home", "--at", a.url, "--token", "token-a")
+    assert code == 0 and "left home" in out and "home" not in a.fed.networks
+    assert run("network", "new", "--at", a.url, "--token", "token-a")[0] == 2
+    # A hub started with --join default (or --follow seed) is in it from the start.
+    hub, srv = serve_hub(port=0, quiet=True, name="d", join=["default"])
+    try:
+        assert hub.federation is not None and hub.federation.following[b.url].network == default.id
+    finally:
+        hub.stop()
+        srv.stop()
+    # The snapshot keeps the default network's part of each directory and nobody else's.
+    b.fed.merge_directory([{"id": "http://private.example", "name": "p", "trees": [], "seen": time.time()}], via="x", network="0123456789abcdef")
+    b.fed.merge_directory([{"id": "http://public.example", "name": "q", "trees": [], "seen": time.time()}], via="x", network=default.id)
+    b.hub.token = None  # as anyone sees it, the private part included: the snapshot must still drop it
+    out = tmp_path / "directory.json"
+    done = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(out), "--network", str(network)], capture_output=True, text=True, cwd=str(ROOT))
+    assert done.returncode == 0, done.stderr
+    ids = {h["id"] for h in json.loads(out.read_text())["hubs"]}
+    assert "http://public.example" in ids and "http://private.example" not in ids and b.url in ids

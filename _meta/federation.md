@@ -212,18 +212,24 @@ visitor's browser.
 
 **Seeds.** pyrtan.com publishes `rendezvous/seeds.json`, a static list
 of hub URLs maintained by pull request, the role of a torrent's bootstrap
-nodes. `pyrtan follow` with no URL follows the first seed whose `/actor`
-answers; `pyrtan hub --follow seed` does the same on start. A seed is an
-ordinary federated hub whose operator keeps it up; the first one is the
-author's NAS. `$PYRTAN_SEEDS` points at another list (a URL or a file),
+nodes. `pyrtan join` (and `pyrtan follow` with no URL) puts a hub in the
+default network (§7a) and follows the first seed whose `/actor` answers;
+`pyrtan hub --join default` (or `--follow seed`) does the same on start.
+A seed is an ordinary federated hub in the default network, up when its
+operator's box is; nothing needs it to be up always (below). `$PYRTAN_SEEDS` points at another list (a URL or a file),
 `$PYRTAN_RENDEZVOUS` at one hub.
 
 **The snapshot.** Seeds are home boxes, and home boxes go off. So the
 site's build, which GitHub runs on every push and once an hour, asks each
-seed's `/directory` and bakes the merged answer into
-`rendezvous/directory.json` with the time, keeping the last snapshot's
-entries for a seed that did not answer and dropping anything a week old
-(`site/snapshot.py`, standard library, no pyrtan). The landing page
+seed's `/directory`, then every other hub it knows of (from the last
+snapshot, and from what the hubs it asked named), in parallel rounds up
+to a bound, and bakes the merged answer into `rendezvous/directory.json`
+with the time, keeping the default network's part of each directory (and
+what was heard outside any network), keeping the last snapshot's entries
+for hubs that did not answer and dropping anything a week old
+(`site/snapshot.py`, standard library, no pyrtan). The build is the
+seed's directory work, done by GitHub: the directory stays current while
+any listed hub is up, whether or not a seed is. The landing page
 shows it when no seed answers the visitor's browser; `pyrtan directory`
 falls back to it; `pyrtan follow` with no URL tries its hubs after the
 seeds (`$PYRTAN_SNAPSHOT` overrides). A new hub can therefore bootstrap
@@ -244,6 +250,52 @@ directory and pass it on, all outbound. It cannot be followed or asked,
 because nobody can reach its inbox. To be routable it needs an address:
 a port forward behind TLS, or a tunnel (Cloudflare Tunnel, Tailscale
 Funnel) that costs nothing and opens no port. The deploy guide says how.
+
+## 7a. Networks
+
+v0.10 lets one hub be in several federations at once and lets any hub
+start one. A **network** is a name and a secret. `pyrtan network new
+home` makes one on a hub, a network of one, and prints its invite,
+`home:<secret>@<the hub's URL>`; `pyrtan join <invite>` on another hub
+puts it in the network and follows the hub the invite names in it. A
+hub keeps its networks in its state file.
+
+**Follows.** A Follow made in a network carries `network`, an id drawn
+from the name and the secret (`network_id`, a hash: it gives neither
+away, and two networks that share a name have different ids), and is
+signed with the network's secret, not the pair secret. The followed hub
+takes it only if it is in a network with that id and the signature holds
+under its secret; otherwise `403 not-in-network` or `401 unsigned`. A
+Follow without `network` is judged as before (§2): open, the
+`--federation-secret`, or refused by `--closed`, which now means "no
+follows outside my networks". Both sides remember the network on the
+link (`Remote.network`). A pair of hubs has one link, so a follow in a
+second network moves the link there.
+
+**Directory.** Each entry remembers the network of the link it arrived
+over, and gossip over a link carries only that network's entries (and
+the hub's own, if listed: being listed is the hub's choice, everywhere).
+So what a hub hears in a private network is passed on only within it.
+`GET /directory` without the operator's token shows what was heard
+outside any network or in a public one; with it, everything, each row
+naming its networks. The `directory` blob a hub's keepers hold is the
+public part only. `pyrtan network leave` unfollows the hubs followed in
+the network, drops those that followed in it and forgets its entries.
+
+**The default network.** pyrtan.com publishes `rendezvous/network.json`:
+the name `pyrtan` and a secret that is public on purpose. A secret on a
+public page guards nothing, and is not meant to: it names the network,
+so the public directory is one network among others and a private one
+never mixes into it. What makes a stranger's hub harmless is what always
+did: following is the one act of trust (§1), being followed grants only
+the right to ask, and the operator's token guards the rest. A hub whose
+operator wants a guarded federation makes a network and shares its
+invite privately.
+
+**Not taken.** Keys per network (an Ed25519 key a network signs members
+with) would let a network expel a member without changing its secret.
+Today expelling means a new network and new invites. That is the price
+of HMAC, and small for networks of friends.
 
 ## 8. Members
 

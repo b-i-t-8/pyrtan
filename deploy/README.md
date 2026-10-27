@@ -1,8 +1,7 @@
 # Running the demo on OpenMediaVault
 
 Two ways. Docker through OMV's Compose plugin is the one that fits the box;
-the systemd unit is for running it bare on the host. (The seed hub at
-`seed.pyrtan.com` runs on Fly.io instead; see [`fly/README.md`](fly/README.md).)
+the systemd unit is for running it bare on the host.
 
 Replace `<nas-ip>` below with your NAS's address on the LAN. Both end with
 the demo page at `http://<nas-ip>:8700/` (Docker) or `http://<nas-ip>:8701/`
@@ -67,11 +66,16 @@ To let this swarm answer for another (a friend's hub, or any hub in the
 directory), give the hub a public address, with a tunnel that opens no
 port (`cloudflared tunnel --url http://127.0.0.1:8700`, or `tailscale
 funnel 8700`) or a port forward behind TLS, then set in the compose
-file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_FOLLOW:
-seed` and `PYRTAN_LISTED: "true"`, with `PYRTAN_TOKEN` set. The hub then
-follows the first seed from pyrtan.com, routes to it, and is listed in
-the directory every hub gossips; `pyrtan follow URL --at <your hub>
---token …` follows any other. Following is one-directional trust: your
+file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_JOIN:
+default` and `PYRTAN_LISTED: "true"`, with `PYRTAN_TOKEN` set and
+`PYRTAN_EGRESS: public` (hubs that follow yours may ask it to run trees,
+and `any` would let them point a tree at your LAN). The hub then joins
+the default network pyrtan.com publishes, follows the first seed in it,
+routes to it, and is listed in the directory every hub gossips; `pyrtan
+follow URL --at <your hub> --token …` follows any other. For a network
+of your own, `pyrtan network new home --at <your hub> --token …` prints
+an invite; a friend's hub joins with `pyrtan join <invite>`, or by
+adding it to its `PYRTAN_JOIN`. Following is one-directional trust: your
 hub routes to the hubs you follow, and hubs that follow yours may ask it.
 See [`../_meta/federation.md`](../_meta/federation.md).
 
