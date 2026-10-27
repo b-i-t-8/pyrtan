@@ -62,6 +62,11 @@ private network's hubs never reach the public directory, and ``GET
 names the network, it does not guard it, and nothing here needs it to.
 A follow outside any network (and every member's) works as before.
 
+**Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
+stranger with ``Meet``, and the two seats talk in ``Say`` and end with
+``Part``, both ways between any two hubs that share a secret; a ``Say``
+is logged without its text. See :mod:`pyrtan.chat`.
+
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
 library, and a pair secret is enough for hubs whose operators chose each
@@ -102,7 +107,8 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer")
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Part")
+CHAT_TYPES = ("Meet", "Say", "Part")   # a lobby's: two strangers on two hubs
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
@@ -352,6 +358,14 @@ def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any
     return {"reporter": who.rstrip("/"), "id": tree_id, "node": node[:80], "on": on[:120], "observed": observed, "count": count, "last": last}
 
 
+def _logged(activity: dict[str, Any]) -> dict[str, Any]:
+    """An activity as the outbox and inbox logs keep it: a chat line without its text."""
+    obj = activity.get("object")
+    if activity.get("type") == "Say" and isinstance(obj, dict) and "text" in obj:
+        return {**activity, "object": {**obj, "text": f"<{len(str(obj['text']))} characters>"}}
+    return activity
+
+
 def heard(seen: float, now: float | None = None) -> str:
     """How recently a directory entry's hub announced, as gossip carried it."""
     age = (now if now is not None else time.time()) - seen
@@ -379,6 +393,7 @@ class Federation:
         self.handout: Callable[[], dict[str, Any]] = lambda: {}  # the trees trusted members run: name -> the tree as JSON
         self._handed: dict[str, dict[str, dict[str, Any]]] = {}  # member -> key -> {sha256, at, confirmed}
         self._asks: dict[str, dict[str, Any]] = {}            # run id -> {member, event, answer}
+        self.chat: Any = None                                  # the hub's lobby, when it keeps one (pyrtan.chat.Lobby)
         self.ask_timeout = ASK_TIMEOUT
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
@@ -740,10 +755,10 @@ class Federation:
         try:
             status, answer = http_json("POST", remote.inbox, activity, timeout=10.0, headers=headers)
         except Exception as e:
-            self.outbox.append({**activity, "to": remote.url, "delivered": False, "error": str(e)})
+            self.outbox.append({**_logged(activity), "to": remote.url, "delivered": False, "error": str(e)})
             return False, str(e), None
         ok = status in (200, 202)
-        self.outbox.append({**activity, "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
+        self.outbox.append({**_logged(activity), "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
         if ok and isinstance(answer, dict):
             if activity.get("type") == "Announce":
                 # An inbox answers an Announce with its own gossip: one round trip, both directions.
@@ -1116,27 +1131,34 @@ class Federation:
         if h.get("X-Pyrtan-Actor", "").rstrip("/") != actor:
             return 401, {"status": "error", "reason": "unsigned", "say": "The signature's actor must be the activity's actor."}
         kind = activity["type"]
-        self.inbox_log.append({**activity, "received": time.time()})
+        self.inbox_log.append({**_logged(activity), "received": time.time()})
         if kind == "Follow":
             return self._on_follow(actor, activity, h, trusted)
         followed = self.following.get(actor)
         follower = self.followers.get(actor)
-        if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer"):
+        if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES):
             # Announce from a hub we follow: its trees are ours to route to;
-            # from a follower: only the directory it carries. Keeping goes
-            # both ways between any two that share a secret.
+            # from a follower: only the directory it carries. Keeping and
+            # chatting go both ways between any two that share a secret.
             remote = followed or follower
         else:
             remote = followed if kind in ("Accept", "Reject") else follower
         if remote is None:
             return 403, {"status": "error", "reason": "unknown-actor", "say": f"{actor} is not a hub this one follows or is followed by."}
         problem = verify(remote.secret, "POST", "/inbox", activity, h)
-        if problem and kind in ("Announce", "Keep", "Kept", "Fetch", "Answer") and followed and follower and followed is not follower:
+        if problem and kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES) and followed and follower and followed is not follower:
             # Mutual follow: the announce may be signed with the other pair.
             remote = follower if remote is followed else followed
             problem = verify(remote.secret, "POST", "/inbox", activity, h)
         if problem:
             return 401, {"status": "error", "reason": "unsigned", "say": problem}
+        if kind in CHAT_TYPES:
+            if self.chat is None:
+                return 404, {"status": "error", "reason": "no-chat", "say": f"{self.id} keeps no lobby."}
+            if remote.kind != "hub":
+                return 403, {"status": "error", "reason": "not-a-hub", "say": "Strangers meet hub to hub; a member chats through its hub's lobby."}
+            remote.last_ok = time.time()
+            return self.chat.on_activity(kind, remote, activity.get("object"), follower=remote is follower)
         if kind == "Accept":
             with self._lock:
                 remote.state = "accepted"

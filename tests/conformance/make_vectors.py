@@ -63,6 +63,9 @@ CASES: list[dict] = [
     {"intent": "is the modem on /dev/ttyUSB1 up"},
     {"intent": "is the modem on /dev/ttyACM0 up"},
     {"intent": "is the modem on /dev/ttyS0 up"},
+    {"intent": "how are you today?"},
+    {"intent": "are you a bot"},
+    {"intent": "goodbye"},
 ]
 
 

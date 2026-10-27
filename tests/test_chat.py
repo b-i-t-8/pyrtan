@@ -1,0 +1,318 @@
+"""The lobby: two strangers on one hub, a bot made of trees, strangers on
+two hubs that follow each other, and what the lobby refuses."""
+
+import io
+import sys
+import time
+
+import pytest
+
+from pyrtan import Registry, RecordedTransport
+from pyrtan.chat import interests_of, sample
+from pyrtan.cli import main
+from pyrtan.hub import Hub
+from pyrtan.service import Server, Service, http_json
+from conftest import EXAMPLES, FIXTURES
+
+GREETER = """
+name = "greeter"
+description = "asks for a name"
+start = "have-name"
+
+[[triggers]]
+pattern = "greet me"
+
+[inputs.name]
+type = "str"
+required = false
+
+[nodes.have-name]
+kind = "decide"
+on = "inputs.name"
+branches = [ { when = { exists = true }, then = "hello" }, { else = "ask" } ]
+
+[nodes.ask]
+kind = "ask"
+prompt = "What is your name?"
+into = "inputs.name"
+next = "hello"
+
+[nodes.hello]
+kind = "done"
+say = "Hello, {{ inputs.name }}."
+"""
+
+
+def post(hub, path, body):
+    return hub.route("POST", path, body)
+
+
+def start(hub, want="anyone", interests=()):
+    status, out = post(hub, "/chat/start", {"want": want, "interests": list(interests)})
+    assert status == 200, out
+    return out
+
+
+def until(hub, seat, test, after=0, timeout=5.0):
+    """Poll a seat until ``test(events, view)`` holds; every event seen so far."""
+    events, deadline = [], time.time() + timeout
+    while True:
+        status, view = post(hub, "/chat/poll", {"seat": seat, "after": after, "wait": 0.2})
+        assert status == 200, view
+        events += view["events"]
+        after = view["after"]
+        if test(events, view):
+            return events, view
+        if time.time() > deadline:
+            raise AssertionError(f"never: {events}")
+
+
+def texts(events, kind):
+    return [e["text"] for e in events if e["kind"] == kind]
+
+
+@pytest.fixture
+def examples_hub():
+    svc = Service(Registry.from_paths([EXAMPLES]), name="alpha", transport=RecordedTransport.from_file(FIXTURES / "examples.json"))
+    hub = Hub(name="alpha", chat=True, local=svc)
+    yield hub
+    hub.stop()
+
+
+def test_two_strangers_meet_talk_and_part():
+    hub = Hub(name="h", chat=True)
+    a = start(hub, "people", ["Music", "cats"])
+    assert a["state"] == "waiting" and a["interests"] == ["music", "cats"]
+    assert hub.route("GET", "/chat", None)[1]["waiting"] == 1
+    b = start(hub, "anyone", ["music"])
+    assert b["state"] == "talking" and b["partner"] == {"kind": "stranger", "hub": None}
+    assert "You're now chatting with a random stranger. Say hi!" in texts(b["events"], "system")
+    assert "You both like music." in texts(b["events"], "system")
+    events, view = until(hub, a["seat"], lambda ev, v: v["state"] == "talking")
+    assert "You both like music." in texts(events, "system")
+
+    assert post(hub, "/chat/say", {"seat": a["seat"], "text": "  hi there  "})[0] == 200
+    events, _ = until(hub, b["seat"], lambda ev, v: texts(ev, "stranger"), after=b["after"])
+    assert texts(events, "stranger") == ["hi there"]
+    events, _ = until(hub, a["seat"], lambda ev, v: texts(ev, "you"), after=view["after"])
+    assert texts(events, "you") == ["hi there"]  # your own line comes back in the hub's order
+
+    # b moves on: a is told, and cannot talk into the void.
+    status, nxt = post(hub, "/chat/next", {"seat": b["seat"]})
+    assert status == 200 and nxt["state"] == "waiting"
+    events, view = until(hub, a["seat"], lambda ev, v: v["state"] == "ended")
+    assert "Stranger has disconnected." in texts(events, "system")
+    assert post(hub, "/chat/say", {"seat": a["seat"], "text": "hello?"})[1]["reason"] == "not-talking"
+
+    # Next pairs a with b again: the only other person here.
+    status, again = post(hub, "/chat/next", {"seat": a["seat"]})
+    assert again["state"] == "talking"
+    assert post(hub, "/chat/leave", {"seat": a["seat"]})[1]["left"] is True
+    assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["reason"] == "no-seat"
+    events, _ = until(hub, b["seat"], lambda ev, v: v["state"] == "ended", after=nxt["after"])
+    assert texts(events, "system")[-1] == "Stranger has disconnected."
+    assert hub.route("GET", "/chat", None)[1] == {"status": "ok", "waiting": 0, "talking": 0, "bots": 0, "hubs": 0}
+
+
+def test_a_bot_is_trees_and_says_how_it_answered(examples_hub):
+    hub = examples_hub
+    seat = start(hub, "bot", ["disk"])
+    assert seat["state"] == "talking" and seat["partner"]["kind"] == "bot" and seat["partner"]["name"] == "alpha"
+    intro = texts(seat["events"], "system")[-1]
+    assert intro.startswith("You're now chatting with a bot: alpha, this hub's own trees.") and "not a model" in intro
+    assert "Try “how full is the disk”." in intro  # a sentence from the tree that shares the interest
+    after = seat["after"]
+
+    def bot_says(text):
+        nonlocal after
+        assert post(hub, "/chat/say", {"seat": seat["seat"], "text": text})[0] == 200
+        events, view = until(hub, seat["seat"], lambda ev, v: texts(ev, "bot"), after=after)
+        after = view["after"]
+        return [e for e in events if e["kind"] == "bot"][-1]
+
+    line = bot_says("what's the weather in Oslo")
+    assert line["text"] == "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h."
+    assert line["status"] == "done" and line["tree"] == "weather" and line["peer"] == "local"
+    assert line["trace"]["steps"][0]["kind"] == "intent" and line["output"]["sky"] == "raining"
+
+    # A greeting asks the swarm nothing: the bot says who it is, and nothing is recorded.
+    line = bot_says("hey!")
+    assert line["reason"] == "greeting" and line["text"].startswith("I'm alpha, this hub's own trees.")
+    line = bot_says("how are you?")
+    assert line["tree"] == "small-talk" and line["text"].startswith("Deterministic")
+    assert hub.unanswered.to_list() == []
+
+    # Nobody answers: the bot says so, with the tree that would, and the swarm records it.
+    line = bot_says("top 3 stories on lobsters")
+    assert line["reason"] == "no-match" and 'pyrtan new top-stories-lobsters --from "top 3 stories on lobsters"' in line["text"]
+    assert [u["text"] for u in hub.unanswered.to_list()] == ["top 3 stories on lobsters"]
+
+
+def test_a_bot_asks_and_the_next_line_is_the_answer(tmp_path):
+    (tmp_path / "greeter.toml").write_text(GREETER)
+    hub = Hub(name="g", chat=True, local=Service(Registry.from_paths([tmp_path]), name="g"))
+    seat = start(hub, "bot")
+    assert "Try “greet me”." in texts(seat["events"], "system")[-1]
+    post(hub, "/chat/say", {"seat": seat["seat"], "text": "greet me"})
+    events, view = until(hub, seat["seat"], lambda ev, v: texts(ev, "bot"), after=seat["after"])
+    assert texts(events, "bot") == ["What is your name?"] and events[-1]["status"] == "asked"
+    post(hub, "/chat/say", {"seat": seat["seat"], "text": "Ada"})
+    events, _ = until(hub, seat["seat"], lambda ev, v: texts(ev, "bot"), after=view["after"])
+    assert texts(events, "bot") == ["Hello, Ada."] and events[-1]["status"] == "done"
+
+
+def test_anyone_meets_a_bot_after_a_while_and_people_never_do(examples_hub):
+    hub = examples_hub
+    hub.lobby.bot_after = 0.3
+    people = start(hub, "people")
+    _, view = post(hub, "/chat/poll", {"seat": people["seat"], "after": people["after"], "wait": 0.6})
+    assert view["state"] == "waiting" and view["events"] == []
+    post(hub, "/chat/leave", {"seat": people["seat"]})
+
+    anyone = start(hub, "anyone")
+    assert anyone["state"] == "waiting"
+    # The long poll wakes by itself when the bot is due.
+    t0 = time.time()
+    _, view = post(hub, "/chat/poll", {"seat": anyone["seat"], "after": anyone["after"], "wait": 5})
+    assert view["state"] == "talking" and view["partner"]["kind"] == "bot" and time.time() - t0 < 2
+
+
+def test_no_trees_no_bots():
+    hub = Hub(name="empty", chat=True)
+    hub.lobby.bot_after = 0
+    bot = start(hub, "bot")
+    assert bot["state"] == "ended" and "No bots here" in texts(bot["events"], "system")[-1]
+    anyone = start(hub, "anyone")
+    events, view = until(hub, anyone["seat"], lambda ev, v: "either" in " ".join(texts(ev, "system")))
+    assert view["state"] == "waiting" and texts(events, "system").count("No bots here either; still looking for a person.") == 1
+
+
+def test_lines_are_short_and_not_too_fast():
+    hub = Hub(name="h", chat=True)
+    a, b = start(hub, "people"), start(hub, "people")
+    say = lambda text: post(hub, "/chat/say", {"seat": a["seat"], "text": text})
+    assert say("x" * 1001)[1]["reason"] == "too-long"
+    assert say("   ")[0] == 400
+    assert [say(f"line {i}")[0] for i in range(6)] == [200] * 5 + [429]
+    assert post(hub, "/chat/start", {"want": "everyone"})[0] == 400
+    assert post(hub, "/chat/say", {"seat": "nobody", "text": "hi"})[1]["reason"] == "no-seat"
+
+
+def test_a_seat_nobody_polls_is_let_go():
+    hub = Hub(name="h", chat=True)
+    hub.lobby.seat_idle = 0.3
+    a, b = start(hub, "people"), start(hub, "people")
+    events, view = until(hub, b["seat"], lambda ev, v: v["state"] == "ended", after=b["after"])
+    assert texts(events, "system") == ["Stranger has disconnected."]
+    assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["reason"] == "no-seat"
+
+
+def test_interests_choose_whom_you_meet():
+    hub = Hub(name="h", chat=True)
+    cats = start(hub, "people", ["cats"])
+    hub.lobby.seats[cats["seat"]].busy = True  # as if asking another hub: two can wait at once
+    dogs = start(hub, "people", ["dogs"])
+    hub.lobby.seats[cats["seat"]].busy = False
+    assert cats["state"] == dogs["state"] == "waiting"
+    me = start(hub, "people", ["dogs", "chess"])  # at random among equals, but sharing a word goes first
+    assert me["state"] == "talking" and "You both like dogs." in texts(me["events"], "system")
+    assert post(hub, "/chat/poll", {"seat": cats["seat"]})[1]["state"] == "waiting"
+    assert interests_of("Dogs, #chess,, a b c d e f") == ["dogs", "chess", "a", "b", "c"]
+    assert sample({"triggers": ["[what's the] weather in {place}"], "inputs": {"place": {"default": "Oslo"}}}) == "what's the weather in Oslo"
+    assert sample({"triggers": ["(who|what) are you [doing|today]"]}) == "who are you doing"
+    assert sample({"triggers": ["is {host:host} up"], "inputs": {"host": {}}}) is None
+
+
+def test_trigger_inputs_travel_with_capabilities(examples_hub):
+    # small-talk fixes its topic in each trigger; a hub must route with it.
+    caps = examples_hub.capabilities()["trees"]
+    talk = next(t for t in caps if t["name"] == "small-talk")
+    assert talk["trigger_inputs"]["how are you [doing|today]"] == {"topic": "how"}
+    status, out = examples_hub.intent({"text": "goodbye"})
+    assert out["status"] == "done" and out["output"] == {"topic": "bye"}
+
+
+def test_the_lobby_is_opt_in_and_in_the_api():
+    plain = Hub(name="p")
+    assert plain.route("GET", "/chat", None)[1]["reason"] == "no-chat"
+    assert plain.route("GET", "/api", None)[1]["chat"] is False
+    _, api = Hub(name="c", chat=True).route("GET", "/api", None)
+    assert api["chat"] is True and "/chat/start" in api["endpoints"]
+
+
+class Lobbyist:
+    """A federated hub with a lobby and no trees, over a real socket."""
+
+    def __init__(self, name):
+        self.hub = Hub(name=name, poll_every=60, chat=True)
+        self.srv = Server(self.hub.route, quiet=True, federated=True).start()
+        self.fed = self.hub.federate(self.srv.url)
+        self.url = self.srv.url
+
+    def call(self, path, body=None):
+        return http_json("POST" if body is not None else "GET", f"{self.url}{path}", body)
+
+    def stop(self):
+        self.hub.stop()
+        self.srv.stop()
+
+
+@pytest.fixture
+def lobbies():
+    a, b = Lobbyist("a"), Lobbyist("b")
+    yield a, b
+    a.stop()
+    b.stop()
+
+
+def test_strangers_meet_across_a_follow(lobbies):
+    a, b = lobbies
+    there = start(b.hub, "people", ["chess"])
+    assert there["state"] == "waiting"
+    a.fed.follow(b.url)
+    assert a.fed.following[b.url].state == "accepted"
+    assert a.call("/chat")[1]["hubs"] == 1
+
+    _, here = a.call("/chat/start", {"want": "people", "interests": ["chess"]})
+    assert here["state"] == "talking" and here["partner"] == {"kind": "stranger", "hub": "b"}
+    assert "You're now chatting with a random stranger on b. Say hi!" in texts(here["events"], "system")
+    assert "You both like chess." in texts(here["events"], "system")
+    events, view = until(b.hub, there["seat"], lambda ev, v: v["state"] == "talking")
+    assert "You're now chatting with a random stranger on a. Say hi!" in texts(events, "system")
+
+    assert a.call("/chat/say", {"seat": here["seat"], "text": "hello from a"})[0] == 200
+    events, view = until(b.hub, there["seat"], lambda ev, v: texts(ev, "stranger"), after=view["after"])
+    assert texts(events, "stranger") == ["hello from a"]
+    assert post(b.hub, "/chat/say", {"seat": there["seat"], "text": "and from b"})[0] == 200
+    events, _ = until(a.hub, here["seat"], lambda ev, v: texts(ev, "stranger"), after=here["after"])
+    assert texts(events, "stranger") == ["and from b"]
+
+    # The logs keep that a line went, never what it said.
+    said = [x for x in a.fed.outbox if x["type"] == "Say"]
+    assert said and all(x["object"]["text"] == "<12 characters>" for x in said)
+    assert "hello from a" not in str(list(b.fed.inbox_log)) and "and from b" not in str(list(a.fed.outbox) + list(a.fed.inbox_log))
+
+    # Being followed lets b answer a's Meet, not send its own to a.
+    ok, error, answer = b.fed.deliver(b.fed.followers[a.url], b.fed._activity("Meet", {"ref": "x" * 16}))
+    assert not ok and answer["reason"] == "not-a-follower"
+    # A Say for a conversation that is not that hub's goes nowhere.
+    ok, error, answer = b.fed.deliver(b.fed.followers[a.url], b.fed._activity("Say", {"to": "y" * 16, "from": "x" * 16, "text": "boo"}))
+    assert not ok and answer["reason"] == "no-such-seat"
+
+    a.call("/chat/leave", {"seat": here["seat"]})
+    events, view = until(b.hub, there["seat"], lambda ev, v: v["state"] == "ended", after=view["after"])
+    assert texts(events, "system")[-1] == "Stranger has disconnected."
+
+
+def test_cli_chat_with_a_bot(examples_hub, capsys, monkeypatch):
+    srv = Server(examples_hub.route, quiet=True).start()
+    try:
+        monkeypatch.setattr(sys, "stdin", io.StringIO("how are you\n"))
+        assert main(["chat", "--bot", "--at", srv.url]) == 0
+        out = capsys.readouterr().out
+        assert "You're now chatting with a bot: alpha" in out
+        assert "Bot: Deterministic, thanks: the same question takes the same path every time." in out
+        assert examples_hub.lobby.seats == {}  # it left on the way out
+        assert main(["chat", "--at", "http://127.0.0.1:9"]) == 3
+    finally:
+        srv.stop()

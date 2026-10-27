@@ -6,10 +6,12 @@
     pyrtan run    --tree NAME --input k=v    run a named tree
     pyrtan match  TEXT [--trees PATH]        how a sentence reads: the rewrites and every trigger's verdict
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
+    pyrtan chat   [--at HUB] [--bot|--people]  talk to a random stranger or a bot, through a hub started --chat
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
     pyrtan hub    --trees DIR                and hold trees itself: a swarm in one process
     pyrtan hub    --federate --advertise URL [--follow URL ...] [--listed]  and between hubs
+    pyrtan hub    --chat                     and keep a lobby: strangers and bots, Omegle-style
     pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: a seed
     pyrtan unfollow URL --at HUB
     pyrtan peers  --at HUB                   services, and hubs followed and following
@@ -37,6 +39,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -94,6 +97,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     p.add_argument("--no-trace", action="store_true")
     _token_arg(p, "the token the service or hub requires, if any")
+
+    p = sub.add_parser("chat", help="talk to a random stranger or a bot, through a hub started with --chat")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the hub (default $PYRTAN_AT or the local hub)")
+    who = p.add_mutually_exclusive_group()
+    who.add_argument("--bot", action="store_true", help="meet a bot: trees on the network, not a person")
+    who.add_argument("--people", action="store_true", help="meet people only; never a bot")
+    p.add_argument("--interests", default="", metavar="WORDS", help="up to five words, comma-separated; a stranger or bot that shares one is met first")
+    p.add_argument("--trace", action="store_true", help="print the path behind each bot line")
+    _token_arg(p, "the token the hub requires, if any")
 
     p = sub.add_parser("serve", help="host trees as a service")
     p.add_argument("paths", nargs="*")
@@ -158,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--listed", action="store_true", default=os.environ.get("PYRTAN_LISTED", "").lower() in ("1", "true", "yes"), help="put this hub in the directory it gossips, so others can find it (default $PYRTAN_LISTED)")
     p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
+    p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
     p.add_argument("--quiet", action="store_true")
 
@@ -262,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -455,6 +468,106 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
     outcome = _answer_questions(outcome, remote_resume)
     return _report(outcome, args.json, not args.no_trace)
+
+
+def cmd_chat(args: argparse.Namespace) -> int:
+    at = args.at.rstrip("/")
+    want = "bot" if args.bot else "people" if args.people else "anyone"
+
+    def post(path: str, body: dict[str, Any], timeout: float = 15.0) -> tuple[int, Any]:
+        return http_json("POST", f"{at}{path}", body, timeout=timeout, token=args.token)
+
+    try:
+        status, body = post("/chat/start", {"want": want, "interests": args.interests})
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status == 401:
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict) or "seat" not in body:
+        print(f"pyrtan: {at}: {body.get('say') if isinstance(body, dict) else body or status}", file=sys.stderr)
+        return 3
+    seat = body["seat"]
+    state = {"after": 0, "owed": 0, "partner": body.get("partner")}  # owed: lines said to a bot it has not answered yet
+    lock = threading.Condition()
+    stop = threading.Event()
+    print("Type to talk. /next for someone new, /quit or Ctrl-D to leave.", flush=True)
+
+    def show(answer: dict[str, Any]) -> None:
+        with lock:
+            for e in answer.get("events", []):
+                if e["n"] <= state["after"]:
+                    continue
+                state["after"] = e["n"]
+                if e["kind"] == "system":
+                    print(f"  {e['text']}", flush=True)
+                elif e["kind"] == "bot":
+                    print(f"Bot: {e['text']}", flush=True)
+                    if args.trace and isinstance(e.get("trace"), dict):
+                        print(outcome_from_dict({**e, "say": e["text"]}).trace.render(), flush=True)
+                    state["owed"] = max(0, state["owed"] - 1)
+                elif e["kind"] == "stranger":
+                    print(f"Stranger: {e['text']}", flush=True)
+            state["partner"] = answer.get("partner")
+            lock.notify_all()
+
+    show(body)
+
+    def pump() -> None:
+        while not stop.is_set():
+            try:
+                st, answer = post("/chat/poll", {"seat": seat, "after": state["after"], "wait": 20}, timeout=40.0)
+            except Exception as e:
+                print(f"  ({at} did not answer: {e})", flush=True)
+                stop.wait(2)
+                continue
+            if st == 404:
+                print("  This seat is gone; start again.", flush=True)
+                stop.set()
+                with lock:
+                    lock.notify_all()
+                return
+            if st == 200 and isinstance(answer, dict):
+                show(answer)
+                if answer.get("state") == "left":
+                    return
+
+    threading.Thread(target=pump, daemon=True).start()
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if stop.is_set() or line in ("/quit", "/q"):
+                break
+            if line in ("/next", "/n"):
+                st, answer = post("/chat/next", {"seat": seat, "after": state["after"]})
+                if st == 200 and isinstance(answer, dict):
+                    show(answer)
+                continue
+            if not line:
+                continue
+            with lock:
+                to_bot = (state["partner"] or {}).get("kind") == "bot"
+                if to_bot:
+                    state["owed"] += 1
+            st, answer = post("/chat/say", {"seat": seat, "text": line})
+            if st != 200:
+                with lock:
+                    state["owed"] -= 1 if to_bot else 0
+                print(f"  {answer.get('say') if isinstance(answer, dict) else answer}", flush=True)
+        else:
+            # Input ran out (a pipe): wait for the bot to answer what it was told.
+            with lock:
+                lock.wait_for(lambda: state["owed"] <= 0 or stop.is_set(), timeout=60)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop.set()
+        try:
+            post("/chat/leave", {"seat": seat}, timeout=5.0)
+        except Exception:
+            pass
+    return 0
 
 
 def _report(outcome: Outcome, as_json: bool, with_trace: bool) -> int:
@@ -669,7 +782,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
         federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
         trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch,
+        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
@@ -677,6 +790,8 @@ def cmd_hub(args: argparse.Namespace) -> int:
         local += f", watching {len(hub.local.service.watcher)}"
     if hub.handout_registry is not None:
         local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
+    if hub.lobby is not None:
+        local += ", chatting at /chat"
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){local}{fed}" + _access_note(args), flush=True)
     try:
         server.wait()

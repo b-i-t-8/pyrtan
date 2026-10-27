@@ -2,8 +2,9 @@
 file hosted anywhere else (``pyrtan console --out``).
 
 It asks a sentence and shows the answer, the output and the trace; lists
-what the swarm can answer; shows the hub's peers and their ``link``; and
-lists the gaps. Everything it does goes through the public endpoints
+what the swarm can answer; shows the hub's peers and their ``link``; lists
+the gaps; and, on a hub started with ``--chat``, pairs this browser with a
+random stranger or a bot (``/chat``, see :mod:`pyrtan.chat`). Everything it does goes through the public endpoints
 (``/api``, ``/health``, ``/capabilities``, ``/peers``, ``/gaps``,
 ``/intent``, ``/resume``), so it works the same against a hub and a
 service, and the same whether it was served by that hub or by a static
@@ -81,6 +82,14 @@ PAGE = r"""<!doctype html>
   .pyr { color:var(--pyr) } .tan { color:var(--tan) }
   :focus-visible { outline:2px solid var(--tan); outline-offset:2px }
   ::selection { background:var(--tan); color:var(--tan-fg) }
+  .chat-log { height:min(60vh,480px); overflow-y:auto; padding:2px 2px 8px; overflow-wrap:anywhere }
+  .chat-log .line { margin:6px 0 }
+  .chat-log .sys { color:var(--mute); font-size:14px }
+  .chat-log .who { font-weight:600; margin-right:6px }
+  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) }
+  .chat-log details { font-size:13px; margin-top:2px }
+  #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
+  select { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   @media (max-width:560px) { table thead { display:none } table td { display:block; border-top:0 } table tr { display:block; border-top:1px solid var(--line); padding:6px 0 } }
 </style>
 </head>
@@ -116,6 +125,7 @@ PAGE = r"""<!doctype html>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
+    <a href="#chat" data-tab="chat" id="chat-tab" hidden>Chat</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
 
@@ -207,6 +217,27 @@ PAGE = r"""<!doctype html>
     </div>
   </section>
 
+  <section id="tab-chat" hidden>
+    <h2>Talk to a stranger</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
+    <div class="card" id="chat-off">
+      <form class="row" id="chat-start" style="margin:0">
+        <input type="text" id="chat-interests" placeholder="interests, optional: weather, news, music" autocomplete="off">
+        <select id="chat-want" aria-label="who to meet"><option value="anyone">a stranger, or a bot</option><option value="people">people only</option><option value="bot">a bot</option></select>
+        <button type="submit">Start</button>
+      </form>
+    </div>
+    <div class="card" id="chat-on" hidden>
+      <div class="chat-log" id="chat-log" aria-live="polite"></div>
+      <form class="row" id="chat-say" style="margin:8px 0 0">
+        <button type="button" class="quiet" id="chat-next" title="Esc">New</button>
+        <input type="text" id="chat-text" placeholder="say something" autocomplete="off" maxlength="1000">
+        <button type="submit">Send</button>
+      </form>
+      <div class="mute" style="font-size:13px">Stop (or Esc), twice: end this and meet someone new · <a href="#" id="chat-stop">leave the lobby</a></div>
+    </div>
+  </section>
+
   <section id="tab-api" hidden>
     <h2>The same endpoints this page uses</h2>
     <div class="card">
@@ -217,7 +248,8 @@ GET  /capabilities
 GET  /health
 GET  /gaps
 GET  /unanswered
-GET  /peers    (hub only)</pre>
+GET  /peers    (hub only)
+POST /chat/start {"want": "anyone"|"people"|"bot"}   (hub with --chat)</pre>
       <div class="mute" style="font-size:14px;margin-top:8px">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
   </section>
@@ -266,6 +298,7 @@ function showTab(name) {
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
+  if (name === "chat") chat.count();
 }
 
 async function loadDirectory() {
@@ -329,6 +362,7 @@ async function load() {
   $("#peers-tab").hidden = !isHub;
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
+  $("#chat-tab").hidden = !(isHub && a.chat);
   member.hub = a.federation || null;
   if (member.hub) member.start();
   $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
@@ -651,6 +685,84 @@ $("#member-run").addEventListener("submit", async (e) => {
 $("#member-listed").addEventListener("change", (e) => { member.me.listed = e.target.checked; member.save(); member.announce(); });
 $("#kept").addEventListener("click", async (e) => { const a = e.target.closest("a[data-show]"); if (!a) return; e.preventDefault(); const b = await member.keptGet(a.dataset.show); alert(b ? JSON.stringify(b.data, null, 2).slice(0, 4000) : "not kept"); });
 if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
+
+// ------------------------------------------------------------ chat
+// A seat in the hub's lobby: start, then long-poll for events (the hub
+// echoes our own lines too, so the log is the hub's word, in its order).
+const chat = {
+  seat: null, after: 0, gen: 0, state: null, partner: null, sure: 0,
+  async post(path, body, extra) {
+    const r = await api(path, Object.assign({method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}, extra || {}));
+    if (r.status === 401) throw new Error("401: this Pyrtan needs a token");
+    return r.json();
+  },
+  async count() {
+    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); } catch (e) {}
+  },
+  async start() {
+    const interests = $("#chat-interests").value.split(/[,\s]+/).filter(Boolean);
+    let r; try { r = await this.post("chat/start", {want: $("#chat-want").value, interests}); } catch (e) { problem(e.message, true); return; }
+    if (!r.seat) { problem(r.say || "The lobby did not take a seat.", true); return; }
+    problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = "";
+    $("#chat-off").hidden = true; $("#chat-on").hidden = false;
+    this.take(r); this.loop(++this.gen); $("#chat-text").focus();
+  },
+  take(r) {
+    for (const e of r.events || []) if (e.n > this.after) { this.render(e); this.after = e.n; }
+    this.state = r.state; this.partner = r.partner;
+    $("#chat-text").disabled = r.state !== "talking";
+    $("#chat-text").placeholder = r.state === "talking" ? (r.partner && r.partner.kind === "bot" ? "ask the bot something" : "say something") : r.state === "waiting" ? "waiting for someone…" : "press New for someone else";
+    this.resetNext();
+  },
+  async loop(gen) {
+    while (this.seat && gen === this.gen) {
+      let r; try { r = await this.post("chat/poll", {seat: this.seat, after: this.after, wait: 20}); } catch (e) { await new Promise(res => setTimeout(res, 2000)); continue; }
+      if (gen !== this.gen) return;
+      if (r.state === "left") return;
+      if (r.reason === "no-seat") { this.line("sys", "This seat is gone (nobody polled it for a minute). Start again."); this.seat = null; this.take({state: "ended"}); return; }
+      this.take(r);
+    }
+  },
+  render(e) {
+    if (e.kind === "system") return this.line("sys", e.text);
+    const el = this.line(e.kind, e.text, {you: "You", stranger: "Stranger", bot: "Bot"}[e.kind] || e.kind);
+    if (e.kind === "bot" && (e.trace || e.tree)) {
+      const d = document.createElement("details");
+      d.innerHTML = `<summary>${esc([e.status, e.tree, e.peer && e.peer !== "local" ? "from " + e.peer : ""].filter(Boolean).join(" · "))}</summary>${e.trace ? `<pre>${esc(renderTrace(e.trace))}</pre>` : ""}`;
+      el.appendChild(d);
+    }
+  },
+  line(kind, text, who) {
+    const log = $("#chat-log"), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    const el = document.createElement("div"); el.className = "line " + kind;
+    el.innerHTML = (who ? `<span class="who">${esc(who)}:</span>` : "") + esc(text);
+    log.appendChild(el); if (stick) log.scrollTop = log.scrollHeight;
+    return el;
+  },
+  async say() {
+    const text = $("#chat-text").value.trim(); if (!text || !this.seat) return;
+    $("#chat-text").value = "";
+    try { const r = await this.post("chat/say", {seat: this.seat, text}); if (r.status !== "ok") this.line("sys", r.say || r.reason); } catch (e) { this.line("sys", e.message); }
+  },
+  resetNext() { this.sure = 0; $("#chat-next").textContent = this.state === "talking" ? "Stop" : "New"; },
+  async next() {
+    // Like Omegle: while talking, the first press asks, the second ends it and finds someone new.
+    if (this.state === "talking" && !this.sure) { this.sure = 1; $("#chat-next").textContent = "Really?"; setTimeout(() => this.resetNext(), 3000); return; }
+    if (!this.seat) return this.start();
+    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after})); } catch (e) { this.line("sys", e.message); }
+  },
+  leave(keepalive) {
+    if (!this.seat) return;
+    const seat = this.seat; this.seat = null; this.gen++;
+    this.post("chat/leave", {seat}, keepalive ? {keepalive: true} : {}).catch(() => {});
+  },
+};
+$("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
+$("#chat-say").addEventListener("submit", (e) => { e.preventDefault(); chat.say(); });
+$("#chat-next").addEventListener("click", () => chat.next());
+$("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; chat.count(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
+window.addEventListener("pagehide", () => chat.leave(true));
 
 $("#forget").addEventListener("click", () => { store.clear(); base = ""; token = ""; $("#hub-url").value = ""; $("#hub-token").value = ""; $("#who").textContent = "not connected"; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); });
 load();
