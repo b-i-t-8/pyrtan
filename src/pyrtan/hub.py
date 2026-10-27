@@ -50,7 +50,7 @@ from typing import Any
 
 from . import __version__
 from .chat import Lobby, is_chat_path
-from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_seed, parse_invite, sign
+from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_hub, parse_invite, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
@@ -633,14 +633,15 @@ def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
     """Join a network from an invite (``name:secret[@hub]``), or the default
     network pyrtan.com publishes when ``invite`` is empty or ``default``,
     and follow a hub in it. When the default network cannot be read, the
-    first live seed is followed outside any network, as before networks."""
+    first listed hub that answers is followed outside any network, as
+    before networks."""
     if invite in (None, "", "default"):
         net = default_network()
         hubs = bootstrap_candidates()
         if net is None:
-            url = first_live_seed()
+            url = first_live_hub()
             if url is None:
-                return 200, {"status": "error", "reason": "no-network", "say": "Cannot read the default network, and no seed or snapshot hub answers; give an invite or a hub URL."}
+                return 200, {"status": "error", "reason": "no-network", "say": "Cannot read the default network, and no listed or snapshot hub answers; give an invite or a hub URL."}
             try:
                 remote = fed.follow(url)
             except ValueError as e:

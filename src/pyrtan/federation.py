@@ -42,8 +42,10 @@ started ``--listed`` puts an entry for itself (id, name, the trees it
 holds, when) in every ``Announce`` it sends; every hub keeps the entries
 it hears and passes them on in its own announces, in both directions of
 every follow. Nothing central holds the directory: every federated hub
-does, and pyrtan.com publishes only static files: the default network,
-a list of *seeds* (hubs to follow first), and an hourly snapshot. An
+does, and pyrtan.com publishes only static files on GitHub Pages: the
+default network, the *hub list* (hubs operators added by pull request,
+which pyrtan.com asks every hour), and an hourly snapshot of what they
+know. No hub is run for it, and none has to be up for it. An
 entry is a hint (a hub two follows away cannot verify who said it), kept
 until its hub has not been heard of for a week, and routing never uses
 it: finding a hub in the directory and following it is still the one act
@@ -94,7 +96,7 @@ from . import __version__
 from .service import http_json
 from .store import BlobStore, StoreError, check_key, digest as blob_digest
 
-DEFAULT_SEEDS = "https://pyrtan.com/rendezvous/seeds.json"
+DEFAULT_HUB_LIST = "https://pyrtan.com/rendezvous/hubs.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
 DEFAULT_NETWORK = "https://pyrtan.com/rendezvous/network.json"
 NETWORK_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -122,17 +124,17 @@ ASK_WINDOW = 600.0                     # a member asked to keep within this coun
 SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
 
 
-# ---------------------------------------------------------------- seeds
+# ---------------------------------------------------------------- the hub list
 
 
-def seed_urls() -> list[str]:
-    """Hubs to follow first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
-    ``$PYRTAN_SEEDS`` (a URL or file holding ``{"hubs": [...]}``), or the
-    list at pyrtan.com. Never raises: no seeds is an empty list."""
+def rendezvous_hubs() -> list[str]:
+    """Hubs to try first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
+    ``$PYRTAN_HUB_LIST`` (a URL or file holding ``{"hubs": [...]}``), or
+    the hub list at pyrtan.com. Never raises: no list is an empty list."""
     single = os.environ.get("PYRTAN_RENDEZVOUS")
     if single:
         return [single.rstrip("/")]
-    source = os.environ.get("PYRTAN_SEEDS") or DEFAULT_SEEDS
+    source = os.environ.get("PYRTAN_HUB_LIST") or DEFAULT_HUB_LIST
     try:
         if source.startswith(("http://", "https://")):
             status, body = http_json("GET", source, timeout=10.0)
@@ -150,7 +152,7 @@ def seed_urls() -> list[str]:
 def snapshot_hubs() -> list[str]:
     """Hubs from the directory snapshot pyrtan.com bakes hourly
     (``$PYRTAN_SNAPSHOT`` overrides the URL or names a file), most recently
-    heard first. What a new hub can try when every seed is down."""
+    heard first. What a new hub can try when no listed hub answers."""
     source = os.environ.get("PYRTAN_SNAPSHOT") or DEFAULT_SNAPSHOT
     try:
         if source.startswith(("http://", "https://")):
@@ -238,16 +240,16 @@ def default_network() -> Network | None:
 
 
 def bootstrap_candidates() -> list[str]:
-    """Where to look for a first hub: the seeds, then the snapshot's hubs."""
-    seeds = seed_urls()
-    return seeds + [h for h in snapshot_hubs() if h not in seeds]
+    """Where to look for a first hub: the hub list, then the snapshot's hubs."""
+    listed = rendezvous_hubs()
+    return listed + [h for h in snapshot_hubs() if h not in listed]
 
 
-def first_live_seed(seeds: list[str] | None = None) -> str | None:
-    """The first seed whose ``/actor`` answers as a hub; when none does, the
-    first hub from the snapshot that answers; else None."""
-    tried = seeds if seeds is not None else seed_urls()
-    for batch in ([tried] if seeds is not None else [tried, lambda: [h for h in snapshot_hubs() if h not in tried]]):
+def first_live_hub(hubs: list[str] | None = None) -> str | None:
+    """The first listed hub whose ``/actor`` answers as a hub; when none
+    does, the first hub from the snapshot that answers; else None."""
+    tried = hubs if hubs is not None else rendezvous_hubs()
+    for batch in ([tried] if hubs is not None else [tried, lambda: [h for h in snapshot_hubs() if h not in tried]]):
         for url in (batch() if callable(batch) else batch):
             try:
                 status, actor = http_json("GET", f"{url}/actor", timeout=5.0)
@@ -671,7 +673,7 @@ class Federation:
     # the path decided on and the value no branch covered, with a count;
     # never the inputs or the rest of the state. Every federated hub keeps
     # what it hears and passes it on, like the directory, so the reports
-    # reach the seeds and the snapshot pyrtan.com bakes, where an author
+    # reach the listed hubs and the snapshot pyrtan.com bakes, where an author
     # reads them beside the tree. Nothing is reported for a tree without a
     # namespace: there is nobody to report to.
 

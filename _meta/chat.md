@@ -51,7 +51,7 @@ says why. The rest of the hub (`/intent`, `/run`, `/gaps`, `/follow`,
 nothing but each other. A hub with no token has no guests: there,
 anyone may meet a bot, as anyone may ask it at `/intent`.
 
-**No seed, no centre.** There is no chat server. Every hub started
+**No centre.** There is no chat server, and pyrtan.com runs no hub. Every hub started
 `--chat` is a lobby, and a seat that finds nobody at home asks the hubs
 its hub follows (§3). A hub that joins the default network (`pyrtan
 join`) follows a hub in it, and each follow is a way for the people

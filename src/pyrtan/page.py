@@ -314,7 +314,7 @@ async function loadDirectory() {
     tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code>${h.via === "self" ? ' <span class="mute">(this hub)</span>' : ""}${h.kind === "member" ? ' <span class="mute">(member)</span>' : ""}<div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.seen ? new Date(h.seen * 1000).toLocaleString() : ""}</td>`;
     body.appendChild(tr);
   }
-  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Follow a seed, or start this hub with <code>--listed</code>.</td></tr>`;
+  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Join the default network (<code>pyrtan join</code>), or start this hub with <code>--listed</code>.</td></tr>`;
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 

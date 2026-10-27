@@ -265,16 +265,16 @@ purpose. It names the network rather than guarding it: anyone may join,
 and what keeps a stranger's hub harmless is that following is still the
 one act of trust. `pyrtan join` (or `pyrtan hub --join default`, or
 `$PYRTAN_JOIN=default`) puts a hub in it and follows the first hub in
-`rendezvous/seeds.json` that answers, then the first from the snapshot;
+`rendezvous/hubs.json` that answers, then the first from the snapshot;
 when none does, the hub is the network so far, and others join through
-it. No hub has to be always up: every hour pyrtan.com's build asks
-every hub it knows of for its directory (the seeds, then everyone the
-last snapshot or a hub names), keeps the default network's part, and
-publishes it as `rendezvous/directory.json`, so the directory stays
-current while any listed hub is up, and pyrtan.com itself is static
-files on GitHub Pages. To be a seed, a hub in the default network,
+it. pyrtan.com runs no hub: it is static files on GitHub Pages. Every
+hour its build asks every hub it knows of for its directory (the hub
+list, then everyone the last snapshot or a hub names), keeps the default
+network's part, and publishes it as `rendezvous/directory.json`, so the
+directory stays current while any hub it knows of is up, and no hub has
+to be always up. To be on the hub list, a hub in the default network,
 started `--listed` and `--cors https://pyrtan.com`, goes into
-`seeds.json` by pull request.
+`site/rendezvous/hubs.json` by pull request.
 
 ## Members, and what they keep
 
@@ -456,7 +456,7 @@ chat (a bot runs trees, so a lobby must not be a way round it). To let
 strangers in and keep the token on everything else, start the hub
 `--chat-public`: callers without the token are guests, who meet people
 (here, or on a hub this one follows) and never a bot. There is no chat
-server and no seed: every hub started `--chat` is a lobby, and hubs
+server and no hub of pyrtan.com's: every hub started `--chat` is a lobby, and hubs
 that follow each other share their strangers. It is
 text only, a line is at most 1,000 characters, five in a burst and one a
 second after; a seat nobody polls for a minute is let go. There is no
@@ -574,7 +574,7 @@ _meta/          the design record, the tree format reference, and the
                 design for pyrtan.com
 deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
                 and a systemd unit
-site/           pyrtan.com: the landing page, the seed list, the catalog
+site/           pyrtan.com: the landing page, the hub list, the catalog
                 viewer, the source browser (files, releases, branches and
                 history), and the build the pages workflow publishes
 ```
