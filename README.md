@@ -190,7 +190,10 @@ Open <http://127.0.0.1:8700/> for the console: a sentence box, the answer,
 the output and the trace; everything the swarm can answer; each peer and
 its `link`; and the gaps. The same console lives at
 <https://pyrtan.com/console/> and can be pointed at any hub started with
-`--cors https://pyrtan.com`. To run the swarm on a NAS or any Docker host,
+`--cors https://pyrtan.com`. The wordmark is two colours, **Pyr** the
+primary and **tan** the secondary: click either half, right-click it, or
+press and hold it on a phone to pick that half's colour, kept in the
+browser. To run the swarm on a NAS or any Docker host,
 see [`deploy/README.md`](deploy/README.md).
 
 ## A federation

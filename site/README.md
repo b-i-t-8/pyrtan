@@ -9,6 +9,7 @@ static directory and publishes it.
 | `/` | the landing page, with the live directory read from the seeds in the visitor's browser | `site/index.html` |
 | `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it); point it at any hub started with `--cors https://pyrtan.com`; its Member tab joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
 | `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, and `index.json` the command reads | `pyrtan index examples catalog --copy`, through `site/gate.py` |
+| `/theme.js` | the wordmark's colour picker the landing page and the catalog load (the console carries its own copy inline) | `src/pyrtan/js/theme.js` |
 | `/rendezvous/seeds.json` | hubs to follow first | `site/rendezvous/seeds.json` |
 | `/rendezvous/directory.json` | a snapshot of the directory as the seeds know it, refreshed hourly | `site/snapshot.py` |
 | `/rendezvous/reports.json` | the gap reports the seeds carry for catalog trees, refreshed hourly | `site/snapshot.py --reports` |

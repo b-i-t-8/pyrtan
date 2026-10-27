@@ -45,8 +45,9 @@ def git_bytes(*args: str) -> bytes:
 # -- pages ---------------------------------------------------------------
 
 CSS = """
-  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --accent:#2b5db8; --soft:#f1efe9; --add:#e6f4ea; --del:#fbe9e7 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --accent:#7fa6f0; --soft:#222420; --add:#16301f; --del:#3a1d19 } }
+  :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --pyr:#c2410c; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9; --add:#e6f4ea; --del:#fbe9e7 }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420; --add:#16301f; --del:#3a1d19 } }
+  :root { --accent:var(--pyr) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif }
   main { max-width:980px; margin:0 auto; padding:32px 16px 64px }
@@ -55,6 +56,9 @@ CSS = """
   header nav a.on { color:var(--fg); font-weight:600; text-decoration:none }
   h1 { font-size:22px; margin:0 0 6px; word-break:break-word } h2 { font-size:18px; margin:28px 0 8px }
   a { color:var(--accent) } .mute { color:var(--mute) } .small { font-size:14px }
+  .pyr { color:var(--pyr) } .tan { color:var(--tan) }
+  :focus-visible { outline:2px solid var(--tan); outline-offset:2px }
+  ::selection { background:var(--tan); color:var(--tan-fg) }
   code, pre { font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace }
   code { background:var(--soft); padding:1px 5px; border-radius:4px }
   pre { padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:auto }
@@ -97,11 +101,13 @@ class Site:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)} · Pyrtan source</title>
+<meta name="theme-color" content="#c2410c">
+<script src="{self.link(page, '../theme.js')}"></script>
 <style>{CSS}</style>
 </head>
 <body>
 <main>
-<header><b><a href="{self.link(page, '../index.html')}">Pyrtan</a> / <a href="{self.link(page, 'index.html')}">source</a></b><nav>{nav}</nav><span class="mute small">v{esc(self.version)} · {esc(self.branch)}</span></header>
+<header><b><a href="{self.link(page, '../index.html')}"><span class="pyr">Pyr</span><span class="tan">tan</span></a> / <a href="{self.link(page, 'index.html')}">source</a></b><nav>{nav}</nav><span class="mute small">v{esc(self.version)} · {esc(self.branch)}</span></header>
 {body}
 </main>
 </body>

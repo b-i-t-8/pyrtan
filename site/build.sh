@@ -14,6 +14,8 @@ python3 site/source.py "$out/source"
 # The landing page carries the version of the pyrtan it was built with.
 version="$(pyrtan --version | cut -d' ' -f2)"
 sed "s/__VERSION__/$version/g" site/index.html > "$out/index.html"
+# The wordmark's colour picker, shared by the landing page and the catalog (the console inlines it).
+cp src/pyrtan/js/theme.js "$out/"
 cp site/rendezvous/seeds.json "$out/rendezvous/"
 # The directory as the seeds know it now, keeping the last published
 # snapshot's entries when a seed is down (SNAPSHOT_PREVIOUS may add more).
