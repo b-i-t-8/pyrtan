@@ -37,8 +37,27 @@ partner told, which is how a closed tab ends a conversation.
 The lobby follows the hub's access rule: with a token, only callers with
 the token chat. That is deliberate. A bot runs trees, so a lobby open to
 callers the hub would refuse at `/intent` would be a way round the token.
-A hub that wants strangers from the internet runs without a token, as
-every hub that serves strangers already does.
+
+**A public lobby (v0.13).** A hub that wants strangers from the
+internet in its lobby, and its token on everything else, starts
+`--chat-public` (`$PYRTAN_CHAT_PUBLIC`). `/chat` then answers without
+the token, and a caller without it is a *guest*: a guest meets people,
+on this hub or on a hub it follows, and never a bot. `want: bot` from a
+guest is refused (`bots-need-token`), `anyone` is read as `people`, and
+`/chat` counts no bots for them. `/api` says `chat_public` and, for the
+caller asking, `chat_bots`; the console offers a guest "people only" and
+says why. The rest of the hub (`/intent`, `/run`, `/gaps`, `/follow`,
+`/keep`) still needs the token, so opening the lobby lends strangers
+nothing but each other. A hub with no token has no guests: there,
+anyone may meet a bot, as anyone may ask it at `/intent`.
+
+**No seed, no centre.** There is no chat server. Every hub started
+`--chat` is a lobby, and a seat that finds nobody at home asks the hubs
+its hub follows (§3). A hub that joins the default network (`pyrtan
+join`) follows a hub in it, and each follow is a way for the people
+waiting on two hubs to meet; the network has as many lobbies as it has
+hubs that chat. A
+person runs one, or opens the Chat tab of any hub that is public.
 
 ## 2. Bots
 
@@ -151,7 +170,8 @@ for that conversation.
 - **Pretending to moderate.** Omegle closed in 2023 over abuse it could
   not moderate at scale; this lobby is not built to do better. What it
   does: text only, no links rendered, opt-in per hub (`--chat`), behind
-  the hub's token when it has one, a line at most 1,000 characters, five
+  the hub's token when it has one unless the operator opens it
+  (`--chat-public`, people only), a line at most 1,000 characters, five
   lines in a burst and one a second after, at most 500 seats, and either
   side can leave at any moment. An operator who opens a lobby to the
   internet should know that is all.
@@ -178,5 +198,7 @@ for that conversation.
 - **v0.11, built:** the lobby, bots, strangers across a follow, the Chat
   tab, `pyrtan chat`, `small-talk`, `trigger_inputs`.
 - **v0.12, built:** the typing indicator, per person and per hub (§4).
+- **v0.13, built:** public lobbies: `--chat-public`, guests meet people
+  only (§1).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.

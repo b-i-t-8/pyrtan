@@ -172,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
     p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
+    p.add_argument("--chat-public", action="store_true", default=os.environ.get("PYRTAN_CHAT_PUBLIC", "").lower() in ("1", "true", "yes"), help="open the lobby to callers without the token (implies --chat): they meet people only, never a bot, and everything else still needs the token (default $PYRTAN_CHAT_PUBLIC)")
     p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
     p.add_argument("--quiet", action="store_true")
@@ -793,7 +794,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
         federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
         trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat, chat_typing=args.chat_typing,
+        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
@@ -802,7 +803,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
     if hub.handout_registry is not None:
         local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
     if hub.lobby is not None:
-        local += ", chatting at /chat"
+        local += ", chatting at /chat" + (" (open to callers without the token, people only)" if hub.chat_public and args.token else "")
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){local}{fed}" + _access_note(args), flush=True)
     try:
         server.wait()

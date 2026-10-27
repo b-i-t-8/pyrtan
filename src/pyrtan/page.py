@@ -221,6 +221,7 @@ PAGE = r"""<!doctype html>
   <section id="tab-chat" hidden>
     <h2>Talk to a stranger</h2>
     <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
+    <div class="notice" id="chat-guest" hidden>This hub's lobby is open to anyone, and you are here without its token: you meet people, not bots. A bot runs the hub's trees, and the token is what guards them.</div>
     <div class="card" id="chat-off">
       <form class="row" id="chat-start" style="margin:0">
         <input type="text" id="chat-interests" placeholder="interests, optional: weather, news, music" autocomplete="off">
@@ -338,7 +339,7 @@ async function detect() {
         $("#connect-lede").textContent = "This Pyrtan needs a token:";
         $("#connect-help").innerHTML = "Kept in this browser only. The token is the one the hub or service was started with (<code>--token</code> or <code>$PYRTAN_TOKEN</code>).";
         $("#hub-token").value = token;
-        if (!token) problem("Enter the token to see what this Pyrtan can answer.");
+        if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
       }
       return a;
     }
@@ -367,6 +368,14 @@ async function load() {
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
   $("#chat-tab").hidden = !(isHub && a.chat);
+  if (a.chat && a.chat_bots === false && token) {
+    try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
+  }
+  if (a.chat && a.chat_bots === false) {
+    // A public lobby, and no token here: people only, since a bot runs the hub's trees.
+    $("#chat-want").innerHTML = `<option value="people">people only</option>`;
+    $("#chat-guest").hidden = false;
+  }
   member.hub = a.federation || null;
   if (member.hub) member.start();
   $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
@@ -375,7 +384,10 @@ async function load() {
     const h = await json("health");
     $("#who").textContent = (h.name ? h.name + " · " : "") + (h.peers != null ? `${h.up}/${h.peers} peers up` + (h.trees != null ? `, ${h.trees} trees` : "") : (h.trees ? `${h.trees.length} trees` : ""));
   } catch (e) { $("#who").textContent = "unreachable"; }
-  if (a.auth === "bearer" && !token) return;
+  if (a.auth === "bearer" && !token) {
+    if (a.chat_public && location.hash === "#chat") showTab("chat");  // the one tab open without the token
+    return;
+  }
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem("");

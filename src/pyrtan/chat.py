@@ -37,6 +37,14 @@ else's, and a hub started ``--no-chat-typing`` has it off for everyone.
 Across hubs it travels as ``Typing``, at most every two seconds, and the
 logs leave it out.
 
+**Public lobbies.** The lobby follows the hub's token: a bot runs trees,
+and the token is what guards them. A hub started ``--chat-public`` keeps
+its token for everything else and opens ``/chat`` to callers without it,
+as *guests*: a guest meets people (here, or on a hub this one follows)
+and never a bot. ``want: bot`` from a guest is refused, and ``anyone`` is
+read as ``people``. A hub with no token has no guests: anyone may meet a
+bot there, as anyone may ask it at ``/intent``.
+
 Endpoints, all POST with a JSON body except the first:
 
 ``GET  /chat``           how many are waiting and talking; whether bots, other hubs and typing are in reach
@@ -87,6 +95,10 @@ TYPING_TTL = 5.0      # an indicator nobody refreshes goes out after this long
 TYPING_EVERY = 2.0    # how often "still typing" travels to another hub
 REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 INTEREST = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
+
+
+def is_chat_path(path: str) -> bool:
+    return path == "/chat" or path.startswith("/chat/")
 
 
 def interests_of(value: Any) -> list[str]:
@@ -173,6 +185,7 @@ class Seat:
     ref: str          # what another hub calls it; never the id
     want: str
     interests: list[str]
+    bots: bool = True        # may meet a bot: false for a guest of a public lobby
     since: float = field(default_factory=time.time)
     seen: float = field(default_factory=time.time)
     state: str = "waiting"   # waiting | talking | ended | left
@@ -208,7 +221,7 @@ class Lobby:
 
     # ------------------------------------------------------------ views
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, guest: bool = False) -> dict[str, Any]:
         with self.cond:
             self._sweep()
             seats = list(self.seats.values())
@@ -217,14 +230,14 @@ class Lobby:
             "status": "ok",
             "waiting": sum(1 for s in seats if s.state == "waiting"),
             "talking": sum(1 for s in seats if s.state == "talking"),
-            "bots": sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
+            "bots": 0 if guest else sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
             "hubs": sum(1 for r in fed.following.values() if r.link != "down") if fed is not None else 0,
             "typing": self.typing,
         }
 
     def _view(self, seat: Seat, after: int) -> dict[str, Any]:
         events = [e for e in seat.events if e["n"] > after]
-        return {"status": "ok", "seat": seat.id, **seat.view(), "typing_indicator": self._shows(seat), "partner_typing": self._partner_typing(seat), "events": events, "after": seat.n}
+        return {"status": "ok", "seat": seat.id, **seat.view(), "bots": seat.bots, "typing_indicator": self._shows(seat), "partner_typing": self._partner_typing(seat), "events": events, "after": seat.n}
 
     # ------------------------------------------------------------ typing
 
@@ -422,15 +435,19 @@ class Lobby:
                 seat.seen = time.time()
             return seat
 
-    def start(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def start(self, body: dict[str, Any], guest: bool = False) -> tuple[int, dict[str, Any]]:
         want = body.get("want", "anyone")
         if want not in WANTS:
             return 400, {"status": "error", "reason": "bad-request", "say": f"want is one of {', '.join(WANTS)}."}
+        if guest and want == "bot":
+            return 403, {"status": "error", "reason": "bots-need-token", "say": "Without this hub's token you meet people only: a bot runs the hub's trees."}
+        if guest:
+            want = "people"
         with self.cond:
             self._sweep()
             if len(self.seats) >= SEATS_MAX:
                 return 503, {"status": "error", "reason": "lobby-full", "say": f"The lobby is full ({SEATS_MAX} seats); try again in a minute."}
-            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False)
+            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest)
             self.seats[seat.id] = seat
             self.refs[seat.ref] = seat
             self._add(seat, "system", "Looking for a bot…" if want == "bot" else "Looking for someone you can chat with…")
@@ -669,16 +686,17 @@ class Lobby:
 
     # ------------------------------------------------------------ routing
 
-    def route(self, method: str, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def route(self, method: str, path: str, body: dict[str, Any], *, guest: bool = False) -> tuple[int, dict[str, Any]]:
+        """``guest``: the caller lacks the hub's token, and came in because the lobby is public."""
         if method == "GET" and path == "/chat":
             try:
-                return 200, self.stats()
+                return 200, self.stats(guest)
             finally:
                 self._flush()
         handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/typing": self.typed, "/chat/settings": self.settings, "/chat/next": self.next, "/chat/leave": self.leave}
         if method == "POST" and path in handlers:
             try:
-                return handlers[path](body)
+                return self.start(body, guest) if path == "/chat/start" else handlers[path](body)
             finally:
                 self._flush()  # the Parts an ending owes another hub, sent once no lock is held
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
