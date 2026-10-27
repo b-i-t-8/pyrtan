@@ -56,7 +56,7 @@ from .tree import TreeError, check, load_tree
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="pyrtan", description="A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees.")
+    parser = argparse.ArgumentParser(prog="pyrtan", description="A core set of expandable services that act on all forms of I/O through inspectable decision trees.")
     parser.add_argument("--version", action="version", version=f"pyrtan {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -28,7 +28,7 @@
   <p class="lede">Trees you can pull into your own swarm. Each is one TOML file, checked by the repository's tests, with the licence its author chose, under the namespace of whoever published it. <code>pyrtan pull NAMESPACE/NAME</code> verifies the file against <a href="index.json">index.json</a> before writing it. Where hubs that opted in have met a value a tree had no branch for, the <a href="../rendezvous/reports.json">gap reports</a> say so beside it.</p>
   <input type="search" id="q" placeholder="filter: weather, github, read-only…" autocomplete="off">
   <div id="list"><p class="mute">Loading index.json…</p></div>
-  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan/tree/main/catalog">how</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a></footer>
+  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="../source/blob/catalog/README.md.html">how</a> · <a href="../source/">source</a></footer>
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
