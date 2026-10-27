@@ -34,10 +34,14 @@ x-pyrtan: &pyrtan
     # PYRTAN_TOKEN: "change-me-to-something-long"
     PYRTAN_EGRESS: any
     # Federation: once the hub is reachable from outside (a tunnel or a
-    # port-forward with TLS), give it its public URL and it follows the
-    # seeds at pyrtan.com and lists itself in the directory. Needs the token.
+    # port-forward with TLS), give it its public URL and it joins the
+    # default network pyrtan.com publishes, follows a seed in it, and lists
+    # itself in the directory. Needs the token, and PYRTAN_EGRESS: public
+    # above: hubs that follow this one may ask it to run trees.
+    # PYRTAN_JOIN may also hold invites to networks of your own
+    # (NAME:SECRET@HUB, from `pyrtan network new`), space-separated.
     # PYRTAN_ADVERTISE: "https://hub.example.net"
-    # PYRTAN_FOLLOW: "seed"
+    # PYRTAN_JOIN: "default"
     # PYRTAN_LISTED: "true"
     # PYRTAN_REPORT_GAPS: "true"        # opt in: the gaps your catalog trees meet (tree, node, value; never inputs) reach their authors via pyrtan.com
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run

@@ -21,8 +21,9 @@ Endpoints:
 
 Federated (``--federate``), a hub also answers ``GET /actor``, ``POST
 /inbox``, ``POST /follow`` and ``/unfollow`` (operator), ``GET /following``,
-``/followers`` and ``/outbox``, and routes to the hubs it follows; see
-:mod:`pyrtan.federation`.
+``/followers`` and ``/outbox``, ``GET`` and ``POST /networks``, ``POST
+/join`` and ``/leave`` (operator: the networks it is in), and routes to
+the hubs it follows; see :mod:`pyrtan.federation`.
 
 A service that holds several trees and a hub that routes between services
 answer the same requests, so a client need not know which it is talking to,
@@ -42,7 +43,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import __version__
-from .federation import MAX_HOPS, Federation, Remote, sign
+from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_seed, parse_invite, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
@@ -144,7 +145,7 @@ class Hub:
         the URL they reach it at. ``store`` is where it keeps blobs, its own
         and others'; ``replicas`` how many keepers each of its own should have."""
         auto = {
-            "directory": lambda: self.federation.gossip() if self.federation else [],
+            "directory": lambda: self.federation.directory_backup() if self.federation else [],
             "gaps": lambda: self.gaps()["gaps"],
             "unanswered": lambda: self.unanswered_all()["unanswered"],
         }
@@ -491,7 +492,8 @@ class Hub:
             if method == "GET" and path == "/actor":
                 return 200, fed.actor()
             if method == "GET" and path == "/directory":
-                return 200, fed.directory()
+                # A private network's part only to the operator (or to anyone, on a hub with no token).
+                return 200, fed.directory(private=not self.token or bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token))
             if method == "GET" and path == "/reports":
                 return 200, fed.reports_view()
             if method == "POST" and path == "/inbox":
@@ -504,13 +506,33 @@ class Hub:
                 url = body.get("url")
                 if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
+                network = body.get("network")
+                if network is not None and not isinstance(network, str):
+                    return 400, {"status": "error", "reason": "bad-request", "say": "A network is named by a string."}
                 if body.get("listed") is True and not fed.listed:
                     fed.set_listed(True)
                 try:
-                    remote = fed.follow(url)
+                    remote = fed.follow(url, network=network)
                 except ValueError as e:
                     return 400, {"status": "error", "reason": "cannot-follow", "say": str(e)}
                 return 200, {"status": "ok", "following": remote.to_dict(), "listed": fed.listed}
+            if method == "GET" and path == "/networks":
+                return 200, {"networks": fed.networks_view()}
+            if method == "POST" and path == "/networks":
+                try:
+                    net = fed.create_network(body.get("name"), public=body.get("public") is True)
+                except ValueError as e:
+                    return 400, {"status": "error", "reason": "bad-network", "say": str(e)}
+                return 200, {"status": "ok", "network": net.name, "id": net.id, "invite": net.invite(fed.id)}
+            if method == "POST" and path == "/join":
+                if body.get("listed") is True and not fed.listed:
+                    fed.set_listed(True)
+                return join_network(fed, body.get("invite"))
+            if method == "POST" and path == "/leave":
+                name = body.get("network")
+                if not isinstance(name, str):
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"network\": \"name\"}."}
+                return 200, {"status": "ok", "left": fed.leave_network(name)}
             if method == "POST" and path == "/listed":
                 fed.set_listed(body.get("listed") is not False)
                 if fed.listed:
@@ -556,7 +578,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -579,6 +601,44 @@ def _rank(peer: Local | Peer | Remote) -> int:
     return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (5 if isinstance(peer, Remote) and peer.kind == "member" else 10 if isinstance(peer, Remote) else 0) - (1 if isinstance(peer, Local) else 0)
 
 
+def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
+    """Join a network from an invite (``name:secret[@hub]``), or the default
+    network pyrtan.com publishes when ``invite`` is empty or ``default``,
+    and follow a hub in it. When the default network cannot be read, the
+    first live seed is followed outside any network, as before networks."""
+    if invite in (None, "", "default"):
+        net = default_network()
+        hubs = bootstrap_candidates()
+        if net is None:
+            url = first_live_seed()
+            if url is None:
+                return 200, {"status": "error", "reason": "no-network", "say": "Cannot read the default network, and no seed or snapshot hub answers; give an invite or a hub URL."}
+            try:
+                remote = fed.follow(url)
+            except ValueError as e:
+                return 200, {"status": "error", "reason": "cannot-follow", "say": str(e)}
+            return 200, {"status": "ok", "network": None, "following": remote.to_dict(), "say": f"now follows {url}, outside any network (the default network could not be read)"}
+    else:
+        try:
+            net, url = parse_invite(str(invite))
+        except ValueError as e:
+            return 400, {"status": "error", "reason": "bad-invite", "say": str(e)}
+        hubs = [url] if url else []
+    try:
+        remote = fed.join(net, hubs)
+    except ValueError as e:
+        return 400, {"status": "error", "reason": "bad-network", "say": str(e)}
+    net = fed.networks[net.name]
+    hubs = [h for h in hubs if h.rstrip("/") != fed.id]
+    if remote is not None:
+        say = f"in {net.name}, following {remote.url}"
+    elif hubs:
+        say = f"in {net.name}; no hub in it accepted a follow yet (tried {', '.join(hubs)}), so this hub is a network of one until one does or another hub joins through it"
+    else:
+        say = f"in {net.name}, a network of one until another hub joins through this one"
+    return 200, {"status": "ok", "network": net.name, "id": net.id, "public": net.public, "following": remote.to_dict() if remote else None, "invite": net.invite(fed.id), "say": say}
+
+
 def serve_hub(
     host: str = "127.0.0.1",
     port: int = 8700,
@@ -595,6 +655,7 @@ def serve_hub(
     state: str | None = None,
     open_follows: bool = True,
     follow: list[str] | None = None,
+    join: list[str] | None = None,
     listed: bool = False,
     trees: list[str | Path] | None = None,
     handout: list[str | Path] | None = None,
@@ -610,7 +671,7 @@ def serve_hub(
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
-    if federate or advertise:
+    if federate or advertise or join:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
         hub.add_peer(url)
@@ -619,5 +680,8 @@ def serve_hub(
             hub.federation.follow(url)  # type: ignore[union-attr]
         except ValueError as e:
             print(f"pyrtan hub: cannot follow {url}: {e}", flush=True)
+    for invite in join or []:
+        _, answer = join_network(hub.federation, invite)  # type: ignore[arg-type]
+        print(f"pyrtan hub: join {answer.get('network') or invite.split(':', 1)[0]}: {answer.get('say')}", flush=True)
     hub.start_polling()
     return hub, server

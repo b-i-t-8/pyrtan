@@ -79,12 +79,13 @@ pyrtan serve trees --port 8701                            # then open http://127
   <p>Every hub and service serves the console at <code>/</code>. The same console is at <a href="console/">pyrtan.com/console</a>: point it at your own hub, started with <code>--token</code> and <code>--cors https://pyrtan.com</code>, and ask it from anywhere. Nothing about your swarm passes through this site; the page talks to your hub directly.</p>
 
   <h2 id="directory">The directory</h2>
-  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This page asks the <a href="rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know; when none answers, it shows the <a href="rendezvous/directory.json">snapshot</a> pyrtan.com takes from them every hour. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
+  <p>Hubs find each other without a server. A hub started <code>--listed</code> announces itself to the hubs it follows and that follow it; every hub keeps what it hears and passes it on. This is the <a href="rendezvous/network.json">default network</a>, the one <code>pyrtan join</code> puts a hub in; any hub can also start a network of its own and share its invite, and a private network's hubs never show here. This page asks the <a href="rendezvous/seeds.json">seed hubs</a> from your browser and shows what they know; when none answers, it shows the <a href="rendezvous/directory.json">snapshot</a> pyrtan.com takes every hour from every hub it can reach. An entry is a hint, not a route: to use a hub, follow it from your own.</p>
   <div class="card"><table id="hubs"><thead><tr><th>Heard</th><th>Hub</th><th>Holds</th><th></th></tr></thead><tbody><tr><td colspan="4" class="mute" id="hubs-note">Asking the seeds…</td></tr></tbody></table></div>
 <pre>pyrtan hub --federate --advertise https://your-hub --listed --token …   # your hub, behind a tunnel or TLS
-pyrtan follow --at https://your-hub --token …                           # follow the first seed; route to it
+pyrtan join --at https://your-hub --token …                             # be in the default network
+pyrtan network new home --at https://your-hub --token …                 # or start your own: prints its invite
 pyrtan directory                                                        # who the swarm knows</pre>
-  <p>To become a seed, add your hub's URL to <code>rendezvous/seeds.json</code> by pull request.</p>
+  <p>To become a seed, add your hub's URL to <code>rendezvous/seeds.json</code> by pull request. It need not be up all the time: the hourly snapshot keeps the directory from every listed hub that is.</p>
 
   <h2>Hosting</h2>
   <p>Self-hosting is the product. A hosted option, running the same open-source hub per customer with secrets, retention, scheduled re-runs and alerts around it, is planned; it will speak the same API, so a swarm can move either way without changing a caller.</p>

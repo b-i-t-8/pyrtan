@@ -42,11 +42,25 @@ started ``--listed`` puts an entry for itself (id, name, the trees it
 holds, when) in every ``Announce`` it sends; every hub keeps the entries
 it hears and passes them on in its own announces, in both directions of
 every follow. Nothing central holds the directory: every federated hub
-does, and pyrtan.com publishes only a static list of *seeds*, hubs to
-follow first. An entry is a hint (a hub two follows away cannot verify
-who said it), kept until its hub has not been heard of for a week, and
-routing never uses it: finding a hub in the directory and following it is
-still the one act of trust.
+does, and pyrtan.com publishes only static files: the default network,
+a list of *seeds* (hubs to follow first), and an hourly snapshot. An
+entry is a hint (a hub two follows away cannot verify who said it), kept
+until its hub has not been heard of for a week, and routing never uses
+it: finding a hub in the directory and following it is still the one act
+of trust.
+
+**Networks** are names and secrets. A hub can be in any number and start
+one (``create_network``, a network of one); another joins with its
+invite, ``name:secret@hub`` (``join``). A Follow made in a network names
+it by ``network_id`` (from the name and the secret, so it gives neither
+away) and is signed with its secret; the followed hub takes it only if
+it is in that network. The directory heard over a link is kept with the
+link's network and passed on only over links in the same one, so a
+private network's hubs never reach the public directory, and ``GET
+/directory`` shows them only to the operator. The default network
+(``default_network``, published at pyrtan.com) has a public secret: it
+names the network, it does not guard it, and nothing here needs it to.
+A follow outside any network (and every member's) works as before.
 
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
@@ -76,6 +90,9 @@ from .store import BlobStore, StoreError, check_key, digest as blob_digest
 
 DEFAULT_SEEDS = "https://pyrtan.com/rendezvous/seeds.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
+DEFAULT_NETWORK = "https://pyrtan.com/rendezvous/network.json"
+NETWORK_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+INVITE = re.compile(r"^([a-z0-9][a-z0-9-]{0,39}):([A-Za-z0-9_-]{16,128})(?:@(https?://\S+))?$")
 SIGNATURE_WINDOW = 300.0   # seconds a signed message stays valid
 MAX_HOPS = 1               # federation is one hop; raise with care
 STALE_AFTER = 30.0
@@ -141,6 +158,75 @@ def snapshot_hubs() -> list[str]:
     hubs = [h for h in body["hubs"] if isinstance(h, dict) and isinstance(h.get("id"), str) and h["id"].startswith(("http://", "https://"))]
     hubs.sort(key=lambda h: -float(h.get("seen", 0) or 0))
     return [h["id"].rstrip("/") for h in hubs]
+
+
+# ---------------------------------------------------------------- networks
+
+
+def network_id(name: str, secret: str) -> str:
+    """What a Follow names a network by: derived from its name and secret,
+    so two networks that share a name never meet, and the id gives the
+    secret away to nobody."""
+    return hashlib.sha256(f"pyrtan-network\n{name}\n{secret}".encode("utf-8")).hexdigest()[:16]
+
+
+@dataclass
+class Network:
+    """A set of hubs that sign their follows with one secret. ``public``
+    marks one whose secret is published (the default network at
+    pyrtan.com): its directory is shown to anyone, a private one's only
+    to the operator."""
+
+    name: str
+    secret: str
+    public: bool = False
+
+    @property
+    def id(self) -> str:
+        return network_id(self.name, self.secret)
+
+    def invite(self, hub: str | None = None) -> str:
+        return f"{self.name}:{self.secret}" + (f"@{hub.rstrip('/')}" if hub else "")
+
+    def to_state(self) -> dict[str, Any]:
+        return {"name": self.name, "secret": self.secret, "public": self.public}
+
+    @classmethod
+    def from_state(cls, d: Any) -> "Network | None":
+        if not isinstance(d, dict) or not isinstance(d.get("name"), str) or not isinstance(d.get("secret"), str):
+            return None
+        if not NETWORK_NAME.match(d["name"]) or len(d["secret"]) < 16:
+            return None
+        return cls(d["name"], d["secret"], bool(d.get("public", False)))
+
+
+def parse_invite(text: str) -> tuple[Network, str | None]:
+    """``name:secret`` or ``name:secret@https://hub``: a network, and the
+    hub to follow into it. Raises ValueError on anything else."""
+    m = INVITE.match(text.strip()) if isinstance(text, str) else None
+    if not m:
+        raise ValueError("an invite is NAME:SECRET or NAME:SECRET@https://hub (a name of lowercase letters, digits and dashes; a secret of at least 16 letters, digits, dashes or underscores)")
+    return Network(m.group(1), m.group(2)), (m.group(3).rstrip("/") if m.group(3) else None)
+
+
+def default_network() -> Network | None:
+    """The public network pyrtan.com publishes (``$PYRTAN_NETWORK``
+    overrides the URL or names a file). Its secret is public on purpose:
+    it names the network rather than guarding it. None when unreadable."""
+    source = os.environ.get("PYRTAN_NETWORK") or DEFAULT_NETWORK
+    try:
+        if source.startswith(("http://", "https://")):
+            status, body = http_json("GET", source, timeout=10.0)
+            if status != 200:
+                return None
+        else:
+            body = json.loads(Path(source).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    net = Network.from_state(body)
+    if net is not None:
+        net.public = True
+    return net
 
 
 def bootstrap_candidates() -> list[str]:
@@ -218,6 +304,7 @@ class Remote:
     since: float = field(default_factory=time.time)
     kind: str = "hub"           # hub | member
     trusted: bool = False       # a member that joined with the operator's token: it may run the hub's trees
+    network: str | None = None  # the id of the network the follow was made in; None for a follow outside any
 
     @property
     def link(self) -> str:
@@ -233,14 +320,14 @@ class Remote:
         return "down"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "trusted": self.trusted}
+        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "trusted": self.trusted, "network": self.network}
 
     def to_state(self) -> dict[str, Any]:
-        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind, "trusted": self.trusted}
+        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind, "trusted": self.trusted, "network": self.network}
 
     @classmethod
     def from_state(cls, d: dict[str, Any]) -> "Remote":
-        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)))
+        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)), network=d.get("network") if isinstance(d.get("network"), str) else None)
 
 
 def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any] | None:
@@ -295,7 +382,8 @@ class Federation:
         self.ask_timeout = ASK_TIMEOUT
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
-        self.directory_entries: dict[str, dict[str, Any]] = {}
+        self.networks: dict[str, Network] = {}               # name -> network this hub is in
+        self.directory_entries: dict[str, dict[str, Any]] = {}  # (network id, hub id) -> entry; see _dkey
         self.outbox: deque[dict[str, Any]] = deque(maxlen=50)
         self.inbox_log: deque[dict[str, Any]] = deque(maxlen=50)
         self._announced: tuple[str, float] = ("", 0.0)       # digest and time of the last downward announce
@@ -323,6 +411,7 @@ class Federation:
         with self._lock:
             data = {
                 "listed": self.listed,
+                "networks": [n.to_state() for n in self.networks.values()],
                 "following": [r.to_state() for r in self.following.values()],
                 "followers": [r.to_state() for r in self.followers.values()],
                 "directory": list(self.directory_entries.values()),
@@ -339,11 +428,15 @@ class Federation:
         except (OSError, json.JSONDecodeError):
             return
         self.listed = bool(data.get("listed", False))
+        for d in data.get("networks", []):
+            net = Network.from_state(d)
+            if net is not None:
+                self.networks[net.name] = net
         for d in data.get("following", []):
             self.following[d["url"]] = Remote.from_state(d)
         for d in data.get("followers", []):
             self.followers[d["url"]] = Remote.from_state(d)
-        self.merge_directory(data.get("directory", []), via="state")
+        self.merge_directory(data.get("directory", []), via="state", keep_tags=True)
         self.merge_reports(data.get("reports", []), via="state")
         keeping = data.get("keeping")
         if isinstance(keeping, dict):
@@ -356,72 +449,204 @@ class Federation:
                 self.directory_entries.pop(self.id, None)
             self._save()
 
+    # ------------------------------------------------------------ networks
+    # A network is a name and a secret its hubs sign their follows with. A
+    # hub may be in any number, starts one with create_network, and joins
+    # one with an invite (join). Every follow made in a network says so,
+    # and the directory heard over it is kept apart and passed on only
+    # within it, so a private network's hubs never reach the public one.
+    # A follow outside any network (follow(url), a member) works as before.
+
+    def network(self, name: str) -> Network:
+        net = self.networks.get(name)
+        if net is None:
+            raise ValueError(f"this hub is in no network named {name!r}")
+        return net
+
+    def network_by_id(self, nid: Any) -> Network | None:
+        return next((n for n in self.networks.values() if n.id == nid), None) if isinstance(nid, str) else None
+
+    def add_network(self, net: Network) -> Network:
+        """Be in ``net``. The same network again is a no-op; another one
+        under a name already taken is refused."""
+        with self._lock:
+            current = self.networks.get(net.name)
+            if current is not None:
+                if current.secret != net.secret:
+                    raise ValueError(f"this hub is already in a different network named {net.name!r}; leave it first")
+                current.public = current.public or net.public
+                return current
+            self.networks[net.name] = net
+            self._save()
+        return net
+
+    def create_network(self, name: str, public: bool = False) -> Network:
+        if not isinstance(name, str) or not NETWORK_NAME.match(name):
+            raise ValueError("a network's name is lowercase letters, digits and dashes, at most 40")
+        if name in self.networks:
+            raise ValueError(f"this hub is already in a network named {name!r}")
+        return self.add_network(Network(name, _secrets.token_urlsafe(24), public))
+
+    def join(self, net: Network, hubs: list[str]) -> Remote | None:
+        """Be in ``net`` and follow the first of ``hubs`` that accepts a
+        follow in it. None when none does: the hub is then a network of
+        one, which others can join by following it."""
+        net = self.add_network(net)
+        for url in hubs:
+            url = url.rstrip("/")
+            if url == self.id:
+                continue
+            current = self.following.get(url)
+            if current is not None and current.network == net.id and current.state == "accepted":
+                return current
+            before = (current.network, current.state) if current is not None else None
+            try:
+                remote = self.follow(url, network=net.name)
+            except ValueError:
+                continue
+            if remote.state == "accepted":
+                return remote
+            with self._lock:
+                # Not accepted in this network: leave things as they were.
+                if before is None:
+                    self.following.pop(url, None)
+                else:
+                    remote.network, remote.state = before
+                self._save()
+        return None
+
+    def leave_network(self, name: str) -> bool:
+        """Leave a network: unfollow the hubs followed in it, drop the hubs
+        that followed us in it, and forget its directory."""
+        net = self.networks.get(name)
+        if net is None:
+            return False
+        for url in [u for u, r in self.following.items() if r.network == net.id]:
+            self.unfollow(url)
+        with self._lock:
+            for url in [u for u, r in self.followers.items() if r.network == net.id]:
+                del self.followers[url]
+            for key in [k for k, e in self.directory_entries.items() if e.get("network") == net.id]:
+                del self.directory_entries[key]
+            del self.networks[name]
+            self._save()
+        return True
+
+    def networks_view(self) -> list[dict[str, Any]]:
+        """The operator's view: each network with its invite."""
+        with self._lock:
+            return [{"name": n.name, "id": n.id, "public": n.public, "invite": n.invite(self.id), "following": sorted(u for u, r in self.following.items() if r.network == n.id), "followers": sorted(u for u, r in self.followers.items() if r.network == n.id)} for n in sorted(self.networks.values(), key=lambda n: n.name)]
+
     # ------------------------------------------------------------ directory
+
+    @staticmethod
+    def _dkey(network: str | None, hub_id: str) -> str:
+        return hub_id if network is None else f"{network} {hub_id}"
 
     def own_entry(self) -> dict[str, Any] | None:
         if not self.listed:
             return None
         return {"id": self.id, "name": self.name, "kind": "hub", "trees": sorted({t.get("name") for t in self.capabilities() if isinstance(t, dict) and t.get("name")}), "seen": time.time()}
 
-    def gossip(self) -> list[dict[str, Any]]:
-        """What this hub tells others about the directory: itself, if
-        listed, and every live entry it has heard."""
+    def gossip(self, network: str | None = None) -> list[dict[str, Any]]:
+        """What this hub tells a hub it is linked to in ``network`` (an id;
+        None for a link outside any) about the directory: itself, if
+        listed, and every live entry it heard in that same network."""
         now = time.time()
         with self._lock:
-            entries = [e for e in self.directory_entries.values() if e["id"] != self.id and now - e["seen"] < DIRECTORY_TTL]
+            entries = [e for e in self.directory_entries.values() if e["id"] != self.id and e.get("network") == network and now - e["seen"] < DIRECTORY_TTL]
+        own = self.own_entry()
+        return ([own] if own else []) + sorted(({k: v for k, v in e.items() if k != "network"} for e in entries), key=lambda e: -e["seen"])
+
+    def _public_networks(self) -> set[str | None]:
+        return {None} | {n.id for n in self.networks.values() if n.public}
+
+    def directory_backup(self) -> list[dict[str, Any]]:
+        """The directory as a blob for keepers: the public part, tagged,
+        so a private network's hubs are never handed to a keeper."""
+        now = time.time()
+        public = self._public_networks()
+        with self._lock:
+            entries = [dict(e) for e in self.directory_entries.values() if e.get("network") in public and now - e["seen"] < DIRECTORY_TTL]
         own = self.own_entry()
         return ([own] if own else []) + sorted(entries, key=lambda e: -e["seen"])
 
-    def merge_directory(self, entries: Any, via: str) -> int:
-        """Take entries heard from ``via``: a newer ``seen`` replaces an
-        older one, our own entry is never overwritten, nothing from the
-        future is believed, and the table stays bounded. Returns how many
-        entries changed."""
+    def merge_directory(self, entries: Any, via: str, network: str | None = None, keep_tags: bool = False) -> int:
+        """Take entries heard from ``via`` over a link in ``network``: a
+        newer ``seen`` replaces an older one, our own entry is never
+        overwritten, nothing from the future is believed, and the table
+        stays bounded. ``keep_tags`` is for our own copies (the state file,
+        a blob handed back): each entry keeps the network it carries, if we
+        are still in it. Returns how many entries changed."""
         if not isinstance(entries, list):
             return 0
         now = time.time()
         changed = 0
         with self._lock:
+            known = {n.id for n in self.networks.values()}
             for e in entries:
                 if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://", MEMBER_PREFIX)):
                     continue
                 hub_id = e["id"].rstrip("/")
                 if hub_id == self.id:
                     continue
+                net = network
+                if keep_tags:
+                    net = e.get("network") if isinstance(e.get("network"), str) else None
+                    if net is not None and net not in known:
+                        continue
                 try:
                     seen = min(float(e.get("seen", 0)), now)
                 except (TypeError, ValueError):
                     continue
                 if now - seen >= DIRECTORY_TTL:
                     continue
-                current = self.directory_entries.get(hub_id)
+                key = self._dkey(net, hub_id)
+                current = self.directory_entries.get(key)
                 if current is not None and current["seen"] >= seen:
                     continue
-                self.directory_entries[hub_id] = {
+                self.directory_entries[key] = {
                     "id": hub_id,
                     "name": str(e.get("name") or "")[:80],
                     "kind": "member" if hub_id.startswith(MEMBER_PREFIX) else "hub",
                     "trees": [str(t)[:80] for t in e.get("trees", []) if isinstance(t, (str, int))][:200],
                     "seen": seen,
                     "via": via,
+                    "network": net,
                 }
                 changed += 1
             if len(self.directory_entries) > DIRECTORY_MAX:
-                for hub_id in sorted(self.directory_entries, key=lambda k: self.directory_entries[k]["seen"])[: len(self.directory_entries) - DIRECTORY_MAX]:
-                    del self.directory_entries[hub_id]
+                for key in sorted(self.directory_entries, key=lambda k: self.directory_entries[k]["seen"])[: len(self.directory_entries) - DIRECTORY_MAX]:
+                    del self.directory_entries[key]
         if changed:
             self._save()
         return changed
 
-    def directory(self) -> dict[str, Any]:
+    def directory(self, private: bool = True) -> dict[str, Any]:
         """Every hub this one has heard of that asked to be found, this one
-        included if listed. ``link`` is how recently each announced."""
+        included if listed: one row per hub, naming the networks it was
+        heard in. ``link`` is how recently each announced. Without
+        ``private`` (a caller without the operator's token), only what was
+        heard outside any network or in a public one."""
         now = time.time()
-        hubs = []
-        for e in self.gossip():
-            hubs.append({"id": e["id"], "name": e["name"], "kind": e.get("kind", "hub"), "trees": e["trees"], "seen": e["seen"], "link": heard(e["seen"], now), "via": e.get("via", "self" if e["id"] == self.id else "")})
+        visible = None if private else self._public_networks()
+        names = {n.id: n.name for n in self.networks.values()}
+        rows: dict[str, dict[str, Any]] = {}
+        own = self.own_entry()
+        if own:
+            rows[self.id] = {**own, "via": "self", "networks": sorted(n.id for n in self.networks.values() if private or n.public)}
+        with self._lock:
+            entries = [dict(e) for e in self.directory_entries.values() if now - e["seen"] < DIRECTORY_TTL and (visible is None or e.get("network") in visible)]
+        for e in sorted(entries, key=lambda e: -e["seen"]):
+            row = rows.get(e["id"])
+            if row is None:
+                rows[e["id"]] = row = {**{k: v for k, v in e.items() if k != "network"}, "networks": []}
+            if e.get("network") and e["network"] not in row["networks"]:
+                row["networks"].append(e["network"])
+        hubs = [{"id": r["id"], "name": r["name"], "kind": r.get("kind", "hub"), "trees": r["trees"], "seen": r["seen"], "link": heard(r["seen"], now), "via": r.get("via", ""), "networks": sorted(r["networks"])} for r in rows.values()]
         hubs.sort(key=lambda h: (h["id"] != self.id, {"up": 0, "stale": 1, "down": 2}[h["link"]], h["name"], h["id"]))
-        return {"hub": self.id, "name": self.name, "listed": self.listed, "count": len(hubs), "hubs": hubs}
+        shown = {nid for h in hubs for nid in h["networks"]}
+        return {"hub": self.id, "name": self.name, "listed": self.listed, "count": len(hubs), "hubs": hubs, "networks": {nid: names[nid] for nid in sorted(shown) if nid in names}}
 
     # ------------------------------------------------------------ gap reports
     # A hub that opted in (--report-gaps) puts the gaps its catalog trees met
@@ -493,7 +718,7 @@ class Federation:
         return {"type": type_, "id": f"{self.id}/activities/{uuid.uuid4()}", "actor": self.id, "published": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "object": object_, **extra}
 
     def _announcement(self, for_remote: Remote | None = None) -> dict[str, Any]:
-        out = {"type": "Capabilities", "name": self.name, "trees": self.capabilities(), "directory": self.gossip()}
+        out = {"type": "Capabilities", "name": self.name, "trees": self.capabilities(), "directory": self.gossip(for_remote.network if for_remote is not None else None)}
         reports = self.report_gossip()
         if reports:
             out["reports"] = reports
@@ -522,7 +747,7 @@ class Federation:
         if ok and isinstance(answer, dict):
             if activity.get("type") == "Announce":
                 # An inbox answers an Announce with its own gossip: one round trip, both directions.
-                self.merge_directory(answer.get("directory"), via=remote.url)
+                self.merge_directory(answer.get("directory"), via=remote.url, network=remote.network)
                 self.merge_reports(answer.get("reports"), via=remote.url)
             if activity.get("type") == "Keep" and answer.get("kept") == activity["object"].get("key"):
                 self.confirm(remote.url, activity["object"]["key"], activity["object"]["sha256"])
@@ -541,12 +766,16 @@ class Federation:
             remote.last_error = None
         return out
 
-    def follow(self, url: str) -> Remote:
+    def follow(self, url: str, network: str | None = None) -> Remote:
         """Follow the hub at ``url``: fetch its actor, make a pair secret,
-        send the Follow. The remote is pending until it Accepts."""
+        send the Follow. The remote is pending until it Accepts. In a
+        ``network`` (a name this hub is in), the Follow names it and is
+        signed with its secret, and what the two hear of the directory over
+        this link stays in it."""
         url = url.rstrip("/")
         if url == self.id:
             raise ValueError("a hub cannot follow itself")
+        net = self.network(network) if network is not None else None
         try:
             status, actor = http_json("GET", f"{url}/actor", timeout=10.0)
         except Exception as e:
@@ -562,12 +791,14 @@ class Federation:
                 remote.inbox = actor["inbox"]
                 remote.name = actor.get("name", remote.name)
                 remote.state = "pending"
+            remote.network = net.id if net else None
             self._save()
-        activity = self._activity("Follow", url, secret=remote.secret, inbox=self.inbox, name=self.name)
-        # Under a shared federation secret the Follow is signed with it; in
-        # the open case with the pair secret, which proves nothing yet but
-        # keeps every message signed.
-        ok, error, _ = self.deliver(remote, activity, self.secret or remote.secret)
+        extra = {"network": net.id} if net else {}
+        activity = self._activity("Follow", url, secret=remote.secret, inbox=self.inbox, name=self.name, **extra)
+        # In a network the Follow is signed with its secret; under a shared
+        # federation secret with that; in the open case with the pair
+        # secret, which proves nothing yet but keeps every message signed.
+        ok, error, _ = self.deliver(remote, activity, net.secret if net else (self.secret or remote.secret))
         if not ok:
             remote.last_error = error
         elif remote.state == "accepted":
@@ -585,7 +816,10 @@ class Federation:
         return True
 
     def _due(self, last: tuple[str, float], announcement: dict[str, Any], force: bool) -> tuple[bool, str]:
-        digest = hashlib.sha256(canonical({"trees": [{k: t.get(k) for k in ("name", "version", "triggers", "inputs", "language", "hosts")} for t in announcement["trees"]], "directory": [(e["id"], e["trees"]) for e in announcement["directory"]]})).hexdigest()
+        with self._lock:
+            # Every network's directory: a change in any is news for the links in it.
+            heard = sorted((e.get("network") or "", e["id"], e["trees"]) for e in self.directory_entries.values())
+        digest = hashlib.sha256(canonical({"trees": [{k: t.get(k) for k in ("name", "version", "triggers", "inputs", "language", "hosts")} for t in announcement["trees"]], "directory": [(e["id"], e["trees"]) for e in announcement["directory"]], "heard": heard})).hexdigest()
         due = force or digest != last[0] or time.time() - last[1] >= ANNOUNCE_EVERY
         return due, digest
 
@@ -839,7 +1073,7 @@ class Federation:
             entry["holders"][who] = {"at": time.time(), "sha256": meta.get("sha256")}
             self._save()
         if key == "directory":
-            self.merge_directory(blob.get("data"), via=who)
+            self.merge_directory(blob.get("data"), via=who, keep_tags=True)
         return True
 
     def _take_capabilities(self, remote: Remote, caps: dict[str, Any]) -> None:
@@ -933,13 +1167,13 @@ class Federation:
                         handed = self.handout()
                         names = {t.get("name") for t in obj.get("trees", []) if isinstance(t, dict)}
                         remote.trees = [handed[n].capability() for n in sorted(names & set(handed))]
-            taken = self.merge_directory(obj.get("directory", []), via=actor)
+            taken = self.merge_directory(obj.get("directory", []), via=actor, network=remote.network)
             self.merge_reports(obj.get("reports", []), via=actor)
             # What it keeps for us that we no longer have: ask for it back.
             wanted = [k for k in obj.get("kept", []) if isinstance(k, str) and not self.store.get_own(k)]
             for k in wanted[:20]:
                 self.deliver(remote, self._activity("Fetch", {"key": k}))
-            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip(), "reports": self.report_gossip(), "kept": [b["key"] for b in self.store.list_kept(actor)]}
+            return 200, {"status": "ok", "trees": len(remote.trees) if remote is followed else 0, "merged": taken, "directory": self.gossip(remote.network), "reports": self.report_gossip(), "kept": [b["key"] for b in self.store.list_kept(actor)]}
         if kind == "Keep":
             obj = activity.get("object")
             if not isinstance(obj, dict) or "data" not in obj:
@@ -997,7 +1231,16 @@ class Federation:
         inbox = activity.get("inbox")
         if not isinstance(pair, str) or len(pair) < 16 or not isinstance(inbox, str):
             return 400, {"status": "error", "reason": "bad-activity", "say": "A Follow carries a pair secret and the follower's inbox."}
-        if self.secret:
+        nid = activity.get("network")
+        net = self.network_by_id(nid)
+        if nid is not None:
+            # A follow in a network: signed with its secret, and only into a network this hub is in.
+            if net is None:
+                return 403, {"status": "error", "reason": "not-in-network", "say": "This hub is not in the network this follow names."}
+            problem = verify(net.secret, "POST", "/inbox", activity, h)
+            if problem:
+                return 401, {"status": "error", "reason": "unsigned", "say": f"A follow in {net.name} is signed with its secret: {problem}."}
+        elif self.secret:
             problem = verify(self.secret, "POST", "/inbox", activity, h)
             if problem:
                 return 401, {"status": "error", "reason": "unsigned", "say": f"This hub takes follows signed with its federation secret: {problem}."}
@@ -1025,7 +1268,7 @@ class Federation:
             name = str(activity.get("name") or doc.get("name") or "")
             kind = "hub"
         with self._lock:
-            remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind, trusted=bool(trusted and kind == "member"))
+            remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind, trusted=bool(trusted and kind == "member"), network=net.id if net else None)
             self.followers[actor] = remote
             self._handed.pop(actor, None)
             self._save()
@@ -1039,4 +1282,4 @@ class Federation:
 
     def to_dict(self) -> dict[str, Any]:
         with self._lock:
-            return {"id": self.id, "listed": self.listed, "following": [r.to_dict() for r in self.following.values()], "followers": [r.to_dict() for r in self.followers.values()], "directory": len(self.directory_entries) + (1 if self.listed else 0), "keeping": len(self.keeping), "store": self.store.usage(), "replicas": self.replicas}
+            return {"id": self.id, "listed": self.listed, "following": [r.to_dict() for r in self.following.values()], "followers": [r.to_dict() for r in self.followers.values()], "directory": len({e["id"] for e in self.directory_entries.values()}) + (1 if self.listed else 0), "keeping": len(self.keeping), "store": self.store.usage(), "replicas": self.replicas, "networks": [{"name": n.name, "id": n.id, "public": n.public} for n in self.networks.values()]}

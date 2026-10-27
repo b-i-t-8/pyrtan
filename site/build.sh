@@ -16,10 +16,13 @@ version="$(pyrtan --version | cut -d' ' -f2)"
 sed "s/__VERSION__/$version/g" site/index.html > "$out/index.html"
 # The wordmark's colour picker, shared by the landing page and the catalog (the console inlines it).
 cp src/pyrtan/js/theme.js "$out/"
-cp site/rendezvous/seeds.json "$out/rendezvous/"
-# The directory as the seeds know it now, keeping the last published
-# snapshot's entries when a seed is down (SNAPSHOT_PREVIOUS may add more).
+cp site/rendezvous/seeds.json site/rendezvous/network.json "$out/rendezvous/"
+# The directory as the hubs know it now (the seeds, then every hub the
+# last snapshot or a hub names), the default network's part only, keeping
+# the last published snapshot's entries for hubs that are down
+# (SNAPSHOT_PREVIOUS may add more).
 python3 site/snapshot.py site/rendezvous/seeds.json "$out/rendezvous/directory.json" \
+  --network site/rendezvous/network.json \
   --previous https://pyrtan.com/rendezvous/directory.json \
   --previous https://b-i-t-8.github.io/pyrtan/rendezvous/directory.json \
   ${SNAPSHOT_PREVIOUS:+--previous "$SNAPSHOT_PREVIOUS"} \

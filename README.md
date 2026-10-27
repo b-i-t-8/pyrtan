@@ -162,7 +162,9 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory. |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
-| `pyrtan follow [URL] --at HUB` | Makes your hub follow another (default: the first live seed from pyrtan.com): it then routes sentences to that hub's trees too. `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
+| `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
+| `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network pyrtan.com publishes, or the one an invite (`NAME:SECRET@HUB`) names. |
+| `pyrtan network new NAME --at HUB` | Starts a network of your own, a network of one, and prints its invite. `network list` shows each network with its invite; `network leave NAME` cuts the links made in it. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
@@ -222,20 +224,56 @@ ask. **Federation is one hop:** a hub announces what it holds itself,
 never what it learned from others, and refuses to forward a request that
 already crossed a hub, so there is nothing to loop. **Every message is
 signed**, and a hub started with `--federation-secret` takes follows only
-from hubs that know the secret; `--closed` takes none. `--state FILE`
-keeps the relationships across restarts.
+from hubs that know the secret; `--closed` takes none outside its
+networks. `--state FILE` keeps the relationships and networks across
+restarts.
 
 Hubs find each other without a server. A hub started `--listed` puts an
 entry for itself (name, URL, the trees it holds) in every announce it
 sends, every hub keeps the entries it hears and passes them on in both
 directions of every follow, and `pyrtan directory` (or the console, or
-any hub's `/directory`) shows the result. pyrtan.com publishes only
-`rendezvous/seeds.json`, a static list of hubs to follow first, and an
-hourly snapshot of what they know; `pyrtan follow` with no URL takes
-the first seed that answers, then the first hub from the snapshot. An entry is a hint,
-not a route: to use a hub you found, follow it. A hub can also hold trees
+any hub's `/directory`) shows the result. An entry is a hint, not a
+route: to use a hub you found, follow it. A hub can also hold trees
 itself, `pyrtan hub --trees DIR`, so a whole federated swarm can be one
 process on one box.
+
+### Networks
+
+A **network** is a name and a secret its hubs sign their follows with. A
+hub can be in any number of them, and any hub can start one:
+
+```
+pyrtan network new home --at https://alpha.example        # a network of one; prints its invite
+pyrtan join home:Qx…@https://alpha.example --at https://beta.example   # beta is in home, following alpha
+pyrtan join --at https://gamma.example                    # gamma is in the default network
+```
+
+A follow made in a network names it, by an id drawn from the name and
+the secret, and is signed with the secret, so only a hub holding the
+invite gets in, and two networks that happen to share a name never
+meet. What a hub hears of the directory over a link stays in that
+link's network: a private network's hubs are passed on only within it,
+shown at `/directory` only to the operator, and never handed to a
+keeper. Leaving a network (`pyrtan network leave`) cuts the links made
+in it and forgets what was heard there. A follow made outside any
+network, and a member's, works as it always has.
+
+The **default network** is the one pyrtan.com publishes in
+`rendezvous/network.json`: `pyrtan`, with a secret that is public on
+purpose. It names the network rather than guarding it: anyone may join,
+and what keeps a stranger's hub harmless is that following is still the
+one act of trust. `pyrtan join` (or `pyrtan hub --join default`, or
+`$PYRTAN_JOIN=default`) puts a hub in it and follows the first hub in
+`rendezvous/seeds.json` that answers, then the first from the snapshot;
+when none does, the hub is the network so far, and others join through
+it. No hub has to be always up: every hour pyrtan.com's build asks
+every hub it knows of for its directory (the seeds, then everyone the
+last snapshot or a hub names), keeps the default network's part, and
+publishes it as `rendezvous/directory.json`, so the directory stays
+current while any listed hub is up, and pyrtan.com itself is static
+files on GitHub Pages. To be a seed, a hub in the default network,
+started `--listed` and `--cors https://pyrtan.com`, goes into
+`seeds.json` by pull request.
 
 ## Members, and what they keep
 
@@ -485,10 +523,11 @@ site/           pyrtan.com: the landing page, the seed list, the catalog
 
 ## Status
 
-0.9.0. The core, the service, the hub, the command, the console, the
+0.10.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
-between hubs, the gossiped directory, members (a browser or a phone as
+between hubs, networks (any hub starts one; pyrtan.com publishes the
+default), the gossiped directory, members (a browser or a phone as
 part of the swarm), the blobs they keep and the trees they run
 (`pyrtan.js`, conformant with the Python runtime), six forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each

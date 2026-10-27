@@ -1,10 +1,16 @@
 """Bake a snapshot of the directory into the site.
 
 GitHub Actions runs this on every build and on a schedule: it asks each
-seed hub for its ``/directory``, merges what they say with the snapshot
-already published (so a build when every seed is down keeps the last good
-one rather than publishing an empty list), drops entries nobody has heard
-of for a week, and writes ``rendezvous/directory.json``. The landing page
+seed hub for its ``/directory``, then every other hub it knows of (from
+the last snapshot and from what the hubs it asked said), so the directory
+stays fresh while any listed hub is up, even with every seed down. It
+merges what they say with the snapshot already published (so a build when
+nobody answers keeps the last good one rather than publishing an empty
+list), drops entries nobody has heard of for a week, and writes
+``rendezvous/directory.json``. It keeps only the default network's part
+of each directory (``--network``, the ``network.json`` the site
+publishes) and what was heard outside any network; a private network's
+hubs never reach the snapshot. The landing page
 shows the live directory when a seed answers the visitor's browser and
 this snapshot, marked with its time, when none does; ``pyrtan follow``
 with no URL tries the hubs in it after the seeds.
@@ -13,9 +19,10 @@ Standard library only; no pyrtan import, so it runs before anything is
 installed.
 
     python3 site/snapshot.py SEEDS OUT [--previous URL_OR_FILE ...]
+                             [--network URL_OR_FILE] [--max N]
                              [--reports OUT --previous-reports URL_OR_FILE ...]
 
-With ``--reports`` it also asks each seed for ``/reports``, the gap
+With ``--reports`` it also asks each hub that answered for ``/reports``, the gap
 reports hubs that opted in (``--report-gaps``) gossip for catalog trees,
 merges them the same way, and writes ``rendezvous/reports.json``; the
 catalog page shows them beside each tree.
@@ -25,9 +32,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -35,6 +44,8 @@ from typing import Any
 TTL = 7 * 86400
 REPORT_TTL = 30 * 86400
 TIMEOUT = 8.0
+MAX_ASK = 200      # hubs asked per run, seeds included
+PARALLEL = 16
 
 
 def fetch(source: str) -> Any:
@@ -45,10 +56,20 @@ def fetch(source: str) -> Any:
     return json.loads(Path(source).read_text(encoding="utf-8"))
 
 
-def merge(into: dict[str, dict[str, Any]], entries: Any, via: str, now: float) -> int:
+def network_id(name: str, secret: str) -> str:
+    """As pyrtan.federation.network_id; repeated so this runs before pyrtan is installed."""
+    return hashlib.sha256(f"pyrtan-network\n{name}\n{secret}".encode("utf-8")).hexdigest()[:16]
+
+
+def merge(into: dict[str, dict[str, Any]], entries: Any, via: str, now: float, network: str | None = None) -> int:
+    """Take a directory's rows; with ``network`` (an id), only those heard
+    in it or outside any network."""
     taken = 0
     for e in entries if isinstance(entries, list) else []:
         if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://")):
+            continue
+        nets = e.get("networks")
+        if network is not None and isinstance(nets, list) and nets and network not in nets:
             continue
         try:
             seen = min(float(e.get("seen", 0)), now)
@@ -95,7 +116,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("seeds", help="seeds.json, a path or URL")
     ap.add_argument("out", help="where to write directory.json")
     ap.add_argument("--previous", action="append", default=[], help="an earlier directory.json to keep entries from (URL or path; repeatable, first that answers wins)")
-    ap.add_argument("--reports", default=None, help="also write the gap reports the seeds carry to this reports.json")
+    ap.add_argument("--network", default=None, help="the default network's network.json (URL or path): keep only its part of each directory")
+    ap.add_argument("--max", type=int, default=MAX_ASK, help=f"hubs to ask at most, seeds included (default {MAX_ASK})")
+    ap.add_argument("--reports", default=None, help="also write the gap reports the hubs carry to this reports.json")
     ap.add_argument("--previous-reports", action="append", default=[], help="an earlier reports.json to keep rows from (URL or path; repeatable, first that answers wins)")
     args = ap.parse_args(argv)
     now = time.time()
@@ -122,29 +145,55 @@ def main(argv: list[str] | None = None) -> int:
             report["previous"] = source
             break
 
+    network: str | None = None
+    if args.network:
+        try:
+            n = fetch(args.network)
+            network = network_id(n["name"], n["secret"])
+        except Exception as e:
+            print(f"snapshot: cannot read the default network from {args.network}: {e}; keeping every network's part", file=sys.stderr)
     try:
         seeds = [h.rstrip("/") for h in fetch(args.seeds).get("hubs", []) if isinstance(h, str)]
     except Exception as e:
         print(f"snapshot: cannot read seeds from {args.seeds}: {e}", file=sys.stderr)
         seeds = []
-    for seed in seeds:
+    report["crawled"] = {"answered": [], "silent": []}
+
+    def ask(hub: str) -> tuple[str, Any, Any, str | None]:
         try:
-            d = fetch(f"{seed}/directory")
+            d = fetch(f"{hub}/directory")
         except Exception as e:
-            report["silent"].append({"seed": seed, "error": str(e)[:120]})
-            continue
-        if isinstance(d, dict) and isinstance(d.get("hubs"), list):
-            merge(hubs, d["hubs"], seed, now)
-            report["answered"].append(seed)
-        else:
-            report["silent"].append({"seed": seed, "error": "not a directory"})
-        if args.reports:
+            return hub, None, None, str(e)[:120]
+        r = None
+        if args.reports and isinstance(d, dict):
             try:
-                r = fetch(f"{seed}/reports")
-                if isinstance(r, dict):
-                    merge_reports(reports, r.get("reports"), now)
+                r = fetch(f"{hub}/reports")
             except Exception:
                 pass
+        return hub, d, r, None
+
+    # The seeds first, then every hub the last snapshot heard of, most
+    # recent first, then whoever the hubs asked name: rounds of parallel
+    # asks until nobody new is named or --max is reached.
+    asked: set[str] = set()
+    pending = list(dict.fromkeys(seeds + [h["id"] for h in sorted(hubs.values(), key=lambda h: -h["seen"])]))
+    while pending and len(asked) < args.max:
+        batch = [h for h in pending if h not in asked][: args.max - len(asked)]
+        pending = []
+        asked.update(batch)
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            results = list(pool.map(ask, batch))
+        for hub, d, r, error in results:
+            book = report if hub in seeds else report["crawled"]
+            if error is None and isinstance(d, dict) and isinstance(d.get("hubs"), list):
+                merge(hubs, d["hubs"], hub, now, network)
+                book["answered"].append(hub)
+                pending.extend(e["id"].rstrip("/") for e in d["hubs"] if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"].startswith(("http://", "https://")) and e["id"].rstrip("/") not in asked)
+                if isinstance(r, dict):
+                    merge_reports(reports, r.get("reports"), now)
+            else:
+                book["silent"].append({"seed" if hub in seeds else "hub": hub, "error": error or "not a directory"})
+        pending = list(dict.fromkeys(pending))
 
     out = {
         "pyrtan-directory": 1,
@@ -155,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     path = Path(args.out)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
-    print(f"snapshot: {len(out['hubs'])} hub(s); {len(report['answered'])} seed(s) answered, {len(report['silent'])} silent" + (f"; kept entries from {report['previous']}" if report["previous"] else ""))
+    print(f"snapshot: {len(out['hubs'])} hub(s); {len(report['answered'])} seed(s) answered, {len(report['silent'])} silent; {len(report['crawled']['answered'])} other hub(s) answered, {len(report['crawled']['silent'])} silent" + (f"; kept entries from {report['previous']}" if report["previous"] else ""))
     if args.reports:
         rows = sorted(reports.values(), key=lambda r: (-r["count"], -r["last"], r["id"]))
         rpath = Path(args.reports)
