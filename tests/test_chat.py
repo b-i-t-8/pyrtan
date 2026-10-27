@@ -111,7 +111,7 @@ def test_two_strangers_meet_talk_and_part():
     assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["reason"] == "no-seat"
     events, _ = until(hub, b["seat"], lambda ev, v: v["state"] == "ended", after=nxt["after"])
     assert texts(events, "system")[-1] == "Stranger has disconnected."
-    assert hub.route("GET", "/chat", None)[1] == {"status": "ok", "waiting": 0, "talking": 0, "bots": 0, "hubs": 0}
+    assert hub.route("GET", "/chat", None)[1] == {"status": "ok", "waiting": 0, "talking": 0, "bots": 0, "hubs": 0, "typing": True}
 
 
 def test_a_bot_is_trees_and_says_how_it_answered(examples_hub):
@@ -314,5 +314,129 @@ def test_cli_chat_with_a_bot(examples_hub, capsys, monkeypatch):
         assert "Bot: Deterministic, thanks: the same question takes the same path every time." in out
         assert examples_hub.lobby.seats == {}  # it left on the way out
         assert main(["chat", "--at", "http://127.0.0.1:9"]) == 3
+    finally:
+        srv.stop()
+
+
+def test_stranger_is_typing_and_stops():
+    hub = Hub(name="h", chat=True)
+    hub.lobby.typing_ttl = 0.4
+    a, b = start(hub, "people"), start(hub, "people")
+    assert b["typing_indicator"] is True and b["partner_typing"] is False
+    assert hub.route("GET", "/chat", None)[1]["typing"] is True
+
+    assert post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})[1] == {"status": "ok", "shared": True}
+    # A poll that says what it shows is answered as soon as that changes.
+    t0 = time.time()
+    _, view = post(hub, "/chat/poll", {"seat": b["seat"], "after": b["after"], "wait": 5, "partner_typing": False})
+    assert view["partner_typing"] is True and view["events"] == [] and time.time() - t0 < 1
+    # Nobody refreshes it: it goes out on its own, and the poll wakes for that too.
+    t0 = time.time()
+    _, view = post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"], "wait": 5, "partner_typing": True})
+    assert view["partner_typing"] is False and 0.2 < time.time() - t0 < 2
+
+    # Typing, then the line: the line ends it.
+    post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})
+    assert post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"]})[1]["partner_typing"] is True
+    post(hub, "/chat/say", {"seat": a["seat"], "text": "hello"})
+    _, view = post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"]})
+    assert texts(view["events"], "stranger") == ["hello"] and view["partner_typing"] is False
+    # And stopping says so at once.
+    post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})
+    post(hub, "/chat/typing", {"seat": a["seat"], "typing": False})
+    assert post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"]})[1]["partner_typing"] is False
+
+    # A client that does not say what it shows is not woken by typing (it would spin).
+    post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})
+    t0 = time.time()
+    _, view = post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"], "wait": 0.3})
+    assert time.time() - t0 >= 0.3 and view["events"] == []
+
+    # The stranger leaves mid-word: the indicator goes with them.
+    post(hub, "/chat/leave", {"seat": a["seat"]})
+    assert post(hub, "/chat/poll", {"seat": b["seat"], "after": view["after"]})[1]["partner_typing"] is False
+
+
+def test_the_indicator_is_both_ways_or_not_at_all():
+    hub = Hub(name="h", chat=True)
+    a = start(hub, "people")
+    b = post(hub, "/chat/start", {"want": "people", "typing_indicator": False})[1]
+    assert b["typing_indicator"] is False
+    # b shares nothing, and sees nothing.
+    assert post(hub, "/chat/typing", {"seat": b["seat"], "typing": True})[1]["shared"] is False
+    assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["partner_typing"] is False
+    post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})
+    assert post(hub, "/chat/poll", {"seat": b["seat"]})[1]["partner_typing"] is False
+    # Turned on mid-conversation, b sees a, and a sees b.
+    _, view = post(hub, "/chat/settings", {"seat": b["seat"], "typing_indicator": True})
+    assert view["typing_indicator"] is True and view["partner_typing"] is True
+    post(hub, "/chat/typing", {"seat": b["seat"], "typing": True})
+    assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["partner_typing"] is True
+    # Turned off again, what a was shown of b's typing goes out at once.
+    post(hub, "/chat/settings", {"seat": b["seat"], "typing_indicator": False})
+    assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["partner_typing"] is False
+    assert post(hub, "/chat/settings", {"seat": b["seat"], "typing_indicator": "yes"})[0] == 400
+    # The setting holds across Next, unless Next says otherwise.
+    assert post(hub, "/chat/next", {"seat": b["seat"]})[1]["typing_indicator"] is False
+    assert post(hub, "/chat/next", {"seat": b["seat"], "typing_indicator": True})[1]["typing_indicator"] is True
+
+
+def test_a_hub_can_turn_typing_off_for_everyone():
+    hub = Hub(name="quiet", chat=True, chat_typing=False)
+    assert hub.route("GET", "/chat", None)[1]["typing"] is False
+    a, b = start(hub, "people"), start(hub, "people")
+    assert a["typing_indicator"] is False and b["typing_indicator"] is False
+    assert post(hub, "/chat/typing", {"seat": a["seat"], "typing": True})[1]["shared"] is False
+    assert post(hub, "/chat/poll", {"seat": b["seat"]})[1]["partner_typing"] is False
+
+
+def test_a_bot_is_thinking_while_its_trees_run(examples_hub, monkeypatch):
+    hub = examples_hub
+    slow = hub.intent
+
+    def thinking(body, only=None):
+        time.sleep(0.5)
+        return slow(body, only=only)
+
+    monkeypatch.setattr(hub, "intent", thinking)
+    seat = start(hub, "bot")
+    post(hub, "/chat/say", {"seat": seat["seat"], "text": "how are you"})
+    _, view = post(hub, "/chat/poll", {"seat": seat["seat"], "after": seat["after"] + 1, "wait": 2, "partner_typing": False})
+    assert view["partner_typing"] is True and texts(view["events"], "bot") == []
+    events, view = until(hub, seat["seat"], lambda ev, v: texts(ev, "bot"), after=view["after"])
+    assert view["partner_typing"] is False and texts(events, "bot")[0].startswith("Deterministic")
+
+
+def test_typing_travels_between_hubs_and_stays_out_of_the_logs(lobbies):
+    a, b = lobbies
+    there = start(b.hub, "people")
+    a.fed.follow(b.url)
+    _, here = a.call("/chat/start", {"want": "people"})
+    assert here["state"] == "talking"
+    assert a.call("/chat/typing", {"seat": here["seat"], "typing": True})[1]["shared"] is True
+    _, view = until(b.hub, there["seat"], lambda ev, v: v["partner_typing"])
+    # Said again within two seconds, it does not travel again.
+    a.call("/chat/typing", {"seat": here["seat"], "typing": True})
+    assert a.hub.lobby.seats[here["seat"]].told[0] is True
+    a.call("/chat/typing", {"seat": here["seat"], "typing": False})
+    until(b.hub, there["seat"], lambda ev, v: not v["partner_typing"])
+    post(b.hub, "/chat/typing", {"seat": there["seat"], "typing": True})
+    until(a.hub, here["seat"], lambda ev, v: v["partner_typing"])
+    assert not [x for x in list(a.fed.outbox) + list(a.fed.inbox_log) + list(b.fed.outbox) + list(b.fed.inbox_log) if x["type"] == "Typing"]
+
+
+def test_cli_shows_the_indicator_unless_told_not_to(examples_hub, capsys, monkeypatch):
+    slow = examples_hub.intent
+    monkeypatch.setattr(examples_hub, "intent", lambda body, only=None: (time.sleep(0.6), slow(body, only=only))[1])
+    srv = Server(examples_hub.route, quiet=True).start()
+    try:
+        monkeypatch.setattr(sys, "stdin", io.StringIO("how are you\n"))
+        assert main(["chat", "--bot", "--at", srv.url]) == 0
+        out = capsys.readouterr().out
+        assert out.index("  Bot is thinking…") < out.index("Bot: Deterministic")
+        monkeypatch.setattr(sys, "stdin", io.StringIO("how are you\n"))
+        assert main(["chat", "--bot", "--no-typing", "--at", srv.url]) == 0
+        out = capsys.readouterr().out
+        assert "thinking" not in out and "Bot: Deterministic" in out
     finally:
         srv.stop()

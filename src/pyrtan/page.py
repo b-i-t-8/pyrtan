@@ -88,6 +88,7 @@ PAGE = r"""<!doctype html>
   .chat-log .who { font-weight:600; margin-right:6px }
   .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) }
   .chat-log details { font-size:13px; margin-top:2px }
+  .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
   #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
   select { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   @media (max-width:560px) { table thead { display:none } table td { display:block; border-top:0 } table tr { display:block; border-top:1px solid var(--line); padding:6px 0 } }
@@ -229,6 +230,7 @@ PAGE = r"""<!doctype html>
     </div>
     <div class="card" id="chat-on" hidden>
       <div class="chat-log" id="chat-log" aria-live="polite"></div>
+      <div class="typing-line" id="chat-typing-line" aria-live="polite"></div>
       <form class="row" id="chat-say" style="margin:8px 0 0">
         <button type="button" class="quiet" id="chat-next" title="Esc">New</button>
         <input type="text" id="chat-text" placeholder="say something" autocomplete="off" maxlength="1000">
@@ -236,6 +238,7 @@ PAGE = r"""<!doctype html>
       </form>
       <div class="mute" style="font-size:13px">Stop (or Esc), twice: end this and meet someone new · <a href="#" id="chat-stop">leave the lobby</a></div>
     </div>
+    <label class="mute" style="font-size:14px" id="chat-typing-opt"><input type="checkbox" id="chat-typing" checked> Typing indicator: see when the stranger is typing, and let them see when you are. Off, neither of you sees it.</label>
   </section>
 
   <section id="tab-api" hidden>
@@ -249,7 +252,8 @@ GET  /health
 GET  /gaps
 GET  /unanswered
 GET  /peers    (hub only)
-POST /chat/start {"want": "anyone"|"people"|"bot"}   (hub with --chat)</pre>
+POST /chat/start {"want": "anyone"|"people"|"bot", "typing_indicator": true}   (hub with --chat)
+POST /chat/typing {"seat": "…", "typing": true}</pre>
       <div class="mute" style="font-size:14px;margin-top:8px">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
   </section>
@@ -691,17 +695,19 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localho
 // echoes our own lines too, so the log is the hub's word, in its order).
 const chat = {
   seat: null, after: 0, gen: 0, state: null, partner: null, sure: 0,
+  indicator: false, partnerTyping: false, sentTyping: false, sentAt: 0,
+  pref() { try { return localStorage.getItem("pyrtan.chat.typing") !== "0"; } catch (e) { return true; } },
   async post(path, body, extra) {
     const r = await api(path, Object.assign({method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}, extra || {}));
     if (r.status === 401) throw new Error("401: this Pyrtan needs a token");
     return r.json();
   },
   async count() {
-    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); } catch (e) {}
+    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); $("#chat-typing-opt").hidden = s.typing !== true; } catch (e) {}
   },
   async start() {
     const interests = $("#chat-interests").value.split(/[,\s]+/).filter(Boolean);
-    let r; try { r = await this.post("chat/start", {want: $("#chat-want").value, interests}); } catch (e) { problem(e.message, true); return; }
+    let r; try { r = await this.post("chat/start", {want: $("#chat-want").value, interests, typing_indicator: $("#chat-typing").checked}); } catch (e) { problem(e.message, true); return; }
     if (!r.seat) { problem(r.say || "The lobby did not take a seat.", true); return; }
     problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = "";
     $("#chat-off").hidden = true; $("#chat-on").hidden = false;
@@ -710,13 +716,17 @@ const chat = {
   take(r) {
     for (const e of r.events || []) if (e.n > this.after) { this.render(e); this.after = e.n; }
     this.state = r.state; this.partner = r.partner;
+    this.indicator = !!r.typing_indicator; this.partnerTyping = !!r.partner_typing;
+    $("#chat-typing-line").textContent = this.partnerTyping ? (r.partner && r.partner.kind === "bot" ? "Bot is thinking…" : "Stranger is typing…") : "";
     $("#chat-text").disabled = r.state !== "talking";
     $("#chat-text").placeholder = r.state === "talking" ? (r.partner && r.partner.kind === "bot" ? "ask the bot something" : "say something") : r.state === "waiting" ? "waiting for someone…" : "press New for someone else";
     this.resetNext();
   },
   async loop(gen) {
     while (this.seat && gen === this.gen) {
-      let r; try { r = await this.post("chat/poll", {seat: this.seat, after: this.after, wait: 20}); } catch (e) { await new Promise(res => setTimeout(res, 2000)); continue; }
+      // Saying what is shown lets the hub answer as soon as the stranger starts or stops typing.
+      const ask = {seat: this.seat, after: this.after, wait: 20}; if (this.indicator) ask.partner_typing = this.partnerTyping;
+      let r; try { r = await this.post("chat/poll", ask); } catch (e) { await new Promise(res => setTimeout(res, 2000)); continue; }
       if (gen !== this.gen) return;
       if (r.state === "left") return;
       if (r.reason === "no-seat") { this.line("sys", "This seat is gone (nobody polled it for a minute). Start again."); this.seat = null; this.take({state: "ended"}); return; }
@@ -741,15 +751,30 @@ const chat = {
   },
   async say() {
     const text = $("#chat-text").value.trim(); if (!text || !this.seat) return;
-    $("#chat-text").value = "";
+    $("#chat-text").value = ""; this.sentTyping = false;  // the line ends the typing, on the hub too
     try { const r = await this.post("chat/say", {seat: this.seat, text}); if (r.status !== "ok") this.line("sys", r.say || r.reason); } catch (e) { this.line("sys", e.message); }
+  },
+  typed(on) {
+    // Typing goes out when it starts or stops, and again every two seconds while it goes on.
+    if (!this.seat || !this.indicator || this.state !== "talking" || (this.partner && this.partner.kind === "bot")) return;
+    const now = Date.now();
+    if (on === this.sentTyping && (!on || now - this.sentAt < 2000)) return;
+    this.sentTyping = on; this.sentAt = now;
+    this.post("chat/typing", {seat: this.seat, typing: on}).catch(() => {});
+  },
+  async setIndicator(on) {
+    try { localStorage.setItem("pyrtan.chat.typing", on ? "1" : "0"); } catch (e) {}
+    if (!this.seat) return;
+    this.sentTyping = false;
+    try { this.take(await this.post("chat/settings", {seat: this.seat, typing_indicator: on, after: this.after})); } catch (e) { this.line("sys", e.message); }
   },
   resetNext() { this.sure = 0; $("#chat-next").textContent = this.state === "talking" ? "Stop" : "New"; },
   async next() {
     // Like Omegle: while talking, the first press asks, the second ends it and finds someone new.
     if (this.state === "talking" && !this.sure) { this.sure = 1; $("#chat-next").textContent = "Really?"; setTimeout(() => this.resetNext(), 3000); return; }
     if (!this.seat) return this.start();
-    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after})); } catch (e) { this.line("sys", e.message); }
+    this.sentTyping = false;
+    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after, typing_indicator: $("#chat-typing").checked})); } catch (e) { this.line("sys", e.message); }
   },
   leave(keepalive) {
     if (!this.seat) return;
@@ -759,6 +784,10 @@ const chat = {
 };
 $("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
 $("#chat-say").addEventListener("submit", (e) => { e.preventDefault(); chat.say(); });
+$("#chat-text").addEventListener("input", () => chat.typed(!!$("#chat-text").value.trim()));
+$("#chat-text").addEventListener("blur", () => chat.typed(false));
+$("#chat-typing").checked = chat.pref();
+$("#chat-typing").addEventListener("change", (e) => chat.setIndicator(e.target.checked));
 $("#chat-next").addEventListener("click", () => chat.next());
 $("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; chat.count(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });

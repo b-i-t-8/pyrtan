@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.11.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. |
+| **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). |
 | **Date** | 2026-10-27 |
 | **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing is kept. |
 | **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
@@ -99,7 +99,47 @@ While a seat is asking other hubs it is *busy*, and nobody can pair it
 meanwhile; two seats that ask each other's hubs at once both get
 `met: false` and try again on their next round.
 
-## 4. What this design refuses
+## 4. Typing (v0.12)
+
+While a person types, the client says so (`POST /chat/typing {seat,
+typing: true}`), again every two seconds while they go on, and `false`
+when the box empties, loses focus or the line is sent. The partner's
+poll answers with `partner_typing: true` and the console shows
+"Stranger is typing…". While a bot's trees run, its partner reads
+`partner_typing: true` too, and the console says "Bot is thinking…".
+
+It is a state, not an event: nothing about it enters the seat's events,
+so a client that was away sees the conversation and not a history of
+keystrokes. It goes out by itself five seconds after the last word of
+it (a closed tab, a lost `false`), and at once with the next line. A
+poll that sends `partner_typing` (what the client is showing) is woken
+when that is no longer true, both when the partner starts and when
+the indicator goes out; a poll that does not send it is never woken by
+typing, so a client that does not show the indicator cannot be made to
+spin by someone else's keystrokes.
+
+**Enabling and disabling.** Two switches, both on by default:
+
+- *Per person.* `typing_indicator: false` on `/chat/start`, `/chat/next`
+  or `/chat/settings` (the console's "Typing indicator" box, remembered
+  in that browser; `pyrtan chat --no-typing`). It works both ways, like
+  read receipts: a seat with it off shares nothing and sees nothing. A
+  person who would rather not be watched typing should not get to watch.
+  Turned off mid-word, what the partner was shown goes out at once.
+- *Per hub.* `pyrtan hub --chat --no-chat-typing`
+  (`$PYRTAN_CHAT_TYPING=0`): nobody's typing is shared, `/chat` says
+  `typing: false`, and the console hides the box.
+
+Across hubs it is a `Typing {to, from, typing}` activity, sent on a
+change and at most every two seconds while typing holds. The sender's hub
+sends it only for a seat with the indicator on and the receiver's shows
+it only to a seat with it on, so the rule holds across hubs without
+either hub knowing the other seat's setting. The outbox and inbox logs
+leave `Typing` out: it would push everything else off them. A hub from
+before v0.12 refuses the activity; the first refusal stops the sending
+for that conversation.
+
+## 5. What this design refuses
 
 - **A model behind the bot.** A bot that "chats" by generating text
   would be the one place in Pyrtan whose output cannot be explained.
@@ -119,7 +159,7 @@ meanwhile; two seats that ask each other's hubs at once both get
   WebRTC, nothing the standard library's server cannot hold.
 - **A second hop.** A `Meet` reaches the hubs this one follows and stops.
 
-## 5. Failure modes, honestly
+## 6. Failure modes, honestly
 
 - A hub that dies mid-conversation sends no `Part`. The stranger on the
   other hub sees nothing until they say something (the `Say` fails, and
@@ -133,10 +173,10 @@ meanwhile; two seats that ask each other's hubs at once both get
   `no-chat`, one from before v0.11 refuses the activity type; either is
   `met: false` to the asker.
 
-## 6. Sequencing
+## 7. Sequencing
 
 - **v0.11, built:** the lobby, bots, strangers across a follow, the Chat
   tab, `pyrtan chat`, `small-talk`, `trigger_inputs`.
-- **Later:** "Stranger is typing…" (a transient field on the poll, and a
-  `Typing` activity across hubs); a member's lobby that works offline
-  between two phones of the same hub.
+- **v0.12, built:** the typing indicator, per person and per hub (§4).
+- **Later:** a member's lobby that works offline between two phones of
+  the same hub.

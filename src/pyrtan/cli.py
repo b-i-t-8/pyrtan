@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     who.add_argument("--people", action="store_true", help="meet people only; never a bot")
     p.add_argument("--interests", default="", metavar="WORDS", help="up to five words, comma-separated; a stranger or bot that shares one is met first")
     p.add_argument("--trace", action="store_true", help="print the path behind each bot line")
+    p.add_argument("--no-typing", action="store_true", help="turn the typing indicator off: no \"Stranger is typing…\" (a terminal reads whole lines, so it never says you are typing)")
     _token_arg(p, "the token the hub requires, if any")
 
     p = sub.add_parser("serve", help="host trees as a service")
@@ -171,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
     p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
+    p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
     p.add_argument("--quiet", action="store_true")
 
@@ -478,7 +480,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         return http_json("POST", f"{at}{path}", body, timeout=timeout, token=args.token)
 
     try:
-        status, body = post("/chat/start", {"want": want, "interests": args.interests})
+        status, body = post("/chat/start", {"want": want, "interests": args.interests, "typing_indicator": not args.no_typing})
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
@@ -489,7 +491,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         print(f"pyrtan: {at}: {body.get('say') if isinstance(body, dict) else body or status}", file=sys.stderr)
         return 3
     seat = body["seat"]
-    state = {"after": 0, "owed": 0, "partner": body.get("partner")}  # owed: lines said to a bot it has not answered yet
+    state = {"after": 0, "owed": 0, "partner": body.get("partner"), "typing": False}  # owed: lines said to a bot it has not answered yet
     lock = threading.Condition()
     stop = threading.Event()
     print("Type to talk. /next for someone new, /quit or Ctrl-D to leave.", flush=True)
@@ -510,6 +512,10 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 elif e["kind"] == "stranger":
                     print(f"Stranger: {e['text']}", flush=True)
             state["partner"] = answer.get("partner")
+            typing = bool(answer.get("partner_typing"))
+            if typing and not state["typing"]:
+                print("  Bot is thinking…" if (state["partner"] or {}).get("kind") == "bot" else "  Stranger is typing…", flush=True)
+            state["typing"] = typing
             lock.notify_all()
 
     show(body)
@@ -517,8 +523,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
     def pump() -> None:
         while not stop.is_set():
             try:
-                st, answer = post("/chat/poll", {"seat": seat, "after": state["after"], "wait": 20}, timeout=40.0)
+                ask = {"seat": seat, "after": state["after"], "wait": 20}
+                if body.get("typing_indicator"):
+                    ask["partner_typing"] = state["typing"]  # woken when it changes
+                st, answer = post("/chat/poll", ask, timeout=40.0)
             except Exception as e:
+                if stop.is_set():
+                    return  # leaving: the hub not answering any more is expected
                 print(f"  ({at} did not answer: {e})", flush=True)
                 stop.wait(2)
                 continue
@@ -782,7 +793,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
         federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
         state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
         trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat,
+        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat, chat_typing=args.chat_typing,
     )
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""

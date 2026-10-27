@@ -64,8 +64,9 @@ A follow outside any network (and every member's) works as before.
 
 **Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
 stranger with ``Meet``, and the two seats talk in ``Say`` and end with
-``Part``, both ways between any two hubs that share a secret; a ``Say``
-is logged without its text. See :mod:`pyrtan.chat`.
+``Part``, with ``Typing`` while someone types, both ways between any two
+hubs that share a secret; a ``Say`` is logged without its text and a
+``Typing`` not at all. See :mod:`pyrtan.chat`.
 
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
@@ -107,8 +108,9 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Part")
-CHAT_TYPES = ("Meet", "Say", "Part")   # a lobby's: two strangers on two hubs
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part")
+CHAT_TYPES = ("Meet", "Say", "Typing", "Part")   # a lobby's: two strangers on two hubs
+UNLOGGED = ("Typing",)                 # said every couple of seconds while someone types: not worth a log line
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
@@ -755,10 +757,12 @@ class Federation:
         try:
             status, answer = http_json("POST", remote.inbox, activity, timeout=10.0, headers=headers)
         except Exception as e:
-            self.outbox.append({**_logged(activity), "to": remote.url, "delivered": False, "error": str(e)})
+            if activity.get("type") not in UNLOGGED:
+                self.outbox.append({**_logged(activity), "to": remote.url, "delivered": False, "error": str(e)})
             return False, str(e), None
         ok = status in (200, 202)
-        self.outbox.append({**_logged(activity), "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
+        if activity.get("type") not in UNLOGGED:
+            self.outbox.append({**_logged(activity), "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
         if ok and isinstance(answer, dict):
             if activity.get("type") == "Announce":
                 # An inbox answers an Announce with its own gossip: one round trip, both directions.
@@ -1131,7 +1135,8 @@ class Federation:
         if h.get("X-Pyrtan-Actor", "").rstrip("/") != actor:
             return 401, {"status": "error", "reason": "unsigned", "say": "The signature's actor must be the activity's actor."}
         kind = activity["type"]
-        self.inbox_log.append({**_logged(activity), "received": time.time()})
+        if activity.get("type") not in UNLOGGED:
+            self.inbox_log.append({**_logged(activity), "received": time.time()})
         if kind == "Follow":
             return self._on_follow(actor, activity, h, trusted)
         followed = self.following.get(actor)
