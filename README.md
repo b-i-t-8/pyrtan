@@ -55,6 +55,8 @@ pyrtan --version
 Trees that drive a browser need the one optional extra, Playwright:
 `pip install 'pyrtan[browser]'` and `playwright install chromium` (or
 point `PYRTAN_BROWSER` at a Chromium you have).
+Signing and checking identities (`pyrtan id`) needs the other,
+`cryptography`: `pip install 'pyrtan[identity]'`.
 
 From a checkout, `uv sync` then `uv run pyrtan …`, and `uv run pytest`.
 
@@ -174,6 +176,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees; what a catalog's CI runs. |
 | `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere. |
+| `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve, `id check` checks an identifier or any of those documents, `id show` shows them. |
 
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
 `Authorization: Bearer` on everything but `/health` and the console, and
@@ -306,6 +309,27 @@ against the JavaScript one in the test suite. The design is in
 sentence carries `via: [the hub it crossed]`, and the console's Peers tab
 shows who follows whom. The design is in
 [`_meta/federation.md`](_meta/federation.md).
+
+## Identity
+
+A person, a hub or a device is a key, and its identity is that key
+written out: `pyr:` and 56 characters, which anyone can check a
+signature against without asking anybody. `pyr:<key>@host` (a hub, an
+`.onion`) says where it can be reached; `alice@pyrtan.com` is a name a
+domain vouches for. No domain owns an identity, and none grants
+anything by it: each hub will keep its own list of who may do what.
+
+```
+pyrtan id new                                       # your root key, ~/.config/pyrtan/identity/
+pyrtan id device add pyr:… --may chat,run --label phone
+pyrtan id name alice@pyrtan.com --github <your numeric GitHub id>
+pyrtan id check pyr:…@hub.example
+```
+
+This is the first step: identifiers, the signed documents (the identity
+document, device notes, name claims) and the command. Names at
+pyrtan.com and grants on hubs come next. The design is in
+[`_meta/identity.md`](_meta/identity.md).
 
 ## The catalog
 
@@ -552,7 +576,8 @@ slot refused. The whole set of rules is in
 ```
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
-                service, hub, federation, page (the console), catalog, cli
+                service, hub, federation, identity, page (the console),
+                catalog, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -580,7 +605,9 @@ topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), and the chat lobby (strangers on the hub and the
 hubs it follows, and bots made of trees) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
-and its own box, and follow other swarms. Not yet built: hosting.
+and its own box, and follow other swarms. Identities (keys, device notes
+and name claims, `pyrtan id`) are built as far as their first step;
+names at pyrtan.com and grants on hubs are not. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

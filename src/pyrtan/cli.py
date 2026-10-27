@@ -26,6 +26,7 @@
     pyrtan pull   NAME[@VERSION] [--dir]     fetch a tree from a catalog, verified
     pyrtan index  DIR [--out FILE]           build a catalog index from a directory
     pyrtan console --out FILE                write the console as one static HTML file
+    pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
 bearer token, ``--cors ORIGIN`` to let a browser elsewhere call them, and
@@ -48,6 +49,7 @@ from . import __version__
 from .catalog import Catalog, CatalogError, build_index, catalog_url
 from .federation import bootstrap_candidates
 from .grow import Proposal, propose
+from .identity import ABILITIES, KINDS, IdentityError
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
@@ -273,13 +275,40 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("console", help="write the console as one static HTML file, to host anywhere")
     p.add_argument("--out", required=True, help="the file to write ('-' for stdout)")
 
+    p = sub.add_parser("id", help="your identity: a key, reachable at any domain, named by any domain (_meta/identity.md)")
+    ids = p.add_subparsers(dest="id_command", required=True)
+    q = ids.add_parser("new", help="make your root key and identity document")
+    q.add_argument("--kind", choices=KINDS, default="person", help="what the identity says it is (default person)")
+    q.add_argument("--route", action="append", default=[], metavar="HOST", help="a hub or .onion that takes messages for you (repeatable)")
+    q = ids.add_parser("show", help="your identity, its routes and devices")
+    q.add_argument("--json", action="store_true", help="print the signed identity document")
+    q = ids.add_parser("check", help="check an identity, address or name, or a document (a file, or - for stdin)")
+    q.add_argument("thing", help="pyr:…, pyr:…@host, name@domain, or a JSON file")
+    q = ids.add_parser("device", help="delegate to a device key: a phone, a browser, another machine")
+    q.add_argument("action", choices=["add"])
+    q.add_argument("device", metavar="pyr:…", help="the device's identity")
+    q.add_argument("--may", default="ask,chat", help=f"what the device may ever be granted, comma-separated from {','.join(ABILITIES)} (default ask,chat)")
+    q.add_argument("--label", default="", help="what to call it: phone, laptop")
+    q.add_argument("--days", type=int, default=365, help="how long the note lasts, at most 365 (default 365)")
+    q = ids.add_parser("revoke", help="revoke a device; hubs drop it when they next read your document")
+    q.add_argument("device", metavar="pyr:…")
+    q = ids.add_parser("route", help="add or remove a place you can be reached")
+    q.add_argument("action", choices=["add", "remove"])
+    q.add_argument("host", help="a host[:port] or <56>.onion")
+    q = ids.add_parser("name", help="sign a claim that you are name@domain, for the domain to serve")
+    q.add_argument("name", metavar="NAME@DOMAIN")
+    q.add_argument("--github", type=int, metavar="USER_ID", help="your numeric GitHub user id, for a name at pyrtan.com")
+    q.add_argument("--out", help="write the claim here (default: stdout)")
+    for q in ids.choices.values():
+        q.add_argument("--dir", type=Path, default=None, help="where your key and document live (default $PYRTAN_IDENTITY or ~/.config/pyrtan/identity)")
+
     args = parser.parse_args(argv)
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
-        "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch,
+        "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
     }
     return commands[args.command](args)
 
@@ -1250,6 +1279,155 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 1
     _write_scaffold(proposal, Path(args.dir))
     print(f"wrote {path}: {proposal.name!r} answering {proposal.trigger!r}; edit it, then: pyrtan check {path}")
+    return 0
+
+
+# ---------------------------------------------------------------- pyrtan id
+
+
+def cmd_id(args: argparse.Namespace) -> int:
+    from . import identity
+    directory = args.dir or identity.home()
+    try:
+        return {
+            "new": _id_new, "show": _id_show, "check": _id_check, "device": _id_device,
+            "revoke": _id_revoke, "route": _id_route, "name": _id_name,
+        }[args.id_command](args, directory)
+    except IdentityError as e:
+        print(f"pyrtan id: {e}", file=sys.stderr)
+        return 1
+
+
+def _id_load(directory: Path):
+    """Your root key and your current identity document."""
+    from . import identity
+    key_file, doc_file = directory / "root.key", directory / "identity.json"
+    if not key_file.exists():
+        raise IdentityError(f"no identity in {directory}: make one with `pyrtan id new`")
+    key = identity.Key.load(key_file)
+    try:
+        doc = json.loads(doc_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise IdentityError(f"{doc_file}: {e}") from None
+    problem = identity.check_identity(doc, ident=key.id)
+    if problem:
+        raise IdentityError(f"{doc_file}: {problem}")
+    return key, doc
+
+
+def _id_save(directory: Path, doc: dict[str, Any]) -> None:
+    path = directory / "identity.json"
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temp.replace(path)
+
+
+def _id_new(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key_file = directory / "root.key"
+    if key_file.exists():
+        print(f"pyrtan id: {key_file} exists; an identity is not replaced (move it away first, knowing that it is you)", file=sys.stderr)
+        return 1
+    key = identity.Key.generate()
+    doc = identity.make_identity(key, kind=args.kind, routes=args.route)
+    key.save(key_file)
+    _id_save(directory, doc)
+    print(f"you are {key.id}")
+    print(f"the key is {key_file} (readable only by you). It is the identity: lose it and nobody can give it back,")
+    print("copy it and whoever has the copy is you. Back it up somewhere offline.")
+    print(f"the document hubs and name providers hold is {directory / 'identity.json'}")
+    return 0
+
+
+def _id_show(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    _, doc = _id_load(directory)
+    if args.json:
+        print(json.dumps(doc, indent=2, ensure_ascii=False))
+        return 0
+    print(f"{doc['id']}  ({doc['kind']}, updated {time.strftime('%Y-%m-%d %H:%M', time.localtime(doc['updated']))})")
+    print("routes: " + (", ".join(doc["routes"]) if doc["routes"] else "none (add one with `pyrtan id route add HOST`)"))
+    print(f"devices: {len(doc['devices'])}" + ("" if doc["devices"] else " (add one with `pyrtan id device add pyr:…`)"))
+    for note in doc["devices"]:
+        status = identity.device_status(doc, note["device"])
+        until = time.strftime("%Y-%m-%d", time.localtime(note["expires"]))
+        print(f"  {note['device']}  {note['label'] or '-':10} may {','.join(note['may']) or 'nothing'}  {status} until {until}")
+    for device in doc["revoked"]:
+        print(f"  {device}  revoked")
+    return 0
+
+
+def _id_check(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    thing = args.thing
+    if thing != "-" and not Path(thing).is_file():
+        parsed = identity.parse(thing)
+        if parsed.form == "name":
+            print(f"{parsed}: a name; resolving it at {parsed.domain} comes with the names step (_meta/identity.md §6)")
+        else:
+            print(f"{parsed}: a well-formed {parsed.form}, key {identity.decode(parsed.id).hex()}")
+        return 0
+    try:
+        doc = json.loads(sys.stdin.read() if thing == "-" else Path(thing).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise IdentityError(f"{thing}: {e}") from None
+    kind, problem = identity.check_any(doc)
+    if problem:
+        print(f"{thing}: {kind}: refused: {problem}")
+        return 1
+    if kind == "identity":
+        print(f"{thing}: the identity document of {doc['id']}, signed by it; {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
+    elif kind == "device":
+        print(f"{thing}: {doc['device']} may {','.join(doc['may']) or 'nothing'} for {doc['root']}, until {time.strftime('%Y-%m-%d', time.localtime(doc['expires']))}")
+    else:
+        print(f"{thing}: {doc['id']} claims {doc['name']}@{doc['domain']}, signed by it")
+    return 0
+
+
+def _id_device(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    if not 0 < args.days <= 365:
+        raise IdentityError("--days is from 1 to 365")
+    key, doc = _id_load(directory)
+    may = [a for a in args.may.replace(" ", "").split(",") if a]
+    issued = int(time.time())
+    note = identity.make_device(key, args.device, may, label=args.label, issued=issued, expires=issued + args.days * 86400)
+    _id_save(directory, identity.with_device(doc, key, note))
+    print(json.dumps(note, ensure_ascii=False))
+    print(f"{note['device']} may {','.join(note['may']) or 'nothing'} for you until {time.strftime('%Y-%m-%d', time.localtime(note['expires']))}; give the device the note above", file=sys.stderr)
+    return 0
+
+
+def _id_revoke(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, doc = _id_load(directory)
+    device = identity.normal(args.device)
+    _id_save(directory, identity.with_revoked(doc, key, device))
+    print(f"revoked {device}; hubs drop it when they next read your document")
+    return 0
+
+
+def _id_route(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, doc = _id_load(directory)
+    host = identity.check_locator(args.host)
+    routes = [r for r in doc["routes"] if r != host] + ([host] if args.action == "add" else [])
+    _id_save(directory, identity.with_routes(doc, key, routes))
+    print("routes: " + (", ".join(routes) or "none"))
+    return 0
+
+
+def _id_name(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, _ = _id_load(directory)
+    extra = {"github": args.github} if args.github is not None else {}
+    claim = identity.make_name(key, args.name, **extra)
+    text = json.dumps(claim, indent=2, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"wrote {args.out}: {claim['id']} claims {claim['name']}@{claim['domain']}; the domain serves it at /.well-known/pyrtan/name/{claim['name']}.json")
+    else:
+        sys.stdout.write(text)
     return 0
 
 

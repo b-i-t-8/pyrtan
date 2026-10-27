@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Proposed.** Nothing here is built. This note settles the format and the rules before any code; §10 says in what order the code would come. |
+| **Status** | **First step built** (§10): identifiers, the three documents, signing and checking, and `pyrtan id`. Names at pyrtan.com (§6) and everything on the wire (§7) are proposed, not built. |
 | **Date** | 2026-10-27 |
 | **Decision** | A person (or a hub, or a device) is a public key. The identifier is that key, written so that anyone can check a signature from it without asking anybody. Domains, hubs and onion services are where an identity can be *reached* and what it can be *called*, never what it *is*: `pyr:<key>` is the identity, `pyr:<key>@host` says where to find it, and `alice@pyrtan.com` is a name a domain vouches for. pyrtan.com hands out names by pull request, as one name provider among any number. An identity grants nothing by itself: each hub keeps its own list of who may do what. |
-| **Where** | Proposed: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/federation.py` and `hub.py` (signed requests, grants), `src/pyrtan/page.py` (the console's device key), `site/names/` and `site/gate.py` (pyrtan.com's names), `/.well-known/pyrtan/` on any domain. |
+| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `pyrtan id` in `src/pyrtan/cli.py`, `tests/test_identity.py`. Proposed: `src/pyrtan/federation.py` and `hub.py` (signed requests, grants), `src/pyrtan/page.py` (the console's device key), `site/names/` and `site/gate.py` (pyrtan.com's names), `/.well-known/pyrtan/` on any domain. |
 
 ## 0. The brief
 
@@ -215,6 +215,9 @@ or someone registering at it, from pointing a name at a key whose holder
 never claimed it. The domain's part is serving the file; the key's part
 is signing it; both have to agree.
 
+`pyrtan id name alice@example.org` signs a claim with your root key, for
+the domain to serve.
+
 **Pinning.** The first identity a name resolves to is remembered (in the
 hub's state file, the console's storage, `~/.config/pyrtan/`). A later
 answer naming a different identity is not followed: it is shown beside
@@ -365,18 +368,25 @@ hub that checks Alice with a shared secret can also forge Alice.
 
 ## 10. Sequencing
 
-- **First: the identifier and the documents.** `identity.py`: encode,
-  decode, checksum, canonical document signing and checking; `pyrtan id
-  new`, `show`, `check`, `device add`, `revoke`; the root key in
-  `~/.config/pyrtan/identity/`. Tests with RFC 8032's vectors and the
-  vector in §2, and conformance vectors (`tests/conformance/`) so the
-  console's checking agrees with Python's.
+- **First, built: the identifier and the documents.** `identity.py`:
+  encode, decode, checksum, parse the three forms, canonical document
+  signing and checking, reissuing a document strictly newer; `pyrtan id
+  new`, `show`, `check`, `device add`, `revoke`, `route add|remove`, and
+  `name` (signs a claim, ready for the second step); the root key in
+  `$PYRTAN_IDENTITY`, else `~/.config/pyrtan/identity/root.key`, mode
+  600, beside `identity.json`. Tested with RFC 8032's vectors and the
+  vector in §2; CI installs the extra so signing is tested, and the
+  suite still passes without it.
 - **Second: names.** `site/names/`, the gate's checks, the build's
   `/.well-known/pyrtan/` output, `pyrtan id resolve alice@pyrtan.com`,
   pinning. pyrtan.com hands out names; nothing yet grants by them.
 - **Third: hubs.** Signed requests, `--allow` and grants, members
   following with a device key, revocation refresh, the console's device
-  key and pairing. This is the step that replaces handing out the token.
+  key and pairing, with conformance vectors (`tests/conformance/`) so the
+  console's checking agrees with Python's: the console needs SHA3-256 for
+  the checksum, which WebCrypto does not offer, so it carries its own,
+  as it carries SHA-256 today. This is the step that replaces handing out
+  the token.
 - **Later:** hub keys in `/actor` and moves; a chat seat that opts in to
   showing a verified name (chat stays anonymous by default, and still
   keeps nothing); reaching `.onion` locators, which needs a SOCKS proxy
@@ -388,8 +398,8 @@ hub that checks Alice with a shared secret can also forge Alice.
 - **A lost root key is a lost identity.** Device notes expire within a
   year and nothing can renew them. The person makes a new root, re-pairs
   their devices, and asks each name provider and each hub operator to
-  point at it. The CLI says this when it makes a root, and offers to
-  write a backup.
+  point at it. The CLI says this when it makes a root, and names the
+  file to back up.
 - **A stolen device** works until it is revoked and the hubs re-read the
   document: up to an hour, plus however long the new document takes to
   reach a route the hub asks. `may` bounds what it can do meanwhile.
