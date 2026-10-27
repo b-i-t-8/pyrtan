@@ -81,7 +81,7 @@ PAGE = r"""<!doctype html>
     <h1>Pyrtan <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
-  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
 
   <section id="connect" hidden>
     <div class="card">
