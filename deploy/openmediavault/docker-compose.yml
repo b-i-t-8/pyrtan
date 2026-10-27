@@ -46,6 +46,7 @@ x-pyrtan: &pyrtan
     # PYRTAN_REPORT_GAPS: "true"        # opt in: the gaps your catalog trees meet (tree, node, value; never inputs) reach their authors via pyrtan.com
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run
     # PYRTAN_CHAT: "true"               # a lobby at /chat: people meet a random stranger here or on a hub this one follows, or a bot made of its trees
+    # PYRTAN_CHAT_TYPING: "0"           # turn the lobby's "Stranger is typing…" off for everyone (each person can also turn it off for themselves)
     PYRTAN_UNANSWERED: /state/unanswered.jsonl   # sentences nobody answered, kept across restarts (the hub's; services with a hub leave the record to it)
     PYRTAN_STATE: /state/federation.json
     PYRTAN_STORE: /state/store          # blobs: the hub's own and the ones it keeps for others

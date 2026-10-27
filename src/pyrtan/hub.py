@@ -125,9 +125,9 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True) -> None:
         self.name = name
-        self.lobby = Lobby(self) if chat else None
+        self.lobby = Lobby(self, typing=chat_typing) if chat else None
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
         self.token = token or None
@@ -597,7 +597,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register"]
             if self.lobby is not None:
-                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/next", "/chat/leave"]
+                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "endpoints": endpoints}
@@ -689,9 +689,10 @@ def serve_hub(
     unanswered: str | Path | None = None,
     watch: bool = False,
     chat: bool = False,
+    chat_typing: bool = True,
 ) -> tuple[Hub, Server]:
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise or join:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
