@@ -12,8 +12,13 @@
  *   subset, not the host's DOM, so a page reads the same everywhere; named
  *   character references beyond the common ones are left as written.
  * - Regular expressions are the host's; the subset trees use is common.
- * - There is no intent matching here: a member runs the tree its hub
- *   already chose. `delegate` goes to the resolver (the hub).
+ * - Sentences are read here as there (nlp.py, intent.py and the proposal
+ *   from grow.py): a runner reads among the trees it holds and asks its
+ *   resolver (a member's hub) only when none answers. Python's \d takes
+ *   any script's digits; here a digit is 0-9 (fold makes full-width ones
+ *   plain first).
+ * - LocalHub makes a page a hub of its own: the paths and answers of a
+ *   service, in memory, for a browser that has joined no hub.
  *
  * No model. No dependencies. Runs in a browser as `Pyrtan` and in node.
  */
@@ -23,6 +28,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  const VERSION = "0.10.0";
   const MAX_STEPS = 500, MAX_DEPTH = 8, DEFAULT_TIMEOUT = 10.0, DEFAULT_RETRIES = 1;
   const MISSING = Object.freeze({ toString: () => "<missing>", missing: true });
   const isMissing = (v) => v === MISSING;
@@ -516,6 +522,584 @@
     return "ok";
   }
 
+  // ------------------------------------------------------------ language (nlp.py, intent.py)
+  // How a sentence finds its tree, the same rules as the Python runtime: the
+  // same tables, the same rewrites in the same order, the same regular
+  // expression built from each trigger, the same verdicts and notes, so a
+  // browser reads a sentence the way a hub does.
+  const CONTRACTIONS = {
+    "what's": "what is", "whats": "what is", "where's": "where is", "who's": "who is", "how's": "how is",
+    "when's": "when is", "why's": "why is", "it's": "it is", "that's": "that is", "there's": "there is",
+    "here's": "here is", "let's": "let us", "isn't": "is not", "aren't": "are not", "wasn't": "was not",
+    "weren't": "were not", "don't": "do not", "doesn't": "does not", "didn't": "did not", "can't": "can not",
+    "cannot": "can not", "couldn't": "could not", "won't": "will not", "wouldn't": "would not",
+    "shouldn't": "should not", "haven't": "have not", "hasn't": "has not", "hadn't": "had not",
+    "i'm": "i am", "i've": "i have", "i'd": "i would", "i'll": "i will", "you're": "you are",
+    "you've": "you have", "you'd": "you would", "you'll": "you will", "we're": "we are", "we've": "we have",
+    "they're": "they are", "they've": "they have", "gimme": "give me", "lemme": "let me", "wanna": "want to",
+    "gonna": "going to", "u": "you", "pls": "please", "plz": "please", "thx": "thanks",
+  };
+  const LEADING_FILLERS = [
+    "hey pyrtan", "hi pyrtan", "hello pyrtan", "ok pyrtan", "okay pyrtan", "pyrtan",
+    "hey", "hi", "hello", "yo", "ok", "okay", "so", "um", "uh", "well", "please", "kindly",
+    "can you", "could you", "would you", "will you", "can you please", "could you please", "would you please",
+    "i want you to", "i need you to", "i would like you to", "i'd like you to",
+    "quick question", "question",
+  ];
+  const TRAILING_FILLERS = ["please", "thanks", "thank you", "for me", "if you can", "if you could", "if possible", "pyrtan"];
+  // Python's sorted(..., key=len, reverse=True) is stable: equal lengths keep their order.
+  const byLengthDesc = (list) => list.map((f, i) => [f, i]).sort((a, b) => b[0].length - a[0].length || a[1] - b[1]).map((p) => p[0]);
+  const LEADING_SORTED = byLengthDesc(LEADING_FILLERS), TRAILING_SORTED = byLengthDesc(TRAILING_FILLERS);
+  const UNITS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+  const TENS = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+  const SCALES = { hundred: 100, thousand: 1000, million: 1000000, billion: 1000000000 };
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const NOT_PLURALS = new Set(["news", "is", "as", "us", "his", "this", "thus", "yes", "plus", "bus", "gas", "was", "has", "its",
+    "status", "bonus", "always", "perhaps", "physics", "series", "species", "means", "analysis", "basis",
+    "lens", "chess", "address", "process", "access", "class", "pass", "less", "unless", "across", "ssl",
+    "https", "dns", "tls", "os", "ios", "chaos", "canvas", "atlas", "virus", "campus", "census", "focus",
+    "iris", "oasis", "crisis", "thesis", "diagnosis", "axis", "texas", "paris", "mars", "venus"]);
+  const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+  const MONTH_ABBR = {}; MONTHS.forEach((m, i) => { MONTH_ABBR[m.slice(0, 3)] = i + 1; }); MONTH_ABBR.sept = 9;
+  const DURATION_UNITS = {
+    s: 1, sec: 1, secs: 1, second: 1, seconds: 1, m: 60, min: 60, mins: 60, minute: 60, minutes: 60,
+    h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600, d: 86400, day: 86400, days: 86400,
+    w: 604800, wk: 604800, wks: 604800, week: 604800, weeks: 604800,
+  };
+  const HOST_RE = /^(?:https?:\/\/)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}|localhost|(?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?(?:\/\S*)?$/i;
+  const URL_RE = /^https?:\/\/[^\s<>"']+$/i;
+  const EMAIL_RE = /^[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63}$/;
+  const isAlpha = (s) => s.length > 0 && /^\p{L}+$/u.test(s);
+  const isUpperChar = (c) => c !== c.toLowerCase() && c === c.toUpperCase();
+  const isLowerWord = (w) => w === w.toLowerCase() && w !== w.toUpperCase();
+  const reEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+  // Python's str() of a float: 2.0, not 2.
+  const pyFloat = (n) => (Number.isInteger(n) && Math.abs(n) < 1e16 ? n.toFixed(1) : String(n));
+  class ParseError extends Error {}
+  class TriggerError extends Error {}
+
+  function fold(text) {
+    text = String(text).normalize("NFKC");
+    text = text.replace(/’/g, "'").replace(/‘/g, "'").replace(/“/g, '"').replace(/”/g, '"');
+    text = text.replace(/[‐-―−]/g, "-");
+    return text.replace(/\s+/gu, " ").trim();
+  }
+  function trim(text) {
+    text = text.replace(/^[^\p{L}\p{N}]+|[\s?!.,;:]+$/gu, "");
+    text = text.replace(/\s*[,;!?]+\s*/g, " ");
+    text = text.replace(/(?<=[A-Za-z])\.(?=\s|$)/g, "");
+    return text.replace(/\s+/gu, " ").trim();
+  }
+  function stripFillers(text, keep) {
+    keep = keep || new Set();
+    const dropped = [];
+    let changed = true;
+    while (changed && text) {
+      changed = false;
+      let low = text.toLowerCase();
+      for (const f of LEADING_SORTED) {
+        if ((low === f || low.startsWith(f + " ") || low.startsWith(f + ",")) && !keep.has(f.split(" ")[0])) {
+          dropped.push(text.slice(0, f.length));
+          text = text.slice(f.length).replace(/^[ ,]+/, "");
+          changed = true;
+          break;
+        }
+      }
+      low = text.toLowerCase();
+      for (const f of TRAILING_SORTED) {
+        const words = f.split(" ");
+        if ((low === f || low.endsWith(" " + f) || low.endsWith("," + f)) && !keep.has(words[words.length - 1])) {
+          dropped.push(text.slice(text.length - f.length));
+          text = text.slice(0, text.length - f.length).replace(/[ ,]+$/, "");
+          changed = true;
+          break;
+        }
+      }
+    }
+    return [text, dropped];
+  }
+  function expandContractions(text) {
+    const expanded = [];
+    const out = text.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, (word) => {
+      const low = word.toLowerCase().replace(/’/g, "'");
+      if (!has(CONTRACTIONS, low)) return word;
+      const full = CONTRACTIONS[low];
+      expanded.push(`${word}->${full}`);
+      return isLowerWord(word) || !isUpperChar(word[0]) ? full : full[0].toUpperCase() + full.slice(1);
+    });
+    return [out, expanded];
+  }
+  const isNumberWord = (word) => word.toLowerCase().split("-").every((p) => has(UNITS, p) || has(TENS, p) || has(SCALES, p) || p === "dozen");
+  function numberRun(words, start) {
+    let i = start;
+    const first = words[i].toLowerCase();
+    if (first === "a" && i + 1 < words.length && ["dozen", "hundred", "thousand", "million", "billion"].includes(words[i + 1].toLowerCase())) i += 1;
+    else if (!isNumberWord(first)) return start;
+    let end = i;
+    while (i < words.length) {
+      const w = words[i].toLowerCase();
+      if (isNumberWord(w)) { i += 1; end = i; }
+      else if ((w === "and" || w === "a") && i + 1 < words.length && isNumberWord(words[i + 1].toLowerCase())) i += 1;
+      else break;
+    }
+    return end;
+  }
+  function runValue(run) {
+    const words = [];
+    for (const tok of run) words.push(...tok.toLowerCase().split("-"));
+    let total = 0, current = 0, seen = false;
+    for (const w of words) {
+      if (w === "and" || w === "a") { if (w === "a") current = 1; continue; }
+      if (has(UNITS, w)) { current += UNITS[w]; seen = true; }
+      else if (has(TENS, w)) { current += TENS[w]; seen = true; }
+      else if (w === "dozen") { current = (current || 1) * 12; seen = true; }
+      else if (w === "hundred") { current = (current || 1) * 100; seen = true; }
+      else if (has(SCALES, w)) { total += (current || 1) * SCALES[w]; current = 0; seen = true; }
+      else return null;
+    }
+    return seen ? total + current : null;
+  }
+  function wordsToDigits(text) {
+    const words = text.split(" "), out = [], changed = [];
+    let i = 0;
+    while (i < words.length) {
+      const end = numberRun(words, i);
+      if (end > i) {
+        const run = words.slice(i, end), value = runValue(run);
+        if (value !== null) { out.push(String(value)); changed.push(`${run.join(" ")}->${value}`); i = end; continue; }
+      }
+      out.push(words[i]); i += 1;
+    }
+    return [out.join(" "), changed];
+  }
+  function clean(text, opts) {
+    opts = opts || {};
+    const steps = [];
+    const folded = fold(text);
+    if (folded !== String(text).trim()) steps.push("fold");
+    text = trim(folded);
+    if (opts.fillers !== false) {
+      const [t, dropped] = stripFillers(text, opts.keep);
+      text = t;
+      if (dropped.length) { steps.push("fillers: " + dropped.map(pyrepr).join(", ")); text = trim(text); }
+    }
+    const [t2, expanded] = expandContractions(text);
+    text = t2;
+    if (expanded.length) steps.push("contractions: " + expanded.join(", "));
+    if (opts.numbers !== false) {
+      const [t3, changed] = wordsToDigits(text);
+      text = t3;
+      if (changed.length) steps.push("numbers: " + changed.join(", "));
+    }
+    return [text.replace(/\s+/gu, " ").trim(), steps];
+  }
+  function singular(word) {
+    const w = word.toLowerCase();
+    if (w.length < 4 || NOT_PLURALS.has(w) || w.endsWith("ss") || !isAlpha(w)) return w;
+    if (w.endsWith("ies") && w.length > 4) return w.slice(0, -3) + "y";
+    if (["ches", "shes", "sses", "xes", "zes"].some((e) => w.endsWith(e))) return w.slice(0, -2);
+    if (w.endsWith("s")) return w.slice(0, -1);
+    return w;
+  }
+  function plural(word) {
+    const w = word.toLowerCase();
+    if (!isAlpha(w) || NOT_PLURALS.has(w)) return w;
+    if (w.endsWith("y") && w.length > 2 && !"aeiou".includes(w[w.length - 2])) return w.slice(0, -1) + "ies";
+    if (["ch", "sh", "ss", "x", "z", "s"].some((e) => w.endsWith(e))) return w + "es";
+    return w + "s";
+  }
+  function forms(word) {
+    const w = word.toLowerCase(), out = new Set([w]);
+    if (isAlpha(w) && Array.from(w).length >= 3) { const base = singular(w); out.add(base); out.add(plural(base)); }
+    return out;
+  }
+  function distance(a, b, limit = 2) {
+    a = Array.from(a.toLowerCase()); b = Array.from(b.toLowerCase());
+    if (Math.abs(a.length - b.length) > limit) return limit + 1;
+    let prevPrev = null, prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i].concat(new Array(b.length).fill(0));
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+        if (prevPrev !== null && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], prevPrev[j - 2] + 1);
+      }
+      if (Math.min(...cur) > limit) return limit + 1;
+      prevPrev = prev; prev = cur;
+    }
+    return prev[prev.length - 1];
+  }
+
+  // ---- values: each typed slot's fixed reader
+  function parseNumber(text) {
+    let [t] = wordsToDigits(text.trim());
+    t = t.replace(/,/g, "");
+    if (/^-?\d+$/.test(t)) return { value: parseInt(t, 10), py: String(parseInt(t, 10)) };
+    if (/^-?\d+\.\d+$/.test(t)) { const v = parseFloat(t); return { value: v, py: pyFloat(v) }; }
+    throw new ParseError(`${pyrepr(text)} is not a number`);
+  }
+  function parseDuration(text) {
+    let [t] = wordsToDigits(text.trim().toLowerCase());
+    t = t.replace(/\bhalf\s+an?\s+([a-z]+)/g, "0.5 $1");
+    t = t.replace(/\b(an?)\s+(?=(?:hour|minute|second|day|week)s?\b)/g, "1 ");
+    t = t.replace(/(\d+(?:\.\d+)?)\s*([a-z]+)\s+and\s+a\s+half\b/g, (m, n, u) => `${pyFloat(parseFloat(n) + 0.5)} ${u}`);
+    t = t.replace(/\s+and\s+/g, " ");
+    let total = 0, found = false, pos = 0;
+    for (const m of t.matchAll(/(\d+(?:\.\d+)?)\s*([a-z]+)/g)) {
+      if (t.slice(pos, m.index).trim()) throw new ParseError(`${pyrepr(text)} is not a duration`);
+      if (!has(DURATION_UNITS, m[2])) throw new ParseError(`${pyrepr(text)}: unknown unit ${pyrepr(m[2])}`);
+      total += parseFloat(m[1]) * DURATION_UNITS[m[2]];
+      found = true; pos = m.index + m[0].length;
+    }
+    if (!found || t.slice(pos).trim()) throw new ParseError(`${pyrepr(text)} is not a duration`);
+    const v = Math.trunc(total);
+    return { value: v, py: String(v) };
+  }
+  const pad2 = (n) => String(n).padStart(2, "0");
+  function parseTime(text) {
+    let [t] = wordsToDigits(text.trim().toLowerCase());
+    t = t.replace(/\./g, ":").replace(/ /g, "");
+    const done = (s) => ({ value: s, py: s });
+    if (t === "noon" || t === "midday") return done("12:00");
+    if (t === "midnight") return done("00:00");
+    const m = /^(\d{1,2})(?::(\d{2}))?(?:o'?clock)?(am|pm)?$/.exec(t);
+    if (!m) throw new ParseError(`${pyrepr(text)} is not a time`);
+    let hour = parseInt(m[1], 10);
+    const minute = parseInt(m[2] || "0", 10), half = m[3];
+    if (half) {
+      if (!(hour >= 1 && hour <= 12)) throw new ParseError(`${pyrepr(text)}: ${hour} with ${half}`);
+      hour = (hour % 12) + (half === "pm" ? 12 : 0);
+    } else if (m[2] === undefined && !m[0].endsWith("clock")) throw new ParseError(`${pyrepr(text)}: a bare number is not a time; say 15:00 or 3pm`);
+    if (!(hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59)) throw new ParseError(`${pyrepr(text)} is not a time`);
+    return done(`${pad2(hour)}:${pad2(minute)}`);
+  }
+  // Dates are plain calendar days in UTC, as the hub's clock gives them.
+  const isLeap = (y) => y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const monthDays = (y, m) => [31, isLeap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  const dayOf = (y, m, d) => { const out = new Date(0); out.setUTCFullYear(y, m - 1, d); return out; };
+  const isoDay = (d) => `${String(d.getUTCFullYear()).padStart(4, "0")}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+  const weekdayOf = (d) => (d.getUTCDay() + 6) % 7;
+  function mkDate(year, month, day, text) {
+    const why = !(year >= 1 && year <= 9999) ? `year ${year} is out of range` : !(month >= 1 && month <= 12) ? "month must be in 1..12" : !(day >= 1 && day <= monthDays(year, month)) ? "day is out of range for month" : null;
+    if (why) throw new ParseError(text === null ? why : `${pyrepr(text)}: ${why}`);
+    return dayOf(year, month, day);
+  }
+  function shift(day, n, unit) {
+    unit = unit.replace(/s+$/, "");
+    if (unit === "day") return addDays(day, n);
+    if (unit === "week") return addDays(day, 7 * n);
+    const months = day.getUTCMonth() + (unit === "month" ? n : 12 * n);
+    const year = day.getUTCFullYear() + Math.floor(months / 12), month = (((months % 12) + 12) % 12) + 1;
+    return mkDate(year, month, Math.min(day.getUTCDate(), monthDays(year, month)), null);
+  }
+  function monthOf(word) {
+    if (!word || /^\d+$/.test(word)) return null;
+    const i = MONTHS.indexOf(word);
+    if (i >= 0) return i + 1;
+    const three = word.slice(0, 3);
+    if (word.length >= 3 && has(MONTH_ABBR, three) && MONTHS[MONTH_ABBR[three] - 1].startsWith(word)) { const k = word.startsWith("sept") ? word.slice(0, 4) : three; return has(MONTH_ABBR, k) ? MONTH_ABBR[k] : null; }
+    return null;
+  }
+  function weekdayIndex(word) {
+    const i = WEEKDAYS.indexOf(word);
+    if (i >= 0) return i;
+    if (word.length >= 3) { const j = WEEKDAYS.findIndex((d) => d.slice(0, 3) === word.slice(0, 3)); if (j >= 0 && WEEKDAYS[j].startsWith(word)) return j; }
+    return null;
+  }
+  function parseDate(text, now) {
+    const n = now instanceof Date ? now : new Date();
+    const today = dayOf(n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate());
+    const done = (d) => { const s = isoDay(d); return { value: s, py: s }; };
+    let [t] = wordsToDigits(text.trim().toLowerCase());
+    t = t.replace(/^(on|at|for|the|this coming)\s+/, "").trim();
+    t = t.replace(/(\d)(st|nd|rd|th)\b/g, "$1");
+    t = t.split(",").join(" ").split("  ").join(" ").trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+    if (m) return done(mkDate(+m[1], +m[2], +m[3], text));
+    m = /^(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?$/.exec(t);
+    if (m) {
+      const d = +m[1], mo = +m[2];
+      if (d <= 12 && mo <= 12 && d !== mo) throw new ParseError(`${pyrepr(text)} could be day/month or month/day; write it as ${today.getUTCFullYear()}-${pad2(mo)}-${pad2(d)} or '${d} ${MONTHS[mo - 1]}'`);
+      let year = m[3] ? +m[3] : today.getUTCFullYear();
+      if (year < 100) year += 2000;
+      return done(mkDate(year, mo, d, text));
+    }
+    m = /^(\d{1,2})(?:\s+of)?\s+([a-z]+)(?:\s+(\d{4}))?$/.exec(t) || /^([a-z]+)\s+(\d{1,2})(?:\s+(\d{4}))?$/.exec(t);
+    if (m && (monthOf(m[1]) || monthOf(m[2]))) {
+      let day, month;
+      if (/^\d+$/.test(m[1])) { day = +m[1]; month = monthOf(m[2]); } else { month = monthOf(m[1]); day = +m[2]; }
+      if (!month) throw new ParseError(`${pyrepr(text)} is not a date`);
+      return done(mkDate(m[3] ? +m[3] : today.getUTCFullYear(), month, day, text));
+    }
+    if (t === "today" || t === "now") return done(today);
+    if (["tomorrow", "tmrw", "tmr"].includes(t)) return done(addDays(today, 1));
+    if (t === "yesterday") return done(addDays(today, -1));
+    if (t === "day after tomorrow" || t === "the day after tomorrow") return done(addDays(today, 2));
+    if (t === "day before yesterday" || t === "the day before yesterday") return done(addDays(today, -2));
+    m = /^(?:(this|next|last)\s+)?([a-z]+)$/.exec(t);
+    if (m && weekdayIndex(m[2]) !== null) {
+      let ahead = (((weekdayIndex(m[2]) - weekdayOf(today)) % 7) + 7) % 7;
+      if (m[1] === "next") ahead = ahead || 7;
+      else if (m[1] === "last") ahead = ahead ? ahead - 7 : -7;
+      return done(addDays(today, ahead));
+    }
+    m = /^in\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)$/.exec(t);
+    if (m) return done(shift(today, +m[1], m[2]));
+    m = /^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+ago$/.exec(t);
+    if (m) return done(shift(today, -m[1], m[2]));
+    m = /^(next|last)\s+(week|month|year)$/.exec(t);
+    if (m) return done(shift(today, m[1] === "next" ? 1 : -1, m[2]));
+    m = /^end of (?:the |this )?(month|year)$/.exec(t);
+    if (m) {
+      if (m[1] === "year") return done(dayOf(today.getUTCFullYear(), 12, 31));
+      return done(addDays(shift(dayOf(today.getUTCFullYear(), today.getUTCMonth() + 1, 1), 1, "month"), -1));
+    }
+    if (["start of month", "start of the month", "beginning of month", "beginning of the month"].includes(t)) return done(dayOf(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
+    throw new ParseError(`${pyrepr(text)} is not a date this reads`);
+  }
+  function parseHost(text) {
+    const m = HOST_RE.exec(text.trim());
+    if (!m) throw new ParseError(`${pyrepr(text)} is not a host name`);
+    const v = m[1].toLowerCase();
+    return { value: v, py: v };
+  }
+  function parseUrl(text) {
+    const t = text.trim();
+    if (!URL_RE.test(t)) throw new ParseError(`${pyrepr(text)} is not a URL`);
+    return { value: t, py: t };
+  }
+  function parseEmail(text) {
+    const t = text.trim();
+    if (!EMAIL_RE.test(t)) throw new ParseError(`${pyrepr(text)} is not an email address`);
+    return { value: t.toLowerCase(), py: t.toLowerCase() };
+  }
+  const PARSERS = { number: parseNumber, duration: parseDuration, time: parseTime, date: parseDate, host: parseHost, url: parseUrl, email: parseEmail };
+  const nlp = { fold, trim, stripFillers, expandContractions, wordsToDigits, clean, singular, plural, forms, distance, parseNumber, parseDuration, parseTime, parseDate, parseHost, parseUrl, parseEmail, ParseError };
+
+  // ---- triggers
+  const KINDS = ["int", "float", "word", "text", "number", "date", "time", "duration", "host", "url", "email"];
+  const SLOT_RE = { int: "-?\\d+", float: "-?\\d+(?:\\.\\d+)?", number: "-?\\d+(?:[.,]\\d+)*", word: "\\S+", text: ".+?", date: ".+?", time: "\\S+(?:\\s*[ap]m)?", duration: ".+?", host: "\\S+", url: "\\S+", email: "\\S+", "": ".+?" };
+  const TYPO_MIN_LENGTH = 5;
+  function normalise(text) {
+    text = String(text).trim();
+    text = text.replace(/^[^\p{L}\p{N}]+|[\s?!.,;:]+$/gu, "");
+    return text.replace(/\s+/gu, " ");
+  }
+  function language(raw, where = "language") {
+    if (raw === null || raw === undefined) return { synonyms: {}, typos: false };
+    if (!isObj(raw)) throw new TriggerError(`${where} must be a table`);
+    const syn = raw.synonyms === undefined ? {} : raw.synonyms;
+    if (!isObj(syn)) throw new TriggerError(`${where}.synonyms must be a table of word = [words]`);
+    const synonyms = {};
+    for (const [word, a] of Object.entries(syn)) {
+      const alts = typeof a === "string" ? [a] : a;
+      if (!Array.isArray(alts) || !alts.every((x) => typeof x === "string" && x.trim())) throw new TriggerError(`${where}.synonyms.${word} must be a list of words`);
+      if (!/^[A-Za-z][A-Za-z'-]*$/.test(word)) throw new TriggerError(`${where}.synonyms: ${pyrepr(word)} is not a word`);
+      synonyms[word.toLowerCase()] = alts.map((x) => x.trim().toLowerCase());
+    }
+    const typos = raw.typos === undefined ? false : raw.typos;
+    if (!isBool(typos)) throw new TriggerError(`${where}.typos must be true or false`);
+    for (const key of Object.keys(raw)) if (key !== "synonyms" && key !== "typos") throw new TriggerError(`${where}: unknown key ${pyrepr(key)}; one of synonyms, typos`);
+    return { synonyms, typos };
+  }
+  const languageDict = (lang) => { const out = {}; if (Object.keys(lang.synonyms).length) out.synonyms = lang.synonyms; if (lang.typos) out.typos = true; return out; };
+  function wordRegex(word, lang) {
+    const spellings = forms(word), phrases = [];
+    for (const syn of lang.synonyms[word.toLowerCase()] || []) {
+      if (syn.includes(" ")) phrases.push(syn.split(/\s+/).map(reEscape).join("\\s+"));
+      else for (const f of forms(syn)) spellings.add(f);
+    }
+    const sorted = [...spellings].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
+    return "(?:" + sorted.map(reEscape).concat(phrases).join("|") + ")";
+  }
+  function compilePattern(pattern, lang) {
+    lang = lang || { synonyms: {}, typos: false };
+    if (!pattern || !pattern.trim()) throw new TriggerError("a trigger pattern cannot be empty");
+    const slots = {}, out = [], vocabulary = new Set(), ordered = [];
+    let literal = 0, pos = 0, depth = 0, word = [];
+    const text = Array.from(pattern.trim().toLowerCase());
+    const flush = () => {
+      if (!word.length) return;
+      const w = word.join("");
+      out.push(wordRegex(w, lang)); vocabulary.add(w); ordered.push(w);
+      for (const syn of lang.synonyms[w] || []) for (const s of syn.split(/\s+/)) if (s) vocabulary.add(s);
+      word = [];
+    };
+    while (pos < text.length) {
+      const ch = text[pos];
+      if (isAlpha(ch) || (word.length && "'-".includes(ch) && pos + 1 < text.length && isAlpha(text[pos + 1]))) { word.push(ch); literal++; pos++; continue; }
+      flush();
+      if (ch === "{") {
+        const m = /^\{([A-Za-z_][A-Za-z0-9_]*)(?::([a-z]+))?\}/.exec(text.slice(pos).join(""));
+        if (!m) throw new TriggerError(`bad slot in trigger ${pyrepr(pattern)} at ${pos}`);
+        const name = m[1], kind = m[2] === undefined ? null : m[2];
+        if (kind !== null && !KINDS.includes(kind)) throw new TriggerError(`slot {${name}:${kind}} in ${pyrepr(pattern)}: kind must be one of ${KINDS.join(", ")}`);
+        if (has(slots, name)) throw new TriggerError(`slot ${pyrepr(name)} appears twice in ${pyrepr(pattern)}`);
+        slots[name] = kind;
+        out.push(`(?<${name}>${SLOT_RE[kind === null ? "" : kind]})`);
+        pos += m[0].length;
+      } else if (ch === "[") { depth++; out.push("(?:\\s*"); pos++; }
+      else if (ch === "]") { if (depth === 0) throw new TriggerError(`unbalanced ] in trigger ${pyrepr(pattern)}`); depth--; out.push(")?"); pos++; }
+      else if (ch === "(") { depth++; out.push("(?:"); pos++; }
+      else if (ch === ")") { if (depth === 0) throw new TriggerError(`unbalanced ) in trigger ${pyrepr(pattern)}`); depth--; out.push(")"); pos++; }
+      else if (ch === "|" && depth > 0) { out.push("|"); pos++; }
+      else if (/^\s$/u.test(ch)) {
+        while (pos < text.length && /^\s$/u.test(text[pos])) pos++;
+        // Space is optional around optional groups and slots, so "[the] weather" matches "weather".
+        if (out.length && ["(?:\\s*", ")?", "(?:", ")", "|"].includes(out[out.length - 1])) out.push("\\s*");
+        else if (pos < text.length && "[(|".includes(text[pos])) out.push("\\s*");
+        else out.push("\\s+");
+      } else { out.push(reEscape(ch)); literal++; pos++; }
+    }
+    flush();
+    if (depth !== 0) throw new TriggerError(`unbalanced [ in trigger ${pyrepr(pattern)}`);
+    if (literal === 0) throw new TriggerError(`trigger ${pyrepr(pattern)} has no literal words; it would match anything`);
+    let regex;
+    try { regex = new RegExp("^(?:" + out.join("") + ")$", "iu"); } catch (e) { throw new TriggerError(`trigger ${pyrepr(pattern)} does not compile: ${e.message}`); }
+    return { regex, slots, specificity: literal, vocabulary, edges: ordered.length ? [ordered[0], ordered[ordered.length - 1]] : ["", ""] };
+  }
+  function correctTypos(sentence, vocabulary) {
+    if (!vocabulary.size) return [sentence, []];
+    const fixed = [];
+    const out = sentence.replace(/[A-Za-z]+/g, (word) => {
+      const low = word.toLowerCase();
+      if (low.length < TYPO_MIN_LENGTH || vocabulary.has(low) || [...vocabulary].some((v) => forms(v).has(low))) return word;
+      const close = [...vocabulary].filter((v) => v.length >= TYPO_MIN_LENGTH && distance(low, v, 1) <= 1);
+      if (close.length !== 1) return word;
+      fixed.push([word, close[0]]);
+      return close[0];
+    });
+    return [out, fixed];
+  }
+  function readSlot(kind, raw, now) {
+    if (kind === "int") return { value: parseInt(raw, 10), py: String(parseInt(raw, 10)) };
+    if (kind === "float") { const v = parseFloat(raw); return { value: v, py: pyFloat(v) }; }
+    if (kind === null || kind === "word" || kind === "text") return { value: raw, py: raw };
+    return kind === "date" ? PARSERS.date(raw, now) : PARSERS[kind](raw);
+  }
+  class Trigger {
+    constructor(pattern, fixedInputs, lang) {
+      this.pattern = pattern;
+      this.fixedInputs = fixedInputs || {};
+      this.language = lang && lang.synonyms ? lang : language(lang);
+      // The pattern gets the rewrites a sentence gets, minus fillers and number words.
+      this.cleaned = fold(pattern).split(/(\{[^}]*\})/).map((part) => (part.startsWith("{") ? part : expandContractions(part)[0])).join("");
+      Object.assign(this, compilePattern(this.cleaned, this.language));
+    }
+    match(text, now) { const m = this.matchDetail(text, now); return m ? m.inputs : null; }
+    matchDetail(text, now, cleaned = false) {
+      let sentence = cleaned ? text : clean(text)[0];
+      const notes = [];
+      if (this.language.typos) { const [s, fixed] = correctTypos(sentence, this.vocabulary); sentence = s; for (const [a, b] of fixed) notes.push(`typo: ${a}->${b}`); }
+      const m = this.regex.exec(sentence);
+      if (!m) return null;
+      const inputs = Object.assign({}, this.fixedInputs);
+      for (const [name, kind] of Object.entries(this.slots)) {
+        let raw = m.groups[name];
+        if (raw === undefined) continue;
+        raw = raw.trim();
+        let got;
+        try { got = readSlot(kind, raw, now); }
+        catch (e) {
+          if (!(e instanceof ParseError)) throw e;
+          notes.push(`slot ${name}: ${e.message}`);
+          return { tree: "", trigger: this, inputs: {}, specificity: this.specificity, notes, rejected: true };
+        }
+        inputs[name] = got.value;
+        if (has(PARSERS, kind) && got.py !== raw) notes.push(`${name}: ${pyrepr(raw)} read as ${typeof got.value === "string" ? pyrepr(got.value) : got.py}`);
+      }
+      return { tree: "", trigger: this, inputs, specificity: this.specificity, notes, rejected: false };
+    }
+  }
+  const matchDict = (m) => ({ tree: m.tree, trigger: m.trigger.pattern, specificity: m.specificity, inputs: m.inputs, notes: m.notes, rejected: m.rejected });
+  function isoNow(d) {
+    if (!(d instanceof Date)) return null;
+    const ms = d.getUTCMilliseconds();
+    return d.toISOString().replace(/\.\d{3}Z$/, (ms ? "." + String(ms).padStart(3, "0") + "000" : "") + "+00:00");
+  }
+  class Reading {
+    constructor(text, cleaned, steps, matches, considered, now) { Object.assign(this, { text, cleaned, steps, matches, considered, now }); }
+    get winner() { return this.matches.length === 1 ? this.matches[0] : null; }
+    toDict() { return { text: this.text, cleaned: this.cleaned, steps: this.steps, now: this.now, matches: this.matches.map(matchDict), considered: this.considered.map(matchDict) }; }
+    step() {
+      const rewrite = pyrepr(this.text) + (this.cleaned !== this.text ? ` -> ${pyrepr(this.cleaned)}` : "");
+      let summary;
+      const w = this.winner;
+      if (w) { summary = `${rewrite}; ${w.tree} via ${pyrepr(w.trigger.pattern)} (${w.specificity} literal chars)`; if (w.notes.length) summary += "; " + w.notes.join("; "); }
+      else if (this.matches.length) summary = `${rewrite}; tie between ${pyrepr([...new Set(this.matches.map((m) => m.tree))].sort())}`;
+      else summary = `${rewrite}; no trigger matched`;
+      const observed = { cleaned: this.cleaned, steps: this.steps };
+      if (w) { observed.trigger = w.trigger.pattern; observed.inputs = w.inputs; if (w.notes.length) observed.notes = w.notes; }
+      return { node: "intent", kind: "intent", summary, observed };
+    }
+  }
+  // candidates: [[treeName, Trigger], ...] in the order a registry lists them (trees by name).
+  function read(text, candidates, now) {
+    const keep = new Set();
+    for (const [, trig] of candidates) for (const w of trig.edges) if (w) keep.add(w);
+    const [cleaned, steps] = clean(text, { keep });
+    const considered = [];
+    for (const [tree, trig] of candidates) { const got = trig.matchDetail(cleaned, now, true); if (got) { got.tree = tree; considered.push(got); } }
+    const live = considered.filter((m) => !m.rejected);
+    const top = live.reduce((t, m) => Math.max(t, m.specificity), 0);
+    return new Reading(text, cleaned, steps, live.filter((m) => m.specificity === top), considered, isoNow(now));
+  }
+
+  // ---- the tree that would answer a sentence nobody answered (grow.py)
+  const PROPOSE_FILLER = new Set(["a", "an", "the", "what", "what's", "whats", "how", "please", "me", "my", "tell", "show", "give", "is", "are", "of", "to", "for", "in", "on", "at", "do", "does", "it", "and", "with"]);
+  const NAME_MAX = 40;
+  function proposalSlot(tok, inputs) {
+    const bare = tok.replace(/^["'(),;:!?]+|["'(),;:!?]+$/g, "");
+    const unique = (base) => { if (!has(inputs, base)) return base; let n = 2; while (has(inputs, base + n)) n++; return base + n; };
+    if (/^-?\d+$/.test(bare)) { const s = unique("count"); inputs[s] = { type: "int", description: `as in: ${bare}` }; return `{${s}:int}`; }
+    if (/^-?\d+\.\d+$/.test(bare)) { const s = unique("value"); inputs[s] = { type: "float", description: `as in: ${bare}` }; return `{${s}:float}`; }
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i.test(bare) && !bare.endsWith("...") && !bare.endsWith(".")) { const s = unique("host"); inputs[s] = { type: "str", description: `a host name, as in: ${bare}`, role: "host" }; return `{${s}:host}`; }
+    if (/^[\p{L}\p{N}_.\-]+\/[\p{L}\p{N}_.\-/]+$/u.test(bare)) { const s = unique("target"); inputs[s] = { type: "str", description: `as in: ${bare}` }; return `{${s}:word}`; }
+    return null;
+  }
+  const proposalLiteral = (tok) => tok.replace(/[{}[\]()|]/g, "").trim();
+  function shellQuote(s) {
+    if (/^[\p{L}\p{N}_./:@%+=,-]+$/u.test(s)) return s;
+    if (!/["$`\\]/.test(s)) return `"${s}"`;
+    return "'" + s.replace(/'/g, "'\"'\"'") + "'";
+  }
+  function proposalName(literalWords, tokens, slots) {
+    const slug = (w) => w.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    let words = literalWords.filter((w) => !PROPOSE_FILLER.has(w.toLowerCase())).map(slug).filter(Boolean);
+    if (words.length < 2 && slots.length) words = slots.map((s) => s.replace(/\d+$/, "")).concat(words);
+    if (!words.length) words = tokens.map(slug).filter(Boolean);
+    let name = words.join("-").slice(0, NAME_MAX).replace(/^-+|-+$/g, "");
+    name = name.replace(/-{2,}/g, "-");
+    if (!name || !/^[a-z0-9]/.test(name)) name = "new-tree";
+    return name;
+  }
+  function propose(text) {
+    const cleanText = normalise(text) || String(text).trim() || "new tree";
+    const tokens = cleanText.split(" ");
+    const pieces = [], literalWords = [];
+    let inputs = {};
+    for (const tok of tokens) {
+      const slot = proposalSlot(tok, inputs);
+      if (slot !== null) pieces.push(slot); else { pieces.push(proposalLiteral(tok)); literalWords.push(tok); }
+    }
+    let trigger = pieces.filter(Boolean).join(" "), words = literalWords;
+    try { new Trigger(trigger); }
+    catch (e) {
+      if (!(e instanceof TriggerError)) throw e;
+      trigger = tokens.map(proposalLiteral).filter(Boolean).join(" ") || "new tree";
+      inputs = {}; words = tokens;
+    }
+    const name = proposalName(words, tokens, Object.keys(inputs));
+    return { text: cleanText, name, trigger, inputs, scaffold: ["pyrtan", "new", name, "--from", shellQuote(cleanText)].join(" ") };
+  }
+  function noMatchOutcome(text, where) {
+    const p = propose(text);
+    return { say: `${where} answers ${pyrepr(text)}. To write the tree that would: ${p.scaffold}`, output: { unanswered: text, proposal: p } };
+  }
+  const intent = { Trigger, TriggerError, read, normalise, language, compilePattern, correctTypos, propose, noMatchOutcome, KINDS };
+
   // ------------------------------------------------------------ trees
   const INPUT_TYPES = ["str", "int", "float", "bool", "list", "dict"];
   function inferType(v) { return isBool(v) ? "bool" : isNum(v) ? (Number.isInteger(v) ? "int" : "float") : Array.isArray(v) ? "list" : isObj(v) ? "dict" : "str"; }
@@ -542,8 +1126,13 @@
       this.name = raw.name; this.version = raw.version || 1; this.description = raw.description || "";
       this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || ""; this.namespace = raw.namespace || "";
       for (const k of LIST_NAMES) this[k] = raw[k] || [];
-      this.language = raw.language || {};
-      this.triggers = (raw.triggers || []).map((t) => (typeof t === "string" ? { pattern: t } : t));
+      try { this.language = language(raw.language); } catch (e) { if (e instanceof TriggerError) throw new TreeError(`${this.name}: ${e.message}`); throw e; }
+      this.triggers = (raw.triggers || []).map((t, i) => {
+        if (typeof t === "string") t = { pattern: t };
+        if (!isObj(t) || !("pattern" in t)) throw new TreeError(`${this.name}: triggers[${i}] needs a 'pattern'`);
+        try { return new Trigger(t.pattern, Object.assign({}, t.inputs || {}), this.language); }
+        catch (e) { if (e instanceof TriggerError) throw new TreeError(`${this.name}: triggers[${i}]: ${e.message}`); throw e; }
+      });
       this.inputs = {};
       for (const [name, s] of Object.entries(raw.inputs || {})) {
         const spec = isObj(s) ? s : { default: s };
@@ -603,7 +1192,7 @@
       for (const [n, s] of Object.entries(this.inputs)) {
         const d = {};
         if (s.type) d.type = s.type;
-        if (s.default !== null && s.default !== undefined && s.default !== "" && s.default !== false) d.default = s.default;
+        if (s.default !== null && s.default !== undefined && s.default !== "" && s.default !== false && s.default !== 0) d.default = s.default;  // Python drops what == False
         if (s.required && (s.default === null || s.default === undefined)) d.required = true;
         if (s.description) d.description = s.description;
         inputs[n] = d;
@@ -615,7 +1204,7 @@
       cap.sources = this.sources();
       const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
       if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
-      return Object.assign(cap, { license: this.license, language: this.language, triggers: this.triggers.map((t) => t.pattern), inputs });
+      return Object.assign(cap, { license: this.license, language: languageDict(this.language), triggers: this.triggers.map((t) => t.pattern), inputs });
     }
   }
 
@@ -637,7 +1226,9 @@
         const h = {}; r.headers.forEach((v, k) => { h[k.toLowerCase()] = v; });
         return new Response(r.status, h, text, r.url || url, Date.now() - started);
       } catch (e) {
-        throw new TransportError(`${method} ${url}: ${e && e.message ? e.message : e}`);
+        // A browser hides why: most often the site does not let pages on other origins read it (CORS).
+        const why = typeof window !== "undefined" && e instanceof TypeError ? " (the site may not let a page in a browser read it; a hub can)" : "";
+        throw new TransportError(`${method} ${url}: ${e && e.message ? e.message : e}${why}`);
       } finally { if (timer) clearTimeout(timer); }
     }
   }
@@ -730,9 +1321,42 @@
       }
       return this.run(tree, inputs || {}, { depth });
     }
+    candidates() {
+      const out = [];
+      for (const name of Object.keys(this.trees).sort()) for (const trig of this.trees[name].triggers) out.push([name, trig]);
+      return out;
+    }
+    read(text) { return read(text, this.candidates(), this.clock()); }
+    // Read a sentence and run the tree it names; the trace begins with the intent step.
     async runIntent(text, depth = 0) {
-      if (this.resolver) return fromDict(await this.resolver.runIntent(text, depth), "");
-      return outcome("error", "", { reason: "no-match", say: `Nothing here answers ${pyrepr(text)}.` });
+      const reading = this.read(text);
+      if (!reading.matches.length) {
+        if (this.resolver) return fromDict(await this.resolver.runIntent(text, depth), "");
+        const nm = noMatchOutcome(text, "Nothing here");
+        nm.output.reading = { cleaned: reading.cleaned, steps: reading.steps, considered: reading.considered.map((m) => m.trigger.pattern) };
+        return outcome("error", "", Object.assign({ reason: "no-match" }, nm));
+      }
+      const trees = [...new Set(reading.matches.map((m) => m.tree))].sort();
+      if (trees.length > 1) return outcome("error", "", { reason: "ambiguous", say: `${pyrepr(text)} matches more than one tree equally well: ${trees.join(", ")}`, output: { candidates: trees, reading: { cleaned: reading.cleaned, steps: reading.steps } } });
+      const match = reading.matches[0], tree = this.get(match.tree);
+      const trace = new Trace(tree.name), st = reading.step();
+      trace.add(step(st.node, st.kind, st.summary, { observed: st.observed, next: tree.start, depth }));
+      return this.run(tree, match.inputs, { depth, trace });
+    }
+    // Continue a run paused by ask: the answer goes where the ask node said.
+    async resume(snapshot, answer) {
+      const tree = this.get(snapshot.tree);
+      if (!tree) return outcome("error", snapshot.tree || "", { reason: "no-such-tree" });
+      const node = tree.node(snapshot.node), into = String(node.get("into"));
+      const inputs = Object.assign({}, snapshot.inputs), state = Object.assign({}, snapshot.state);
+      if (into.startsWith("inputs.")) {
+        const key = into.slice(7);
+        try { inputs[key] = coerce(tree.inputs[key], answer); } catch (e) { if (e instanceof TreeError) return outcome("error", tree.name, { reason: "bad-input", say: e.message }); throw e; }
+      } else put(state, into.startsWith("state.") ? into.slice(6) : into, answer);
+      const trace = new Trace(tree.name);
+      trace.steps = (snapshot.trace || []).map((x) => step(x.node, x.kind, x.summary, { observed: x.observed === undefined ? null : x.observed, chosen: x.chosen === undefined ? null : x.chosen, next: x.next === undefined ? null : x.next, elapsed_ms: x.elapsed_ms || 0, depth: x.depth || 0 }));
+      trace.add(step(node.id, "ask", `answered: ${brief(answer)}`, { next: node.next }));
+      return this.run(tree, inputs, { start: node.next, state, trace });
     }
     async run(tree, inputs, opts) {
       opts = opts || {};
@@ -804,7 +1428,7 @@
           call = async () => (await this.transport.request(method, url, headers, body === undefined ? null : body, timeout)).toState();
         } else {
           label = `${sourceName} ${what(sourceName, spec)}`;
-          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not on a member; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : "devices")}.` });
+          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : "devices")}.` });
           call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
         }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
@@ -911,5 +1535,99 @@
     return outcome(d.status || "error", d.tree || fallbackTree, { say: d.say === undefined ? null : d.say, output: d.output === undefined ? null : d.output, reason: d.reason === undefined ? null : d.reason, question: d.question === undefined ? null : d.question, snapshot: d.snapshot === undefined ? null : d.snapshot, trace, inputs: d.inputs || {} });
   }
 
-  return { MISSING, Tree, Runner, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: "0.10.0" };
+  // ------------------------------------------------------------ the hub in a page
+  // A browser that has joined no hub is a hub of its own, for as long as the
+  // page is open: it holds trees (the catalog's, as a page loads them), reads
+  // sentences, runs the trees and keeps the gaps and the unanswered sentences
+  // in memory. It answers the same paths with the same shapes as a service
+  // (service.py), so the console talks to it exactly as it talks to a hub.
+  // What it cannot do is reach what only a box can: files, programs, serial
+  // lines, brokers, a browser to drive, and sites that do not let a page read
+  // them. Those trees answer with the reason, and joining a hub is the cure.
+  const UNANSWERED_LIMIT = 200;
+  class LocalHub {
+    constructor(opts) {
+      opts = opts || {};
+      this.name = opts.name || "this browser";
+      this.version = opts.version || VERSION;
+      this.clock = opts.clock || (() => new Date());
+      this.wall = opts.wall || (() => Date.now() / 1000);
+      this.runner = new Runner({ transport: opts.transport || new FetchTransport(), adapters: opts.adapters || null, clock: this.clock, env: opts.env });
+      this.errors = {}; this.held = {};
+      this.gaps = new Map(); this.unanswered = new Map();
+      this.runs = 0; this.started = this.wall();
+      for (const raw of opts.trees || []) this.add(raw);
+    }
+    // where: what to call the tree in errors (a catalog id). The first tree of a name is the one held.
+    add(raw, where) {
+      const name = raw && raw.name;
+      if (name && this.runner.get(name) && this.held[name] !== (where || name)) { this.errors[where || name] = `a tree named ${pyrepr(name)} is already held, from ${this.held[name]}`; return null; }
+      try { const t = this.runner.add(raw); this.held[t.name] = where || t.name; delete this.errors[where || t.name]; return t; }
+      catch (e) { if (!(e instanceof TreeError)) throw e; this.errors[where || (raw && raw.name) || "?"] = e.message; return null; }
+    }
+    trees() { return Object.keys(this.runner.trees).sort().map((n) => this.runner.trees[n]); }
+    health() {
+      return { status: "ok", name: this.name, trees: this.trees().map((t) => t.name), errors: this.errors, runs: this.runs, gaps: this.gaps.size, unanswered: this.unanswered.size, uptime_s: Math.floor(this.wall() - this.started), watches: 0 };
+    }
+    capabilities() { return { name: this.name, trees: this.trees().map((t) => t.capability()) }; }
+    noteGaps(gaps) {
+      const now = this.wall();
+      for (const g of gaps) {
+        const key = JSON.stringify([g.tree, g.node, g.on, g.observed === undefined ? null : g.observed]);
+        const cur = this.gaps.get(key);
+        if (cur) { cur.count += 1; cur.last_seen = Math.max(cur.last_seen, now); }
+        else this.gaps.set(key, { tree: g.tree, node: g.node, on: g.on, observed: g.observed === undefined ? null : g.observed, count: 1, first_seen: now, last_seen: now });
+      }
+    }
+    noteUnanswered(text) {
+      const now = this.wall(), key = normalise(text).toLowerCase() || text;
+      let e = this.unanswered.get(key);
+      if (!e) { e = { text: normalise(text) || text, count: 0, first: now, last: now, proposal: propose(text) }; this.unanswered.set(key, e); }
+      e.count += 1; e.last = Math.max(e.last, now);
+      while (this.unanswered.size > UNANSWERED_LIMIT) {
+        let oldest = null;
+        for (const [k, v] of this.unanswered) if (oldest === null || v.last < this.unanswered.get(oldest).last) oldest = k;
+        this.unanswered.delete(oldest);
+      }
+    }
+    finish(o, body) {
+      this.runs += 1;
+      if (o.trace && o.trace.gaps && o.trace.gaps.length) this.noteGaps(o.trace.gaps);
+      return outcomeDict(o, body.trace === undefined ? true : Boolean(body.trace));
+    }
+    async intent(body) {
+      const text = body.text;
+      if (typeof text !== "string" || !text.trim()) return { status: "error", reason: "bad-request", say: 'Send {"text": "..."}.' };
+      const o = await this.runner.runIntent(text, Math.trunc(Number(body.depth || 0)));
+      if (o.reason === "no-match") this.noteUnanswered(text);
+      return this.finish(o, body);
+    }
+    async run(body) {
+      if (typeof body.tree !== "string") return { status: "error", reason: "bad-request", say: 'Send {"tree": "...", "inputs": {...}}.' };
+      return this.finish(await this.runner.runTree(body.tree, body.inputs || {}, Math.trunc(Number(body.depth || 0))), body);
+    }
+    async resume(body) {
+      const snap = body.snapshot;
+      if (!isObj(snap) || !("tree" in snap)) return { status: "error", reason: "bad-request", say: 'Send {"snapshot": {...}, "answer": ...}.' };
+      return this.finish(await this.runner.resume(snap, body.answer === undefined ? null : body.answer), body);
+    }
+    // (method, path, body) -> [status, payload], as service.py's route.
+    async route(method, path, body) {
+      method = String(method || "GET").toUpperCase();
+      path = "/" + String(path || "").split("?")[0].replace(/^\/+/, "");
+      body = isObj(body) ? body : {};
+      if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches"] }];
+      if (method === "GET" && path === "/health") return [200, this.health()];
+      if (method === "GET" && path === "/capabilities") return [200, this.capabilities()];
+      if (method === "GET" && path === "/gaps") return [200, { gaps: [...this.gaps.values()].map((g) => Object.assign({}, g)).sort((a, b) => b.count - a.count || a.last_seen - b.last_seen) }];
+      if (method === "GET" && path === "/unanswered") return [200, { unanswered: [...this.unanswered.values()].map((e) => Object.assign({}, e)).sort((a, b) => b.count - a.count || b.last - a.last) }];
+      if (method === "GET" && path === "/watches") return [200, { count: 0, watches: [], watching: false }];
+      if (method === "POST" && path === "/intent") return [200, await this.intent(body)];
+      if (method === "POST" && path === "/run") return [200, await this.run(body)];
+      if (method === "POST" && path === "/resume") return [200, await this.resume(body)];
+      return [404, { status: "error", reason: "not-found", say: `No ${method} ${path} here.` }];
+    }
+  }
+
+  return { MISSING, Tree, Runner, LocalHub, Reading, nlp, intent, read, propose, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: VERSION };
 });

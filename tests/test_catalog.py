@@ -12,6 +12,7 @@ import pytest
 
 from pyrtan.catalog import Catalog, CatalogError, build_index
 from pyrtan.cli import main
+from pyrtan.tree import load_tree
 from conftest import EXAMPLES
 
 
@@ -139,6 +140,18 @@ def test_cli_index_search_pull(catalog_dir, served, tmp_path, capsys):
     assert "not 9" in capsys.readouterr().err
     assert main(["console", "--out", str(tmp_path / "site" / "console.html")]) == 0
     assert "<title>Pyrtan</title>" in (tmp_path / "site" / "console.html").read_text()
+
+
+def test_index_writes_the_trees_as_json_for_the_browser(catalog_dir, tmp_path):
+    # The console in a browser holds the catalog's trees: the same trees, as JSON, beside the index.
+    site = tmp_path / "site"
+    assert main(["index", str(catalog_dir), "--copy", str(site)]) == 0
+    index = json.loads((site / "index.json").read_text())
+    bundle = json.loads((site / "trees.json").read_text())
+    assert bundle["pyrtan-trees"] == 1 and bundle["count"] == index["count"] == 10
+    assert [(t["id"], t["sha256"]) for t in bundle["trees"]] == [(e["id"], e["sha256"]) for e in index["trees"]]
+    weather = next(t["tree"] for t in bundle["trees"] if t["id"].endswith("weather"))
+    assert weather == load_tree(site / next(e["path"] for e in index["trees"] if e["id"].endswith("weather"))).raw
 
 
 # ---------------------------------------------------------------- namespaces, the gate, publishing
