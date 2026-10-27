@@ -8,7 +8,10 @@ out="${1:-out}"
 rm -rf "$out"
 mkdir -p "$out/console" "$out/catalog" "$out/rendezvous"
 out="$(cd "$out" && pwd)"
-cp site/index.html site/CNAME "$out/"
+cp site/CNAME "$out/"
+# The landing page carries the version of the pyrtan it was built with.
+version="$(pyrtan --version | cut -d' ' -f2)"
+sed "s/__VERSION__/$version/g" site/index.html > "$out/index.html"
 cp site/rendezvous/seeds.json "$out/rendezvous/"
 # The directory as the seeds know it now, keeping the last published
 # snapshot's entries when a seed is down (SNAPSHOT_PREVIOUS may add more).
