@@ -1,0 +1,5 @@
+{
+  "pyrtan-hubs": 1,
+  "about": "Hubs pyrtan.com asks every hour for the directory, and the ones `pyrtan join` with no invite tries first. pyrtan.com runs no hub: this list is how it learns that one exists. Add yours by pull request; it should be a federated hub in the default network, started with --listed and --cors https://pyrtan.com. It need not be up all the time: the hourly snapshot keeps what every hub it can reach knows.",
+  "hubs": []
+}

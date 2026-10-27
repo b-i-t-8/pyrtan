@@ -3,8 +3,9 @@ file hosted anywhere else (``pyrtan console --out``), where it is a hub of
 its own until it joins one.
 
 It asks a sentence and shows the answer, the output and the trace; lists
-what the swarm can answer; shows the hub's peers and their ``link``; and
-lists the gaps. Everything it does goes through the public endpoints
+what the swarm can answer; shows the hub's peers and their ``link``; lists
+the gaps; and, on a hub started with ``--chat``, pairs this browser with a
+random stranger or a bot (``/chat``, see :mod:`pyrtan.chat`). Everything it does goes through the public endpoints
 (``/api``, ``/health``, ``/capabilities``, ``/peers``, ``/gaps``,
 ``/intent``, ``/resume``), so it works the same against a hub and a
 service, and the same whether it was served by that hub or by a static
@@ -50,7 +51,8 @@ PAGE = r"""<!doctype html>
 <script>__THEME__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  :root[data-theme=dark] { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 }
   :root { --accent:var(--pyr); --accent-fg:var(--pyr-fg) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
@@ -88,13 +90,22 @@ PAGE = r"""<!doctype html>
   .pyr { color:var(--pyr) } .tan { color:var(--tan) }
   :focus-visible { outline:2px solid var(--tan); outline-offset:2px }
   ::selection { background:var(--tan); color:var(--tan-fg) }
+  .chat-log { height:min(60vh,480px); overflow-y:auto; padding:2px 2px 8px; overflow-wrap:anywhere }
+  .chat-log .line { margin:6px 0 }
+  .chat-log .sys { color:var(--mute); font-size:14px }
+  .chat-log .who { font-weight:600; margin-right:6px }
+  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) }
+  .chat-log details { font-size:13px; margin-top:2px }
+  .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
+  #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
+  select { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   @media (max-width:560px) { table thead { display:none } table td { display:block; border-top:0 } table tr { display:block; border-top:1px solid var(--line); padding:6px 0 } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
+    <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
   <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
@@ -124,6 +135,7 @@ PAGE = r"""<!doctype html>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
+    <a href="#chat" data-tab="chat" id="chat-tab" hidden>Chat</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
 
@@ -215,6 +227,30 @@ PAGE = r"""<!doctype html>
     </div>
   </section>
 
+  <section id="tab-chat" hidden>
+    <h2>Talk to a stranger</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
+    <div class="notice" id="chat-guest" hidden>This hub's lobby is open to anyone, and you are here without its token: you meet people, not bots. A bot runs the hub's trees, and the token is what guards them.</div>
+    <div class="card" id="chat-off">
+      <form class="row" id="chat-start" style="margin:0">
+        <input type="text" id="chat-interests" placeholder="interests, optional: weather, news, music" autocomplete="off">
+        <select id="chat-want" aria-label="who to meet"><option value="anyone">a stranger, or a bot</option><option value="people">people only</option><option value="bot">a bot</option></select>
+        <button type="submit">Start</button>
+      </form>
+    </div>
+    <div class="card" id="chat-on" hidden>
+      <div class="chat-log" id="chat-log" aria-live="polite"></div>
+      <div class="typing-line" id="chat-typing-line" aria-live="polite"></div>
+      <form class="row" id="chat-say" style="margin:8px 0 0">
+        <button type="button" class="quiet" id="chat-next" title="Esc">New</button>
+        <input type="text" id="chat-text" placeholder="say something" autocomplete="off" maxlength="1000">
+        <button type="submit">Send</button>
+      </form>
+      <div class="mute" style="font-size:13px">Stop (or Esc), twice: end this and meet someone new · <a href="#" id="chat-stop">leave the lobby</a></div>
+    </div>
+    <label class="mute" style="font-size:14px" id="chat-typing-opt"><input type="checkbox" id="chat-typing" checked> Typing indicator: see when the stranger is typing, and let them see when you are. Off, neither of you sees it.</label>
+  </section>
+
   <section id="tab-api" hidden>
     <h2>The same endpoints this page uses</h2>
     <div class="card">
@@ -225,7 +261,9 @@ GET  /capabilities
 GET  /health
 GET  /gaps
 GET  /unanswered
-GET  /peers    (hub only)</pre>
+GET  /peers    (hub only)
+POST /chat/start {"want": "anyone"|"people"|"bot", "typing_indicator": true}   (hub with --chat)
+POST /chat/typing {"seat": "…", "typing": true}</pre>
       <div class="mute" style="font-size:14px;margin-top:8px" id="api-help">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
   </section>
@@ -279,6 +317,7 @@ function showTab(name) {
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
+  if (name === "chat") chat.count();
 }
 
 async function loadDirectory() {
@@ -289,7 +328,7 @@ async function loadDirectory() {
     tr.innerHTML = `<td><span class="link ${esc(h.link)}"></span>${esc(h.link)}</td><td><code>${esc(h.name||"")}</code>${h.via === "self" ? ' <span class="mute">(this hub)</span>' : ""}${h.kind === "member" ? ' <span class="mute">(member)</span>' : ""}<div class="mute">${esc(h.id)}</div></td><td>${(h.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}</td><td class="mute">${h.seen ? new Date(h.seen * 1000).toLocaleString() : ""}</td>`;
     body.appendChild(tr);
   }
-  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Follow a seed, or start this hub with <code>--listed</code>.</td></tr>`;
+  if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Join the default network (<code>pyrtan join</code>), or start this hub with <code>--listed</code>.</td></tr>`;
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 
@@ -314,7 +353,7 @@ async function detect() {
         $("#connect-lede").textContent = "This Pyrtan needs a token:";
         $("#connect-help").innerHTML = "Kept in this browser only. The token is the one the hub or service was started with (<code>--token</code> or <code>$PYRTAN_TOKEN</code>).";
         $("#hub-token").value = token;
-        if (!token) problem("Enter the token to see what this Pyrtan can answer.");
+        if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
       }
       return a;
     }
@@ -389,6 +428,15 @@ async function load() {
   $("#peers-tab").hidden = !isHub;
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
+  $("#chat-tab").hidden = !(isHub && a.chat);
+  if (a.chat && a.chat_bots === false && token) {
+    try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
+  }
+  if (a.chat && a.chat_bots === false) {
+    // A public lobby, and no token here: people only, since a bot runs the hub's trees.
+    $("#chat-want").innerHTML = `<option value="people">people only</option>`;
+    $("#chat-guest").hidden = false;
+  }
   member.hub = a.federation || null;
   if (member.hub) member.start();
   $("#where").textContent = local ? "running in this browser" : (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
@@ -398,7 +446,10 @@ async function load() {
     $("#who").textContent = (h.name ? h.name + " · " : "") + (h.peers != null ? `${h.up}/${h.peers} peers up` + (h.trees != null ? `, ${h.trees} trees` : "") : (h.trees ? `${h.trees.length} trees` : ""));
   } catch (e) { $("#who").textContent = "unreachable"; }
   for (const el of document.querySelectorAll(".at")) el.textContent = base || location.origin;
-  if (a.auth === "bearer" && !token) return;
+  if (a.auth === "bearer" && !token) {
+    if (a.chat_public && location.hash === "#chat") showTab("chat");  // the one tab open without the token
+    return;
+  }
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
@@ -715,8 +766,111 @@ $("#member-listed").addEventListener("change", (e) => { member.me.listed = e.tar
 $("#kept").addEventListener("click", async (e) => { const a = e.target.closest("a[data-show]"); if (!a) return; e.preventDefault(); const b = await member.keptGet(a.dataset.show); alert(b ? JSON.stringify(b.data, null, 2).slice(0, 4000) : "not kept"); });
 if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
 
+// ------------------------------------------------------------ chat
+// A seat in the hub's lobby: start, then long-poll for events (the hub
+// echoes our own lines too, so the log is the hub's word, in its order).
+const chat = {
+  seat: null, after: 0, gen: 0, state: null, partner: null, sure: 0,
+  indicator: false, partnerTyping: false, sentTyping: false, sentAt: 0,
+  pref() { try { return localStorage.getItem("pyrtan.chat.typing") !== "0"; } catch (e) { return true; } },
+  async post(path, body, extra) {
+    const r = await api(path, Object.assign({method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}, extra || {}));
+    if (r.status === 401) throw new Error("401: this Pyrtan needs a token");
+    return r.json();
+  },
+  async count() {
+    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); $("#chat-typing-opt").hidden = s.typing !== true; } catch (e) {}
+  },
+  async start() {
+    const interests = $("#chat-interests").value.split(/[,\s]+/).filter(Boolean);
+    let r; try { r = await this.post("chat/start", {want: $("#chat-want").value, interests, typing_indicator: $("#chat-typing").checked}); } catch (e) { problem(e.message, true); return; }
+    if (!r.seat) { problem(r.say || "The lobby did not take a seat.", true); return; }
+    problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = "";
+    $("#chat-off").hidden = true; $("#chat-on").hidden = false;
+    this.take(r); this.loop(++this.gen); $("#chat-text").focus();
+  },
+  take(r) {
+    for (const e of r.events || []) if (e.n > this.after) { this.render(e); this.after = e.n; }
+    this.state = r.state; this.partner = r.partner;
+    this.indicator = !!r.typing_indicator; this.partnerTyping = !!r.partner_typing;
+    $("#chat-typing-line").textContent = this.partnerTyping ? (r.partner && r.partner.kind === "bot" ? "Bot is thinking…" : "Stranger is typing…") : "";
+    $("#chat-text").disabled = r.state !== "talking";
+    $("#chat-text").placeholder = r.state === "talking" ? (r.partner && r.partner.kind === "bot" ? "ask the bot something" : "say something") : r.state === "waiting" ? "waiting for someone…" : "press New for someone else";
+    this.resetNext();
+  },
+  async loop(gen) {
+    while (this.seat && gen === this.gen) {
+      // Saying what is shown lets the hub answer as soon as the stranger starts or stops typing.
+      const ask = {seat: this.seat, after: this.after, wait: 20}; if (this.indicator) ask.partner_typing = this.partnerTyping;
+      let r; try { r = await this.post("chat/poll", ask); } catch (e) { await new Promise(res => setTimeout(res, 2000)); continue; }
+      if (gen !== this.gen) return;
+      if (r.state === "left") return;
+      if (r.reason === "no-seat") { this.line("sys", "This seat is gone (nobody polled it for a minute). Start again."); this.seat = null; this.take({state: "ended"}); return; }
+      this.take(r);
+    }
+  },
+  render(e) {
+    if (e.kind === "system") return this.line("sys", e.text);
+    const el = this.line(e.kind, e.text, {you: "You", stranger: "Stranger", bot: "Bot"}[e.kind] || e.kind);
+    if (e.kind === "bot" && (e.trace || e.tree)) {
+      const d = document.createElement("details");
+      d.innerHTML = `<summary>${esc([e.status, e.tree, e.peer && e.peer !== "local" ? "from " + e.peer : ""].filter(Boolean).join(" · "))}</summary>${e.trace ? `<pre>${esc(renderTrace(e.trace))}</pre>` : ""}`;
+      el.appendChild(d);
+    }
+  },
+  line(kind, text, who) {
+    const log = $("#chat-log"), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    const el = document.createElement("div"); el.className = "line " + kind;
+    el.innerHTML = (who ? `<span class="who">${esc(who)}:</span>` : "") + esc(text);
+    log.appendChild(el); if (stick) log.scrollTop = log.scrollHeight;
+    return el;
+  },
+  async say() {
+    const text = $("#chat-text").value.trim(); if (!text || !this.seat) return;
+    $("#chat-text").value = ""; this.sentTyping = false;  // the line ends the typing, on the hub too
+    try { const r = await this.post("chat/say", {seat: this.seat, text}); if (r.status !== "ok") this.line("sys", r.say || r.reason); } catch (e) { this.line("sys", e.message); }
+  },
+  typed(on) {
+    // Typing goes out when it starts or stops, and again every two seconds while it goes on.
+    if (!this.seat || !this.indicator || this.state !== "talking" || (this.partner && this.partner.kind === "bot")) return;
+    const now = Date.now();
+    if (on === this.sentTyping && (!on || now - this.sentAt < 2000)) return;
+    this.sentTyping = on; this.sentAt = now;
+    this.post("chat/typing", {seat: this.seat, typing: on}).catch(() => {});
+  },
+  async setIndicator(on) {
+    try { localStorage.setItem("pyrtan.chat.typing", on ? "1" : "0"); } catch (e) {}
+    if (!this.seat) return;
+    this.sentTyping = false;
+    try { this.take(await this.post("chat/settings", {seat: this.seat, typing_indicator: on, after: this.after})); } catch (e) { this.line("sys", e.message); }
+  },
+  resetNext() { this.sure = 0; $("#chat-next").textContent = this.state === "talking" ? "Stop" : "New"; },
+  async next() {
+    // Like Omegle: while talking, the first press asks, the second ends it and finds someone new.
+    if (this.state === "talking" && !this.sure) { this.sure = 1; $("#chat-next").textContent = "Really?"; setTimeout(() => this.resetNext(), 3000); return; }
+    if (!this.seat) return this.start();
+    this.sentTyping = false;
+    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after, typing_indicator: $("#chat-typing").checked})); } catch (e) { this.line("sys", e.message); }
+  },
+  leave(keepalive) {
+    if (!this.seat) return;
+    const seat = this.seat; this.seat = null; this.gen++;
+    this.post("chat/leave", {seat}, keepalive ? {keepalive: true} : {}).catch(() => {});
+  },
+};
+$("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
+$("#chat-say").addEventListener("submit", (e) => { e.preventDefault(); chat.say(); });
+$("#chat-text").addEventListener("input", () => chat.typed(!!$("#chat-text").value.trim()));
+$("#chat-text").addEventListener("blur", () => chat.typed(false));
+$("#chat-typing").checked = chat.pref();
+$("#chat-typing").addEventListener("change", (e) => chat.setIndicator(e.target.checked));
+$("#chat-next").addEventListener("click", () => chat.next());
+$("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; chat.count(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
+window.addEventListener("pagehide", () => chat.leave(true));
+
 // Forgetting the hub makes this browser its own hub again.
-$("#forget").addEventListener("click", () => { store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
+$("#forget").addEventListener("click", () => { chat.leave(true); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
 load();
 </script>
 </body>

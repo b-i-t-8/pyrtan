@@ -42,8 +42,10 @@ started ``--listed`` puts an entry for itself (id, name, the trees it
 holds, when) in every ``Announce`` it sends; every hub keeps the entries
 it hears and passes them on in its own announces, in both directions of
 every follow. Nothing central holds the directory: every federated hub
-does, and pyrtan.com publishes only static files: the default network,
-a list of *seeds* (hubs to follow first), and an hourly snapshot. An
+does, and pyrtan.com publishes only static files on GitHub Pages: the
+default network, the *hub list* (hubs operators added by pull request,
+which pyrtan.com asks every hour), and an hourly snapshot of what they
+know. No hub is run for it, and none has to be up for it. An
 entry is a hint (a hub two follows away cannot verify who said it), kept
 until its hub has not been heard of for a week, and routing never uses
 it: finding a hub in the directory and following it is still the one act
@@ -61,6 +63,12 @@ private network's hubs never reach the public directory, and ``GET
 (``default_network``, published at pyrtan.com) has a public secret: it
 names the network, it does not guard it, and nothing here needs it to.
 A follow outside any network (and every member's) works as before.
+
+**Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
+stranger with ``Meet``, and the two seats talk in ``Say`` and end with
+``Part``, with ``Typing`` while someone types, both ways between any two
+hubs that share a secret; a ``Say`` is logged without its text and a
+``Typing`` not at all. See :mod:`pyrtan.chat`.
 
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
@@ -88,7 +96,7 @@ from . import __version__
 from .service import http_json
 from .store import BlobStore, StoreError, check_key, digest as blob_digest
 
-DEFAULT_SEEDS = "https://pyrtan.com/rendezvous/seeds.json"
+DEFAULT_HUB_LIST = "https://pyrtan.com/rendezvous/hubs.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
 DEFAULT_NETWORK = "https://pyrtan.com/rendezvous/network.json"
 NETWORK_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -102,7 +110,9 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer")
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part")
+CHAT_TYPES = ("Meet", "Say", "Typing", "Part")   # a lobby's: two strangers on two hubs
+UNLOGGED = ("Typing",)                 # said every couple of seconds while someone types: not worth a log line
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
@@ -114,17 +124,17 @@ ASK_WINDOW = 600.0                     # a member asked to keep within this coun
 SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
 
 
-# ---------------------------------------------------------------- seeds
+# ---------------------------------------------------------------- the hub list
 
 
-def seed_urls() -> list[str]:
-    """Hubs to follow first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
-    ``$PYRTAN_SEEDS`` (a URL or file holding ``{"hubs": [...]}``), or the
-    list at pyrtan.com. Never raises: no seeds is an empty list."""
+def rendezvous_hubs() -> list[str]:
+    """Hubs to try first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
+    ``$PYRTAN_HUB_LIST`` (a URL or file holding ``{"hubs": [...]}``), or
+    the hub list at pyrtan.com. Never raises: no list is an empty list."""
     single = os.environ.get("PYRTAN_RENDEZVOUS")
     if single:
         return [single.rstrip("/")]
-    source = os.environ.get("PYRTAN_SEEDS") or DEFAULT_SEEDS
+    source = os.environ.get("PYRTAN_HUB_LIST") or DEFAULT_HUB_LIST
     try:
         if source.startswith(("http://", "https://")):
             status, body = http_json("GET", source, timeout=10.0)
@@ -142,7 +152,7 @@ def seed_urls() -> list[str]:
 def snapshot_hubs() -> list[str]:
     """Hubs from the directory snapshot pyrtan.com bakes hourly
     (``$PYRTAN_SNAPSHOT`` overrides the URL or names a file), most recently
-    heard first. What a new hub can try when every seed is down."""
+    heard first. What a new hub can try when no listed hub answers."""
     source = os.environ.get("PYRTAN_SNAPSHOT") or DEFAULT_SNAPSHOT
     try:
         if source.startswith(("http://", "https://")):
@@ -230,16 +240,16 @@ def default_network() -> Network | None:
 
 
 def bootstrap_candidates() -> list[str]:
-    """Where to look for a first hub: the seeds, then the snapshot's hubs."""
-    seeds = seed_urls()
-    return seeds + [h for h in snapshot_hubs() if h not in seeds]
+    """Where to look for a first hub: the hub list, then the snapshot's hubs."""
+    listed = rendezvous_hubs()
+    return listed + [h for h in snapshot_hubs() if h not in listed]
 
 
-def first_live_seed(seeds: list[str] | None = None) -> str | None:
-    """The first seed whose ``/actor`` answers as a hub; when none does, the
-    first hub from the snapshot that answers; else None."""
-    tried = seeds if seeds is not None else seed_urls()
-    for batch in ([tried] if seeds is not None else [tried, lambda: [h for h in snapshot_hubs() if h not in tried]]):
+def first_live_hub(hubs: list[str] | None = None) -> str | None:
+    """The first listed hub whose ``/actor`` answers as a hub; when none
+    does, the first hub from the snapshot that answers; else None."""
+    tried = hubs if hubs is not None else rendezvous_hubs()
+    for batch in ([tried] if hubs is not None else [tried, lambda: [h for h in snapshot_hubs() if h not in tried]]):
         for url in (batch() if callable(batch) else batch):
             try:
                 status, actor = http_json("GET", f"{url}/actor", timeout=5.0)
@@ -352,6 +362,14 @@ def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any
     return {"reporter": who.rstrip("/"), "id": tree_id, "node": node[:80], "on": on[:120], "observed": observed, "count": count, "last": last}
 
 
+def _logged(activity: dict[str, Any]) -> dict[str, Any]:
+    """An activity as the outbox and inbox logs keep it: a chat line without its text."""
+    obj = activity.get("object")
+    if activity.get("type") == "Say" and isinstance(obj, dict) and "text" in obj:
+        return {**activity, "object": {**obj, "text": f"<{len(str(obj['text']))} characters>"}}
+    return activity
+
+
 def heard(seen: float, now: float | None = None) -> str:
     """How recently a directory entry's hub announced, as gossip carried it."""
     age = (now if now is not None else time.time()) - seen
@@ -379,6 +397,7 @@ class Federation:
         self.handout: Callable[[], dict[str, Any]] = lambda: {}  # the trees trusted members run: name -> the tree as JSON
         self._handed: dict[str, dict[str, dict[str, Any]]] = {}  # member -> key -> {sha256, at, confirmed}
         self._asks: dict[str, dict[str, Any]] = {}            # run id -> {member, event, answer}
+        self.chat: Any = None                                  # the hub's lobby, when it keeps one (pyrtan.chat.Lobby)
         self.ask_timeout = ASK_TIMEOUT
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
@@ -654,7 +673,7 @@ class Federation:
     # the path decided on and the value no branch covered, with a count;
     # never the inputs or the rest of the state. Every federated hub keeps
     # what it hears and passes it on, like the directory, so the reports
-    # reach the seeds and the snapshot pyrtan.com bakes, where an author
+    # reach the listed hubs and the snapshot pyrtan.com bakes, where an author
     # reads them beside the tree. Nothing is reported for a tree without a
     # namespace: there is nobody to report to.
 
@@ -740,10 +759,12 @@ class Federation:
         try:
             status, answer = http_json("POST", remote.inbox, activity, timeout=10.0, headers=headers)
         except Exception as e:
-            self.outbox.append({**activity, "to": remote.url, "delivered": False, "error": str(e)})
+            if activity.get("type") not in UNLOGGED:
+                self.outbox.append({**_logged(activity), "to": remote.url, "delivered": False, "error": str(e)})
             return False, str(e), None
         ok = status in (200, 202)
-        self.outbox.append({**activity, "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
+        if activity.get("type") not in UNLOGGED:
+            self.outbox.append({**_logged(activity), "to": remote.url, "delivered": ok, "error": None if ok else f"{status}: {answer}"})
         if ok and isinstance(answer, dict):
             if activity.get("type") == "Announce":
                 # An inbox answers an Announce with its own gossip: one round trip, both directions.
@@ -1116,27 +1137,35 @@ class Federation:
         if h.get("X-Pyrtan-Actor", "").rstrip("/") != actor:
             return 401, {"status": "error", "reason": "unsigned", "say": "The signature's actor must be the activity's actor."}
         kind = activity["type"]
-        self.inbox_log.append({**activity, "received": time.time()})
+        if activity.get("type") not in UNLOGGED:
+            self.inbox_log.append({**_logged(activity), "received": time.time()})
         if kind == "Follow":
             return self._on_follow(actor, activity, h, trusted)
         followed = self.following.get(actor)
         follower = self.followers.get(actor)
-        if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer"):
+        if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES):
             # Announce from a hub we follow: its trees are ours to route to;
-            # from a follower: only the directory it carries. Keeping goes
-            # both ways between any two that share a secret.
+            # from a follower: only the directory it carries. Keeping and
+            # chatting go both ways between any two that share a secret.
             remote = followed or follower
         else:
             remote = followed if kind in ("Accept", "Reject") else follower
         if remote is None:
             return 403, {"status": "error", "reason": "unknown-actor", "say": f"{actor} is not a hub this one follows or is followed by."}
         problem = verify(remote.secret, "POST", "/inbox", activity, h)
-        if problem and kind in ("Announce", "Keep", "Kept", "Fetch", "Answer") and followed and follower and followed is not follower:
+        if problem and kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES) and followed and follower and followed is not follower:
             # Mutual follow: the announce may be signed with the other pair.
             remote = follower if remote is followed else followed
             problem = verify(remote.secret, "POST", "/inbox", activity, h)
         if problem:
             return 401, {"status": "error", "reason": "unsigned", "say": problem}
+        if kind in CHAT_TYPES:
+            if self.chat is None:
+                return 404, {"status": "error", "reason": "no-chat", "say": f"{self.id} keeps no lobby."}
+            if remote.kind != "hub":
+                return 403, {"status": "error", "reason": "not-a-hub", "say": "Strangers meet hub to hub; a member chats through its hub's lobby."}
+            remote.last_ok = time.time()
+            return self.chat.on_activity(kind, remote, activity.get("object"), follower=remote is follower)
         if kind == "Accept":
             with self._lock:
                 remote.state = "accepted"

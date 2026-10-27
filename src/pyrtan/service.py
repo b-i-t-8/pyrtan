@@ -279,7 +279,7 @@ def bearer_ok(header: str | None, token: str) -> bool:
     return scheme.lower() == "bearer" and hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
 
 
-def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False):
+def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None):
     token = token or None
     origins = [o.rstrip("/") for o in (cors or []) if o]
     any_origin = "*" in origins
@@ -319,7 +319,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
 
         def _authorised(self, path: str) -> bool:
             """True if the request may proceed; otherwise a 401 has been sent."""
-            if token is None or path in PUBLIC_PATHS or bearer_ok(self.headers.get("Authorization"), token):
+            if token is None or path in PUBLIC_PATHS or bearer_ok(self.headers.get("Authorization"), token) or (public is not None and public(path)):
                 return True
             if federated and signed_path(path) and self.headers.get("X-Pyrtan-Signature"):
                 return True  # the route verifies the signature
@@ -391,10 +391,11 @@ class Server:
     """A running HTTP server around a route function, for a service or a hub.
 
     ``token`` requires ``Authorization: Bearer`` on everything but the public
-    paths; ``cors`` lists the browser origins allowed to call (``*`` for any)."""
+    paths, and any path ``public`` says yes to (a hub's open lobby); ``cors``
+    lists the browser origins allowed to call (``*`` for any)."""
 
-    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False) -> None:
-        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated))
+    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None) -> None:
+        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated, public))
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 

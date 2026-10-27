@@ -319,39 +319,39 @@ def test_directory_is_gossiped_in_both_directions_and_routes_to_nobody(two, tmp_
         c.stop()
 
 
-def test_seeds_and_cli_defaults(two, capsys, monkeypatch, tmp_path):
+def test_hub_list_and_cli_defaults(two, capsys, monkeypatch, tmp_path):
     a, b = two
-    from pyrtan.federation import first_live_seed, seed_urls
+    from pyrtan.federation import first_live_hub, rendezvous_hubs
 
     def run(*argv):
         code = main(list(argv))
         out = capsys.readouterr()
         return code, out.out, out.err
 
-    seeds = tmp_path / "seeds.json"
-    seeds.write_text(json.dumps({"pyrtan-seeds": 1, "hubs": ["http://127.0.0.1:9", b.url, a.url]}))
-    monkeypatch.setenv("PYRTAN_SEEDS", str(seeds))
+    listed = tmp_path / "hubs.json"
+    listed.write_text(json.dumps({"pyrtan-hubs": 1, "hubs": ["http://127.0.0.1:9", b.url, a.url]}))
+    monkeypatch.setenv("PYRTAN_HUB_LIST", str(listed))
     monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "no-snapshot.json"))  # never reach pyrtan.com from a test
     monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
-    assert seed_urls() == ["http://127.0.0.1:9", b.url, a.url]
-    assert first_live_seed() == b.url  # the dead one is skipped
+    assert rendezvous_hubs() == ["http://127.0.0.1:9", b.url, a.url]
+    assert first_live_hub() == b.url  # the dead one is skipped
     monkeypatch.setenv("PYRTAN_RENDEZVOUS", a.url)
-    assert seed_urls() == [a.url]
+    assert rendezvous_hubs() == [a.url]
     monkeypatch.delenv("PYRTAN_RENDEZVOUS")
     b.fed.set_listed(True)
-    code, out, _ = run("follow", "--at", a.url, "--token", "token-a", "--listed")  # no URL: the first live seed
+    code, out, _ = run("follow", "--at", a.url, "--token", "token-a", "--listed")  # no URL: the first listed hub that answers
     assert code == 0 and f"now follows {b.url}" in out and "listed in the directory" in out
     assert a.fed.listed and a.url in {h["id"] for h in b.fed.directory()["hubs"]}
-    monkeypatch.setenv("PYRTAN_AT", "http://127.0.0.1:9")  # the local default is dead: fall through to the seeds
+    monkeypatch.setenv("PYRTAN_AT", "http://127.0.0.1:9")  # the local default is dead: fall through to the hub list
     code, out, _ = run("directory")
     assert code == 0 and f"as b ({b.url})" in out and a.url in out and b.url in out
     code, out, _ = run("directory", "--at", a.url, "--json")
     assert {h["id"] for h in json.loads(out)["hubs"]} == {a.url, b.url}
     assert run("directory", "--at", b.svc_srv.url)[0] == 3
-    monkeypatch.setenv("PYRTAN_SEEDS", str(tmp_path / "missing.json"))
-    assert seed_urls() == []
+    monkeypatch.setenv("PYRTAN_HUB_LIST", str(tmp_path / "missing.json"))
+    assert rendezvous_hubs() == []
     code, _, err = run("follow", "--at", a.url, "--token", "token-a")
-    assert code == 3 and "no seed or snapshot hub answers" in err
+    assert code == 3 and "no listed or snapshot hub answers" in err
 
 
 def test_hub_holds_trees_itself(tmp_path):
@@ -404,7 +404,7 @@ say = "picnic says {{ state.a.say }}"
 
 
 def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
-    """site/snapshot.py merges the seeds' directories with the last snapshot,
+    """site/snapshot.py merges the listed hubs' directories with the last snapshot,
     and the command falls back to the snapshot when nothing is live."""
     import subprocess
     import sys as _sys
@@ -412,36 +412,36 @@ def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
     a, b = two
     b.fed.set_listed(True)
     a.post("/follow", {"url": b.url})
-    seeds = tmp_path / "seeds.json"
-    seeds.write_text(json.dumps({"pyrtan-seeds": 1, "hubs": ["http://127.0.0.1:9", a.url]}))
+    listed = tmp_path / "hubs.json"
+    listed.write_text(json.dumps({"pyrtan-hubs": 1, "hubs": ["http://127.0.0.1:9", a.url]}))
     old = tmp_path / "old.json"
     old.write_text(json.dumps({"pyrtan-directory": 1, "hubs": [{"id": "http://gone.example", "name": "gone", "trees": ["x"], "seen": time.time() - 3600}, {"id": "http://ancient.example", "trees": [], "seen": time.time() - 30 * 86400}]}))
     out = tmp_path / "directory.json"
-    run = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(out), "--previous", str(tmp_path / "missing.json"), "--previous", str(old)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
+    run = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--previous", str(tmp_path / "missing.json"), "--previous", str(old)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
     assert run.returncode == 0, run.stderr
     snap = json.loads(out.read_text())
-    assert snap["pyrtan-directory"] == 1 and snap["seeds"]["answered"] == [a.url] and snap["seeds"]["silent"][0]["seed"] == "http://127.0.0.1:9"
-    assert snap["seeds"]["previous"] == str(old)
+    assert snap["pyrtan-directory"] == 1 and snap["listed"]["answered"] == [a.url] and snap["listed"]["silent"][0]["hub"] == "http://127.0.0.1:9"
+    assert snap["listed"]["previous"] == str(old)
     ids = [h["id"] for h in snap["hubs"]]
-    assert b.url in ids and "http://gone.example" in ids and "http://ancient.example" not in ids  # live from the seed, kept from the snapshot, expired
+    assert b.url in ids and "http://gone.example" in ids and "http://ancient.example" not in ids  # live from the listed hub, kept from the snapshot, expired
     # B was named by A, so it was asked too, and its own word on itself is the newest.
-    assert snap["seeds"]["crawled"]["answered"] == [b.url] and next(h for h in snap["hubs"] if h["id"] == b.url)["via"] == b.url
+    assert snap["listed"]["crawled"]["answered"] == [b.url] and next(h for h in snap["hubs"] if h["id"] == b.url)["via"] == b.url
 
     def cli(*argv):
         code = main(list(argv))
         o = capsys.readouterr()
         return code, o.out, o.err
 
-    from pyrtan.federation import bootstrap_candidates, first_live_seed, snapshot_hubs
+    from pyrtan.federation import bootstrap_candidates, first_live_hub, snapshot_hubs
 
-    # With every seed dead, the snapshot's hubs are the next place to look.
-    monkeypatch.setenv("PYRTAN_SEEDS", str(tmp_path / "dead-seeds.json"))
-    (tmp_path / "dead-seeds.json").write_text(json.dumps({"hubs": ["http://127.0.0.1:9"]}))
+    # With every listed hub dead, the snapshot's hubs are the next place to look.
+    monkeypatch.setenv("PYRTAN_HUB_LIST", str(tmp_path / "dead-hubs.json"))
+    (tmp_path / "dead-hubs.json").write_text(json.dumps({"hubs": ["http://127.0.0.1:9"]}))
     monkeypatch.setenv("PYRTAN_SNAPSHOT", str(out))
     monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
     assert snapshot_hubs()[0] == b.url  # most recently heard first
     assert bootstrap_candidates() == ["http://127.0.0.1:9", b.url, "http://gone.example"]
-    assert first_live_seed() == b.url
+    assert first_live_hub() == b.url
     code, o, _ = cli("follow", "--at", a.url, "--token", "token-a")
     assert code == 0 and f"now follows {b.url}" in o
     monkeypatch.setenv("PYRTAN_AT", "http://127.0.0.1:9")
@@ -839,12 +839,12 @@ def test_reports_command_and_snapshot(two, tmp_path, capsys, monkeypatch):
     assert "pyrtan/weather@1 code: state.code = 99  ×4" in capsys.readouterr().out
     assert main(["reports", "nobody/x", "--at", a.url]) == 0 and "no gap reports" in capsys.readouterr().out
     assert main(["reports", "--at", a.url, "--json"]) == 0 and json.loads(capsys.readouterr().out)["reports"][0]["id"] == "pyrtan/weather@1"
-    # The site's snapshot asks the seeds for /reports and bakes reports.json; the command reads that when no hub is given.
+    # The site's snapshot asks the listed hubs for /reports and bakes reports.json; the command reads that when no hub is given.
     import subprocess, sys as _sys
 
-    seeds = tmp_path / "seeds.json"
-    seeds.write_text(json.dumps({"hubs": [a.url]}))
-    out = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(tmp_path / "directory.json"), "--reports", str(tmp_path / "reports.json")], capture_output=True, text=True, cwd=str(ROOT))
+    listed = tmp_path / "hubs.json"
+    listed.write_text(json.dumps({"hubs": [a.url]}))
+    out = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(tmp_path / "directory.json"), "--reports", str(tmp_path / "reports.json")], capture_output=True, text=True, cwd=str(ROOT))
     assert out.returncode == 0, out.stderr
     baked = json.loads((tmp_path / "reports.json").read_text())
     assert baked["count"] == 1 and baked["reports"][0]["id"] == "pyrtan/weather@1" and baked["reports"][0]["count"] == 4
@@ -985,9 +985,9 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
 
     network = ROOT / "site" / "rendezvous" / "network.json"
     monkeypatch.setenv("PYRTAN_NETWORK", str(network))
-    seeds = tmp_path / "seeds.json"
-    seeds.write_text(json.dumps({"hubs": ["http://127.0.0.1:9", b.url]}))
-    monkeypatch.setenv("PYRTAN_SEEDS", str(seeds))
+    listed = tmp_path / "hubs.json"
+    listed.write_text(json.dumps({"hubs": ["http://127.0.0.1:9", b.url]}))
+    monkeypatch.setenv("PYRTAN_HUB_LIST", str(listed))
     monkeypatch.setenv("PYRTAN_SNAPSHOT", str(tmp_path / "no-snapshot.json"))
     monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
     default = default_network()
@@ -995,7 +995,7 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
     # The first hub in the default network is a network of one: nobody to follow yet.
     code, out, _ = run("join", "--at", b.url, "--token", "token-b", "--listed")
     assert code == 0 and "in pyrtan; no hub in it accepted a follow yet" in out and b.fed.following == {}
-    # `pyrtan follow` with no URL is `pyrtan join`: A is in the default network, following the seed in it.
+    # `pyrtan follow` with no URL is `pyrtan join`: A is in the default network, following the listed hub in it.
     code, out, _ = run("follow", "--at", a.url, "--token", "token-a")
     assert code == 0 and f"in pyrtan, following {b.url}" in out and "invite others" not in out  # a public network needs no invite
     assert a.fed.following[b.url].network == default.id
@@ -1011,7 +1011,7 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
     code, out, _ = run("network", "leave", "home", "--at", a.url, "--token", "token-a")
     assert code == 0 and "left home" in out and "home" not in a.fed.networks
     assert run("network", "new", "--at", a.url, "--token", "token-a")[0] == 2
-    # A hub started with --join default (or --follow seed) is in it from the start.
+    # A hub started with --join default is in it from the start.
     hub, srv = serve_hub(port=0, quiet=True, name="d", join=["default"])
     try:
         assert hub.federation is not None and hub.federation.following[b.url].network == default.id
@@ -1023,7 +1023,7 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
     b.fed.merge_directory([{"id": "http://public.example", "name": "q", "trees": [], "seen": time.time()}], via="x", network=default.id)
     b.hub.token = None  # as anyone sees it, the private part included: the snapshot must still drop it
     out = tmp_path / "directory.json"
-    done = subprocess.run([_sys.executable, "site/snapshot.py", str(seeds), str(out), "--network", str(network)], capture_output=True, text=True, cwd=str(ROOT))
+    done = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--network", str(network)], capture_output=True, text=True, cwd=str(ROOT))
     assert done.returncode == 0, done.stderr
     ids = {h["id"] for h in json.loads(out.read_text())["hubs"]}
     assert "http://public.example" in ids and "http://private.example" not in ids and b.url in ids

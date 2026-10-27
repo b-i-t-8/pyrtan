@@ -112,6 +112,11 @@
       "name": "fixed",
       "sources": [],
       "tags": [],
+      "trigger_inputs": {
+       "the usual": {
+        "what": "coffee"
+       }
+      },
       "triggers": [
        "the usual"
       ],
@@ -169,6 +174,11 @@
        "news",
        "read-only"
       ],
+      "trigger_inputs": {
+       "[what's the] top story on hacker news": {
+        "count": 1
+       }
+      },
       "triggers": [
        "[what's the] top story on hacker news",
        "top {count:int} stories on hacker news"
@@ -443,6 +453,50 @@
         "what": "15m"
        }
       ]
+     },
+     {
+      "description": "How are you, who are you, what can you do, goodbye: what a stranger asks a bot in the chat before asking anything.",
+      "hosts": [],
+      "inputs": {
+       "topic": {
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "small-talk",
+      "namespace": "pyrtan",
+      "sources": [],
+      "tags": [
+       "chat",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "(bye|goodbye|see you|see ya)": {
+        "topic": "bye"
+       },
+       "(who|what) are you": {
+        "topic": "who"
+       },
+       "are you (a bot|human|real|a person)": {
+        "topic": "who"
+       },
+       "how are you [doing|today]": {
+        "topic": "how"
+       },
+       "what (can|do) you do": {
+        "topic": "what"
+       }
+      },
+      "triggers": [
+       "how are you [doing|today]",
+       "(who|what) are you",
+       "what (can|do) you do",
+       "are you (a bot|human|real|a person)",
+       "(bye|goodbye|see you|see ya)"
+      ],
+      "version": 1
      },
      {
       "description": "echo for tie-a",
@@ -8092,6 +8146,171 @@
    },
    "intent": "is the modem on /dev/ttyS0 up",
    "tree": "modem-check"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "how"
+    },
+    "output": {
+     "topic": "how"
+    },
+    "say": "Deterministic, thanks: the same question takes the same path every time.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how are you today",
+        "inputs": {
+         "topic": "how"
+        },
+        "steps": [],
+        "trigger": "how are you [doing|today]"
+       },
+       "summary": "'how are you today?' -> 'how are you today'; small-talk via 'how are you [doing|today]' (19 literal chars)"
+      },
+      {
+       "chosen": "eq 'how'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "how",
+       "node": "topic",
+       "observed": "how",
+       "summary": "inputs.topic = how"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "how",
+       "summary": "Deterministic, thanks: the same question takes the same path every time."
+      }
+     ],
+     "tree": "small-talk"
+    },
+    "tree": "small-talk"
+   },
+   "inputs": {
+    "topic": "how"
+   },
+   "intent": "how are you today?",
+   "tree": "small-talk"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "who"
+    },
+    "output": {
+     "topic": "who"
+    },
+    "say": "A bot: a set of Pyrtan trees on this network, not a person and not a model. Every answer I give comes with the exact path through the tree that produced it.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "are you a bot",
+        "inputs": {
+         "topic": "who"
+        },
+        "steps": [],
+        "trigger": "are you (a bot|human|real|a person)"
+       },
+       "summary": "'are you a bot'; small-talk via 'are you (a bot|human|real|a person)' (26 literal chars)"
+      },
+      {
+       "chosen": "eq 'who'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "who",
+       "node": "topic",
+       "observed": "who",
+       "summary": "inputs.topic = who"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "who",
+       "summary": "A bot: a set of Pyrtan trees on this network, not a person and not a model. Every answer I give comes with the exact path through the tree that produced it."
+      }
+     ],
+     "tree": "small-talk"
+    },
+    "tree": "small-talk"
+   },
+   "inputs": {
+    "topic": "who"
+   },
+   "intent": "are you a bot",
+   "tree": "small-talk"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "bye"
+    },
+    "output": {
+     "topic": "bye"
+    },
+    "say": "Bye. Press New to meet someone else.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "goodbye",
+        "inputs": {
+         "topic": "bye"
+        },
+        "steps": [],
+        "trigger": "(bye|goodbye|see you|see ya)"
+       },
+       "summary": "'goodbye'; small-talk via '(bye|goodbye|see you|see ya)' (21 literal chars)"
+      },
+      {
+       "chosen": "eq 'bye'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "bye",
+       "node": "topic",
+       "observed": "bye",
+       "summary": "inputs.topic = bye"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "bye",
+       "summary": "Bye. Press New to meet someone else."
+      }
+     ],
+     "tree": "small-talk"
+    },
+    "tree": "small-talk"
+   },
+   "inputs": {
+    "topic": "bye"
+   },
+   "intent": "goodbye",
+   "tree": "small-talk"
   }
  ],
  "trees": {
@@ -9156,6 +9375,121 @@
      "name": "example.com"
     }
    ]
+  },
+  "small-talk": {
+   "description": "How are you, who are you, what can you do, goodbye: what a stranger asks a bot in the chat before asking anything.",
+   "inputs": {
+    "topic": {
+     "one_of": [
+      "how",
+      "who",
+      "what",
+      "bye"
+     ],
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "small-talk",
+   "namespace": "pyrtan",
+   "nodes": {
+    "bye": {
+     "kind": "done",
+     "output": {
+      "topic": "bye"
+     },
+     "say": "Bye. Press New to meet someone else."
+    },
+    "how": {
+     "kind": "done",
+     "output": {
+      "topic": "how"
+     },
+     "say": "Deterministic, thanks: the same question takes the same path every time."
+    },
+    "topic": {
+     "branches": [
+      {
+       "then": "how",
+       "when": {
+        "eq": "how"
+       }
+      },
+      {
+       "then": "who",
+       "when": {
+        "eq": "who"
+       }
+      },
+      {
+       "then": "what",
+       "when": {
+        "eq": "what"
+       }
+      },
+      {
+       "then": "bye",
+       "when": {
+        "eq": "bye"
+       }
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.topic"
+    },
+    "what": {
+     "kind": "done",
+     "output": {
+      "topic": "what"
+     },
+     "say": "Only what my trees were written for. Ask something else and I'll say that nobody answers it yet, and which tree would."
+    },
+    "who": {
+     "kind": "done",
+     "output": {
+      "topic": "who"
+     },
+     "say": "A bot: a set of Pyrtan trees on this network, not a person and not a model. Every answer I give comes with the exact path through the tree that produced it."
+    }
+   },
+   "start": "topic",
+   "tags": [
+    "chat",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "inputs": {
+      "topic": "how"
+     },
+     "pattern": "how are you [doing|today]"
+    },
+    {
+     "inputs": {
+      "topic": "who"
+     },
+     "pattern": "(who|what) are you"
+    },
+    {
+     "inputs": {
+      "topic": "what"
+     },
+     "pattern": "what (can|do) you do"
+    },
+    {
+     "inputs": {
+      "topic": "who"
+     },
+     "pattern": "are you (a bot|human|real|a person)"
+    },
+    {
+     "inputs": {
+      "topic": "bye"
+     },
+     "pattern": "(bye|goodbye|see you|see ya)"
+    }
+   ],
+   "version": 1
   },
   "weather": {
    "description": "Current weather for a place, from Open-Meteo.",

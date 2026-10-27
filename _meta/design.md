@@ -284,7 +284,8 @@ Five trees, all against real public APIs, all tested offline:
    as the only trust. Design in [`federation.md`](federation.md).
 4. **v0.4, built: no server anywhere.** The directory hubs find each
    other by is kept and gossiped by every federated hub, with a static
-   seed list at pyrtan.com in place of a rendezvous hub; a hub can hold
+   list of hubs at pyrtan.com in place of a rendezvous hub (then
+   `seeds.json`, now `hubs.json`); a hub can hold
    trees itself (`--trees`), so a federated swarm can be one process.
 5. **v0.5, built: members and what they keep.** A browser or a phone
    joins a hub through a mailbox, carries the directory, and keeps the

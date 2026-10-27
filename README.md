@@ -160,12 +160,13 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
-| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory. |
+| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network pyrtan.com publishes, or the one an invite (`NAME:SECRET@HUB`) names. |
 | `pyrtan network new NAME --at HUB` | Starts a network of your own, a network of one, and prints its invite. `network list` shows each network with its invite; `network leave NAME` cuts the links made in it. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
+| `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
 | `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
@@ -199,10 +200,10 @@ while the page is open. Trees that need a box (files, programs, serial
 lines, brokers, a browser to drive) or a site that does not let a page
 read it say so; for those, join a hub started with
 `--cors https://pyrtan.com` by giving its URL and token. Forget it and the
-browser is its own hub again. The wordmark is two colours, **Pyr** the
+browser is its own hub again. The wordmark is two colours, **pyr** the
 primary and **tan** the secondary: click either half, right-click it, or
-press and hold it on a phone to pick that half's colour, kept in the
-browser. To run the swarm on a NAS or any Docker host,
+press and hold it on a phone to pick that half's colour; tan's picker also
+sets light, dark or auto mode. The choice is kept in the browser. To run the swarm on a NAS or any Docker host,
 see [`deploy/README.md`](deploy/README.md).
 
 ## A federation
@@ -271,16 +272,16 @@ purpose. It names the network rather than guarding it: anyone may join,
 and what keeps a stranger's hub harmless is that following is still the
 one act of trust. `pyrtan join` (or `pyrtan hub --join default`, or
 `$PYRTAN_JOIN=default`) puts a hub in it and follows the first hub in
-`rendezvous/seeds.json` that answers, then the first from the snapshot;
+`rendezvous/hubs.json` that answers, then the first from the snapshot;
 when none does, the hub is the network so far, and others join through
-it. No hub has to be always up: every hour pyrtan.com's build asks
-every hub it knows of for its directory (the seeds, then everyone the
-last snapshot or a hub names), keeps the default network's part, and
-publishes it as `rendezvous/directory.json`, so the directory stays
-current while any listed hub is up, and pyrtan.com itself is static
-files on GitHub Pages. To be a seed, a hub in the default network,
+it. pyrtan.com runs no hub: it is static files on GitHub Pages. Every
+hour its build asks every hub it knows of for its directory (the hub
+list, then everyone the last snapshot or a hub names), keeps the default
+network's part, and publishes it as `rendezvous/directory.json`, so the
+directory stays current while any hub it knows of is up, and no hub has
+to be always up. To be on the hub list, a hub in the default network,
 started `--listed` and `--cors https://pyrtan.com`, goes into
-`seeds.json` by pull request.
+`site/rendezvous/hubs.json` by pull request.
 
 ## Members, and what they keep
 
@@ -411,6 +412,63 @@ device is literal in the file and checked against the tree's lists by
 `pyrtan check`, and a service started `--egress public` watches no file
 and no serial line.
 
+## Chat: strangers and bots
+
+A hub started `--chat` keeps a lobby, Omegle-style: press Start in the
+console's **Chat** tab (or run `pyrtan chat`) and you are paired at random
+with someone else on the hub, with someone waiting on a hub it follows,
+or with a bot. Press Stop twice (or Esc twice) to end it and meet someone
+new. Nobody has a name, and nothing is kept.
+
+```
+$ pyrtan hub --trees examples --chat
+$ pyrtan chat --bot --interests disk
+  You're now chatting with a bot: hub, this hub's own trees. It is 11 trees, not a person and not a model, and every line it says comes with the path that produced it. Try “how full is the disk”.
+hi
+Bot: I'm hub, this hub's own trees. It is 11 trees, …
+what's the weather in Oslo
+Bot: Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
+top 3 stories on lobsters
+Bot: No service in the swarm answers 'top 3 stories on lobsters'. To write the tree that would: pyrtan new top-stories-lobsters --from "top 3 stories on lobsters"
+```
+
+A **bot is not a model**: it is one holder of trees on the network (the
+hub's own, a service, a trusted member, a hub it follows), picked at
+random, one whose trees share a word with your interests first. What you
+say is read against its triggers, then asked of the whole swarm; when
+nobody answers, it says so and names the tree that would, and the
+sentence is recorded as unanswered like any other. An `ask` node's
+question is its next line and your reply is the answer. Every line it
+says carries its trace. [`small-talk`](examples/small-talk/small-talk.toml)
+answers "how are you" and "are you a bot"; a bare "hi" is filler, and
+the bot answers it with who it is.
+
+**Stranger is typing…** While someone types, their partner sees it, and
+while a bot's trees run, "Bot is thinking…". It works both ways or not
+at all: untick *Typing indicator* in the Chat tab (remembered in that
+browser), or `pyrtan chat --no-typing`, and you neither share your
+typing nor see anyone else's. An operator turns it off for the whole
+hub with `pyrtan hub --chat --no-chat-typing` (`$PYRTAN_CHAT_TYPING=0`).
+It is never stored: it goes out with the next line, or after five
+seconds without news.
+
+**Strangers across hubs.** A seat that finds nobody waiting asks the hubs
+its hub follows with a signed `Meet`; the lines travel as `Say` and the
+end as `Part`, typing as `Typing`, hub to hub, signed with the pair's
+secret; the outbox logs a `Say` without its text and leaves `Typing` out. A hub answers a `Meet` only from a
+hub that follows it, and never passes one on.
+
+The lobby follows the hub's token: with one, only callers who have it
+chat (a bot runs trees, so a lobby must not be a way round it). To let
+strangers in and keep the token on everything else, start the hub
+`--chat-public`: callers without the token are guests, who meet people
+(here, or on a hub this one follows) and never a bot. There is no chat
+server and no hub of pyrtan.com's: every hub started `--chat` is a lobby, and hubs
+that follow each other share their strangers. It is
+text only, a line is at most 1,000 characters, five in a burst and one a
+second after; a seat nobody polls for a minute is let go. There is no
+moderation but leaving. The design is in [`_meta/chat.md`](_meta/chat.md).
+
 ## When no service in the swarm answers
 
 A sentence nobody answers is not a dead end; it is the next tree. The hub
@@ -523,14 +581,14 @@ _meta/          the design record, the tree format reference, and the
                 design for pyrtan.com
 deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
                 and a systemd unit
-site/           pyrtan.com: the landing page, the seed list, the catalog
+site/           pyrtan.com: the landing page, the hub list, the catalog
                 viewer, the source browser (files, releases, branches and
                 history), and the build the pages workflow publishes
 ```
 
 ## Status
 
-0.10.0. The core, the service, the hub, the command, the console, the
+0.13.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; pyrtan.com publishes the
@@ -539,8 +597,9 @@ part of the swarm), the blobs they keep and the trees they run
 (`pyrtan.js`, conformant with the Python runtime), six forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each
 behind an allow-list, watches (a tree that runs when a clock, a file, a
-topic or a serial line speaks), and `pyrtan grow` (the branch a gap asks
-for, drafted by rules) are built and tested; a swarm can require a
+topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
+for, drafted by rules), and the chat lobby (strangers on the hub and the
+hubs it follows, bots made of trees, a typing indicator, and lobbies open to the public) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
