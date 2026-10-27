@@ -1,7 +1,7 @@
 # Pyrtan
 
 **Open-source total automation: a core set of expandable services that act on all forms of I/O
-through hardcoded, inspectable decision trees.**
+through inspectable decision trees.**
 
 Pyrtan looks like an assistant from the outside. You give it a sentence; it
 reads or changes something through whatever form of I/O it has an adapter
@@ -479,7 +479,8 @@ _meta/          the design record, the tree format reference, and the
 deploy/         Dockerfile at the root; a compose stack for OpenMediaVault
                 and a systemd unit
 site/           pyrtan.com: the landing page, the seed list, the catalog
-                viewer, and the build the pages workflow publishes
+                viewer, the source browser (files, releases, branches and
+                history), and the build the pages workflow publishes
 ```
 
 ## Status
@@ -498,8 +499,6 @@ token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
-
-Pyrtan is a product of [Hillvon.io](https://hillvon.io).
 
 ## License
 

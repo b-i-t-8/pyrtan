@@ -1,7 +1,7 @@
 [project]
 name = "pyrtan"
 version = "0.9.0"
-description = "Open-source total automation: a core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees."
+description = "Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]

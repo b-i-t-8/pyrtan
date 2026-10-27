@@ -89,7 +89,7 @@ PAGE = r"""<!doctype html>
     <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
-  <p class="lede">A core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
 
   <section id="connect" hidden>
     <div class="card">
@@ -221,7 +221,7 @@ GET  /peers    (hub only)</pre>
     </div>
   </section>
 
-  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://github.com/b-i-t-8/pyrtan">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
+  <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://pyrtan.com/source/">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);

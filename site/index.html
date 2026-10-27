@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyrtan</title>
-<meta name="description" content="Open-source total automation: a core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. No model in the loop.">
+<meta name="description" content="Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees. No model in the loop.">
 <meta name="theme-color" content="#c2410c">
 <script src="theme.js"></script>
 <style>
@@ -41,13 +41,13 @@
 <body>
 <main>
   <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span></h1>
-  <p class="lede">Open-source total automation: a core set of expandable services that act on all forms of I/O through hardcoded, inspectable decision trees. It answers like an assistant. Inside, there is no model.</p>
+  <p class="lede">Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees. It answers like an assistant. Inside, there is no model.</p>
 
   <div class="actions">
     <a class="primary" href="console/">Open the console</a>
     <a href="catalog/">Browse the catalog</a>
     <a href="#directory">The directory</a>
-    <a href="https://github.com/b-i-t-8/pyrtan">Source on GitHub</a>
+    <a href="source/">Browse the source</a>
   </div>
 
 <pre>$ pyrtan run "what's the weather in Oslo" --trees examples
@@ -89,7 +89,7 @@ pyrtan directory                                                        # who th
   <h2>Hosting</h2>
   <p>Self-hosting is the product. A hosted option, running the same open-source hub per customer with secrets, retention, scheduled re-runs and alerts around it, is planned; it will speak the same API, so a swarm can move either way without changing a caller.</p>
 
-  <footer>Pyrtan is free software under the AGPL-3.0-or-later, a product of <a href="https://hillvon.io">Hillvon.io</a>. Trees you write are your own.</footer>
+  <footer>Pyrtan v__VERSION__ is free software under the AGPL-3.0-or-later. Trees you write are your own.</footer>
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
