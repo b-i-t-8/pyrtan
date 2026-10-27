@@ -66,8 +66,14 @@ from .transport import Transport, UrllibTransport
 
 MAX_BODY = 1 << 20
 
-# What answers without a token: the console, its index, and liveness.
-PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory", "/reports", "/manifest.webmanifest", "/sw.js", "/pyrtan.js"})
+# What answers without a token: the console, its index, liveness, and a pushed
+# identity document (which proves itself by its signature).
+PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/actor", "/directory", "/reports", "/manifest.webmanifest", "/sw.js", "/pyrtan.js", "/identity"})
+
+
+def public_path(path: str) -> bool:
+    """What answers without a token: the paths above, and ``/.well-known/`` (identity documents, signed)."""
+    return path in PUBLIC_PATHS or path.startswith("/.well-known/")
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
 SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities", "/mailbox"})
@@ -76,6 +82,8 @@ SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities
 def signed_path(path: str) -> bool:
     """Whether a signed (federated) request may reach this path at all."""
     return path in SIGNED_PATHS or path.startswith("/kept/")
+# Headers a browser at another origin may send: federation's HMAC and an identity's key.
+SIGNATURE_HEADERS = ("X-Pyrtan-Actor", "X-Pyrtan-Date", "X-Pyrtan-Signature", "X-Pyrtan-Key", "X-Pyrtan-Key-Signature", "X-Pyrtan-Device")
 # What /health says to a caller without a token, when one is required.
 PUBLIC_HEALTH_KEYS = ("status", "name", "peers", "up", "stale", "down", "uptime_s")
 
@@ -279,7 +287,7 @@ def bearer_ok(header: str | None, token: str) -> bool:
     return scheme.lower() == "bearer" and hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
 
 
-def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False):
+def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False, keyed: bool = False):
     token = token or None
     origins = [o.rstrip("/") for o in (cors or []) if o]
     any_origin = "*" in origins
@@ -305,7 +313,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
                 return
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, " + ", ".join(SIGNATURE_HEADERS))
             self.send_header("Access-Control-Max-Age", "600")
             self.send_header("Vary", "Origin")
 
@@ -319,10 +327,12 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
 
         def _authorised(self, path: str) -> bool:
             """True if the request may proceed; otherwise a 401 has been sent."""
-            if token is None or path in PUBLIC_PATHS or bearer_ok(self.headers.get("Authorization"), token):
+            if token is None or public_path(path) or bearer_ok(self.headers.get("Authorization"), token):
                 return True
             if federated and signed_path(path) and self.headers.get("X-Pyrtan-Signature"):
                 return True  # the route verifies the signature
+            if keyed and self.headers.get("X-Pyrtan-Key-Signature"):
+                return True  # the route verifies the key and asks its grants
             self._send(401, {"status": "error", "reason": "unauthorised", "say": "This Pyrtan needs a token: send Authorization: Bearer <token>."}, extra={"WWW-Authenticate": 'Bearer realm="pyrtan"'})
             return False
 
@@ -393,8 +403,8 @@ class Server:
     ``token`` requires ``Authorization: Bearer`` on everything but the public
     paths; ``cors`` lists the browser origins allowed to call (``*`` for any)."""
 
-    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False) -> None:
-        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated))
+    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False, keyed: bool = False) -> None:
+        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated, keyed))
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 

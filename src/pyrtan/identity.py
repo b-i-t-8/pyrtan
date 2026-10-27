@@ -42,6 +42,7 @@ VERSION_ED25519 = 1
 VERSIONS = {VERSION_ED25519: 32}
 CHECKSUM_TAG = b".pyrtan id"
 DOC_TAG = b"pyrtan-doc-v1\n"
+REQUEST_TAG = "pyrtan-req-v1"
 ID_LENGTH = 56
 WINDOW = 300                      # seconds a document's time may run ahead of ours
 YEAR = 365 * 24 * 3600            # the longest a device note may last
@@ -509,6 +510,83 @@ def check_any(doc: Any, *, now: float | None = None) -> tuple[str, str | None]:
         if "pyrtan-name" in doc:
             return "name", check_name(doc)
     return "unknown", "not a pyrtan identity document, device note or name claim"
+
+
+# ---------------------------------------------------------------- signed requests
+#
+# A request made as an identity carries X-Pyrtan-Key (the signing key, a
+# root or a device), X-Pyrtan-Date, X-Pyrtan-Key-Signature (Ed25519 over the
+# message below) and, for a device, X-Pyrtan-Device (its note, as base64url
+# canonical JSON). The message is the HMAC one with a domain string and the
+# *audience*, the receiving hub's own id, in front: a request signed for one
+# hub cannot be replayed at another.
+
+
+def request_message(audience: str, method: str, path: str, date: str, body: Any) -> bytes:
+    digest = hashlib.sha256(canonical(body) if body is not None else b"").hexdigest()
+    return "\n".join([REQUEST_TAG, audience.rstrip("/"), method.upper(), path, date, digest]).encode("utf-8")
+
+
+def sign_request(key: Key, audience: str, method: str, path: str, body: Any, *, note: dict[str, Any] | None = None,
+                 date: float | None = None) -> dict[str, str]:
+    """The headers that make a request ``key``'s; ``note`` when ``key`` is a device."""
+    date_text = str(int(time.time() if date is None else date))
+    headers = {
+        "X-Pyrtan-Key": key.id, "X-Pyrtan-Date": date_text,
+        "X-Pyrtan-Key-Signature": _b64(key.sign(request_message(audience, method, path, date_text, body))),
+    }
+    if note is not None:
+        if note.get("device") != key.id:
+            raise IdentityError(f"the note is for {short(note.get('device', '?'))}, not this key")
+        headers["X-Pyrtan-Device"] = _b64(canonical(note))
+    return headers
+
+
+@dataclass(frozen=True)
+class Signer:
+    """Who signed a request: the key, the root it speaks for, and the device note if it is a device."""
+    key: str
+    root: str
+    note: dict[str, Any] | None = None
+
+
+def has_key_signature(headers: dict[str, str] | None) -> bool:
+    return any(k.lower() == "x-pyrtan-key-signature" for k in (headers or {}))
+
+
+def verify_request(audience: str, method: str, path: str, body: Any, headers: dict[str, str] | None, *,
+                   now: float | None = None) -> Signer:
+    """The signer of a request, or IdentityError saying why there is none. Checks the
+    signature, the time, and the device note (signed by its root, current, for this key);
+    whether the root may do anything is the caller's question."""
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    key, date, signature = h.get("x-pyrtan-key", ""), h.get("x-pyrtan-date", ""), h.get("x-pyrtan-key-signature", "")
+    if not key or not signature:
+        raise IdentityError("no key signature")
+    key = normal(key)
+    if not date.isdigit():
+        raise IdentityError("no date")
+    now = time.time() if now is None else now
+    if abs(now - int(date)) > WINDOW:
+        raise IdentityError("signature too old")
+    try:
+        raw = _unb64(signature)
+    except (IdentityError, ValueError):
+        raise IdentityError("the signature is not base64url") from None
+    if not verify(key, request_message(audience, method, path, date, body), raw):
+        raise IdentityError(f"the signature is not {short(key)}'s, for {audience}")
+    if "x-pyrtan-device" not in h:
+        return Signer(key, key)
+    try:
+        note = json.loads(_unb64(h["x-pyrtan-device"]).decode("utf-8"))
+    except (IdentityError, ValueError):
+        raise IdentityError("X-Pyrtan-Device is not a base64url note") from None
+    problem = check_device(note, now=now)
+    if problem:
+        raise IdentityError(f"device note: {problem}")
+    if note["device"] != key:
+        raise IdentityError(f"the device note is for {short(note['device'])}, not the signing key")
+    return Signer(key, note["root"], note)
 
 
 # ---------------------------------------------------------------- where the CLI keeps them
