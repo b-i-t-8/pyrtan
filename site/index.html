@@ -9,7 +9,8 @@
 <script src="theme.js"></script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
+  :root[data-theme=dark] { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 }
   :root { --accent:var(--pyr); --accent-fg:var(--pyr-fg) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif }
@@ -40,7 +41,7 @@
 </head>
 <body>
 <main>
-  <h1><span class="pyr" data-theme-part="pyr">Pyr</span><span class="tan" data-theme-part="tan">tan</span></h1>
+  <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span></h1>
   <p class="lede">Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees. It answers like an assistant. Inside, there is no model.</p>
 
   <div class="actions">

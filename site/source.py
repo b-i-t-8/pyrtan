@@ -46,7 +46,8 @@ def git_bytes(*args: str) -> bytes:
 
 CSS = """
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --pyr:#c2410c; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9; --add:#e6f4ea; --del:#fbe9e7 }
-  @media (prefers-color-scheme: dark) { :root { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420; --add:#16301f; --del:#3a1d19 } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420; --add:#16301f; --del:#3a1d19 } }
+  :root[data-theme=dark] { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --pyr:#fb8a4c; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420; --add:#16301f; --del:#3a1d19 }
   :root { --accent:var(--pyr) }
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif }
@@ -107,7 +108,7 @@ class Site:
 </head>
 <body>
 <main>
-<header><b><a href="{self.link(page, '../index.html')}"><span class="pyr">Pyr</span><span class="tan">tan</span></a> / <a href="{self.link(page, 'index.html')}">source</a></b><nav>{nav}</nav><span class="mute small">v{esc(self.version)} · {esc(self.branch)}</span></header>
+<header><b><a href="{self.link(page, '../index.html')}"><span class="pyr">pyr</span><span class="tan">tan</span></a> / <a href="{self.link(page, 'index.html')}">source</a></b><nav>{nav}</nav><span class="mute small">v{esc(self.version)} · {esc(self.branch)}</span></header>
 {body}
 </main>
 </body>

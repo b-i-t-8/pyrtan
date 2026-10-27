@@ -1,19 +1,23 @@
-// The wordmark and its two colours. "Pyr" is the primary colour (buttons,
+// The wordmark and its two colours. "pyr" is the primary colour (buttons,
 // links, the current tab); "tan" is the secondary (focus rings, hover edges,
-// selected text). Click either half of the wordmark, right-click it, or press
-// and hold it on a touch screen to pick that half's colour. The choice is kept
-// in this browser only, under this origin, and applies to every Pyrtan page
-// served from it.
+// selected text), and its picker also sets the mode: light, dark, or auto to
+// follow the system. Click either half of the wordmark, right-click it, or
+// press and hold it on a touch screen to open that half's picker. The choice
+// is kept in this browser only, under this origin, and applies to every
+// Pyrtan page served from it.
 //
-// A page gives the defaults as --pyr, --pyr-fg, --tan and --tan-fg on :root
-// (light and dark), marks the halves with data-theme-part="pyr" and "tan",
-// and loads this script in <head> so a saved choice applies before first paint.
+// A page gives the defaults as --pyr, --pyr-fg, --tan and --tan-fg on :root,
+// with its dark values both under prefers-color-scheme (for
+// :root:not([data-theme=light])) and under :root[data-theme=dark]; marks the
+// halves with data-theme-part="pyr" and "tan"; and loads this script in
+// <head> so a saved choice applies before first paint.
 (() => {
   const KEY = "pyrtan.theme";
   const PARTS = {
-    pyr: {label: "Pyr", role: "primary", presets: [["ember", "#c2410c"], ["crimson", "#c92a2a"], ["rose", "#c2255c"], ["violet", "#7048e8"], ["blue", "#2b5db8"], ["teal", "#0c8599"], ["green", "#2f9e44"], ["slate", "#495057"]]},
+    pyr: {label: "pyr", role: "primary", presets: [["ember", "#c2410c"], ["crimson", "#c92a2a"], ["rose", "#c2255c"], ["violet", "#7048e8"], ["blue", "#2b5db8"], ["teal", "#0c8599"], ["green", "#2f9e44"], ["slate", "#495057"]]},
     tan: {label: "tan", role: "secondary", presets: [["tan", "#c19a6b"], ["sand", "#d2b48c"], ["copper", "#b87333"], ["clay", "#a0522d"], ["gold", "#d4a017"], ["khaki", "#b5a642"], ["sage", "#8a9a5b"], ["steel", "#7d8ea3"]]},
   };
+  const MODES = [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]];
   const root = document.documentElement;
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { return {}; } };
   const save = (t) => { try { if (Object.keys(t).length) localStorage.setItem(KEY, JSON.stringify(t)); else localStorage.removeItem(KEY); } catch (e) {} };
@@ -28,6 +32,7 @@
       if (valid(t[part])) { root.style.setProperty("--" + part, t[part]); root.style.setProperty("--" + part + "-fg", ink(t[part])); }
       else { root.style.removeProperty("--" + part); root.style.removeProperty("--" + part + "-fg"); }
     }
+    if (t.mode === "light" || t.mode === "dark") root.dataset.theme = t.mode; else delete root.dataset.theme;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) { const c = getComputedStyle(root).getPropertyValue("--pyr").trim(); if (c) meta.content = c; }
   }
@@ -36,6 +41,7 @@
 
   const style = document.createElement("style");
   style.textContent = `
+  :root[data-theme=light] { color-scheme:light } :root[data-theme=dark] { color-scheme:dark }
   [data-theme-part] { cursor:pointer; border-radius:4px; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:manipulation }
   [data-theme-part]:hover { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:4px }
   [data-theme-part][aria-expanded=true] { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:4px }
@@ -50,6 +56,10 @@
   .theme-pick input[type=color] { width:36px; height:28px; padding:0; border:1px solid var(--line, #e3e1da); border-radius:6px; background:none; cursor:pointer }
   .theme-pick .theme-reset { font:inherit; padding:6px 10px; border:1px solid var(--line, #e3e1da); border-radius:6px; background:var(--soft, #f1efe9); color:var(--fg, #1d1d1b); cursor:pointer }
   .theme-pick .theme-reset:disabled { opacity:.5; cursor:default }
+  .theme-pick .theme-mode { display:flex; gap:4px; margin:10px 0 0; padding:3px; background:var(--soft, #f1efe9); border-radius:8px }
+  .theme-pick .theme-mode[hidden] { display:none }
+  .theme-pick .theme-mode button { flex:1; font:inherit; padding:5px 0; border:0; border-radius:6px; background:transparent; color:var(--fg, #1d1d1b); cursor:pointer }
+  .theme-pick .theme-mode button[aria-pressed=true] { background:var(--card, #fff); box-shadow:0 1px 3px rgba(0,0,0,.2); font-weight:600 }
   .theme-pick .theme-hint { color:var(--mute, #6b6a64); font-size:12px; margin:8px 0 0 }`;
   document.head.appendChild(style);
 
@@ -60,6 +70,10 @@
     if (color) theme[part] = color.toLowerCase(); else delete theme[part];
     save(theme); apply(theme); render();
   }
+  function mode(m) {
+    if (m === "light" || m === "dark") theme.mode = m; else delete theme.mode;
+    save(theme); apply(theme); render();
+  }
   function render() {
     if (!pick || !openPart) return;
     const p = PARTS[openPart], cur = current(openPart);
@@ -68,15 +82,19 @@
     pick.querySelector(".theme-swatches").innerHTML = p.presets.map(([name, c]) => `<button type="button" data-color="${c}" style="background:${c}" title="${name}" aria-label="${name}" aria-pressed="${cur === c}"></button>`).join("");
     pick.querySelector("input[type=color]").value = cur || getComputedStyle(root).getPropertyValue("--" + openPart).trim() || "#000000";
     pick.querySelector(".theme-reset").disabled = !cur;
+    const modes = pick.querySelector(".theme-mode"), on = theme.mode || "auto";
+    modes.hidden = openPart !== "tan";
+    for (const b of modes.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.mode === on));
   }
   function build() {
     pick = document.createElement("div");
     pick.className = "theme-pick"; pick.hidden = true; pick.setAttribute("role", "dialog");
-    pick.innerHTML = `<div class="theme-head"></div><div class="theme-swatches"></div><div class="theme-row"><label><input type="color"> Custom</label><button type="button" class="theme-reset">Default</button></div><div class="theme-hint">Kept in this browser only.</div>`;
+    pick.innerHTML = `<div class="theme-head"></div><div class="theme-swatches"></div><div class="theme-row"><label><input type="color"> Custom</label><button type="button" class="theme-reset">Default</button></div><div class="theme-mode" role="group" aria-label="Mode">${MODES.map(([m, label]) => `<button type="button" data-mode="${m}">${label}</button>`).join("")}</div><div class="theme-hint">Kept in this browser only.</div>`;
     pick.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-color]");
       if (b) choose(openPart, b.dataset.color);
       else if (e.target.closest(".theme-reset")) choose(openPart, null);
+      else if (e.target.closest("button[data-mode]")) mode(e.target.closest("button[data-mode]").dataset.mode);
     });
     pick.querySelector("input[type=color]").addEventListener("input", (e) => choose(openPart, e.target.value));
     document.body.appendChild(pick);
@@ -129,6 +147,8 @@
     window.addEventListener("resize", () => { if (pick && !pick.hidden) place(); });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+  // Auto follows the system; the browser bar's colour follows with it.
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { apply(theme); render(); }); } catch (e) {}
   // Another tab on the same origin changed the colours.
   window.addEventListener("storage", (e) => { if (e.key === KEY) { theme = load(); apply(theme); render(); } });
 })();
