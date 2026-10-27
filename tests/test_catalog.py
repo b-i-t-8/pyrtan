@@ -39,7 +39,7 @@ def served(catalog_dir):
 
 def test_build_index_describes_every_tree(catalog_dir):
     index = json.loads((catalog_dir / "index.json").read_text())
-    assert index["pyrtan-catalog"] == 1 and index["count"] == 10
+    assert index["pyrtan-catalog"] == 1 and index["count"] == 11
     weather = next(e for e in index["trees"] if e["name"] == "weather")
     assert weather["path"] == "weather/weather.toml" and weather["license"] == "MIT"
     assert weather["sha256"] == hashlib.sha256((catalog_dir / "weather/weather.toml").read_bytes()).hexdigest()
@@ -67,7 +67,7 @@ def test_build_index_leaves_out_what_does_not_belong(tmp_path):
 
 def test_search_and_find(served):
     cat = Catalog(served)
-    assert {e["name"] for e in cat.search("")} == {"weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check"}
+    assert {e["name"] for e in cat.search("")} == {"weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk"}
     assert [e["name"] for e in cat.search("open-meteo")] == ["weather"]
     assert [e["name"] for e in cat.search("news stories")] == ["hacker-news"]
     assert cat.search("nothing like this") == []
@@ -129,7 +129,7 @@ def test_not_a_catalog(served, tmp_path):
 def test_cli_index_search_pull(catalog_dir, served, tmp_path, capsys):
     out = tmp_path / "idx.json"
     assert main(["index", str(catalog_dir), "--out", str(out)]) == 0
-    assert json.loads(out.read_text())["count"] == 10
+    assert json.loads(out.read_text())["count"] == 11
     assert main(["search", "weather", "--catalog", served]) == 0
     assert "weather@2" in capsys.readouterr().out
     assert main(["search", "zzz", "--catalog", served]) == 1
@@ -263,7 +263,7 @@ def test_gate_and_publish(tmp_path, capsys):
     assert "placed" in out and "git checkout -b catalog/barry-lan-printer" in out
     assert main(["index", str(repo / "examples"), str(repo / "catalog"), "--copy", str(tmp_path / "site"), "--require-namespace"]) == 0
     served = json.loads((tmp_path / "site" / "index.json").read_text())
-    assert {e["id"] for e in served["trees"]} == {f"pyrtan/{n}" for n in ("weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check")} | {"barry/lan-printer"}
+    assert {e["id"] for e in served["trees"]} == {f"pyrtan/{n}" for n in ("weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk")} | {"barry/lan-printer"}
     assert main(["index", str(repo / "examples"), str(repo / "catalog")]) == 2  # two roots need --copy
     assert main(["search", "lan", "--catalog", str(tmp_path / "site")]) == 0 and "barry/lan-printer@3" in capsys.readouterr().out
     assert main(["pull", "lan-printer", "--catalog", str(tmp_path / "site"), "--dir", str(tmp_path / "pulled")]) == 0

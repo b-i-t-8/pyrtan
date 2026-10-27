@@ -19,6 +19,10 @@ Endpoints:
 ``GET  /unanswered`` sentences no peer answered, each with a proposed tree
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
+With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
+stranger here or at a hub it follows, or a bot made of the trees it routes
+to; see :mod:`pyrtan.chat`.
+
 Federated (``--federate``), a hub also answers ``GET /actor``, ``POST
 /inbox``, ``POST /follow`` and ``/unfollow`` (operator), ``GET /following``,
 ``/followers`` and ``/outbox``, and routes to the hubs it follows; see
@@ -42,6 +46,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import __version__
+from .chat import Lobby
 from .federation import MAX_HOPS, Federation, Remote, sign
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
@@ -119,8 +124,9 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False) -> None:
         self.name = name
+        self.lobby = Lobby(self) if chat else None
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
         self.token = token or None
@@ -150,6 +156,7 @@ class Hub:
         }
         self.federation = Federation(advertise, name=self.name, secret=secret, state=state, open_follows=open_follows, capabilities=self.announced_capabilities, listed=listed, store=store, replicas=replicas, auto_keys=auto, report_gaps=report_gaps, own_reports=self.gap_reports)
         self.federation.handout = self.handout_trees
+        self.federation.chat = self.lobby
         return self.federation
 
     def handout_trees(self) -> dict[str, Tree]:
@@ -274,15 +281,18 @@ class Hub:
                 out.extend(self.federation.following.values())
             return out
 
-    def candidates(self) -> list[tuple[tuple[str, str], Trigger]]:
+    def candidates(self, only: str | None = None) -> list[tuple[tuple[str, str], Trigger]]:
+        """Every trigger this hub may route by, as ((holder url, tree), trigger);
+        ``only`` keeps one holder's."""
         out: list[tuple[tuple[str, str], Trigger]] = []
         for holder in self.holders():
-            if holder.link == "down":
+            if holder.link == "down" or (only is not None and holder.url != only):
                 continue
             for tree in holder.trees:
+                fixed = tree.get("trigger_inputs") if isinstance(tree.get("trigger_inputs"), dict) else {}
                 for pattern in tree.get("triggers", []):
                     try:
-                        out.append(((holder.url, tree["name"]), Trigger(pattern, language=tree.get("language") or {})))
+                        out.append(((holder.url, tree["name"]), Trigger(pattern, dict(fixed.get(pattern) or {}), language=tree.get("language") or {})))
                     except Exception:
                         continue
         return out
@@ -323,12 +333,17 @@ class Hub:
                     trees.append({**t, "peer": remote.url, "link": remote.link, "via": "federation"})
         return {"name": self.name, "trees": trees}
 
-    def intent(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    def intent(self, body: dict[str, Any], only: str | None = None) -> tuple[int, dict[str, Any]]:
+        """Read a sentence and route it. ``only`` (a holder's url) reads it
+        against that holder's trees alone, as a chat bot does; a sentence
+        they do not answer is then not recorded, since another holder may."""
         text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             return 200, {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
-        reading = read(text, self.candidates(), _dt.datetime.now(_dt.timezone.utc))
+        reading = read(text, self.candidates(only), _dt.datetime.now(_dt.timezone.utc))
         matches = reading.matches
+        if not matches and only is not None:
+            return 200, {"status": "error", "reason": "no-match", "say": f"{only} holds no tree that answers {text!r}.", "output": {"reading": {"cleaned": reading.cleaned, "steps": reading.steps}}}
         if not matches:
             entry = self.unanswered.record(text)
             answer = no_match_outcome(text, "No service in the swarm")
@@ -341,7 +356,7 @@ class Hub:
         peer_url, tree_name = matches[0].tree  # type: ignore[misc]
         for m in matches:
             m.tree = tree_name  # the step names the tree, not the (peer, tree) pair
-        peer = self.holder(tree_name) or self.peers.get(peer_url)
+        peer = next((h for h in self.holders() if h.url == only), None) if only is not None else self.holder(tree_name) or self.peers.get(peer_url)
         status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True), "hops": body.get("hops", [])})
         if isinstance(answer.get("trace"), dict) and isinstance(answer["trace"].get("steps"), list):
             # The hub read the sentence; the peer only ran the tree. Put the
@@ -545,6 +560,10 @@ class Hub:
             return 200, self.unanswered_all()
         if method == "GET" and path == "/watches":
             return 200, self.watches()
+        if path == "/chat" or path.startswith("/chat/"):
+            if self.lobby is None:
+                return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
+            return self.lobby.route(method, path, body)
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/manifest.webmanifest":
@@ -555,9 +574,11 @@ class Hub:
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register"]
+            if self.lobby is not None:
+                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/next", "/chat/leave"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
-            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "endpoints": endpoints}
+            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -606,9 +627,10 @@ def serve_hub(
     report_gaps: bool = False,
     unanswered: str | Path | None = None,
     watch: bool = False,
+    chat: bool = False,
 ) -> tuple[Hub, Server]:
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise)).start()
     if federate or advertise:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)

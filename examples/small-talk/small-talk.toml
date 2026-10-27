@@ -1,0 +1,64 @@
+# What a stranger says to a bot in the chat before asking anything. A bare
+# "hi" or "thanks" never reaches a tree (greetings and politeness are
+# fillers, and the lobby answers a sentence that is nothing else with the
+# bot's introduction); these are the questions that are left. Each trigger
+# fixes the topic and one decide picks the line: no source is touched, so
+# the tree runs anywhere, a phone included.
+
+name = "small-talk"
+version = 1
+namespace = "pyrtan"
+description = "How are you, who are you, what can you do, goodbye: what a stranger asks a bot in the chat before asking anything."
+tags = ["chat", "read-only"]
+license = "MIT"
+start = "topic"
+
+[[triggers]]
+pattern = "how are you [doing|today]"
+inputs = { topic = "how" }
+[[triggers]]
+pattern = "(who|what) are you"
+inputs = { topic = "who" }
+[[triggers]]
+pattern = "what (can|do) you do"
+inputs = { topic = "what" }
+[[triggers]]
+pattern = "are you (a bot|human|real|a person)"
+inputs = { topic = "who" }
+[[triggers]]
+pattern = "(bye|goodbye|see you|see ya)"
+inputs = { topic = "bye" }
+
+[inputs.topic]
+type = "str"
+one_of = ["how", "who", "what", "bye"]
+
+[nodes.topic]
+kind = "decide"
+on = "inputs.topic"
+branches = [
+  { when = { eq = "how" }, then = "how" },
+  { when = { eq = "who" }, then = "who" },
+  { when = { eq = "what" }, then = "what" },
+  { when = { eq = "bye" }, then = "bye" },
+]
+
+[nodes.how]
+kind = "done"
+say = "Deterministic, thanks: the same question takes the same path every time."
+output = { topic = "how" }
+
+[nodes.who]
+kind = "done"
+say = "A bot: a set of Pyrtan trees on this network, not a person and not a model. Every answer I give comes with the exact path through the tree that produced it."
+output = { topic = "who" }
+
+[nodes.what]
+kind = "done"
+say = "Only what my trees were written for. Ask something else and I'll say that nobody answers it yet, and which tree would."
+output = { topic = "what" }
+
+[nodes.bye]
+kind = "done"
+say = "Bye. Press New to meet someone else."
+output = { topic = "bye" }

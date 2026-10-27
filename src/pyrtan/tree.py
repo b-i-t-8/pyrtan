@@ -263,6 +263,8 @@ class Tree:
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
+            # What a trigger fixes ("top story" means count = 1): a hub routes by these too.
+            **({"trigger_inputs": {t.pattern: t.fixed_inputs for t in self.triggers if t.fixed_inputs}} if any(t.fixed_inputs for t in self.triggers) else {}),
             "inputs": {
                 n: {k: v for k, v in {"type": s.type, "default": s.default, "required": s.required and s.default is None, "description": s.description}.items() if v not in (None, "", False)}
                 for n, s in self.inputs.items()

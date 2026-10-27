@@ -37,6 +37,15 @@ def test_item_missing(runner):
     assert out.status == "failed" and out.reason == "no-such-item"
 
 
+def test_small_talk_is_one_decide_on_what_the_trigger_fixed(runner):
+    for sentence, topic, starts in [("how are you doing?", "how", "Deterministic"), ("Are you human", "who", "A bot"), ("what can you do", "what", "Only what"), ("see ya", "bye", "Bye")]:
+        out = runner.run_intent(sentence)
+        assert out.status == "done" and out.tree == "small-talk" and out.output == {"topic": topic} and out.say.startswith(starts), sentence
+        assert [s.node for s in out.trace.steps if s.kind != "intent"] == ["topic", topic]
+    # A greeting alone is filler: it reads as nothing, and no tree answers it.
+    assert runner.run_intent("hello").reason == "no-match"
+
+
 def test_weather_two_hops(runner):
     out = runner.run_intent("weather in Oslo")
     assert out.status == "done"
