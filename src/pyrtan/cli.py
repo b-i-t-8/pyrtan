@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .catalog import Catalog, CatalogError, build_index, catalog_url
+from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_url
 from .federation import bootstrap_candidates
 from .grow import Proposal, propose
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
@@ -1165,7 +1165,10 @@ def cmd_index(args: argparse.Namespace) -> int:
         out = Path(args.out) if args.out else (Path(args.copy) if args.copy else roots[0]) / "index.json"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
-        print(f"wrote {out}: {index['count']} tree(s)" + (f", copied to {args.copy}" if args.copy else "") + (f", {len(problems)} left out" if problems else ""))
+        # The same trees as JSON, for the console in a browser (it reads JSON, not TOML).
+        bundle = build_bundle(index, Path(args.copy) if args.copy else roots[0])
+        (out.parent / "trees.json").write_text(json.dumps(bundle, ensure_ascii=False, separators=(",", ":"), default=str) + "\n", encoding="utf-8")
+        print(f"wrote {out} and trees.json beside it: {index['count']} tree(s)" + (f", copied to {args.copy}" if args.copy else "") + (f", {len(problems)} left out" if problems else ""))
     return 1 if problems else 0
 
 
@@ -1203,7 +1206,7 @@ def cmd_console(args: argparse.Namespace) -> int:
     (out.parent / "manifest.webmanifest").write_text(MANIFEST, encoding="utf-8")
     (out.parent / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")
     (out.parent / "pyrtan.js").write_text(PYRTAN_JS, encoding="utf-8")
-    print(f"wrote {out}, manifest.webmanifest, sw.js and pyrtan.js beside it; serve the folder from any static host, and point it at a hub with --cors set for that host")
+    print(f"wrote {out}, manifest.webmanifest, sw.js and pyrtan.js beside it; serve the folder from any static host: there the browser is a hub of its own, with a catalog's trees.json (../catalog/ beside it, else pyrtan.com's), until it joins a hub started with --cors for that host")
     return 0
 
 

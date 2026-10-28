@@ -146,9 +146,12 @@ the recorded responses with a fixed clock and writes `vectors.json`;
 `tests/conformance/run.cjs` runs the same trees and inputs through
 `pyrtan.js` and compares status, say, reason, output, path and gaps;
 `tests/test_conformance.py` runs both and fails when the vectors are
-stale. Three differences are documented in the file's header: `float`
-accepts any number, CSS selection is the browser's `DOMParser` plus a
-`:contains` shim, and a member never reads sentences (the hub does).
+stale. The differences are documented in the file's header. Sentences
+are read the same way too: the language rules, the triggers and the
+proposal for an unanswered sentence are ported and in the vectors, so a
+member reads among the trees it holds before it asks its hub, and a
+browser that has joined no hub is a hub of its own
+([`platform.md`](platform.md) §2.5).
 
 **Trust.** A member that follows with the hub's bearer token on the
 `Follow` is recorded `trusted`; one without is a keeper. Trust is what

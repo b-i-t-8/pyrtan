@@ -16,7 +16,15 @@ on every merge.
                 "sources": ["http"], "triggers": [...], "license": "MIT",
                 "path": "pyrtan/weather.toml", "sha256": "...", "size": 1234}]}
 
-``path`` is relative to the index. A tree's ``id`` is ``namespace/name``:
+``path`` is relative to the index. Beside it, ``trees.json`` carries every
+tree the index lists as JSON (the TOML's own table), for a runtime that
+reads JSON and not TOML: the console in a browser, which runs the
+catalog's trees itself until it joins a hub::
+
+    {"pyrtan-trees": 1, "generated": "...", "count": 1,
+     "trees": [{"id": "pyrtan/weather", "sha256": "...", "tree": {...}}]}
+
+``sha256`` is the TOML file's, as in the index. A tree's ``id`` is ``namespace/name``:
 the namespace is who published it (the tree's own ``namespace`` line), so
 two people can each have a ``weather``; ``pyrtan pull weather`` takes the
 one there is and asks when there are two, ``pyrtan pull barry/weather``
@@ -161,6 +169,16 @@ def build_index(root: str | Path | list[str | Path], *, require_license: bool = 
         "trees": trees,
     }
     return index, problems
+
+
+def build_bundle(index: dict[str, Any], base: str | Path) -> dict[str, Any]:
+    """``trees.json`` for an index whose files are under ``base``: each tree's
+    table as JSON, in the index's order, with the file's ``sha256``."""
+    trees = []
+    for entry in index.get("trees", []):
+        path = Path(base) / entry["path"]
+        trees.append({"id": entry["id"], "sha256": entry["sha256"], "tree": load_tree(path).raw})
+    return {"pyrtan-trees": FORMAT, "generated": index.get("generated"), "count": len(trees), "trees": trees}
 
 
 # ---------------------------------------------------------------- reading

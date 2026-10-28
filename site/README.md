@@ -7,8 +7,8 @@ static directory and publishes it.
 | Path | What | Built from |
 | :-- | :-- | :-- |
 | `/` | the landing page, with the live directory read from the listed hubs in the visitor's browser | `site/index.html` |
-| `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it); point it at any hub started with `--cors https://pyrtan.com`; its Member tab joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
-| `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, and `index.json` the command reads | `pyrtan index examples catalog --copy`, through `site/gate.py` |
+| `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it). Until it joins a hub the browser is one: it holds the catalog's trees (`/catalog/trees.json`) and runs them in the page. To join any hub started with `--cors https://pyrtan.com`, give its URL and token; its Member tab then joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
+| `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, `index.json` the command reads, and `trees.json`, the same trees as JSON for the console | `pyrtan index examples catalog --copy`, through `site/gate.py` |
 | `/theme.js` | the wordmark's colour picker the landing page and the catalog load (the console carries its own copy inline) | `src/pyrtan/js/theme.js` |
 | `/rendezvous/network.json` | the default network: its name, and a secret that is public on purpose | `site/rendezvous/network.json` |
 | `/rendezvous/hubs.json` | the hub list: hubs operators added by pull request, which the snapshot asks first and `pyrtan join` tries first | `site/rendezvous/hubs.json` |

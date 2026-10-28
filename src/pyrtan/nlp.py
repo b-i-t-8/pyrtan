@@ -490,10 +490,21 @@ def _weekday(word: str) -> int | None:
 
 
 def _date(year: int, month: int, day: int, text: str) -> _dt.date:
-    try:
+    # Checked here rather than left to datetime, whose wording changes
+    # between Python versions; pyrtan.js says the same words.
+    if not 1 <= year <= 9999:
+        why = f"year {year} is out of range"
+    elif not 1 <= month <= 12:
+        why = "month must be in 1..12"
+    elif not 1 <= day <= _days_in(year, month):
+        why = "day is out of range for month"
+    else:
         return _dt.date(year, month, day)
-    except ValueError as e:
-        raise ParseError(f"{text!r}: {e}") from e
+    raise ParseError(f"{text!r}: {why}")
+
+
+def _days_in(year: int, month: int) -> int:
+    return [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
 
 
 def _shift(day: _dt.date, n: int, unit: str) -> _dt.date:
@@ -504,8 +515,7 @@ def _shift(day: _dt.date, n: int, unit: str) -> _dt.date:
         return day + _dt.timedelta(weeks=n)
     months = day.month - 1 + (n if unit == "month" else 12 * n)
     year, month = day.year + months // 12, months % 12 + 1
-    last = [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
-    return _dt.date(year, month, min(day.day, last))
+    return _dt.date(year, month, min(day.day, _days_in(year, month)))
 
 
 def parse_host(text: str) -> str:

@@ -1,7 +1,5421 @@
 {
  "clock": "2026-10-25T12:00:00+00:00",
  "fixture": "tests/fixtures/examples.json",
+ "hub": [
+  {
+   "body": null,
+   "expect": {
+    "name": "this browser",
+    "trees": [
+     {
+      "description": "echo for books",
+      "hosts": [],
+      "inputs": {
+       "author": {
+        "type": "str"
+       },
+       "count": {
+        "default": 3,
+        "type": "int"
+       }
+      },
+      "language": {
+       "synonyms": {
+        "books": [
+         "novels",
+         "paperback books"
+        ],
+        "find": [
+         "look up"
+        ]
+       },
+       "typos": true
+      },
+      "license": "",
+      "name": "books",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "(find|search) books by {author}",
+       "top story on book club"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for count",
+      "hosts": [],
+      "inputs": {
+       "n": {
+        "type": "float"
+       },
+       "x": {
+        "type": "float"
+       },
+       "y": {
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "count",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "count to {n:number}",
+       "add {x:float} and {y:int}"
+      ],
+      "version": 1
+     },
+     {
+      "commands": [
+       "df"
+      ],
+      "description": "How full a filesystem is, from df on the box this tree runs on.",
+      "hosts": [],
+      "inputs": {
+       "mount": {
+        "default": "/",
+        "description": "A mount point, or any path on the filesystem to measure",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "disk-space",
+      "namespace": "pyrtan",
+      "sources": [
+       "shell"
+      ],
+      "tags": [
+       "ops",
+       "box",
+       "read-only"
+      ],
+      "triggers": [
+       "[how] full is the disk",
+       "disk space",
+       "disk space on {mount:word}"
+      ],
+      "version": 2
+     },
+     {
+      "description": "echo for fixed",
+      "hosts": [],
+      "inputs": {
+       "what": {
+        "default": "tea",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "fixed",
+      "sources": [],
+      "tags": [],
+      "trigger_inputs": {
+       "the usual": {
+        "what": "coffee"
+       }
+      },
+      "triggers": [
+       "the usual"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The latest release of a GitHub repository.",
+      "hosts": [
+       "api.github.com"
+      ],
+      "inputs": {
+       "repo": {
+        "description": "owner/name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "github-release",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "github",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest release of {repo:word}",
+       "latest {repo:word} release"
+      ],
+      "version": 2
+     },
+     {
+      "description": "Top stories on Hacker News, from its public API.",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {
+       "count": {
+        "default": 1,
+        "description": "How many stories to return",
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "hacker-news",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "news",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "[what's the] top story on hacker news": {
+        "count": 1
+       }
+      },
+      "triggers": [
+       "[what's the] top story on hacker news",
+       "top {count:int} stories on hacker news"
+      ],
+      "version": 2
+     },
+     {
+      "description": "One Hacker News item by id: title, url, score, author.",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {
+       "id": {
+        "description": "The item id",
+        "required": true,
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "hacker-news-item",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "news",
+       "read-only"
+      ],
+      "triggers": [
+       "hacker news item {id:int}"
+      ],
+      "version": 2
+     },
+     {
+      "description": "Error lines in the tail of a log file on this box.",
+      "hosts": [],
+      "inputs": {
+       "lines": {
+        "default": 200,
+        "description": "How many lines from the end to look at",
+        "type": "int"
+       },
+       "path": {
+        "default": "/var/log/syslog",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "log-errors",
+      "namespace": "pyrtan",
+      "paths": [
+       "/var/log"
+      ],
+      "sources": [
+       "file"
+      ],
+      "tags": [
+       "ops",
+       "box",
+       "read-only"
+      ],
+      "triggers": [
+       "errors in the log",
+       "errors in {path:word}"
+      ],
+      "version": 2
+     },
+     {
+      "description": "Whether a modem on a serial line answers AT.",
+      "devices": [
+       "/dev/ttyUSB*",
+       "/dev/ttyACM*"
+      ],
+      "hosts": [],
+      "inputs": {
+       "device": {
+        "default": "/dev/ttyUSB0",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "modem-check",
+      "namespace": "pyrtan",
+      "sources": [
+       "serial"
+      ],
+      "tags": [
+       "hardware",
+       "serial"
+      ],
+      "triggers": [
+       "is the modem up",
+       "is the modem on {device:word} up"
+      ],
+      "version": 2
+     },
+     {
+      "description": "asks, then answers",
+      "hosts": [],
+      "inputs": {
+       "drink": {
+        "required": true,
+        "type": "str"
+       },
+       "shots": {
+        "default": 1,
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "order",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "order a {drink:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for ping",
+      "hosts": [],
+      "inputs": {
+       "host": {
+        "type": "str"
+       },
+       "to": {
+        "type": "str"
+       },
+       "url": {
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "ping",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "ping {host:host}",
+       "fetch {url:url}",
+       "mail {to:email}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for remind",
+      "hosts": [],
+      "inputs": {
+       "at": {
+        "type": "str"
+       },
+       "wait": {
+        "type": "int"
+       },
+       "when": {
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "remind",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "remind me {when:date} at {at:time}",
+       "remind me in {wait:duration}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The main heading of a page that needs a script to render, through a real browser.",
+      "hosts": [
+       "*"
+      ],
+      "inputs": {
+       "url": {
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "rendered-headline",
+      "namespace": "pyrtan",
+      "sources": [
+       "browser"
+      ],
+      "tags": [
+       "web",
+       "browser",
+       "read-only"
+      ],
+      "triggers": [
+       "headline of {url:url}",
+       "what does {url:url} say"
+      ],
+      "version": 2
+     },
+     {
+      "description": "The temperature a room's sensor last published, over MQTT.",
+      "hosts": [
+       "broker.local"
+      ],
+      "inputs": {
+       "room": {
+        "default": "kitchen",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "room-temperature",
+      "namespace": "pyrtan",
+      "sources": [
+       "queue"
+      ],
+      "tags": [
+       "home",
+       "mqtt"
+      ],
+      "topics": [
+       "home/+/temperature"
+      ],
+      "triggers": [
+       "[what's the] temperature in the {room:word}",
+       "how warm is the {room:word}"
+      ],
+      "version": 2,
+      "watches": [
+       {
+        "kind": "queue",
+        "what": "home/kitchen/temperature at mqtt://broker.local"
+       }
+      ]
+     },
+     {
+      "description": "Whether a web site answers, and how quickly.",
+      "hosts": [
+       "*"
+      ],
+      "inputs": {
+       "host": {
+        "description": "A host name, with no scheme",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "site-status",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "ops",
+       "read-only"
+      ],
+      "triggers": [
+       "is {host:host} up",
+       "is {host:host} down",
+       "[check] status of {host:host}"
+      ],
+      "version": 2,
+      "watches": [
+       {
+        "kind": "every",
+        "what": "15m"
+       }
+      ]
+     },
+     {
+      "description": "How are you, who are you, what can you do, goodbye: what a stranger asks a bot in the chat before asking anything.",
+      "hosts": [],
+      "inputs": {
+       "topic": {
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "small-talk",
+      "namespace": "pyrtan",
+      "sources": [],
+      "tags": [
+       "chat",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "(bye|goodbye|see you|see ya)": {
+        "topic": "bye"
+       },
+       "(who|what) are you": {
+        "topic": "who"
+       },
+       "are you (a bot|human|real|a person)": {
+        "topic": "who"
+       },
+       "how are you [doing|today]": {
+        "topic": "how"
+       },
+       "what (can|do) you do": {
+        "topic": "what"
+       }
+      },
+      "triggers": [
+       "how are you [doing|today]",
+       "(who|what) are you",
+       "what (can|do) you do",
+       "are you (a bot|human|real|a person)",
+       "(bye|goodbye|see you|see ya)"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for tie-a",
+      "hosts": [],
+      "inputs": {
+       "x": {
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "tie-a",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "shout {x:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for tie-b",
+      "hosts": [],
+      "inputs": {
+       "y": {
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "tie-b",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "shout {y:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Current weather for a place, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       },
+       "units": {
+        "default": "celsius",
+        "type": "str"
+       }
+      },
+      "language": {
+       "synonyms": {
+        "weather": [
+         "forecast",
+         "temperature"
+        ]
+       }
+      },
+      "license": "MIT",
+      "name": "weather",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] weather in {place}",
+       "[what's the] weather for {place}",
+       "how [hot|cold|warm] is it in {place}"
+      ],
+      "version": 2
+     }
+    ]
+   },
+   "method": "GET",
+   "path": "/capabilities",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "top 3 stories on hacker news"
+   },
+   "expect": {
+    "inputs": {
+     "count": 3
+    },
+    "output": {
+     "stories": [
+      {
+       "by": "alice",
+       "id": 101,
+       "score": 42,
+       "title": "Pyrtan 0.1",
+       "url": "https://example.org/p"
+      },
+      {
+       "by": "x",
+       "id": 102,
+       "score": 7,
+       "title": "Ask HN: self post",
+       "url": "https://news.ycombinator.com/item?id=102"
+      },
+      null
+     ]
+    },
+    "say": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch-ids",
+       "node": "intent",
+       "observed": {
+        "cleaned": "top 3 stories on hacker news",
+        "inputs": {
+         "count": 3
+        },
+        "steps": [],
+        "trigger": "top {count:int} stories on hacker news"
+       },
+       "summary": "'top 3 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "check",
+       "node": "fetch-ids",
+       "observed": {
+        "ids": [
+         101,
+         102,
+         103
+        ]
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/topstories.json -> 200; ids=[101, 102, 103]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "check",
+       "observed": 200,
+       "summary": "state.ids_resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "stories",
+       "node": "any",
+       "observed": [
+        101,
+        102,
+        103
+       ],
+       "summary": "state.ids = [101, 102, 103]"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 1,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "x",
+        "score": 7,
+        "title": "Ask HN: self post",
+        "type": "story",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json -> 200; title=Ask HN: self post, url=None, score=7, by=x, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "self-post",
+       "node": "has-url",
+       "summary": "state.url = <missing>"
+      },
+      {
+       "depth": 1,
+       "kind": "set",
+       "next": "reply",
+       "node": "self-post",
+       "observed": {
+        "url": "https://news.ycombinator.com/item?id=102"
+       },
+       "summary": "url=https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Ask HN: self post (7 points, by x) https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "y",
+        "score": null,
+        "title": null,
+        "type": "comment",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/103.json -> 200; title=None, url=None, score=None, by=y, type=comment"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "not-a-story",
+       "node": "kind",
+       "observed": "comment",
+       "summary": "state.type = comment"
+      },
+      {
+       "depth": 1,
+       "kind": "fail",
+       "next": null,
+       "node": "not-a-story",
+       "summary": "not-a-story: Item 103 is a comment, not a story."
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "stories",
+       "summary": "3 item(s), 1 failed"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "weather in Oslo",
+    "trace": false
+   },
+   "expect": {
+    "inputs": {
+     "place": "Oslo",
+     "units": "celsius"
+    },
+    "output": {
+     "country": "Norway",
+     "humidity": 80,
+     "place": "Oslo",
+     "sky": "raining",
+     "temperature": 4.2,
+     "unit": "°C",
+     "wind_kmh": 12.3
+    },
+    "say": "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.",
+    "status": "done",
+    "tree": "weather"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "how cold is it in Nowhereville"
+   },
+   "expect": {
+    "inputs": {
+     "place": "Nowhereville",
+     "units": "celsius"
+    },
+    "reason": "unknown-place",
+    "say": "I could not find a place called Nowhereville.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how cold is it in Nowhereville",
+        "inputs": {
+         "place": "Nowhereville"
+        },
+        "steps": [],
+        "trigger": "how [hot|cold|warm] is it in {place}"
+       },
+       "summary": "'how cold is it in Nowhereville'; weather via 'how [hot|cold|warm] is it in {place}' (20 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": null,
+        "hit": null,
+        "lat": null,
+        "lon": null,
+        "name": null
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json -> 200; hit=None, lat=None, lon=None, name=None, country=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-place",
+       "node": "found",
+       "summary": "state.hit = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-place",
+       "summary": "unknown-place: I could not find a place called Nowhereville."
+      }
+     ],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "is broken.example up"
+   },
+   "expect": {
+    "inputs": {
+     "host": "broken.example"
+    },
+    "output": {
+     "host": "broken.example",
+     "status": 503,
+     "up": false
+    },
+    "reason": "server-error",
+    "say": "broken.example is answering 503: up, but broken.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is broken.example up",
+        "inputs": {
+         "host": "broken.example"
+        },
+        "steps": [],
+        "trigger": "is {host:host} up"
+       },
+       "summary": "'is broken.example up'; site-status via 'is {host:host} up' (4 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "probe",
+       "summary": "GET https://broken.example/ -> 503"
+      },
+      {
+       "chosen": "gte 500",
+       "depth": 0,
+       "kind": "decide",
+       "next": "erroring",
+       "node": "status",
+       "observed": 503,
+       "summary": "state.resp.status = 503"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "erroring",
+       "summary": "server-error: broken.example is answering 503: up, but broken."
+      }
+     ],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "is broken.example up"
+   },
+   "expect": {
+    "inputs": {
+     "host": "broken.example"
+    },
+    "output": {
+     "host": "broken.example",
+     "status": 503,
+     "up": false
+    },
+    "reason": "server-error",
+    "say": "broken.example is answering 503: up, but broken.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is broken.example up",
+        "inputs": {
+         "host": "broken.example"
+        },
+        "steps": [],
+        "trigger": "is {host:host} up"
+       },
+       "summary": "'is broken.example up'; site-status via 'is {host:host} up' (4 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "probe",
+       "summary": "GET https://broken.example/ -> 503"
+      },
+      {
+       "chosen": "gte 500",
+       "depth": 0,
+       "kind": "decide",
+       "next": "erroring",
+       "node": "status",
+       "observed": 503,
+       "summary": "state.resp.status = 503"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "erroring",
+       "summary": "server-error: broken.example is answering 503: up, but broken."
+      }
+     ],
+     "tree": "site-status"
+    },
+    "tree": "site-status"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "make me a sandwich"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "proposal": {
+      "inputs": {},
+      "name": "make-sandwich",
+      "scaffold": "pyrtan new make-sandwich --from \"make me a sandwich\"",
+      "text": "make me a sandwich",
+      "trigger": "make me a sandwich"
+     },
+     "reading": {
+      "cleaned": "make me a sandwich",
+      "considered": [],
+      "steps": []
+     },
+     "unanswered": "make me a sandwich"
+    },
+    "reason": "no-match",
+    "say": "Nothing here answers 'make me a sandwich'. To write the tree that would: pyrtan new make-sandwich --from \"make me a sandwich\"",
+    "status": "error",
+    "tree": ""
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "Make me a sandwich!"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "proposal": {
+      "inputs": {},
+      "name": "make-sandwich",
+      "scaffold": "pyrtan new make-sandwich --from \"Make me a sandwich\"",
+      "text": "Make me a sandwich",
+      "trigger": "Make me a sandwich"
+     },
+     "reading": {
+      "cleaned": "Make me a sandwich",
+      "considered": [],
+      "steps": []
+     },
+     "unanswered": "Make me a sandwich!"
+    },
+    "reason": "no-match",
+    "say": "Nothing here answers 'Make me a sandwich!'. To write the tree that would: pyrtan new make-sandwich --from \"Make me a sandwich\"",
+    "status": "error",
+    "tree": ""
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "shout hello"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "candidates": [
+      "tie-a",
+      "tie-b"
+     ],
+     "reading": {
+      "cleaned": "shout hello",
+      "steps": []
+     }
+    },
+    "reason": "ambiguous",
+    "say": "'shout hello' matches more than one tree equally well: tie-a, tie-b",
+    "status": "error",
+    "tree": ""
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "  "
+   },
+   "expect": {
+    "reason": "bad-request",
+    "say": "Send {\"text\": \"...\"}.",
+    "status": "error"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {},
+   "expect": {
+    "reason": "bad-request",
+    "say": "Send {\"text\": \"...\"}.",
+    "status": "error"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "count": 2
+    },
+    "tree": "hacker-news"
+   },
+   "expect": {
+    "inputs": {
+     "count": 2
+    },
+    "output": {
+     "stories": [
+      {
+       "by": "alice",
+       "id": 101,
+       "score": 42,
+       "title": "Pyrtan 0.1",
+       "url": "https://example.org/p"
+      },
+      {
+       "by": "x",
+       "id": 102,
+       "score": 7,
+       "title": "Ask HN: self post",
+       "url": "https://news.ycombinator.com/item?id=102"
+      }
+     ]
+    },
+    "say": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "check",
+       "node": "fetch-ids",
+       "observed": {
+        "ids": [
+         101,
+         102,
+         103
+        ]
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/topstories.json -> 200; ids=[101, 102, 103]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "check",
+       "observed": 200,
+       "summary": "state.ids_resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "stories",
+       "node": "any",
+       "observed": [
+        101,
+        102,
+        103
+       ],
+       "summary": "state.ids = [101, 102, 103]"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "alice",
+        "score": 42,
+        "title": "Pyrtan 0.1",
+        "type": "story",
+        "url": "https://example.org/p"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1, url=https://example.org/p, score=42, by=alice, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 1,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-url",
+       "observed": "https://example.org/p",
+       "summary": "state.url = https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pyrtan 0.1 (42 points, by alice) https://example.org/p"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "kind",
+       "node": "fetch",
+       "observed": {
+        "by": "x",
+        "score": 7,
+        "title": "Ask HN: self post",
+        "type": "story",
+        "url": null
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json -> 200; title=Ask HN: self post, url=None, score=7, by=x, type=story"
+      },
+      {
+       "chosen": "eq 'story'",
+       "depth": 1,
+       "kind": "decide",
+       "next": "has-url",
+       "node": "kind",
+       "observed": "story",
+       "summary": "state.type = story"
+      },
+      {
+       "chosen": "else",
+       "depth": 1,
+       "kind": "decide",
+       "next": "self-post",
+       "node": "has-url",
+       "summary": "state.url = <missing>"
+      },
+      {
+       "depth": 1,
+       "kind": "set",
+       "next": "reply",
+       "node": "self-post",
+       "observed": {
+        "url": "https://news.ycombinator.com/item?id=102"
+       },
+       "summary": "url=https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Ask HN: self post (7 points, by x) https://news.ycombinator.com/item?id=102"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "stories",
+       "summary": "2 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Top of Hacker News: Pyrtan 0.1 — https://example.org/p"
+      }
+     ],
+     "tree": "hacker-news"
+    },
+    "tree": "hacker-news"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "nope"
+   },
+   "expect": {
+    "inputs": {},
+    "reason": "no-such-tree",
+    "say": "No tree named 'nope'.",
+    "status": "error",
+    "tree": "nope"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "place": "Oslo",
+     "units": "kelvin"
+    },
+    "tree": "weather"
+   },
+   "expect": {
+    "inputs": {},
+    "reason": "bad-input",
+    "say": "input 'units' must be one of ['celsius', 'fahrenheit'], got 'kelvin'",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [],
+     "tree": "weather"
+    },
+    "tree": "weather"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "order a latte"
+   },
+   "expect": {
+    "inputs": {
+     "drink": "latte",
+     "shots": 1
+    },
+    "question": "What size of latte?",
+    "snapshot": {
+     "inputs": {
+      "drink": "latte",
+      "shots": 1
+     },
+     "node": "size",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      }
+     ],
+     "tree": "order"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      }
+     ],
+     "tree": "order"
+    },
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "large",
+    "snapshot": {
+     "inputs": {
+      "drink": "latte",
+      "shots": 1
+     },
+     "node": "size",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      }
+     ],
+     "tree": "order"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "drink": "latte",
+     "shots": 1
+    },
+    "question": "How many shots?",
+    "snapshot": {
+     "inputs": {
+      "drink": "latte",
+      "shots": 1
+     },
+     "node": "shots",
+     "state": {
+      "size": "large"
+     },
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: large"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: large"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    },
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "2",
+    "snapshot": {
+     "inputs": {
+      "drink": "latte",
+      "shots": 1
+     },
+     "node": "shots",
+     "state": {
+      "size": "large"
+     },
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: large"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "drink": "latte",
+     "shots": 2
+    },
+    "output": {
+     "shots": 2,
+     "size": "large"
+    },
+    "say": "A large latte, 2 shot(s).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a latte",
+        "inputs": {
+         "drink": "latte"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of latte?"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: large"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": "reply",
+       "node": "shots",
+       "summary": "answered: 2"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "A large latte, 2 shot(s)."
+      }
+     ],
+     "tree": "order"
+    },
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "snapshot": {
+     "nope": 1
+    }
+   },
+   "expect": {
+    "reason": "bad-request",
+    "say": "Send {\"snapshot\": {...}, \"answer\": ...}.",
+    "status": "error"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "order a mocha"
+   },
+   "expect": {
+    "inputs": {
+     "drink": "mocha",
+     "shots": 1
+    },
+    "question": "What size of mocha?",
+    "snapshot": {
+     "inputs": {
+      "drink": "mocha",
+      "shots": 1
+     },
+     "node": "size",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      }
+     ],
+     "tree": "order"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      }
+     ],
+     "tree": "order"
+    },
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "small",
+    "snapshot": {
+     "inputs": {
+      "drink": "mocha",
+      "shots": 1
+     },
+     "node": "size",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      }
+     ],
+     "tree": "order"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "drink": "mocha",
+     "shots": 1
+    },
+    "question": "How many shots?",
+    "snapshot": {
+     "inputs": {
+      "drink": "mocha",
+      "shots": 1
+     },
+     "node": "shots",
+     "state": {
+      "size": "small"
+     },
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: small"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: small"
+      },
+      {
+       "depth": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    },
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "many",
+    "snapshot": {
+     "inputs": {
+      "drink": "mocha",
+      "shots": 1
+     },
+     "node": "shots",
+     "state": {
+      "size": "small"
+     },
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "size",
+       "node": "intent",
+       "observed": {
+        "cleaned": "order a mocha",
+        "inputs": {
+         "drink": "mocha"
+        },
+        "steps": [],
+        "trigger": "order a {drink:word}"
+       },
+       "summary": "'order a mocha'; order via 'order a {drink:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "size",
+       "summary": "asked: What size of mocha?"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": "shots",
+       "node": "size",
+       "summary": "answered: small"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "ask",
+       "next": null,
+       "node": "shots",
+       "summary": "asked: How many shots?"
+      }
+     ],
+     "tree": "order"
+    }
+   },
+   "expect": {
+    "inputs": {},
+    "reason": "bad-input",
+    "say": "input 'shots' must be int, got 'many'",
+    "status": "error",
+    "tree": "order"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "temperature in the hall"
+   },
+   "expect": {
+    "inputs": {
+     "room": "hall"
+    },
+    "output": {
+     "gap": {
+      "node": "reading",
+      "observed": null,
+      "on": "state.q.json.temperature",
+      "tree": "room-temperature"
+     }
+    },
+    "reason": "gap",
+    "say": "reading: no branch for state.q.json.temperature = <missing>.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "node": "reading",
+       "observed": null,
+       "on": "state.q.json.temperature",
+       "tree": "room-temperature"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "temperature in the hall",
+        "inputs": {
+         "room": "hall"
+        },
+        "steps": [],
+        "trigger": "[what's the] temperature in the {room:word}"
+       },
+       "summary": "'temperature in the hall'; room-temperature via \"[what's the] temperature in the {room:word}\" (25 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/hall/temperature at mqtt://broker.local -> 1 message"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reading",
+       "node": "got",
+       "observed": true,
+       "summary": "state.q.received = True"
+      },
+      {
+       "depth": 0,
+       "kind": "decide",
+       "next": null,
+       "node": "reading",
+       "summary": "state.q.json.temperature = <missing>: no branch"
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "what's the temperature in the hall"
+   },
+   "expect": {
+    "inputs": {
+     "room": "hall"
+    },
+    "output": {
+     "gap": {
+      "node": "reading",
+      "observed": null,
+      "on": "state.q.json.temperature",
+      "tree": "room-temperature"
+     }
+    },
+    "reason": "gap",
+    "say": "reading: no branch for state.q.json.temperature = <missing>.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "node": "reading",
+       "observed": null,
+       "on": "state.q.json.temperature",
+       "tree": "room-temperature"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is the temperature in the hall",
+        "inputs": {
+         "room": "hall"
+        },
+        "steps": [
+         "contractions: what's->what is"
+        ],
+        "trigger": "[what's the] temperature in the {room:word}"
+       },
+       "summary": "\"what's the temperature in the hall\" -> 'what is the temperature in the hall'; room-temperature via \"[what's the] temperature in the {room:word}\" (25 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "got",
+       "node": "wait",
+       "summary": "queue home/hall/temperature at mqtt://broker.local -> 1 message"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reading",
+       "node": "got",
+       "observed": true,
+       "summary": "state.q.received = True"
+      },
+      {
+       "depth": 0,
+       "kind": "decide",
+       "next": null,
+       "node": "reading",
+       "summary": "state.q.json.temperature = <missing>: no branch"
+      }
+     ],
+     "tree": "room-temperature"
+    },
+    "tree": "room-temperature"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": null,
+   "expect": {
+    "gaps": [
+     {
+      "count": 2,
+      "node": "reading",
+      "observed": null,
+      "on": "state.q.json.temperature",
+      "tree": "room-temperature"
+     }
+    ]
+   },
+   "method": "GET",
+   "path": "/gaps",
+   "status": 200
+  },
+  {
+   "body": null,
+   "expect": {
+    "unanswered": [
+     {
+      "count": 2,
+      "proposal": {
+       "inputs": {},
+       "name": "make-sandwich",
+       "scaffold": "pyrtan new make-sandwich --from \"make me a sandwich\"",
+       "text": "make me a sandwich",
+       "trigger": "make me a sandwich"
+      },
+      "text": "make me a sandwich"
+     }
+    ]
+   },
+   "method": "GET",
+   "path": "/unanswered",
+   "status": 200
+  },
+  {
+   "body": null,
+   "expect": {
+    "count": 0,
+    "watches": [],
+    "watching": false
+   },
+   "method": "GET",
+   "path": "/watches",
+   "status": 200
+  },
+  {
+   "body": null,
+   "expect": {
+    "reason": "not-found",
+    "say": "No GET /nowhere here.",
+    "status": "error"
+   },
+   "method": "GET",
+   "path": "/nowhere",
+   "status": 404
+  }
+ ],
+ "language_trees": [
+  {
+   "description": "echo for remind",
+   "hosts": [],
+   "inputs": {
+    "at": {
+     "default": "",
+     "type": "str"
+    },
+    "wait": {
+     "default": 0,
+     "type": "int"
+    },
+    "when": {
+     "default": "",
+     "type": "str"
+    }
+   },
+   "name": "remind",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "at": "{{ inputs.at }}",
+      "wait": "{{ inputs.wait }}",
+      "when": "{{ inputs.when }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "remind me {when:date} at {at:time}",
+    "remind me in {wait:duration}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for count",
+   "hosts": [],
+   "inputs": {
+    "n": {
+     "default": 0,
+     "type": "float"
+    },
+    "x": {
+     "default": 0.0,
+     "type": "float"
+    },
+    "y": {
+     "default": 0,
+     "type": "int"
+    }
+   },
+   "name": "count",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "n": "{{ inputs.n }}",
+      "x": "{{ inputs.x }}",
+      "y": "{{ inputs.y }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "count to {n:number}",
+    "add {x:float} and {y:int}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for ping",
+   "hosts": [],
+   "inputs": {
+    "host": {
+     "default": "",
+     "type": "str"
+    },
+    "to": {
+     "default": "",
+     "type": "str"
+    },
+    "url": {
+     "default": "",
+     "type": "str"
+    }
+   },
+   "name": "ping",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "host": "{{ inputs.host }}",
+      "to": "{{ inputs.to }}",
+      "url": "{{ inputs.url }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "ping {host:host}",
+    "fetch {url:url}",
+    "mail {to:email}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for books",
+   "hosts": [],
+   "inputs": {
+    "author": {
+     "default": "",
+     "type": "str"
+    },
+    "count": {
+     "default": 3,
+     "type": "int"
+    }
+   },
+   "language": {
+    "synonyms": {
+     "Find": "look up",
+     "books": [
+      "novels",
+      "paperback books"
+     ]
+    },
+    "typos": true
+   },
+   "name": "books",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "author": "{{ inputs.author }}",
+      "count": "{{ inputs.count }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "(find|search) books by {author}",
+    "top story on book club"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for tie-a",
+   "hosts": [],
+   "inputs": {
+    "x": {
+     "default": "",
+     "type": "str"
+    }
+   },
+   "name": "tie-a",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "x": "{{ inputs.x }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "shout {x:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for tie-b",
+   "hosts": [],
+   "inputs": {
+    "y": {
+     "default": "",
+     "type": "str"
+    }
+   },
+   "name": "tie-b",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "y": "{{ inputs.y }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    "shout {y:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "echo for fixed",
+   "hosts": [],
+   "inputs": {
+    "what": {
+     "default": "tea",
+     "type": "str"
+    }
+   },
+   "name": "fixed",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "what": "{{ inputs.what }}"
+     },
+     "say": "ok"
+    }
+   },
+   "start": "reply",
+   "triggers": [
+    {
+     "inputs": {
+      "what": "coffee"
+     },
+     "pattern": "the usual"
+    }
+   ],
+   "version": 1
+  },
+  {
+   "description": "asks, then answers",
+   "hosts": [],
+   "inputs": {
+    "drink": {
+     "required": true,
+     "type": "str"
+    },
+    "shots": {
+     "default": 1,
+     "type": "int"
+    }
+   },
+   "name": "order",
+   "nodes": {
+    "reply": {
+     "kind": "done",
+     "output": {
+      "shots": "{{ inputs.shots }}",
+      "size": "{{ state.size }}"
+     },
+     "say": "A {{ state.size }} {{ inputs.drink }}, {{ inputs.shots }} shot(s)."
+    },
+    "shots": {
+     "into": "inputs.shots",
+     "kind": "ask",
+     "next": "reply",
+     "prompt": "How many shots?"
+    },
+    "size": {
+     "into": "state.size",
+     "kind": "ask",
+     "next": "shots",
+     "prompt": "What size of {{ inputs.drink }}?"
+    }
+   },
+   "start": "size",
+   "triggers": [
+    "order a {drink:word}"
+   ],
+   "version": 1
+  }
+ ],
+ "nlp": [
+  {
+   "fn": "clean",
+   "text": "Hey, can you please tell me what's up?",
+   "value": [
+    "tell me what is up",
+    [
+     "fillers: 'Hey', 'can you please'",
+     "contractions: what's->what is"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "“Curly” quotes — and dashes",
+   "value": [
+    "Curly\" quotes - and dashes",
+    [
+     "fold"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "ＦＵＬＬ width",
+   "value": [
+    "FULL width",
+    [
+     "fold"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "I'm sure it's a dozen",
+   "value": [
+    "I am sure it is 12",
+    [
+     "contractions: I'm->i am, it's->it is",
+     "numbers: a dozen->12"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "one hundred and twenty three things",
+   "value": [
+    "123 things",
+    [
+     "numbers: one hundred and twenty three->123"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "a hundred and one",
+   "value": [
+    "101",
+    [
+     "numbers: a hundred and one->101"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "Thanks",
+   "value": [
+    "",
+    [
+     "fillers: 'Thanks'"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "well, um, okay pyrtan: weather.",
+   "value": [
+    "pyrtan: weather",
+    [
+     "fillers: 'well', 'um', 'okay'"
+    ]
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "St. Ives. Then Mr. Smith",
+   "value": [
+    "St Ives Then Mr Smith",
+    []
+   ]
+  },
+  {
+   "fn": "singular",
+   "text": "stories",
+   "value": "story"
+  },
+  {
+   "fn": "singular",
+   "text": "boxes",
+   "value": "box"
+  },
+  {
+   "fn": "singular",
+   "text": "news",
+   "value": "news"
+  },
+  {
+   "fn": "singular",
+   "text": "glass",
+   "value": "glass"
+  },
+  {
+   "fn": "singular",
+   "text": "cats",
+   "value": "cat"
+  },
+  {
+   "fn": "singular",
+   "text": "bus",
+   "value": "bus"
+  },
+  {
+   "fn": "plural",
+   "text": "story",
+   "value": "stories"
+  },
+  {
+   "fn": "plural",
+   "text": "box",
+   "value": "boxes"
+  },
+  {
+   "fn": "plural",
+   "text": "day",
+   "value": "days"
+  },
+  {
+   "fn": "plural",
+   "text": "status",
+   "value": "status"
+  },
+  {
+   "fn": "parse_number",
+   "text": "twenty-one",
+   "value": 21
+  },
+  {
+   "fn": "parse_number",
+   "text": "1,234",
+   "value": 1234
+  },
+  {
+   "fn": "parse_number",
+   "text": "-3.25",
+   "value": -3.25
+  },
+  {
+   "error": "'lots' is not a number",
+   "fn": "parse_number",
+   "text": "lots"
+  },
+  {
+   "fn": "parse_duration",
+   "text": "90 seconds",
+   "value": 90
+  },
+  {
+   "fn": "parse_duration",
+   "text": "2 days and 3 hours",
+   "value": 183600
+  },
+  {
+   "fn": "parse_duration",
+   "text": "a week",
+   "value": 604800
+  },
+  {
+   "fn": "parse_duration",
+   "text": "1.5 hours and a half",
+   "value": 7200
+  },
+  {
+   "error": "'soon' is not a duration",
+   "fn": "parse_duration",
+   "text": "soon"
+  },
+  {
+   "error": "'3 fortnights': unknown unit 'fortnights'",
+   "fn": "parse_duration",
+   "text": "3 fortnights"
+  },
+  {
+   "fn": "parse_time",
+   "text": "15:30",
+   "value": "15:30"
+  },
+  {
+   "fn": "parse_time",
+   "text": "3:05 pm",
+   "value": "15:05"
+  },
+  {
+   "fn": "parse_time",
+   "text": "9 o'clock",
+   "value": "09:00"
+  },
+  {
+   "fn": "parse_time",
+   "text": "12am",
+   "value": "00:00"
+  },
+  {
+   "error": "'13pm': 13 with pm",
+   "fn": "parse_time",
+   "text": "13pm"
+  },
+  {
+   "error": "'7': a bare number is not a time; say 15:00 or 3pm",
+   "fn": "parse_time",
+   "text": "7"
+  },
+  {
+   "fn": "parse_time",
+   "text": "midnight",
+   "value": "00:00"
+  },
+  {
+   "error": "'nine thirty': a bare number is not a time; say 15:00 or 3pm",
+   "fn": "parse_time",
+   "text": "nine thirty"
+  },
+  {
+   "error": "'2026-02-29': day is out of range for month",
+   "fn": "parse_date",
+   "text": "2026-02-29"
+  },
+  {
+   "fn": "parse_date",
+   "text": "2028-02-29",
+   "value": "2028-02-29"
+  },
+  {
+   "fn": "parse_date",
+   "text": "25 oct",
+   "value": "2026-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "oct 25, 2027",
+   "value": "2027-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "the 1st of march",
+   "value": "2026-03-01"
+  },
+  {
+   "fn": "parse_date",
+   "text": "sept 3",
+   "value": "2026-09-03"
+  },
+  {
+   "fn": "parse_date",
+   "text": "25/10/2026",
+   "value": "2026-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "10/10",
+   "value": "2026-10-10"
+  },
+  {
+   "error": "'3/4' could be day/month or month/day; write it as 2026-04-03 or '3 april'",
+   "fn": "parse_date",
+   "text": "3/4"
+  },
+  {
+   "fn": "parse_date",
+   "text": "today",
+   "value": "2026-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "yesterday",
+   "value": "2026-10-24"
+  },
+  {
+   "fn": "parse_date",
+   "text": "day after tomorrow",
+   "value": "2026-10-27"
+  },
+  {
+   "fn": "parse_date",
+   "text": "sunday",
+   "value": "2026-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "this sunday",
+   "value": "2026-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "next sunday",
+   "value": "2026-11-01"
+  },
+  {
+   "fn": "parse_date",
+   "text": "last sunday",
+   "value": "2026-10-18"
+  },
+  {
+   "fn": "parse_date",
+   "text": "last mon",
+   "value": "2026-10-19"
+  },
+  {
+   "fn": "parse_date",
+   "text": "in 3 weeks",
+   "value": "2026-11-15"
+  },
+  {
+   "fn": "parse_date",
+   "text": "in 4 months",
+   "value": "2027-02-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "2 years ago",
+   "value": "2024-10-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "next month",
+   "value": "2026-11-25"
+  },
+  {
+   "fn": "parse_date",
+   "text": "end of month",
+   "value": "2026-10-31"
+  },
+  {
+   "fn": "parse_date",
+   "text": "end of the year",
+   "value": "2026-12-31"
+  },
+  {
+   "fn": "parse_date",
+   "text": "start of month",
+   "value": "2026-10-01"
+  },
+  {
+   "error": "'someday' is not a date this reads",
+   "fn": "parse_date",
+   "text": "someday"
+  },
+  {
+   "error": "'30 feb': day is out of range for month",
+   "fn": "parse_date",
+   "text": "30 feb"
+  },
+  {
+   "fn": "parse_host",
+   "text": "Example.COM",
+   "value": "example.com"
+  },
+  {
+   "fn": "parse_host",
+   "text": "https://a.b.example:8443/x",
+   "value": "a.b.example"
+  },
+  {
+   "error": "'not a host' is not a host name",
+   "fn": "parse_host",
+   "text": "not a host"
+  },
+  {
+   "fn": "parse_url",
+   "text": "http://x.example/y",
+   "value": "http://x.example/y"
+  },
+  {
+   "error": "'x.example' is not a URL",
+   "fn": "parse_url",
+   "text": "x.example"
+  },
+  {
+   "fn": "parse_email",
+   "text": "A.B@Example.org",
+   "value": "a.b@example.org"
+  },
+  {
+   "error": "'a@b' is not an email address",
+   "fn": "parse_email",
+   "text": "a@b"
+  }
+ ],
+ "proposals": [
+  {
+   "expect": {
+    "inputs": {},
+    "name": "make-sandwich",
+    "scaffold": "pyrtan new make-sandwich --from \"make me a sandwich\"",
+    "text": "make me a sandwich",
+    "trigger": "make me a sandwich"
+   },
+   "text": "make me a sandwich"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": {
+      "description": "a host name, as in: example.com",
+      "role": "host",
+      "type": "str"
+     }
+    },
+    "name": "host-up",
+    "scaffold": "pyrtan new host-up --from \"is example.com up\"",
+    "text": "is example.com up",
+    "trigger": "is {host:host} up"
+   },
+   "text": "is example.com up"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "count": {
+      "description": "as in: 3",
+      "type": "int"
+     }
+    },
+    "name": "top-stories-lobsters",
+    "scaffold": "pyrtan new top-stories-lobsters --from \"top 3 stories on lobsters\"",
+    "text": "top 3 stories on lobsters",
+    "trigger": "top {count:int} stories on lobsters"
+   },
+   "text": "top 3 stories on lobsters"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "count": {
+      "description": "as in: 4",
+      "type": "int"
+     },
+     "value": {
+      "description": "as in: 2.5",
+      "type": "float"
+     }
+    },
+    "name": "value-count-times",
+    "scaffold": "pyrtan new value-count-times --from \"what is 2.5 times 4\"",
+    "text": "what is 2.5 times 4",
+    "trigger": "what is {value:float} times {count:int}"
+   },
+   "text": "what is 2.5 times 4"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "target": {
+      "description": "as in: foo/bar",
+      "type": "str"
+     }
+    },
+    "name": "latest-release",
+    "scaffold": "pyrtan new latest-release --from \"latest release of foo/bar\"",
+    "text": "latest release of foo/bar",
+    "trigger": "latest release of {target:word}"
+   },
+   "text": "latest release of foo/bar"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "new-tree",
+    "scaffold": "pyrtan new new-tree --from \"new tree\"",
+    "text": "new tree",
+    "trigger": "new tree"
+   },
+   "text": ""
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "the-the-the",
+    "scaffold": "pyrtan new the-the-the --from \"the the the\"",
+    "text": "the the the",
+    "trigger": "the the the"
+   },
+   "text": "the the the"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "weird-pattern-here",
+    "scaffold": "pyrtan new weird-pattern-here --from \"weird} [pattern] (here)\"",
+    "text": "weird} [pattern] (here)",
+    "trigger": "weird pattern here"
+   },
+   "text": "{weird} [pattern] (here)"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "weather-mars",
+    "scaffold": "pyrtan new weather-mars --from \"what's the weather on mars\"",
+    "text": "what's the weather on mars",
+    "trigger": "what's the weather on mars"
+   },
+   "text": "what's the weather on mars?"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": {
+      "description": "a host name, as in: 10.0.0.1",
+      "role": "host",
+      "type": "str"
+     },
+     "host2": {
+      "description": "a host name, as in: 10.0.0.2",
+      "role": "host",
+      "type": "str"
+     }
+    },
+    "name": "host-host-ping",
+    "scaffold": "pyrtan new host-host-ping --from \"ping 10.0.0.1 and 10.0.0.2\"",
+    "text": "ping 10.0.0.1 and 10.0.0.2",
+    "trigger": "ping {host:host} and {host2:host}"
+   },
+   "text": "ping 10.0.0.1 and 10.0.0.2"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "caf-opening-hours",
+    "scaffold": "pyrtan new caf-opening-hours --from \"café opening hours\"",
+    "text": "café opening hours",
+    "trigger": "café opening hours"
+   },
+   "text": "café opening hours"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "say-hello-user",
+    "scaffold": "pyrtan new say-hello-user --from 'say \"hello\" to $USER'",
+    "text": "say \"hello\" to $USER",
+    "trigger": "say \"hello\" to $USER"
+   },
+   "text": "say \"hello\" to $USER"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "name": "it-s-raining",
+    "scaffold": "pyrtan new it-s-raining --from \"it's raining\"",
+    "text": "it's raining",
+    "trigger": "it's raining"
+   },
+   "text": "it's raining"
+  }
+ ],
  "pyrtan-conformance": 1,
+ "readings": [
+  {
+   "expect": {
+    "cleaned": "What is the top story on Hacker News",
+    "considered": [
+     {
+      "inputs": {
+       "count": 1
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 29,
+      "tree": "hacker-news",
+      "trigger": "[what's the] top story on hacker news"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "count": 1
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 29,
+      "tree": "hacker-news",
+      "trigger": "[what's the] top story on hacker news"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "What is the top story on Hacker News",
+      "inputs": {
+       "count": 1
+      },
+      "steps": [
+       "contractions: What's->what is"
+      ],
+      "trigger": "[what's the] top story on hacker news"
+     },
+     "summary": "\"What's the top story on Hacker News?\" -> 'What is the top story on Hacker News'; hacker-news via \"[what's the] top story on hacker news\" (29 literal chars)"
+    },
+    "steps": [
+     "contractions: What's->what is"
+    ],
+    "text": "What's the top story on Hacker News?"
+   },
+   "text": "What's the top story on Hacker News?"
+  },
+  {
+   "expect": {
+    "cleaned": "top 5 stories on hacker news",
+    "considered": [
+     {
+      "inputs": {
+       "count": 5
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "count": 5
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "top 5 stories on hacker news",
+      "inputs": {
+       "count": 5
+      },
+      "steps": [
+       "numbers: five->5"
+      ],
+      "trigger": "top {count:int} stories on hacker news"
+     },
+     "summary": "'top five stories on hacker news' -> 'top 5 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+    },
+    "steps": [
+     "numbers: five->5"
+    ],
+    "text": "top five stories on hacker news"
+   },
+   "text": "top five stories on hacker news"
+  },
+  {
+   "expect": {
+    "cleaned": "top 3 stories on hacker news",
+    "considered": [
+     {
+      "inputs": {
+       "count": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "count": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "top 3 stories on hacker news",
+      "inputs": {
+       "count": 3
+      },
+      "steps": [
+       "fillers: 'hey pyrtan', 'please'"
+      ],
+      "trigger": "top {count:int} stories on hacker news"
+     },
+     "summary": "'hey pyrtan, top 3 stories on hacker news please' -> 'top 3 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+    },
+    "steps": [
+     "fillers: 'hey pyrtan', 'please'"
+    ],
+    "text": "hey pyrtan, top 3 stories on hacker news please"
+   },
+   "text": "hey pyrtan, top 3 stories on hacker news please"
+  },
+  {
+   "expect": {
+    "cleaned": "weather in Oslo",
+    "considered": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "weather",
+      "trigger": "[what's the] weather in {place}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "weather",
+      "trigger": "[what's the] weather in {place}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "weather in Oslo",
+      "inputs": {
+       "place": "Oslo"
+      },
+      "steps": [],
+      "trigger": "[what's the] weather in {place}"
+     },
+     "summary": "'weather in Oslo'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
+    },
+    "steps": [],
+    "text": "weather in Oslo"
+   },
+   "text": "weather in Oslo"
+  },
+  {
+   "expect": {
+    "cleaned": "what is the forecast for New York",
+    "considered": [
+     {
+      "inputs": {
+       "place": "New York"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 19,
+      "tree": "weather",
+      "trigger": "[what's the] weather for {place}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "place": "New York"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 19,
+      "tree": "weather",
+      "trigger": "[what's the] weather for {place}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "what is the forecast for New York",
+      "inputs": {
+       "place": "New York"
+      },
+      "steps": [
+       "contractions: what's->what is"
+      ],
+      "trigger": "[what's the] weather for {place}"
+     },
+     "summary": "\"what's the forecast for New York\" -> 'what is the forecast for New York'; weather via \"[what's the] weather for {place}\" (19 literal chars)"
+    },
+    "steps": [
+     "contractions: what's->what is"
+    ],
+    "text": "what's the forecast for New York"
+   },
+   "text": "what's the forecast for New York"
+  },
+  {
+   "expect": {
+    "cleaned": "how cold is it in Oslo",
+    "considered": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 20,
+      "tree": "weather",
+      "trigger": "how [hot|cold|warm] is it in {place}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 20,
+      "tree": "weather",
+      "trigger": "how [hot|cold|warm] is it in {place}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "how cold is it in Oslo",
+      "inputs": {
+       "place": "Oslo"
+      },
+      "steps": [],
+      "trigger": "how [hot|cold|warm] is it in {place}"
+     },
+     "summary": "'how cold is it in Oslo'; weather via 'how [hot|cold|warm] is it in {place}' (20 literal chars)"
+    },
+    "steps": [],
+    "text": "how cold is it in Oslo"
+   },
+   "text": "how cold is it in Oslo"
+  },
+  {
+   "expect": {
+    "cleaned": "is Example.com up",
+    "considered": [
+     {
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'Example.com' read as 'example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "site-status",
+      "trigger": "is {host:host} up"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'Example.com' read as 'example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "site-status",
+      "trigger": "is {host:host} up"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "is Example.com up",
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'Example.com' read as 'example.com'"
+      ],
+      "steps": [],
+      "trigger": "is {host:host} up"
+     },
+     "summary": "'is Example.com up'; site-status via 'is {host:host} up' (4 literal chars); host: 'Example.com' read as 'example.com'"
+    },
+    "steps": [],
+    "text": "is Example.com up"
+   },
+   "text": "is Example.com up"
+  },
+  {
+   "expect": {
+    "cleaned": "is http://Example.com:8080/x up",
+    "considered": [
+     {
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'http://Example.com:8080/x' read as 'example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "site-status",
+      "trigger": "is {host:host} up"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'http://Example.com:8080/x' read as 'example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "site-status",
+      "trigger": "is {host:host} up"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "is http://Example.com:8080/x up",
+      "inputs": {
+       "host": "example.com"
+      },
+      "notes": [
+       "host: 'http://Example.com:8080/x' read as 'example.com'"
+      ],
+      "steps": [],
+      "trigger": "is {host:host} up"
+     },
+     "summary": "'is http://Example.com:8080/x up'; site-status via 'is {host:host} up' (4 literal chars); host: 'http://Example.com:8080/x' read as 'example.com'"
+    },
+    "steps": [],
+    "text": "is http://Example.com:8080/x up"
+   },
+   "text": "is http://Example.com:8080/x up"
+  },
+  {
+   "expect": {
+    "cleaned": "is not a host up",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "is not a host up",
+      "steps": []
+     },
+     "summary": "'is not a host up'; no trigger matched"
+    },
+    "steps": [],
+    "text": "is not a host up"
+   },
+   "text": "is not a host up"
+  },
+  {
+   "expect": {
+    "cleaned": "latest release of b-i-t-8/pyrtan",
+    "considered": [
+     {
+      "inputs": {
+       "repo": "b-i-t-8/pyrtan"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 24,
+      "tree": "github-release",
+      "trigger": "[what's the] latest release of {repo:word}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "repo": "b-i-t-8/pyrtan"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 24,
+      "tree": "github-release",
+      "trigger": "[what's the] latest release of {repo:word}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "latest release of b-i-t-8/pyrtan",
+      "inputs": {
+       "repo": "b-i-t-8/pyrtan"
+      },
+      "steps": [],
+      "trigger": "[what's the] latest release of {repo:word}"
+     },
+     "summary": "'latest release of b-i-t-8/pyrtan'; github-release via \"[what's the] latest release of {repo:word}\" (24 literal chars)"
+    },
+    "steps": [],
+    "text": "latest release of b-i-t-8/pyrtan"
+   },
+   "text": "latest release of b-i-t-8/pyrtan"
+  },
+  {
+   "expect": {
+    "cleaned": "how full is the disk",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [],
+      "rejected": false,
+      "specificity": 16,
+      "tree": "disk-space",
+      "trigger": "[how] full is the disk"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {},
+      "notes": [],
+      "rejected": false,
+      "specificity": 16,
+      "tree": "disk-space",
+      "trigger": "[how] full is the disk"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "how full is the disk",
+      "inputs": {},
+      "steps": [],
+      "trigger": "[how] full is the disk"
+     },
+     "summary": "'how full is the disk'; disk-space via '[how] full is the disk' (16 literal chars)"
+    },
+    "steps": [],
+    "text": "how full is the disk"
+   },
+   "text": "how full is the disk"
+  },
+  {
+   "expect": {
+    "cleaned": "disk space on /data",
+    "considered": [
+     {
+      "inputs": {
+       "mount": "/data"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 11,
+      "tree": "disk-space",
+      "trigger": "disk space on {mount:word}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "mount": "/data"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 11,
+      "tree": "disk-space",
+      "trigger": "disk space on {mount:word}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "disk space on /data",
+      "inputs": {
+       "mount": "/data"
+      },
+      "steps": [],
+      "trigger": "disk space on {mount:word}"
+     },
+     "summary": "'disk space on /data'; disk-space via 'disk space on {mount:word}' (11 literal chars)"
+    },
+    "steps": [],
+    "text": "disk space on /data"
+   },
+   "text": "disk space on /data"
+  },
+  {
+   "expect": {
+    "cleaned": "the temperature in the attic",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "the temperature in the attic",
+      "steps": []
+     },
+     "summary": "'the temperature in the attic'; no trigger matched"
+    },
+    "steps": [],
+    "text": "the temperature in the attic"
+   },
+   "text": "the temperature in the attic"
+  },
+  {
+   "expect": {
+    "cleaned": "headline of https://app.example/dashboard",
+    "considered": [
+     {
+      "inputs": {
+       "url": "https://app.example/dashboard"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "rendered-headline",
+      "trigger": "headline of {url:url}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "url": "https://app.example/dashboard"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "rendered-headline",
+      "trigger": "headline of {url:url}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "headline of https://app.example/dashboard",
+      "inputs": {
+       "url": "https://app.example/dashboard"
+      },
+      "steps": [],
+      "trigger": "headline of {url:url}"
+     },
+     "summary": "'headline of https://app.example/dashboard'; rendered-headline via 'headline of {url:url}' (10 literal chars)"
+    },
+    "steps": [],
+    "text": "headline of https://app.example/dashboard"
+   },
+   "text": "headline of https://app.example/dashboard"
+  },
+  {
+   "expect": {
+    "cleaned": "is the modem on /dev/ttyUSB1 up",
+    "considered": [
+     {
+      "inputs": {
+       "device": "/dev/ttyUSB1"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 14,
+      "tree": "modem-check",
+      "trigger": "is the modem on {device:word} up"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "device": "/dev/ttyUSB1"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 14,
+      "tree": "modem-check",
+      "trigger": "is the modem on {device:word} up"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "is the modem on /dev/ttyUSB1 up",
+      "inputs": {
+       "device": "/dev/ttyUSB1"
+      },
+      "steps": [],
+      "trigger": "is the modem on {device:word} up"
+     },
+     "summary": "'is the modem on /dev/ttyUSB1 up'; modem-check via 'is the modem on {device:word} up' (14 literal chars)"
+    },
+    "steps": [],
+    "text": "is the modem on /dev/ttyUSB1 up"
+   },
+   "text": "is the modem on /dev/ttyUSB1 up"
+  },
+  {
+   "expect": {
+    "cleaned": "make me a sandwich",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "make me a sandwich",
+      "steps": []
+     },
+     "summary": "'make me a sandwich'; no trigger matched"
+    },
+    "steps": [],
+    "text": "make me a sandwich"
+   },
+   "text": "make me a sandwich"
+  },
+  {
+   "expect": {
+    "cleaned": "",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "",
+      "steps": []
+     },
+     "summary": "''; no trigger matched"
+    },
+    "steps": [],
+    "text": ""
+   },
+   "text": ""
+  },
+  {
+   "expect": {
+    "cleaned": "",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "",
+      "steps": []
+     },
+     "summary": "'   ?!  ' -> ''; no trigger matched"
+    },
+    "steps": [],
+    "text": "   ?!  "
+   },
+   "text": "   ?!  "
+  },
+  {
+   "expect": {
+    "cleaned": "tell me the weather in Zürich",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "tell me the weather in Zürich",
+      "steps": [
+       "fillers: 'Could you please', 'thanks'"
+      ]
+     },
+     "summary": "'Could you please tell me the weather in Zürich, thanks!' -> 'tell me the weather in Zürich'; no trigger matched"
+    },
+    "steps": [
+     "fillers: 'Could you please', 'thanks'"
+    ],
+    "text": "Could you please tell me the weather in Zürich, thanks!"
+   },
+   "text": "Could you please tell me the weather in Zürich, thanks!"
+  },
+  {
+   "expect": {
+    "cleaned": "TOP 3 STORIES ON HACKER NEWS",
+    "considered": [
+     {
+      "inputs": {
+       "count": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "count": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "TOP 3 STORIES ON HACKER NEWS",
+      "inputs": {
+       "count": 3
+      },
+      "steps": [],
+      "trigger": "top {count:int} stories on hacker news"
+     },
+     "summary": "'TOP 3 STORIES ON HACKER NEWS'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+    },
+    "steps": [],
+    "text": "TOP 3 STORIES ON HACKER NEWS"
+   },
+   "text": "TOP 3 STORIES ON HACKER NEWS"
+  },
+  {
+   "expect": {
+    "cleaned": "top 21 stories on hacker news",
+    "considered": [
+     {
+      "inputs": {
+       "count": 21
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "count": 21
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 22,
+      "tree": "hacker-news",
+      "trigger": "top {count:int} stories on hacker news"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "top 21 stories on hacker news",
+      "inputs": {
+       "count": 21
+      },
+      "steps": [
+       "numbers: twenty-one->21"
+      ],
+      "trigger": "top {count:int} stories on hacker news"
+     },
+     "summary": "'top twenty-one stories on hacker news' -> 'top 21 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+    },
+    "steps": [
+     "numbers: twenty-one->21"
+    ],
+    "text": "top twenty-one stories on hacker news"
+   },
+   "text": "top twenty-one stories on hacker news"
+  },
+  {
+   "expect": {
+    "cleaned": "weather in Oslo",
+    "considered": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "weather",
+      "trigger": "[what's the] weather in {place}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "place": "Oslo"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "weather",
+      "trigger": "[what's the] weather in {place}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "weather in Oslo",
+      "inputs": {
+       "place": "Oslo"
+      },
+      "steps": [
+       "fillers: 'for me'"
+      ],
+      "trigger": "[what's the] weather in {place}"
+     },
+     "summary": "'weather in Oslo for me' -> 'weather in Oslo'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
+    },
+    "steps": [
+     "fillers: 'for me'"
+    ],
+    "text": "weather in Oslo for me"
+   },
+   "text": "weather in Oslo for me"
+  },
+  {
+   "expect": {
+    "cleaned": "",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "",
+      "steps": [
+       "fillers: 'hello'"
+      ]
+     },
+     "summary": "'hello' -> ''; no trigger matched"
+    },
+    "steps": [
+     "fillers: 'hello'"
+    ],
+    "text": "hello"
+   },
+   "text": "hello"
+  },
+  {
+   "expect": {
+    "cleaned": "",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "",
+      "steps": [
+       "fillers: 'pyrtan'"
+      ]
+     },
+     "summary": "'pyrtan' -> ''; no trigger matched"
+    },
+    "steps": [
+     "fillers: 'pyrtan'"
+    ],
+    "text": "pyrtan"
+   },
+   "text": "pyrtan"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me tomorrow at 3pm",
+    "considered": [
+     {
+      "inputs": {
+       "at": "15:00",
+       "when": "2026-10-26"
+      },
+      "notes": [
+       "when: 'tomorrow' read as '2026-10-26'",
+       "at: '3pm' read as '15:00'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "at": "15:00",
+       "when": "2026-10-26"
+      },
+      "notes": [
+       "when: 'tomorrow' read as '2026-10-26'",
+       "at: '3pm' read as '15:00'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me tomorrow at 3pm",
+      "inputs": {
+       "at": "15:00",
+       "when": "2026-10-26"
+      },
+      "notes": [
+       "when: 'tomorrow' read as '2026-10-26'",
+       "at: '3pm' read as '15:00'"
+      ],
+      "steps": [],
+      "trigger": "remind me {when:date} at {at:time}"
+     },
+     "summary": "'remind me tomorrow at 3pm'; remind via 'remind me {when:date} at {at:time}' (10 literal chars); when: 'tomorrow' read as '2026-10-26'; at: '3pm' read as '15:00'"
+    },
+    "steps": [],
+    "text": "remind me tomorrow at 3pm"
+   },
+   "text": "remind me tomorrow at 3pm"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me next friday at noon",
+    "considered": [
+     {
+      "inputs": {
+       "at": "12:00",
+       "when": "2026-10-30"
+      },
+      "notes": [
+       "when: 'next friday' read as '2026-10-30'",
+       "at: 'noon' read as '12:00'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "at": "12:00",
+       "when": "2026-10-30"
+      },
+      "notes": [
+       "when: 'next friday' read as '2026-10-30'",
+       "at: 'noon' read as '12:00'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me next friday at noon",
+      "inputs": {
+       "at": "12:00",
+       "when": "2026-10-30"
+      },
+      "notes": [
+       "when: 'next friday' read as '2026-10-30'",
+       "at: 'noon' read as '12:00'"
+      ],
+      "steps": [],
+      "trigger": "remind me {when:date} at {at:time}"
+     },
+     "summary": "'remind me next friday at noon'; remind via 'remind me {when:date} at {at:time}' (10 literal chars); when: 'next friday' read as '2026-10-30'; at: 'noon' read as '12:00'"
+    },
+    "steps": [],
+    "text": "remind me next friday at noon"
+   },
+   "text": "remind me next friday at noon"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me 25 dec at 9:30 pm",
+    "considered": [
+     {
+      "inputs": {
+       "at": "21:30",
+       "when": "2026-12-25"
+      },
+      "notes": [
+       "when: '25 dec' read as '2026-12-25'",
+       "at: '9:30 pm' read as '21:30'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "at": "21:30",
+       "when": "2026-12-25"
+      },
+      "notes": [
+       "when: '25 dec' read as '2026-12-25'",
+       "at: '9:30 pm' read as '21:30'"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me 25 dec at 9:30 pm",
+      "inputs": {
+       "at": "21:30",
+       "when": "2026-12-25"
+      },
+      "notes": [
+       "when: '25 dec' read as '2026-12-25'",
+       "at: '9:30 pm' read as '21:30'"
+      ],
+      "steps": [],
+      "trigger": "remind me {when:date} at {at:time}"
+     },
+     "summary": "'remind me 25 dec at 9:30 pm'; remind via 'remind me {when:date} at {at:time}' (10 literal chars); when: '25 dec' read as '2026-12-25'; at: '9:30 pm' read as '21:30'"
+    },
+    "steps": [],
+    "text": "remind me 25 dec at 9:30 pm"
+   },
+   "text": "remind me 25 dec at 9:30 pm"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me 3/4 at 10am",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "slot when: '3/4' could be day/month or month/day; write it as 2026-04-03 or '3 april'"
+      ],
+      "rejected": true,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me 3/4 at 10am",
+      "steps": []
+     },
+     "summary": "'remind me 3/4 at 10am'; no trigger matched"
+    },
+    "steps": [],
+    "text": "remind me 3/4 at 10am"
+   },
+   "text": "remind me 3/4 at 10am"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me 31/12 at 25:00",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "when: '31/12' read as '2026-12-31'",
+       "slot at: '25:00' is not a time"
+      ],
+      "rejected": true,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me {when:date} at {at:time}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me 31/12 at 25:00",
+      "steps": []
+     },
+     "summary": "'remind me 31/12 at 25:00'; no trigger matched"
+    },
+    "steps": [],
+    "text": "remind me 31/12 at 25:00"
+   },
+   "text": "remind me 31/12 at 25:00"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me in 2 hours",
+    "considered": [
+     {
+      "inputs": {
+       "wait": 7200
+      },
+      "notes": [
+       "wait: '2 hours' read as 7200"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "wait": 7200
+      },
+      "notes": [
+       "wait: '2 hours' read as 7200"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me in 2 hours",
+      "inputs": {
+       "wait": 7200
+      },
+      "notes": [
+       "wait: '2 hours' read as 7200"
+      ],
+      "steps": [],
+      "trigger": "remind me in {wait:duration}"
+     },
+     "summary": "'remind me in 2 hours'; remind via 'remind me in {wait:duration}' (10 literal chars); wait: '2 hours' read as 7200"
+    },
+    "steps": [],
+    "text": "remind me in 2 hours"
+   },
+   "text": "remind me in 2 hours"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me in an hour and a half",
+    "considered": [
+     {
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: 'an hour and a half' read as 5400"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: 'an hour and a half' read as 5400"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me in an hour and a half",
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: 'an hour and a half' read as 5400"
+      ],
+      "steps": [],
+      "trigger": "remind me in {wait:duration}"
+     },
+     "summary": "'remind me in an hour and a half'; remind via 'remind me in {wait:duration}' (10 literal chars); wait: 'an hour and a half' read as 5400"
+    },
+    "steps": [],
+    "text": "remind me in an hour and a half"
+   },
+   "text": "remind me in an hour and a half"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me in 1h30m",
+    "considered": [
+     {
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: '1h30m' read as 5400"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: '1h30m' read as 5400"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me in 1h30m",
+      "inputs": {
+       "wait": 5400
+      },
+      "notes": [
+       "wait: '1h30m' read as 5400"
+      ],
+      "steps": [],
+      "trigger": "remind me in {wait:duration}"
+     },
+     "summary": "'remind me in 1h30m'; remind via 'remind me in {wait:duration}' (10 literal chars); wait: '1h30m' read as 5400"
+    },
+    "steps": [],
+    "text": "remind me in 1h30m"
+   },
+   "text": "remind me in 1h30m"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me in half an hour",
+    "considered": [
+     {
+      "inputs": {
+       "wait": 1800
+      },
+      "notes": [
+       "wait: 'half an hour' read as 1800"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "wait": 1800
+      },
+      "notes": [
+       "wait: 'half an hour' read as 1800"
+      ],
+      "rejected": false,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me in half an hour",
+      "inputs": {
+       "wait": 1800
+      },
+      "notes": [
+       "wait: 'half an hour' read as 1800"
+      ],
+      "steps": [],
+      "trigger": "remind me in {wait:duration}"
+     },
+     "summary": "'remind me in half an hour'; remind via 'remind me in {wait:duration}' (10 literal chars); wait: 'half an hour' read as 1800"
+    },
+    "steps": [],
+    "text": "remind me in half an hour"
+   },
+   "text": "remind me in half an hour"
+  },
+  {
+   "expect": {
+    "cleaned": "remind me in 2 parsecs",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "slot wait: '2 parsecs': unknown unit 'parsecs'"
+      ],
+      "rejected": true,
+      "specificity": 10,
+      "tree": "remind",
+      "trigger": "remind me in {wait:duration}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "remind me in 2 parsecs",
+      "steps": []
+     },
+     "summary": "'remind me in 2 parsecs'; no trigger matched"
+    },
+    "steps": [],
+    "text": "remind me in 2 parsecs"
+   },
+   "text": "remind me in 2 parsecs"
+  },
+  {
+   "expect": {
+    "cleaned": "count to 205",
+    "considered": [
+     {
+      "inputs": {
+       "n": 205
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "n": 205
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "count to 205",
+      "inputs": {
+       "n": 205
+      },
+      "steps": [
+       "numbers: two hundred and five->205"
+      ],
+      "trigger": "count to {n:number}"
+     },
+     "summary": "'count to two hundred and five' -> 'count to 205'; count via 'count to {n:number}' (7 literal chars)"
+    },
+    "steps": [
+     "numbers: two hundred and five->205"
+    ],
+    "text": "count to two hundred and five"
+   },
+   "text": "count to two hundred and five"
+  },
+  {
+   "expect": {
+    "cleaned": "count to 1 000.5",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "count to 1 000.5",
+      "steps": []
+     },
+     "summary": "'count to 1,000.5' -> 'count to 1 000.5'; no trigger matched"
+    },
+    "steps": [],
+    "text": "count to 1,000.5"
+   },
+   "text": "count to 1,000.5"
+  },
+  {
+   "expect": {
+    "cleaned": "count to 2.0",
+    "considered": [
+     {
+      "inputs": {
+       "n": 2.0
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "n": 2.0
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "count to 2.0",
+      "inputs": {
+       "n": 2.0
+      },
+      "steps": [],
+      "trigger": "count to {n:number}"
+     },
+     "summary": "'count to 2.0'; count via 'count to {n:number}' (7 literal chars)"
+    },
+    "steps": [],
+    "text": "count to 2.0"
+   },
+   "text": "count to 2.0"
+  },
+  {
+   "expect": {
+    "cleaned": "count to 12",
+    "considered": [
+     {
+      "inputs": {
+       "n": 12
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "n": 12
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "count to 12",
+      "inputs": {
+       "n": 12
+      },
+      "steps": [
+       "numbers: a dozen->12"
+      ],
+      "trigger": "count to {n:number}"
+     },
+     "summary": "'count to a dozen' -> 'count to 12'; count via 'count to {n:number}' (7 literal chars)"
+    },
+    "steps": [
+     "numbers: a dozen->12"
+    ],
+    "text": "count to a dozen"
+   },
+   "text": "count to a dozen"
+  },
+  {
+   "expect": {
+    "cleaned": "add 1.5 and 3",
+    "considered": [
+     {
+      "inputs": {
+       "x": 1.5,
+       "y": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 6,
+      "tree": "count",
+      "trigger": "add {x:float} and {y:int}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "x": 1.5,
+       "y": 3
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 6,
+      "tree": "count",
+      "trigger": "add {x:float} and {y:int}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "add 1.5 and 3",
+      "inputs": {
+       "x": 1.5,
+       "y": 3
+      },
+      "steps": [],
+      "trigger": "add {x:float} and {y:int}"
+     },
+     "summary": "'add 1.5 and 3'; count via 'add {x:float} and {y:int}' (6 literal chars)"
+    },
+    "steps": [],
+    "text": "add 1.5 and 3"
+   },
+   "text": "add 1.5 and 3"
+  },
+  {
+   "expect": {
+    "cleaned": "ping localhost",
+    "considered": [
+     {
+      "inputs": {
+       "host": "localhost"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "ping {host:host}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "host": "localhost"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "ping {host:host}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "ping localhost",
+      "inputs": {
+       "host": "localhost"
+      },
+      "steps": [],
+      "trigger": "ping {host:host}"
+     },
+     "summary": "'ping localhost'; ping via 'ping {host:host}' (4 literal chars)"
+    },
+    "steps": [],
+    "text": "ping localhost"
+   },
+   "text": "ping localhost"
+  },
+  {
+   "expect": {
+    "cleaned": "ping 10.0.0.1:22",
+    "considered": [
+     {
+      "inputs": {
+       "host": "10.0.0.1"
+      },
+      "notes": [
+       "host: '10.0.0.1:22' read as '10.0.0.1'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "ping {host:host}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "host": "10.0.0.1"
+      },
+      "notes": [
+       "host: '10.0.0.1:22' read as '10.0.0.1'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "ping {host:host}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "ping 10.0.0.1:22",
+      "inputs": {
+       "host": "10.0.0.1"
+      },
+      "notes": [
+       "host: '10.0.0.1:22' read as '10.0.0.1'"
+      ],
+      "steps": [],
+      "trigger": "ping {host:host}"
+     },
+     "summary": "'ping 10.0.0.1:22'; ping via 'ping {host:host}' (4 literal chars); host: '10.0.0.1:22' read as '10.0.0.1'"
+    },
+    "steps": [],
+    "text": "ping 10.0.0.1:22"
+   },
+   "text": "ping 10.0.0.1:22"
+  },
+  {
+   "expect": {
+    "cleaned": "ping not_a_host",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "slot host: 'not_a_host' is not a host name"
+      ],
+      "rejected": true,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "ping {host:host}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "ping not_a_host",
+      "steps": []
+     },
+     "summary": "'ping not_a_host'; no trigger matched"
+    },
+    "steps": [],
+    "text": "ping not_a_host"
+   },
+   "text": "ping not_a_host"
+  },
+  {
+   "expect": {
+    "cleaned": "fetch https://example.com/a b=c",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "fetch https://example.com/a b=c",
+      "steps": []
+     },
+     "summary": "'fetch https://example.com/a?b=c' -> 'fetch https://example.com/a b=c'; no trigger matched"
+    },
+    "steps": [],
+    "text": "fetch https://example.com/a?b=c"
+   },
+   "text": "fetch https://example.com/a?b=c"
+  },
+  {
+   "expect": {
+    "cleaned": "fetch ftp://x",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "slot url: 'ftp://x' is not a URL"
+      ],
+      "rejected": true,
+      "specificity": 5,
+      "tree": "ping",
+      "trigger": "fetch {url:url}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "fetch ftp://x",
+      "steps": []
+     },
+     "summary": "'fetch ftp://x'; no trigger matched"
+    },
+    "steps": [],
+    "text": "fetch ftp://x"
+   },
+   "text": "fetch ftp://x"
+  },
+  {
+   "expect": {
+    "cleaned": "mail Barry@Example.COM",
+    "considered": [
+     {
+      "inputs": {
+       "to": "barry@example.com"
+      },
+      "notes": [
+       "to: 'Barry@Example.COM' read as 'barry@example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "mail {to:email}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "to": "barry@example.com"
+      },
+      "notes": [
+       "to: 'Barry@Example.COM' read as 'barry@example.com'"
+      ],
+      "rejected": false,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "mail {to:email}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "mail Barry@Example.COM",
+      "inputs": {
+       "to": "barry@example.com"
+      },
+      "notes": [
+       "to: 'Barry@Example.COM' read as 'barry@example.com'"
+      ],
+      "steps": [],
+      "trigger": "mail {to:email}"
+     },
+     "summary": "'mail Barry@Example.COM'; ping via 'mail {to:email}' (4 literal chars); to: 'Barry@Example.COM' read as 'barry@example.com'"
+    },
+    "steps": [],
+    "text": "mail Barry@Example.COM"
+   },
+   "text": "mail Barry@Example.COM"
+  },
+  {
+   "expect": {
+    "cleaned": "mail nobody",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [
+       "slot to: 'nobody' is not an email address"
+      ],
+      "rejected": true,
+      "specificity": 4,
+      "tree": "ping",
+      "trigger": "mail {to:email}"
+     }
+    ],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "mail nobody",
+      "steps": []
+     },
+     "summary": "'mail nobody'; no trigger matched"
+    },
+    "steps": [],
+    "text": "mail nobody"
+   },
+   "text": "mail nobody"
+  },
+  {
+   "expect": {
+    "cleaned": "find books by Ursula Le Guin",
+    "considered": [
+     {
+      "inputs": {
+       "author": "Ursula Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "author": "Ursula Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "find books by Ursula Le Guin",
+      "inputs": {
+       "author": "Ursula Le Guin"
+      },
+      "steps": [],
+      "trigger": "(find|search) books by {author}"
+     },
+     "summary": "'find books by Ursula Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+    },
+    "steps": [],
+    "text": "find books by Ursula Le Guin"
+   },
+   "text": "find books by Ursula Le Guin"
+  },
+  {
+   "expect": {
+    "cleaned": "search novels by Le Guin",
+    "considered": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "search novels by Le Guin",
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "steps": [],
+      "trigger": "(find|search) books by {author}"
+     },
+     "summary": "'search novels by Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+    },
+    "steps": [],
+    "text": "search novels by Le Guin"
+   },
+   "text": "search novels by Le Guin"
+  },
+  {
+   "expect": {
+    "cleaned": "look up paperback books by Le Guin",
+    "considered": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "look up paperback books by Le Guin",
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "steps": [],
+      "trigger": "(find|search) books by {author}"
+     },
+     "summary": "'look up paperback books by Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+    },
+    "steps": [],
+    "text": "look up paperback books by Le Guin"
+   },
+   "text": "look up paperback books by Le Guin"
+  },
+  {
+   "expect": {
+    "cleaned": "finnd books by Le Guin",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "finnd books by Le Guin",
+      "steps": []
+     },
+     "summary": "'finnd books by Le Guin'; no trigger matched"
+    },
+    "steps": [],
+    "text": "finnd books by Le Guin"
+   },
+   "text": "finnd books by Le Guin"
+  },
+  {
+   "expect": {
+    "cleaned": "serch books by Le Guin",
+    "considered": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [
+       "typo: serch->search"
+      ],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [
+       "typo: serch->search"
+      ],
+      "rejected": false,
+      "specificity": 17,
+      "tree": "books",
+      "trigger": "(find|search) books by {author}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "serch books by Le Guin",
+      "inputs": {
+       "author": "Le Guin"
+      },
+      "notes": [
+       "typo: serch->search"
+      ],
+      "steps": [],
+      "trigger": "(find|search) books by {author}"
+     },
+     "summary": "'serch books by Le Guin'; books via '(find|search) books by {author}' (17 literal chars); typo: serch->search"
+    },
+    "steps": [],
+    "text": "serch books by Le Guin"
+   },
+   "text": "serch books by Le Guin"
+  },
+  {
+   "expect": {
+    "cleaned": "top stories on book club",
+    "considered": [
+     {
+      "inputs": {},
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "books",
+      "trigger": "top story on book club"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {},
+      "notes": [],
+      "rejected": false,
+      "specificity": 18,
+      "tree": "books",
+      "trigger": "top story on book club"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "top stories on book club",
+      "inputs": {},
+      "steps": [],
+      "trigger": "top story on book club"
+     },
+     "summary": "'top stories on book club'; books via 'top story on book club' (18 literal chars)"
+    },
+    "steps": [],
+    "text": "top stories on book club"
+   },
+   "text": "top stories on book club"
+  },
+  {
+   "expect": {
+    "cleaned": "shout hello",
+    "considered": [
+     {
+      "inputs": {
+       "x": "hello"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 5,
+      "tree": "tie-a",
+      "trigger": "shout {x:word}"
+     },
+     {
+      "inputs": {
+       "y": "hello"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 5,
+      "tree": "tie-b",
+      "trigger": "shout {y:word}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "x": "hello"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 5,
+      "tree": "tie-a",
+      "trigger": "shout {x:word}"
+     },
+     {
+      "inputs": {
+       "y": "hello"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 5,
+      "tree": "tie-b",
+      "trigger": "shout {y:word}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "shout hello",
+      "steps": []
+     },
+     "summary": "'shout hello'; tie between ['tie-a', 'tie-b']"
+    },
+    "steps": [],
+    "text": "shout hello"
+   },
+   "text": "shout hello"
+  },
+  {
+   "expect": {
+    "cleaned": "the usual",
+    "considered": [
+     {
+      "inputs": {
+       "what": "coffee"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 8,
+      "tree": "fixed",
+      "trigger": "the usual"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "what": "coffee"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 8,
+      "tree": "fixed",
+      "trigger": "the usual"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "the usual",
+      "inputs": {
+       "what": "coffee"
+      },
+      "steps": [],
+      "trigger": "the usual"
+     },
+     "summary": "'the usual'; fixed via 'the usual' (8 literal chars)"
+    },
+    "steps": [],
+    "text": "the usual"
+   },
+   "text": "the usual"
+  },
+  {
+   "expect": {
+    "cleaned": "order a latte",
+    "considered": [
+     {
+      "inputs": {
+       "drink": "latte"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 6,
+      "tree": "order",
+      "trigger": "order a {drink:word}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "drink": "latte"
+      },
+      "notes": [],
+      "rejected": false,
+      "specificity": 6,
+      "tree": "order",
+      "trigger": "order a {drink:word}"
+     }
+    ],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "order a latte",
+      "inputs": {
+       "drink": "latte"
+      },
+      "steps": [],
+      "trigger": "order a {drink:word}"
+     },
+     "summary": "'order a latte'; order via 'order a {drink:word}' (6 literal chars)"
+    },
+    "steps": [],
+    "text": "order a latte"
+   },
+   "text": "order a latte"
+  },
+  {
+   "expect": {
+    "cleaned": "it is the usual",
+    "considered": [],
+    "matches": [],
+    "now": "2026-10-25T12:00:00+00:00",
+    "step": {
+     "kind": "intent",
+     "node": "intent",
+     "observed": {
+      "cleaned": "it is the usual",
+      "steps": [
+       "contractions: it's->it is"
+      ]
+     },
+     "summary": "\"it's the usual\" -> 'it is the usual'; no trigger matched"
+    },
+    "steps": [
+     "contractions: it's->it is"
+    ],
+    "text": "it's the usual"
+   },
+   "text": "it's the usual"
+  }
+ ],
  "runs": [
   {
    "expect": {
@@ -24,6 +5438,23 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch-ids",
+       "node": "intent",
+       "observed": {
+        "cleaned": "What is the top story on Hacker News",
+        "inputs": {
+         "count": 1
+        },
+        "steps": [
+         "contractions: What's->what is"
+        ],
+        "trigger": "[what's the] top story on hacker news"
+       },
+       "summary": "\"What's the top story on Hacker News?\" -> 'What is the top story on Hacker News'; hacker-news via \"[what's the] top story on hacker news\" (29 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -153,6 +5584,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch-ids",
+       "node": "intent",
+       "observed": {
+        "cleaned": "top 3 stories on hacker news",
+        "inputs": {
+         "count": 3
+        },
+        "steps": [],
+        "trigger": "top {count:int} stories on hacker news"
+       },
+       "summary": "'top 3 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -339,7 +5785,23 @@
     "status": "error",
     "trace": {
      "gaps": [],
-     "steps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch-ids",
+       "node": "intent",
+       "observed": {
+        "cleaned": "top 99 stories on hacker news",
+        "inputs": {
+         "count": 99
+        },
+        "steps": [],
+        "trigger": "top {count:int} stories on hacker news"
+       },
+       "summary": "'top 99 stories on hacker news'; hacker-news via 'top {count:int} stories on hacker news' (22 literal chars)"
+      }
+     ],
      "tree": "hacker-news"
     },
     "tree": "hacker-news"
@@ -361,6 +5823,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "hacker news item 999",
+        "inputs": {
+         "id": 999
+        },
+        "steps": [],
+        "trigger": "hacker news item {id:int}"
+       },
+       "summary": "'hacker news item 999'; hacker-news-item via 'hacker news item {id:int}' (14 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -421,6 +5898,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "weather in Oslo",
+        "inputs": {
+         "place": "Oslo"
+        },
+        "steps": [],
+        "trigger": "[what's the] weather in {place}"
+       },
+       "summary": "'weather in Oslo'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -660,6 +6152,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how cold is it in Nowhereville",
+        "inputs": {
+         "place": "Nowhereville"
+        },
+        "steps": [],
+        "trigger": "how [hot|cold|warm] is it in {place}"
+       },
+       "summary": "'how cold is it in Nowhereville'; weather via 'how [hot|cold|warm] is it in {place}' (20 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "found",
        "node": "geocode",
@@ -716,6 +6223,24 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is Example.com up",
+        "inputs": {
+         "host": "example.com"
+        },
+        "notes": [
+         "host: 'Example.com' read as 'example.com'"
+        ],
+        "steps": [],
+        "trigger": "is {host:host} up"
+       },
+       "summary": "'is Example.com up'; site-status via 'is {host:host} up' (4 literal chars); host: 'Example.com' read as 'example.com'"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "status",
        "node": "probe",
@@ -766,6 +6291,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is broken.example up",
+        "inputs": {
+         "host": "broken.example"
+        },
+        "steps": [],
+        "trigger": "is {host:host} up"
+       },
+       "summary": "'is broken.example up'; site-status via 'is {host:host} up' (4 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "status",
        "node": "probe",
@@ -814,6 +6354,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "check status of teapot.example",
+        "inputs": {
+         "host": "teapot.example"
+        },
+        "steps": [],
+        "trigger": "[check] status of {host:host}"
+       },
+       "summary": "'check status of teapot.example'; site-status via '[check] status of {host:host}' (13 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -886,6 +6441,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest release of b-i-t-8/pyrtan",
+        "inputs": {
+         "repo": "b-i-t-8/pyrtan"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest release of {repo:word}"
+       },
+       "summary": "'latest release of b-i-t-8/pyrtan'; github-release via \"[what's the] latest release of {repo:word}\" (24 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "status",
        "node": "fetch",
@@ -936,6 +6506,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest b-i-t-8/nothing release",
+        "inputs": {
+         "repo": "b-i-t-8/nothing"
+        },
+        "steps": [],
+        "trigger": "latest {repo:word} release"
+       },
+       "summary": "'latest b-i-t-8/nothing release'; github-release via 'latest {repo:word} release' (13 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -990,6 +6575,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest release of b-i-t-8/busy",
+        "inputs": {
+         "repo": "b-i-t-8/busy"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest release of {repo:word}"
+       },
+       "summary": "'latest release of b-i-t-8/busy'; github-release via \"[what's the] latest release of {repo:word}\" (24 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "status",
        "node": "fetch",
@@ -1041,6 +6641,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "weather in Paris",
+        "inputs": {
+         "place": "Paris"
+        },
+        "steps": [],
+        "trigger": "[what's the] weather in {place}"
+       },
+       "summary": "'weather in Paris'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1316,6 +6931,19 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "df",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how full is the disk",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[how] full is the disk"
+       },
+       "summary": "'how full is the disk'; disk-space via '[how] full is the disk' (16 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "ran",
        "node": "df",
@@ -1380,6 +7008,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "df",
+       "node": "intent",
+       "observed": {
+        "cleaned": "disk space on /data",
+        "inputs": {
+         "mount": "/data"
+        },
+        "steps": [],
+        "trigger": "disk space on {mount:word}"
+       },
+       "summary": "'disk space on /data'; disk-space via 'disk space on {mount:word}' (11 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1450,6 +7093,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "df",
+       "node": "intent",
+       "observed": {
+        "cleaned": "disk space on /nowhere",
+        "inputs": {
+         "mount": "/nowhere"
+        },
+        "steps": [],
+        "trigger": "disk space on {mount:word}"
+       },
+       "summary": "'disk space on /nowhere'; disk-space via 'disk space on {mount:word}' (11 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "ran",
        "node": "df",
@@ -1505,6 +7163,19 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "read",
+       "node": "intent",
+       "observed": {
+        "cleaned": "errors in the log",
+        "inputs": {},
+        "steps": [],
+        "trigger": "errors in the log"
+       },
+       "summary": "'errors in the log'; log-errors via 'errors in the log' (14 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1580,6 +7251,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "read",
+       "node": "intent",
+       "observed": {
+        "cleaned": "errors in /var/log/quiet.log",
+        "inputs": {
+         "path": "/var/log/quiet.log"
+        },
+        "steps": [],
+        "trigger": "errors in {path:word}"
+       },
+       "summary": "'errors in /var/log/quiet.log'; log-errors via 'errors in {path:word}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "exists",
        "node": "read",
@@ -1649,6 +7335,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "read",
+       "node": "intent",
+       "observed": {
+        "cleaned": "errors in /var/log/nothing.log",
+        "inputs": {
+         "path": "/var/log/nothing.log"
+        },
+        "steps": [],
+        "trigger": "errors in {path:word}"
+       },
+       "summary": "'errors in /var/log/nothing.log'; log-errors via 'errors in {path:word}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "exists",
        "node": "read",
@@ -1695,7 +7396,23 @@
     "status": "error",
     "trace": {
      "gaps": [],
-     "steps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "read",
+       "node": "intent",
+       "observed": {
+        "cleaned": "errors in /etc/passwd",
+        "inputs": {
+         "path": "/etc/passwd"
+        },
+        "steps": [],
+        "trigger": "errors in {path:word}"
+       },
+       "summary": "'errors in /etc/passwd'; log-errors via 'errors in {path:word}' (8 literal chars)"
+      }
+     ],
      "tree": "log-errors"
     },
     "tree": "log-errors"
@@ -1721,6 +7438,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "temperature in the kitchen",
+        "inputs": {
+         "room": "kitchen"
+        },
+        "steps": [],
+        "trigger": "[what's the] temperature in the {room:word}"
+       },
+       "summary": "'temperature in the kitchen'; room-temperature via \"[what's the] temperature in the {room:word}\" (25 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1781,6 +7513,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how warm is the attic",
+        "inputs": {
+         "room": "attic"
+        },
+        "steps": [],
+        "trigger": "how warm is the {room:word}"
+       },
+       "summary": "'how warm is the attic'; room-temperature via 'how warm is the {room:word}' (12 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "got",
        "node": "wait",
@@ -1833,6 +7580,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "temperature in the garage",
+        "inputs": {
+         "room": "garage"
+        },
+        "steps": [],
+        "trigger": "[what's the] temperature in the {room:word}"
+       },
+       "summary": "'temperature in the garage'; room-temperature via \"[what's the] temperature in the {room:word}\" (25 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1893,6 +7655,21 @@
       }
      ],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "wait",
+       "node": "intent",
+       "observed": {
+        "cleaned": "temperature in the hall",
+        "inputs": {
+         "room": "hall"
+        },
+        "steps": [],
+        "trigger": "[what's the] temperature in the {room:word}"
+       },
+       "summary": "'temperature in the hall'; room-temperature via \"[what's the] temperature in the {room:word}\" (25 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -1972,6 +7749,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "open",
+       "node": "intent",
+       "observed": {
+        "cleaned": "headline of https://app.example/dashboard",
+        "inputs": {
+         "url": "https://app.example/dashboard"
+        },
+        "steps": [],
+        "trigger": "headline of {url:url}"
+       },
+       "summary": "'headline of https://app.example/dashboard'; rendered-headline via 'headline of {url:url}' (10 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "loaded",
        "node": "open",
@@ -2027,6 +7819,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "open",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what does https://app.example/empty say",
+        "inputs": {
+         "url": "https://app.example/empty"
+        },
+        "steps": [],
+        "trigger": "what does {url:url} say"
+       },
+       "summary": "'what does https://app.example/empty say'; rendered-headline via 'what does {url:url} say' (11 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -2085,6 +7892,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "open",
+       "node": "intent",
+       "observed": {
+        "cleaned": "headline of https://app.example/gone",
+        "inputs": {
+         "url": "https://app.example/gone"
+        },
+        "steps": [],
+        "trigger": "headline of {url:url}"
+       },
+       "summary": "'headline of https://app.example/gone'; rendered-headline via 'headline of {url:url}' (10 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "loaded",
        "node": "open",
@@ -2135,6 +7957,19 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "at",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is the modem up",
+        "inputs": {},
+        "steps": [],
+        "trigger": "is the modem up"
+       },
+       "summary": "'is the modem up'; modem-check via 'is the modem up' (12 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": "answered",
        "node": "at",
@@ -2181,6 +8016,21 @@
      "steps": [
       {
        "depth": 0,
+       "kind": "intent",
+       "next": "at",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is the modem on /dev/ttyUSB1 up",
+        "inputs": {
+         "device": "/dev/ttyUSB1"
+        },
+        "steps": [],
+        "trigger": "is the modem on {device:word} up"
+       },
+       "summary": "'is the modem on /dev/ttyUSB1 up'; modem-check via 'is the modem on {device:word} up' (14 literal chars)"
+      },
+      {
+       "depth": 0,
        "kind": "observe",
        "next": null,
        "node": "at",
@@ -2208,6 +8058,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "at",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is the modem on /dev/ttyACM0 up",
+        "inputs": {
+         "device": "/dev/ttyACM0"
+        },
+        "steps": [],
+        "trigger": "is the modem on {device:word} up"
+       },
+       "summary": "'is the modem on /dev/ttyACM0 up'; modem-check via 'is the modem on {device:word} up' (14 literal chars)"
+      },
       {
        "depth": 0,
        "kind": "observe",
@@ -2255,7 +8120,23 @@
     "status": "error",
     "trace": {
      "gaps": [],
-     "steps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "at",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is the modem on /dev/ttyS0 up",
+        "inputs": {
+         "device": "/dev/ttyS0"
+        },
+        "steps": [],
+        "trigger": "is the modem on {device:word} up"
+       },
+       "summary": "'is the modem on /dev/ttyS0 up'; modem-check via 'is the modem on {device:word} up' (14 literal chars)"
+      }
+     ],
      "tree": "modem-check"
     },
     "tree": "modem-check"
@@ -2279,6 +8160,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how are you today",
+        "inputs": {
+         "topic": "how"
+        },
+        "steps": [],
+        "trigger": "how are you [doing|today]"
+       },
+       "summary": "'how are you today?' -> 'how are you today'; small-talk via 'how are you [doing|today]' (19 literal chars)"
+      },
       {
        "chosen": "eq 'how'",
        "depth": 0,
@@ -2320,6 +8216,21 @@
      "gaps": [],
      "steps": [
       {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "are you a bot",
+        "inputs": {
+         "topic": "who"
+        },
+        "steps": [],
+        "trigger": "are you (a bot|human|real|a person)"
+       },
+       "summary": "'are you a bot'; small-talk via 'are you (a bot|human|real|a person)' (26 literal chars)"
+      },
+      {
        "chosen": "eq 'who'",
        "depth": 0,
        "kind": "decide",
@@ -2359,6 +8270,21 @@
     "trace": {
      "gaps": [],
      "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "topic",
+       "node": "intent",
+       "observed": {
+        "cleaned": "goodbye",
+        "inputs": {
+         "topic": "bye"
+        },
+        "steps": [],
+        "trigger": "(bye|goodbye|see you|see ya)"
+       },
+       "summary": "'goodbye'; small-talk via '(bye|goodbye|see you|see ya)' (21 literal chars)"
+      },
       {
        "chosen": "eq 'bye'",
        "depth": 0,
