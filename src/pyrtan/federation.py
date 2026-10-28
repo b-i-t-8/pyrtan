@@ -1380,8 +1380,10 @@ class Federation:
             problem = verify(self.secret, "POST", "/inbox", activity, h)
             if problem:
                 return 401, {"status": "error", "reason": "unsigned", "say": f"This hub takes follows signed with its federation secret: {problem}."}
-        elif not self.open_follows:
-            return 403, {"status": "error", "reason": "closed", "say": "This hub does not take follows."}
+        elif not self.open_follows and not (trusted and inbox == "mailbox"):
+            # Closed: follows only within its networks, and members only with the
+            # token (or a key it grants run). A stranger's phone or hub is refused.
+            return 403, {"status": "error", "reason": "closed", "say": "This hub takes follows only within its networks, and members only with its token."}
         else:
             problem = verify(pair, "POST", "/inbox", activity, h)
             if problem:

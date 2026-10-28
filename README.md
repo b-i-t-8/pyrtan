@@ -264,7 +264,8 @@ never what it learned from others, and refuses to forward a request that
 already crossed a hub, so there is nothing to loop. **Every message is
 signed**, and a hub started with `--federation-secret` takes follows only
 from hubs that know the secret; `--closed` takes none outside its
-networks. `--state FILE` keeps the relationships and networks across
+networks, and members (phones, browsers) only with its token or a key it
+grants `run`, so a stranger can join neither as a hub nor as a member. `--state FILE` keeps the relationships and networks across
 restarts.
 
 Hubs find each other without a server. A hub started `--listed` puts an
@@ -799,7 +800,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.24.1. The core, the service, the hub, the command, the console (which
+0.25.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
