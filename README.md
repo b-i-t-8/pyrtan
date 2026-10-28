@@ -38,8 +38,7 @@ trace: weather
   found (decide) [exists True]: state.hit = {…} -> forecast
   forecast (observe): GET https://api.open-meteo.com/v1/forecast?latitude=59.91&… -> 200; temp=4.2, humidity=80, wind=12.3, code=61, unit=°C -> have-temp
   have-temp (decide) [type 'number']: state.temp = 4.2 -> sky
-  sky (decide) [between [51, 67]]: state.code = 61 -> rain
-  rain (set): sky=raining -> reply
+  sky (lookup) [between [51, 67]]: state.code = 61; sky=raining -> reply
   reply (done): Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
 
 Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
@@ -614,11 +613,10 @@ check clean; the person then says what the value means.
 
 ```
 $ pyrtan grow --at http://127.0.0.1:8700 --trees trees --apply
-# weather: in [nodes.sky], add to branches (before the else, if any):
-  { when = { between = [68, 70] }, then = "sky-70" },
-...
+# weather: in [nodes.sky], add to table:
+  { between = [68, 70], value = 70 },
 # why: the value falls in the hole between 67 and 71, which the ranges around it leave open
-# written into trees/weather.toml; now edit [nodes.sky-70] to say what the value means
+# written into trees/weather.toml; now edit the new row's value in [nodes.sky] to say what the value means
 ```
 
 Unanswered sentences survive a restart too, with `--unanswered FILE` on a

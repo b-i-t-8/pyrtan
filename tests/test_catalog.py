@@ -76,9 +76,9 @@ def test_search_and_find(served):
     assert "weather" in [e["name"] for e in meteo] and all(any("open-meteo" in h for h in e["hosts"]) for e in meteo)
     assert [e["name"] for e in cat.search("news stories")] == ["hacker-news", "hn-search"]
     assert cat.search("nothing like this") == []
-    assert cat.find("weather")["version"] == 2
-    assert cat.find("weather@2")["name"] == "weather"
-    with pytest.raises(CatalogError, match="has version 2, not 4"):
+    assert cat.find("weather")["version"] == 3
+    assert cat.find("weather@3")["name"] == "weather"
+    with pytest.raises(CatalogError, match="has version 3, not 4"):
         cat.find("weather@4")
     with pytest.raises(CatalogError, match="not in the catalog"):
         cat.find("nope")
@@ -136,9 +136,9 @@ def test_cli_index_search_pull(catalog_dir, served, tmp_path, capsys):
     assert main(["index", str(catalog_dir), "--out", str(out)]) == 0
     assert json.loads(out.read_text())["count"] == len(EXAMPLE_NAMES)
     assert main(["search", "weather", "--catalog", served]) == 0
-    assert "weather@2" in capsys.readouterr().out
+    assert "weather@3" in capsys.readouterr().out
     assert main(["search", "zzz", "--catalog", served]) == 1
-    assert main(["pull", "site-status", "weather@2", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
+    assert main(["pull", "site-status", "weather@3", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
     assert (tmp_path / "t" / "site-status.toml").exists() and (tmp_path / "t" / "weather.toml").exists()
     assert main(["pull", "weather@9", "--catalog", served, "--dir", str(tmp_path / "t")]) == 1
     assert "not 9" in capsys.readouterr().err
@@ -200,7 +200,7 @@ def test_namespaces_in_the_index_and_in_pulls(tmp_path):
     assert cat.find("github-release")["id"] == "pyrtan/github-release"
     with pytest.raises(CatalogError, match="more than one namespace: barry/weather, pyrtan/weather"):
         cat.find("weather")
-    assert cat.find("barry/weather")["version"] == 2 and cat.find("pyrtan/weather@2")["namespace"] == "pyrtan"
+    assert cat.find("barry/weather")["version"] == 2 and cat.find("pyrtan/weather@3")["namespace"] == "pyrtan"
     with pytest.raises(CatalogError, match="has version 2, not 9"):
         cat.find("barry/weather@9")
     with pytest.raises(CatalogError, match="not in the catalog"):
