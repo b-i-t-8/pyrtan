@@ -85,6 +85,15 @@ PAGE = r"""<!doctype html>
   .status { font-weight:600 } .done{color:var(--ok)} .failed,.error{color:var(--bad)} .asked{color:var(--ask)}
   .say { font-size:18px; margin:6px 0 }
   pre { margin:8px 0 0; padding:10px 12px; background:var(--bg); border:1px solid var(--line); border-radius:8px; overflow:auto; font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap }
+  .suggest { position:relative; flex:1 1 180px; min-width:0 }
+  form.row .suggest input[type=text] { position:relative; width:100%; background:transparent }
+  .suggest .ghost { position:absolute; inset:0; padding:10px 12px; border:1px solid transparent; border-radius:8px; background:var(--card); white-space:pre; overflow:hidden; pointer-events:none }
+  .suggest .ghost .typed { visibility:hidden } .suggest .ghost .rest { color:var(--mute) }
+  .suggestions { position:absolute; z-index:10; left:0; right:0; top:calc(100% + 4px); list-style:none; margin:0; padding:4px 0; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.12); max-height:320px; overflow-y:auto }
+  .suggestions li { padding:7px 12px; cursor:pointer; display:flex; gap:8px; align-items:baseline }
+  .suggestions li[aria-selected=true], .suggestions li:hover { background:var(--soft) }
+  .suggestions li b { font-weight:600 } .suggestions li .text { flex:1; min-width:0; overflow-wrap:anywhere }
+  .suggestions li .from { color:var(--mute); font-size:13px }
   details summary { cursor:pointer; color:var(--mute) }
   ul.tries { list-style:none; padding:0; margin:0; display:flex; flex-wrap:wrap; gap:8px }
   ul.tries li a { display:inline-block; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--fg); text-decoration:none; font-size:14px }
@@ -152,7 +161,11 @@ PAGE = r"""<!doctype html>
 
   <section id="tab-ask">
     <form class="row" id="ask">
-      <input type="text" id="text" placeholder="what's the weather in Oslo" autofocus autocomplete="off">
+      <div class="suggest">
+        <div class="ghost" id="ghost" aria-hidden="true"><span class="typed"></span><span class="rest"></span></div>
+        <input type="text" id="text" placeholder="what's the weather in Oslo" autofocus autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="both" aria-expanded="false" aria-controls="suggestions">
+        <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" hidden></ul>
+      </div>
       <button type="submit" id="go">Ask</button>
     </form>
     <div class="card" style="margin-bottom:24px">
@@ -423,10 +436,18 @@ async function loadDirectory() {
 }
 window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
 
+// A trigger as a sentence: the first of each choice, an input's default or "…"
+// for its blank, and the optional words kept or dropped.
+function phrase(t, pat, optional) {
+  return pat.replace(/\[([^\]|]*)[^\]]*\]/g, optional ? "$1" : "").replace(/\(([^|)]*)\|[^)]*\)/g, "$1").replace(/\{(\w+)(?::\w+)?\}/g, (m, n) => (t.inputs && t.inputs[n] && t.inputs[n].default != null) ? t.inputs[n].default : "…").replace(/\s+/g, " ").trim();
+}
 function sample(t) {
   if (examples[t.name]) return examples[t.name];
-  const pat = (t.triggers || [])[0]; if (!pat) return null;
-  return pat.replace(/\[[^\]]*\]/g, "").replace(/\((\w+)\|[^)]*\)/g, "$1").replace(/\{(\w+)(?::\w+)?\}/g, (m, n) => (t.inputs && t.inputs[n] && t.inputs[n].default != null) ? t.inputs[n].default : "…").replace(/\s+/g, " ").trim();
+  const pat = (t.triggers || [])[0]; return pat ? phrase(t, pat, false) : null;
+}
+// Every sentence a tree answers to, for the ask box to suggest; one that starts with a blank suggests nothing.
+function samples(t) {
+  return [examples[t.name], ...(t.triggers || []).map(p => phrase(t, p, true))].filter(s => s && !s.startsWith("…"));
 }
 
 async function detect() {
@@ -548,6 +569,7 @@ async function load() {
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
   const body = $("#caps tbody"); const tries = $("#tries");
   body.innerHTML = ""; tries.innerHTML = "";
+  suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t))));
   for (const t of c.trees || []) {
     const tr = document.createElement("tr");
     const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
@@ -555,6 +577,9 @@ async function load() {
     body.appendChild(tr);
     const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
   }
+  // The greyed suggestion in the empty box (Tab takes it) is one this swarm answers.
+  const first = tries.querySelector("a[data-q]"), offered = [...tries.querySelectorAll("a[data-q]")].map(a => a.dataset.q);
+  if (first && !offered.includes($("#text").placeholder)) $("#text").placeholder = first.dataset.q;
   showTab((location.hash || "#ask").slice(1));
 }
 
@@ -632,6 +657,7 @@ function renderTrace(tr) {
 
 async function ask(snapshot, answer) {
   const text = $("#text").value.trim(); if (!text && !snapshot) return;
+  if (!snapshot) { suggest.remember(text); suggest.close(); }
   $("#go").disabled = true;
   const t0 = performance.now();
   let r;
@@ -664,6 +690,105 @@ async function ask(snapshot, answer) {
 }
 
 $("#ask").addEventListener("submit", (e) => { e.preventDefault(); ask(); });
+
+// ---------------------------------------------------------------- suggestions in the ask box
+// The sentences this swarm's trees answer to, and the ones asked in this
+// browser before. The best that starts with what is typed shows greyed after
+// it (Tab or → takes it; Tab in the empty box takes the placeholder), and up to
+// eight drop down under the box: ↑ ↓ pick, Enter asks, Esc closes. A sentence
+// with a blank ("latest release of …") fills the box up to the blank instead of asking.
+const ASKED_KEY = "pyrtan.console.asked";
+const suggest = {
+  pool: [], items: [], active: -1, typed: "", open: false,
+  input: $("#text"), list: $("#suggestions"),
+  recent() { try { const r = JSON.parse(localStorage.getItem(ASKED_KEY) || "[]"); return Array.isArray(r) ? r.filter(s => typeof s === "string") : []; } catch (e) { return []; } },
+  remember(text) {
+    const r = [text, ...this.recent().filter(s => s.toLowerCase() !== text.toLowerCase())].slice(0, 20);
+    try { localStorage.setItem(ASKED_KEY, JSON.stringify(r)); } catch (e) {}
+  },
+  from(trees) {
+    const seen = new Set(); this.pool = [];
+    for (const t of trees) for (const text of samples(t)) { const k = text.toLowerCase(); if (!seen.has(k)) { seen.add(k); this.pool.push({text, tree: t.name}); } }
+  },
+  // Recent first, then the trees': those that start with what is typed, then those with every typed word starting one of theirs.
+  match(q) {
+    const low = q.toLowerCase(), words = low.split(/\s+/).filter(Boolean), seen = new Set(), out = [];
+    const add = (e) => { const k = e.text.toLowerCase(); if (!seen.has(k) && out.length < 8) { seen.add(k); out.push(e); } };
+    const all = [...this.recent().map(text => ({text, recent: true})), ...this.pool];
+    for (const e of all) if (e.text.toLowerCase().startsWith(low)) add(e);
+    for (const e of all) { const ws = e.text.toLowerCase().split(/\s+/); if (words.every(w => ws.some(x => x.startsWith(w)))) add(e); }
+    return out;
+  },
+  fill(e) { const i = e.text.indexOf("…"); return i < 0 ? e.text : e.text.slice(0, i); },
+  // The rest of the first suggestion that starts with what is typed, while the caret is at the end.
+  completion() {
+    const el = this.input, v = el.value, low = v.toLowerCase();
+    if (!v || document.activeElement !== el || el.selectionStart !== v.length || el.selectionEnd !== v.length) return "";
+    const e = this.items.find(e => { const f = this.fill(e); return f.length > v.length && f.toLowerCase().startsWith(low); });
+    return e ? this.fill(e).slice(v.length) : "";
+  },
+  ghost() {
+    const rest = this.input.scrollWidth <= this.input.clientWidth ? this.completion() : "";  // scrolled text would not line up
+    $("#ghost .typed").textContent = rest ? this.input.value : "";
+    $("#ghost .rest").textContent = rest;
+  },
+  render() {
+    const v = this.typed, low = v.toLowerCase();
+    this.list.innerHTML = "";
+    this.items.forEach((e, i) => {
+      const li = document.createElement("li");
+      li.id = "suggestion-" + i; li.setAttribute("role", "option"); li.setAttribute("aria-selected", String(i === this.active));
+      const head = v && e.text.toLowerCase().startsWith(low) ? v.length : v ? 0 : e.text.length;  // what is typed plain, the rest bold
+      li.innerHTML = `<span class="text">${esc(e.text.slice(0, head))}<b>${esc(e.text.slice(head))}</b></span><span class="from">${e.recent ? "recent" : esc(e.tree)}</span>`;
+      li.addEventListener("click", () => this.choose(e));
+      this.list.appendChild(li);
+    });
+    const shown = this.open && this.items.length > 0;
+    this.list.hidden = !shown; this.input.setAttribute("aria-expanded", String(shown));
+    if (shown && this.active >= 0) this.input.setAttribute("aria-activedescendant", "suggestion-" + this.active); else this.input.removeAttribute("aria-activedescendant");
+  },
+  refresh() {
+    this.typed = this.input.value; this.active = -1;
+    this.items = this.open ? this.match(this.typed) : [];
+    this.render(); this.ghost();
+  },
+  close() { this.open = false; this.refresh(); },
+  choose(e) {
+    this.input.value = this.fill(e); this.input.focus();
+    if (e.text.includes("…")) { this.open = true; this.refresh(); } else ask();
+  },
+  key(ev) {
+    if (ev.isComposing || ev.ctrlKey || ev.altKey || ev.metaKey) return;
+    const shown = !this.list.hidden;
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      if (!shown) { this.open = true; this.refresh(); return; }
+      // -1 is what was typed: the list wraps through it, as a search box's does.
+      const n = this.items.length + 1;
+      this.active = ((this.active + 1 + (ev.key === "ArrowDown" ? 1 : -1)) % n + n) % n - 1;
+      this.input.value = this.active < 0 ? this.typed : this.fill(this.items[this.active]);
+      this.render(); this.ghost();
+    } else if ((ev.key === "Tab" && !ev.shiftKey) || ev.key === "ArrowRight") {
+      const v = this.input.value, rest = this.completion();
+      const take = rest ? v + rest : ev.key === "Tab" && !v ? this.input.placeholder : "";
+      if (!take) return;  // nothing to complete: Tab moves on, → moves the caret
+      ev.preventDefault(); this.input.value = take; this.open = true; this.refresh();
+    } else if (ev.key === "Escape" && shown) {
+      ev.preventDefault(); this.input.value = this.typed; this.close();
+    } else if (ev.key === "Enter" && shown && this.active >= 0 && this.items[this.active].text.includes("…")) {
+      ev.preventDefault(); this.choose(this.items[this.active]);
+    }
+  },
+};
+suggest.input.addEventListener("input", () => { suggest.open = true; suggest.refresh(); });
+suggest.input.addEventListener("keydown", (e) => suggest.key(e));
+suggest.input.addEventListener("keyup", () => suggest.ghost());
+suggest.input.addEventListener("mousedown", () => { if (!suggest.open) { suggest.open = true; suggest.refresh(); } });
+suggest.input.addEventListener("click", () => suggest.ghost());
+suggest.input.addEventListener("focus", () => suggest.ghost());
+suggest.input.addEventListener("blur", () => suggest.close());
+suggest.list.addEventListener("mousedown", (e) => e.preventDefault());  // keep the box focused, so the click lands
+window.addEventListener("resize", () => suggest.ghost());
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
 $("#connect-form").addEventListener("submit", (e) => {
   e.preventDefault();
