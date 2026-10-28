@@ -1,11 +1,13 @@
-# Running the demo on OpenMediaVault
+# Running Pyrtan on OpenMediaVault
 
-Two ways. Docker through OMV's Compose plugin is the one that fits the box;
-the systemd unit is for running it bare on the host.
+Two ways. Docker through OMV's Compose plugin is the one that fits the box,
+and its compose file is the family hub: private, behind a token, in a
+network of its own. The systemd unit runs the open demo bare on the host,
+for a LAN you trust.
 
 Replace `<nas-ip>` below with your NAS's address on the LAN. Both end with
-the demo page at `http://<nas-ip>:8700/` (Docker) or `http://<nas-ip>:8701/`
-(systemd): a sentence box, the answer, the
+the console at `http://<nas-ip>:8700/` (Docker, after the token) or
+`http://<nas-ip>:8701/` (systemd): a sentence box, the answer, the
 output, and the trace, plus the list of everything the swarm can answer.
 
 ## Docker, through the Compose plugin
@@ -35,35 +37,44 @@ when you edit a file.
    `pyrtan/trees` is the folder **mine** watches. Copy an example in to
    start: `cp pyrtan/examples/site-status/site-status.toml pyrtan/trees/`.
 4. **Add the stack**: *Services › Compose › Files › Add*. Name it `pyrtan`,
-   paste the compose file, and replace both `CHANGE-ME` paths with the path
-   from step 2 (the checkout at `…/appdata/pyrtan`, the trees folder at
-   `…/appdata/pyrtan/trees`). Save.
+   paste the compose file, and replace every `CHANGE-ME`: both paths with
+   the path from step 2 (the checkout at `…/appdata/pyrtan`, the trees
+   folder at `…/appdata/pyrtan/trees`), `PYRTAN_TOKEN` with a long random
+   string (`openssl rand -hex 24`), and `PYRTAN_ADVERTISE` with the NAS's
+   address (see the family section below). Save. The token lives only in
+   OMV's copy of the file: never commit it.
 5. **Up**: select the file, press *Up*. The first time it builds the image
    on the NAS, which takes a minute or two.
-6. **Open** `http://<nas-ip>:8700/`. The page should say `4/4 peers
-   up` within ten seconds (the hub polls every ten). Try "top 3 stories on
-   hacker news".
+6. **Open** `http://<nas-ip>:8700/` and enter the token. The page should
+   say `4/4 peers up` within ten seconds (the hub polls every ten). Try
+   "top 3 stories on hacker news".
+7. **Make the family network**, once: `pyrtan network new family --at
+   http://<nas-ip>:8700 --token <token>` (from any machine with pyrtan, or
+   `docker compose -p pyrtan exec hub pyrtan network new family --at
+   http://127.0.0.1:8700`). Keep the invite it prints; the family section
+   below says what to do with it.
 
 To update: `git pull` in the checkout, then *Down* and *Up* with *Build*
 ticked (or `docker compose -p pyrtan up -d --build` over SSH). To check a
 tree you dropped into `trees/` before it is live:
 `docker compose -p pyrtan exec mine pyrtan check /trees`. To see gaps the
-demo has met: `http://<nas-ip>:8700/gaps`.
+hub has met: `http://<nas-ip>:8700/gaps` (with the token, as everything else).
 
 The services do not expose their own ports; everything goes through the
-hub on 8700. As shipped nothing authenticates: this is a demo for your
-LAN. Before forwarding 8700 anywhere, set a token: uncomment
-`PYRTAN_TOKEN` in the compose file's `x-pyrtan` block (every container
-reads it, so the swarm shares it), put TLS in front, and open
-`https://pyrtan.com/console/` with the hub's URL and the token; the
-compose file already passes `--cors https://pyrtan.com` to the hub. The
+hub on 8700, and every request but `/health` and the console page needs
+the token (every container reads it from the compose file's `x-pyrtan`
+block, so the swarm shares it). The hub takes no `--cors`, so no page but
+its own console talks to it: the family uses `http://<nas-ip>:8700/`. Do
+not forward 8700 to the internet; for family in other houses, see the
+family section below. The
 `mine` service keeps its gaps in `trees/.gaps.jsonl` so they survive a
 restart; the container runs as uid 10001, so `chown 10001 trees` (or
 `chmod o+w trees`) on the NAS, else the gaps stay in memory and `/health`
 reports `gaps_file_error`.
 
-To let this swarm answer for another (a friend's hub, or any hub in the
-directory), give the hub a public address, with a tunnel that opens no
+The rest of this section is for a **public** hub instead, which this
+compose file is not. To let a swarm answer for another (a friend's hub,
+or any hub in the directory), give the hub a public address, with a tunnel that opens no
 port (`cloudflared tunnel --url http://127.0.0.1:8700`, or `tailscale
 funnel 8700`) or a port forward behind TLS, then set in the compose
 file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_JOIN:
@@ -74,7 +85,12 @@ the default network (built in), follows the first hub in it that
 accepts (one it already knows, else from pyrtan.com's hub list, then
 its snapshot),
 routes to it, and is listed in the directory every hub gossips; `pyrtan
-follow URL --at <your hub> --token …` follows any other. For a network
+follow URL --at <your hub> --token …` follows any other. With other hubs
+in the same house (a second NAS, a laptop running `pyrtan hub`), set
+`PYRTAN_LAN: "true"` too, with `network_mode: host` on the hub service
+and `PYRTAN_ADVERTISE` at the box's LAN address: the hubs find each
+other by multicast, and join through each other before asking
+pyrtan.com anything. For a network
 of your own, `pyrtan network new home --at <your hub> --token …` prints
 an invite; a friend's hub joins with `pyrtan join <invite>`, or by
 adding it to its `PYRTAN_JOIN`. Following is one-directional trust: your
@@ -96,6 +112,57 @@ NAS: mount the paths and pass the devices through in the compose file
 drive a browser need Playwright, which the image does not carry; run
 those from a checkout with `uv sync --extra browser`.
 
+### A family intranet: a private network
+
+This is how [`openmediavault/docker-compose.yml`](openmediavault/docker-compose.yml)
+is set up. For a hub that serves a family (or a team) and nobody else,
+keep it off everything public: no `PYRTAN_LISTED`, no `PYRTAN_JOIN:
+default`, nothing added to pyrtan.com's `hubs.json`, no
+`PYRTAN_CHAT_PUBLIC` and no `PYRTAN_CHAT_REACH`, no `--cors`. Make a
+private network instead, and share its invite only with the family. In
+the hub's environment:
+
+```yaml
+PYRTAN_TOKEN: "<long random string>"          # openssl rand -hex 24; the family's way in
+PYRTAN_EGRESS: public                          # hubs that follow this one may ask it to run trees
+PYRTAN_ADVERTISE: "http://<nas-ip>:8700"       # an address every family hub can reach (below)
+PYRTAN_CHAT: "true"                            # the lobby, behind the token: family only
+```
+
+Then, once, from any machine that reaches the hub:
+
+```
+pyrtan network new family --at http://<nas-ip>:8700 --token <token>
+```
+
+It prints an invite, `family:SECRET@http://<nas-ip>:8700`. Send it the
+way you would send a house key. Another family hub (a second NAS, a
+laptop running `pyrtan hub`) joins with `pyrtan join <invite> --at <that
+hub> --token <its token>`, or with the invite in its `PYRTAN_JOIN`. A
+private network's hubs never reach the public directory or the snapshot,
+and its secret signs every follow made in it. Following is one-way:
+the hub that joined follows the NAS, so its people can meet the NAS's
+in the lobby, and for the NAS's people to meet theirs, the NAS follows
+it back: `pyrtan follow http://<that hub>:8700 --network family --at
+http://<nas-ip>:8700 --token <token>`.
+
+Phones and browsers do not need a hub of their own. Open the NAS's
+console at `http://<nas-ip>:8700/`, enter the token, and chat in the
+Chat tab; join in the Member tab to keep the hub's blobs and run its
+trees.
+
+`PYRTAN_ADVERTISE` is the address the other hubs reach this one at. If
+every family hub is in one house, that is the NAS's LAN address. If
+they are in different houses, keep it off the public internet and put
+every hub and phone on one private overlay network instead, such as
+[Tailscale](https://tailscale.com) (`tailscale up` on each machine, not
+`tailscale funnel`, which is public), and advertise the NAS's address
+there (`http://<nas-name>.<tailnet>.ts.net:8700`). An internal hostname
+under a domain you own works too, if every family network resolves it.
+`PYRTAN_LAN` adds nothing here: hubs on the LAN only announce public
+networks, and the invite already carries the NAS's address, so leave
+it off and the hub needs no `network_mode: host`.
+
 ### Without the plugin
 
 Over SSH, from the checkout:
@@ -104,8 +171,15 @@ Over SSH, from the checkout:
 cd /srv/dev-disk-by-uuid-…/appdata/pyrtan
 cp deploy/openmediavault/docker-compose.yml .
 sed -i "s#/srv/dev-disk-by-uuid-CHANGE-ME/pyrtan#$PWD#g" docker-compose.yml
+sed -i "s#CHANGE-ME-to-a-long-random-string#$(openssl rand -hex 24)#" docker-compose.yml
+sed -i "s#CHANGE-ME-nas-ip#<nas-ip>#" docker-compose.yml   # the NAS's LAN address, or its Tailscale name
+grep PYRTAN_TOKEN docker-compose.yml                       # the token: keep it, the family needs it
 docker compose up -d --build
 ```
+
+This copy holds the token. The repository's `.gitignore` keeps a
+`docker-compose.yml` at the root of the checkout out of git, and
+`deploy/openmediavault/docker-compose.yml` stays with its `CHANGE-ME`s.
 
 ### One container only
 

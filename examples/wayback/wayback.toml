@@ -1,0 +1,63 @@
+# Whether the Internet Archive's Wayback Machine has a copy of a site, and
+# a link to its most recent one.
+
+name = "wayback"
+version = 1
+namespace = "pyrtan"
+description = "The Wayback Machine's latest copy of a site, if it has one."
+tags = ["web", "read-only"]
+license = "MIT"
+hosts = ["archive.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "is {site:host} archived"
+[[triggers]]
+pattern = "wayback [machine] {site:host}"
+[[triggers]]
+pattern = "[the] archived copy of {site:host}"
+
+[inputs.site]
+type = "str"
+description = "A host name, as in: example.com"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://archive.org/wayback/available?url={{ inputs.site | url }}" }
+into = "resp"
+extract = [
+  { into = "copy", json = "json.archived_snapshots.closest.url" },
+  { into = "stamp", json = "json.archived_snapshots.closest.timestamp" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "copy"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "none" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "The Wayback Machine has {{ inputs.site }}. Its latest copy: {{ state.copy }}"
+output = { site = "{{ inputs.site }}", url = "{{ state.copy }}", timestamp = "{{ state.stamp }}" }
+
+[nodes.none]
+kind = "done"
+say = "The Wayback Machine has no copy of {{ inputs.site }}."
+output = { site = "{{ inputs.site }}", url = "" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Wayback Machine answered {{ state.resp.status }}."

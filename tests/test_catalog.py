@@ -10,10 +10,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from pyrtan import Registry
 from pyrtan.catalog import Catalog, CatalogError, build_index
 from pyrtan.cli import main
 from pyrtan.tree import load_tree
 from conftest import EXAMPLES
+
+EXAMPLE_NAMES = set(Registry.from_paths([EXAMPLES]).names())
 
 
 @pytest.fixture
@@ -40,7 +43,7 @@ def served(catalog_dir):
 
 def test_build_index_describes_every_tree(catalog_dir):
     index = json.loads((catalog_dir / "index.json").read_text())
-    assert index["pyrtan-catalog"] == 1 and index["count"] == 11
+    assert index["pyrtan-catalog"] == 1 and index["count"] == len(EXAMPLE_NAMES)
     weather = next(e for e in index["trees"] if e["name"] == "weather")
     assert weather["path"] == "weather/weather.toml" and weather["license"] == "MIT"
     assert weather["sha256"] == hashlib.sha256((catalog_dir / "weather/weather.toml").read_bytes()).hexdigest()
@@ -68,13 +71,14 @@ def test_build_index_leaves_out_what_does_not_belong(tmp_path):
 
 def test_search_and_find(served):
     cat = Catalog(served)
-    assert {e["name"] for e in cat.search("")} == {"weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk"}
-    assert [e["name"] for e in cat.search("open-meteo")] == ["weather"]
-    assert [e["name"] for e in cat.search("news stories")] == ["hacker-news"]
+    assert {e["name"] for e in cat.search("")} == EXAMPLE_NAMES
+    meteo = cat.search("open-meteo")
+    assert "weather" in [e["name"] for e in meteo] and all(any("open-meteo" in h for h in e["hosts"]) for e in meteo)
+    assert [e["name"] for e in cat.search("news stories")] == ["hacker-news", "hn-search"]
     assert cat.search("nothing like this") == []
-    assert cat.find("weather")["version"] == 2
-    assert cat.find("weather@2")["name"] == "weather"
-    with pytest.raises(CatalogError, match="has version 2, not 4"):
+    assert cat.find("weather")["version"] == 3
+    assert cat.find("weather@3")["name"] == "weather"
+    with pytest.raises(CatalogError, match="has version 3, not 4"):
         cat.find("weather@4")
     with pytest.raises(CatalogError, match="not in the catalog"):
         cat.find("nope")
@@ -130,11 +134,11 @@ def test_not_a_catalog(served, tmp_path):
 def test_cli_index_search_pull(catalog_dir, served, tmp_path, capsys):
     out = tmp_path / "idx.json"
     assert main(["index", str(catalog_dir), "--out", str(out)]) == 0
-    assert json.loads(out.read_text())["count"] == 11
+    assert json.loads(out.read_text())["count"] == len(EXAMPLE_NAMES)
     assert main(["search", "weather", "--catalog", served]) == 0
-    assert "weather@2" in capsys.readouterr().out
+    assert "weather@3" in capsys.readouterr().out
     assert main(["search", "zzz", "--catalog", served]) == 1
-    assert main(["pull", "site-status", "weather@2", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
+    assert main(["pull", "site-status", "weather@3", "--catalog", served, "--dir", str(tmp_path / "t")]) == 0
     assert (tmp_path / "t" / "site-status.toml").exists() and (tmp_path / "t" / "weather.toml").exists()
     assert main(["pull", "weather@9", "--catalog", served, "--dir", str(tmp_path / "t")]) == 1
     assert "not 9" in capsys.readouterr().err
@@ -196,7 +200,7 @@ def test_namespaces_in_the_index_and_in_pulls(tmp_path):
     assert cat.find("github-release")["id"] == "pyrtan/github-release"
     with pytest.raises(CatalogError, match="more than one namespace: barry/weather, pyrtan/weather"):
         cat.find("weather")
-    assert cat.find("barry/weather")["version"] == 2 and cat.find("pyrtan/weather@2")["namespace"] == "pyrtan"
+    assert cat.find("barry/weather")["version"] == 2 and cat.find("pyrtan/weather@3")["namespace"] == "pyrtan"
     with pytest.raises(CatalogError, match="has version 2, not 9"):
         cat.find("barry/weather@9")
     with pytest.raises(CatalogError, match="not in the catalog"):
@@ -282,7 +286,7 @@ def test_gate_and_publish(tmp_path, capsys):
     assert "placed" in out and "git checkout -b catalog/barry-lan-printer" in out
     assert main(["index", str(repo / "examples"), str(repo / "catalog"), "--copy", str(tmp_path / "site"), "--require-namespace"]) == 0
     served = json.loads((tmp_path / "site" / "index.json").read_text())
-    assert {e["id"] for e in served["trees"]} == {f"pyrtan/{n}" for n in ("weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk")} | {"barry/lan-printer"}
+    assert {e["id"] for e in served["trees"]} == {f"pyrtan/{n}" for n in EXAMPLE_NAMES} | {"barry/lan-printer"}
     assert main(["index", str(repo / "examples"), str(repo / "catalog")]) == 2  # two roots need --copy
     assert main(["search", "lan", "--catalog", str(tmp_path / "site")]) == 0 and "barry/lan-printer@3" in capsys.readouterr().out
     assert main(["pull", "lan-printer", "--catalog", str(tmp_path / "site"), "--dir", str(tmp_path / "pulled")]) == 0

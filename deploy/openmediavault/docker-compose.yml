@@ -1,15 +1,18 @@
-# Pyrtan demo swarm for OpenMediaVault (or any Docker host).
+# Pyrtan on the NAS: the family hub, for OpenMediaVault (or any Docker host).
 #
-# One hub, reachable from the LAN, and two services behind it that each
-# hold part of the examples, so the demo shows routing between services
-# rather than one process. A third service holds a trees/ folder you can
-# edit on the NAS: drop a .toml in and it is live on the next request.
+# A private hub for the family and nobody else: every request needs the
+# token, the lobby (chat) is behind it too, and the hub is in a private
+# network of its own (made once, below) rather than the public one, so it
+# is in no public directory and on no list at pyrtan.com. Two services
+# behind the hub hold part of the examples, and a third holds a trees/
+# folder you can edit on the NAS: drop a .toml in and it is live on the
+# next request.
 #
-# Edit the two CHANGE-ME paths (the checkout, and a trees folder) to match
-# your shared folder, then in OMV: Services > Compose > Files > Add (paste
+# Edit the CHANGE-ME values (the token, the NAS's address, the checkout and
+# the trees folder), then in OMV: Services > Compose > Files > Add (paste
 # this) > Up. Steps in ../README.md.
 #
-# Open http://<nas-ip>:8700/ for the demo page.
+# Open http://<nas-ip>:8700/ and enter the token.
 
 name: pyrtan
 
@@ -28,40 +31,58 @@ x-pyrtan: &pyrtan
     driver: json-file
     options: { max-size: "5m", max-file: "3" }
   environment: &env
-    # Uncomment to require a bearer token on every request but /health and
-    # the console. Every container reads it, so the swarm shares it. Do
-    # this before the hub is reachable from outside your LAN.
-    # PYRTAN_TOKEN: "change-me-to-something-long"
-    PYRTAN_EGRESS: any
-    # Federation: once the hub is reachable from outside (a tunnel or a
-    # port-forward with TLS), give it its public URL and it joins the
-    # default network (built into pyrtan), follows a hub in it, and lists
-    # itself in the directory. Needs the token, and PYRTAN_EGRESS: public
-    # above: hubs that follow this one may ask it to run trees.
-    # PYRTAN_JOIN may also hold invites to networks of your own
-    # (NAME:SECRET@HUB, from `pyrtan network new`), space-separated.
-    # PYRTAN_ADVERTISE: "https://hub.example.net"
-    # PYRTAN_JOIN: "default"
-    # PYRTAN_LISTED: "true"
-    # PYRTAN_REPORT_GAPS: "true"        # opt in: the gaps your catalog trees meet (tree, node, value; never inputs) reach their authors via pyrtan.com
+    # The family's way in, on every request but /health and the console
+    # page itself. Every container reads it, so the swarm shares it; the
+    # services present it when they register with the hub. Make one with
+    # `openssl rand -hex 24`, and never commit the real one.
+    PYRTAN_TOKEN: "CHANGE-ME-to-a-long-random-string"
+    # Hubs that follow this one (the family's other hubs) may ask it to run
+    # trees, so no tree may reach the LAN, files, programs or serial lines
+    # on their behalf. If a tree of yours in trees/ needs those, give the
+    # `mine` service PYRTAN_EGRESS: any; every hub in the family network can
+    # then ask for it.
+    PYRTAN_EGRESS: public
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run
-    # PYRTAN_CHAT: "true"               # a lobby at /chat: people meet a random stranger here or on a hub this one follows, or a bot made of its trees
-    # PYRTAN_CHAT_PUBLIC: "true"        # open the lobby to people without the token (they meet people, never a bot); everything else keeps the token
-    # PYRTAN_CHAT_TYPING: "0"           # turn the lobby's "Stranger is typing…" off for everyone (each person can also turn it off for themselves)
     PYRTAN_UNANSWERED: /state/unanswered.jsonl   # sentences nobody answered, kept across restarts (the hub's; services with a hub leave the record to it)
-    PYRTAN_STATE: /state/federation.json
+    PYRTAN_STATE: /state/federation.json         # the family network, who follows whom, the directory
     PYRTAN_STORE: /state/store          # blobs: the hub's own and the ones it keeps for others
-    PYRTAN_REPLICAS: "2"                # how many members or hubs should keep each of its blobs
+    PYRTAN_REPLICAS: "2"                # how many family phones or hubs should keep each of its blobs
     # PYRTAN_HANDOUT: /handout          # trees for the phones that joined with the token, not for this box (mount a directory at /handout)
+    #
+    # Left out on purpose, since they are for public hubs: PYRTAN_LISTED and
+    # PYRTAN_JOIN: default (the public directory and network), PYRTAN_CHAT_PUBLIC
+    # and PYRTAN_CHAT_REACH (strangers from outside), PYRTAN_REPORT_GAPS (gap
+    # reports that can travel to pyrtan.com), and PYRTAN_LAN (LAN beacons name
+    # only public networks; the invite already carries this hub's address).
 
 services:
   hub:
     <<: *pyrtan
-    # --cors lets the console at pyrtan.com talk to this hub from a browser.
-    command: ["hub", "--host", "0.0.0.0", "--port", "8700", "--poll", "10", "--cors", "https://pyrtan.com"]
+    # No --cors: the family uses this hub's own console at http://<nas-ip>:8700/,
+    # and no page elsewhere (pyrtan.com's console included) is let in.
+    command: ["hub", "--host", "0.0.0.0", "--port", "8700", "--poll", "10"]
     environment:
       <<: *env
       PYRTAN_PORT: "8700"
+      # The hub alone reads these.
+      # The address the family's other hubs reach this one at: the NAS's LAN
+      # address if they are all in this house, or its address on a private
+      # overlay such as Tailscale (http://<nas-name>.<tailnet>.ts.net:8700) if
+      # they are not. Never a public tunnel. Setting it makes the hub
+      # federated, so it can make the family network:
+      #   pyrtan network new family --at http://<nas-ip>:8700 --token <token>
+      # prints the invite, family:SECRET@http://<nas-ip>:8700. Share it only
+      # with the family; another family hub joins with it.
+      PYRTAN_ADVERTISE: "http://CHANGE-ME-nas-ip:8700"
+      # On a family hub other than this first one, the invite goes here instead
+      # of the command above (it is a secret: keep that file to yourself).
+      # PYRTAN_JOIN: "family:SECRET@http://<first-hub>:8700"
+      # The lobby: the strangers here are family, behind the token; nobody from
+      # outside, and no links to other lobbies. For family hubs in other
+      # houses to share their lobbies with this one, this hub follows each of
+      # them back (they follow it when they join):
+      #   pyrtan follow http://<their hub>:8700 --network family --at http://<nas-ip>:8700 --token <token>
+      PYRTAN_CHAT: "true"
     ports:
       - "8700:8700"
     volumes:

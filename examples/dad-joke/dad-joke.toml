@@ -1,0 +1,54 @@
+# A dad joke, from icanhazdadjoke.com. It answers JSON only when asked for
+# JSON alone, so this tree says so in its Accept header.
+
+name = "dad-joke"
+version = 1
+namespace = "pyrtan"
+description = "A random dad joke, from icanhazdadjoke.com."
+tags = ["fun", "read-only"]
+license = "MIT"
+hosts = ["icanhazdadjoke.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "tell me a [dad] joke"
+[[triggers]]
+pattern = "[a] dad joke"
+[[triggers]]
+pattern = "make me laugh"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://icanhazdadjoke.com/", headers = { Accept = "application/json" } }
+into = "resp"
+extract = [
+  { into = "joke", json = "json.joke" },
+  { into = "id", json = "json.id" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-joke" },
+  { else = "unexpected" },
+]
+
+[nodes.has-joke]
+kind = "decide"
+on = "joke"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.joke }}"
+output = { joke = "{{ state.joke }}", url = "https://icanhazdadjoke.com/j/{{ state.id }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "icanhazdadjoke.com answered {{ state.resp.status }}."

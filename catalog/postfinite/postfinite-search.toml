@@ -1,0 +1,205 @@
+# postfinite-search: find entities on Postfinite by name, id or place.
+#
+# Postfinite (https://postfinite.com) keeps published reference data (grids,
+# rivers, tides, weather, prices, rates, trade, health and more: free, keyless
+# public sources, each under its own licence) in every entitled tenant's
+# database, beside the tenant's own devices, with horizon tables that forecast
+# each series and score the forecast against what happened. These trees read
+# all of it through the tenant API, as the `pyrtan` tenant, an internal
+# account that is entitled to every published dataset.
+#
+# They sign in on each run with an account on that tenant. Give the service
+# its credentials, which never appear in a trace:
+#
+#   pyrtan serve catalog/postfinite --env postfinite_email=… --env postfinite_password=…
+#
+# Anyone who can ask the service can then read what the account can read, so
+# give it a hub with a token if that is not everyone.
+
+name = "postfinite-search"
+version = 1
+namespace = "postfinite"
+description = "Entities on Postfinite whose id, name or location contains the words: published points (grids, gauges, ports, central banks…) and the account's own."
+tags = ["postfinite", "data", "search", "read-only"]
+license = "MIT"
+hosts = ["postfinite.com"]
+start = "credentials"
+
+[[triggers]]
+pattern = "search postfinite for {query}"
+
+[[triggers]]
+pattern = "find {query} (on|in) postfinite"
+
+[[triggers]]
+pattern = "postfinite entities (matching|for|about|in) {query}"
+
+[inputs.query]
+type = "str"
+description = "Words to look for in an entity's id, name or location"
+
+[inputs.count]
+type = "int"
+default = 10
+min = 1
+max = 200
+description = "How many entities to return"
+
+# ---- signing in: the same in every Postfinite tree
+
+[nodes.credentials]
+kind = "decide"
+on = "env.postfinite_email"
+branches = [
+  { when = { exists = true }, then = "password" },
+  { else = "no-credentials" },
+]
+
+[nodes.password]
+kind = "decide"
+on = "env.postfinite_password"
+branches = [
+  { when = { exists = true }, then = "sign-in" },
+  { else = "no-credentials" },
+]
+
+# An act, not an observe: a sign-in makes a session and counts towards a
+# lockout, so it is never retried.
+[nodes.sign-in]
+kind = "act"
+http = { method = "POST", url = "https://postfinite.com/api/auth/login", body = { email = "{{ env.postfinite_email }}", password = "{{ env.postfinite_password }}" } }
+into = "login"
+next = "signed-in"
+
+[nodes.signed-in]
+kind = "decide"
+on = "login.status"
+branches = [
+  { when = { eq = 200 }, then = "fetch" },
+  { when = { eq = 401 }, then = "refused" },
+  { when = { eq = 403 }, then = "not-a-password-account" },
+  { when = { eq = 429 }, then = "locked-out" },
+  { when = { gte = 500 }, then = "sign-in-down" },
+  { else = "unexpected-sign-in" },
+]
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://postfinite.com/api/t/entities?q={{ inputs.query | url }}&limit={{ inputs.count }}", headers = { Authorization = "Bearer {{ state.login.json.token }}" } }
+into = "resp"
+extract = [{ into = "total", json = "json.total" }, { into = "entities", json = "json.entities" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { when = { eq = 401 }, then = "session-refused" },
+  { when = { eq = 403 }, then = "no-access" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { when = { gte = 500 }, then = "postfinite-down" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "total"
+branches = [
+  { when = { eq = 0 }, then = "nothing" },
+  { when = { gt = 0 }, then = "read-yet" },
+  { else = "unexpected" },
+]
+
+[nodes.read-yet]
+kind = "decide"
+on = "entities[0].last_reading_at"
+branches = [
+  { when = { exists = true }, then = "unit" },
+  { else = "reply-quiet" },
+]
+
+[nodes.unit]
+kind = "decide"
+on = "entities[0].last_unit"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "reply-bare" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), last {{ state.entities[0].last_metric }} = {{ state.entities[0].last_value }} {{ state.entities[0].last_unit }} at {{ state.entities[0].last_reading_at }}."
+output = { total = "{{ state.total }}", entities = "{{ state.entities }}" }
+
+[nodes.reply-bare]
+kind = "done"
+say = "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), last {{ state.entities[0].last_metric }} = {{ state.entities[0].last_value }} at {{ state.entities[0].last_reading_at }}."
+output = { total = "{{ state.total }}", entities = "{{ state.entities }}" }
+
+[nodes.reply-quiet]
+kind = "done"
+say = "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), with no readings yet."
+output = { total = "{{ state.total }}", entities = "{{ state.entities }}" }
+
+[nodes.nothing]
+kind = "fail"
+reason = "nothing-found"
+say = "Nothing on Postfinite matches '{{ inputs.query }}'. Try fewer words, or ask for postfinite datasets."
+
+# ---- what can go wrong, said plainly
+
+[nodes.no-credentials]
+kind = "fail"
+reason = "no-credentials"
+say = "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+
+[nodes.refused]
+kind = "fail"
+reason = "sign-in-refused"
+say = "Postfinite refused the sign-in: {{ state.login.json.error }}"
+
+[nodes.not-a-password-account]
+kind = "fail"
+reason = "not-a-password-account"
+say = "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+
+[nodes.locked-out]
+kind = "fail"
+reason = "locked-out"
+say = "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+
+[nodes.sign-in-down]
+kind = "fail"
+reason = "upstream-down"
+say = "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+
+[nodes.unexpected-sign-in]
+kind = "fail"
+reason = "unexpected-response"
+say = "Postfinite answered the sign-in with {{ state.login.status }}."
+
+[nodes.session-refused]
+kind = "fail"
+reason = "session-refused"
+say = "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+
+[nodes.no-access]
+kind = "fail"
+reason = "no-access"
+say = "Postfinite refused: {{ state.resp.json.error }}"
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "Postfinite is rate-limiting this account; try again in a minute."
+
+[nodes.postfinite-down]
+kind = "fail"
+reason = "upstream-down"
+say = "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-response"
+say = "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"

@@ -298,3 +298,54 @@ def test_trace_starts_with_how_the_sentence_was_read():
     # A sentence that fits the shape but not the value is refused, and says why.
     out3 = runner.run_intent("remind me someday at noon")
     assert out3.reason == "no-match" and out3.output["reading"]["considered"] == ["remind me {when:date} at {at:time}"]
+
+
+GRADE = """
+name = "grade"
+description = "a score into a word"
+start = "word"
+
+[inputs.score]
+type = "int"
+required = false
+
+[nodes.word]
+kind = "lookup"
+on = "inputs.score"
+into = "result.word"
+table = [
+  { between = [90, 100], value = "excellent" },
+  { between = [50, 89], value = "a pass, {{ inputs.score }}" },
+  { exists = false, value = { word = "absent", points = 0 }, note = "a row may give a table" },
+]
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+output = "{{ state.result.word }}"
+"""
+
+
+def test_lookup_reads_the_first_row_that_holds_and_records_a_gap_when_none_does():
+    runner = Runner(reg_with(GRADE), RecordedTransport())
+    out = runner.run_tree("grade", {"score": 95})
+    assert out.output == "excellent"
+    step = out.trace.steps[0]
+    assert (step.kind, step.chosen, step.observed, step.next) == ("lookup", "between [90, 100]", 95, "reply")
+    assert step.summary == "inputs.score = 95; result.word=excellent"
+    # A value is a template, read when the row is; a row may give a table.
+    assert runner.run_tree("grade", {"score": 60}).output == "a pass, 60"
+    assert runner.run_tree("grade", {}).output == {"word": "absent", "points": 0}
+    # No row and no default: a gap, the same shape a decide records.
+    gap = runner.run_tree("grade", {"score": 10})
+    assert gap.status == "error" and gap.reason == "gap" and gap.say == "word: no row for inputs.score = 10."
+    assert gap.trace.gaps == [{"tree": "grade", "node": "word", "on": "inputs.score", "observed": 10}]
+    # With a default, nothing is a gap.
+    out = Runner(reg_with(GRADE.replace('next = "reply"', 'default = "{{ inputs.score }} is low"\nnext = "reply"')), RecordedTransport()).run_tree("grade", {"score": 10})
+    assert out.output == "10 is low" and out.trace.steps[0].chosen == "default"
+
+
+def test_lookup_value_that_names_nothing_fails_the_node():
+    tree = GRADE.replace('value = "excellent"', 'value = "{{ state.nothing }}"')
+    out = Runner(reg_with(tree), RecordedTransport()).run_tree("grade", {"score": 95})
+    assert out.status == "error" and out.reason == "template"

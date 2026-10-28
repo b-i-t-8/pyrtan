@@ -62,13 +62,15 @@ Four things a reader might expect, and will not find.
   path, and that the path can be read. A model anywhere in the path makes
   the trace a story rather than a record. A model may later sit *beside*
   the swarm, reading gaps and proposing branches for a person to accept;
-  that is an author's tool, not a runtime.
+  that is an author's tool, not a runtime. Since v0.18 it does: an agent
+  in the console, checked by rules, accepted by a person
+  ([`agents.md`](agents.md)).
 - **Code in trees.** Templates are paths and filters. Conditions are
   comparisons. There is no expression language, no `if` in a template, no
   script node. Everything that branches is a `decide` node, which the trace
-  shows. The cost is verbosity (the weather tree spends seven `set` nodes
-  turning a code into a word); the benefit is that a tree can be audited by
-  someone who does not program.
+  shows, or a `lookup` node, which is the same plain conditions with a
+  value per row instead of a node per branch. The cost is verbosity; the
+  benefit is that a tree can be audited by someone who does not program.
 - **Reaching an endpoint the author did not list.** `hosts` is checked at
   load time for literal URLs and at run time for templated ones. A tree
   that takes a host from its input must say `hosts = ["*"]` out loud. The
@@ -183,6 +185,21 @@ first draft for an author, not an answer for a caller. A service without a
 hub keeps its own unanswered log; one with a hub leaves the record to the
 hub, which also collects its peers' at `/unanswered`.
 
+**The builder** (`build.py`) is the next step after the proposal: the
+questions the skeleton cannot answer by itself. What does the tree read
+(an API or page, a file, a program, a browser, another tree, or nothing),
+where, what does it pull out, what does it decide on and which branches,
+what does it say. The questions are a decision tree of their own: which
+apply depends on the answers before them, every one has a default drawn
+from the sentence by rules (a host in the sentence becomes the URL, an
+`api.` host means JSON, a program's exit code is decided on), and a build
+with no answers at all passes `check`. An answer that will not do names
+its question, so `pyrtan build` asks again and the console's form points
+at the field. `POST /build` on a service or hub answers the questions and
+the checked file for a form; nothing is written over the network, the
+author saves the file. No model: a builder that guessed what the tree
+should observe would be the model fallback of §4 wearing a form.
+
 **The service** (`service.py`) wraps a registry in the standard library's
 threading HTTP server. It reloads trees from disk on every request that
 needs them (a stat per file; cheap), keeps the gaps it has seen, and, when
@@ -232,6 +249,15 @@ after a table header, is caught by the loader with a hint.
 weather tree is longer for it; it is also readable by a non-programmer end
 to end.
 
+**A map filter, or a `set` that branches, for code-to-word tables.**
+Before 0.20 the weather tree turned a weather code into a word with one
+`decide` and seven `set` nodes, one per word. A filter such as
+`{{ state.code | map(...) }}` would have been shorter and would have put a
+decision inside a template, where the trace cannot see it. `lookup` is
+the same conditions a `decide` uses, a value per row, the chosen row in
+the trace, and a gap when no row holds; it does not branch, so it adds no
+paths to the graph.
+
 **A model fallback for unmatched sentences.** The obvious feature, and the
 one that would quietly turn the product into the thing it is defined
 against. Not built. A sentence no tree answers returns `no-match`, is
@@ -260,7 +286,7 @@ Five trees, all against real public APIs, all tested offline:
 | Tree | Shows |
 | :-- | :-- |
 | `hacker-news` + `hacker-news-item` | `each` over a list through a second tree; a decision on status before one on content; a self-post with no URL handled by `set` rather than by an empty string |
-| `weather` | Two hops where the second depends on the first; `exists` deciding on absence; a code-to-word table as seven decisions, not an expression |
+| `weather` | Two hops where the second depends on the first; `exists` deciding on absence; a code-to-word table as one `lookup`, not an expression |
 | `site-status` | A host from the sentence, so `hosts = ["*"]` and a run-time host check; `between` on status ranges; a client error reported as "up but refusing" rather than "down" |
 | `github-release` | Headers; a decision that names rate-limiting as its own branch |
 | `picnic` (in the tests) | One service delegating a sentence through the hub to another, and the other's steps returned inside its trace |
@@ -323,7 +349,25 @@ Five trees, all against real public APIs, all tested offline:
    (`grow.py`: a missing value, the hole between ranges, else the value),
    `--apply` writes it into the file, and a person says what it means.
    Unanswered sentences persist with `--unanswered FILE`.
-10. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+10. **v0.18, built: agents beside the swarm.** Open-weights models a
+    person starts in the console (WebLLM in the browser, or a server of
+    their own) probe the trees with sentences of their own, say what a
+    gap's value means, find the patterns trees missed and the trees
+    nobody wrote, chat, and keep a memory and skills. What they suggest
+    is checked by rules in the page, kept at `/suggestions`, and written
+    by `pyrtan grow --suggestions` through the same rules. Design in
+    [`agents.md`](agents.md).
+11. **v0.20, built: lookup tables.** A `lookup` node reads one value
+    against a table of rows (a condition and a value each), puts the
+    first row's value into state, and records a gap when no row holds
+    and there is no `default`; `pyrtan grow` drafts the missing row. The
+    weather tree's code-to-word table went from eight nodes to one. Both
+    runtimes, with conformance vectors.
+12. **v0.22, built: the builder.** An unanswered sentence is answered
+    with questions as well as a proposal: `pyrtan build --from "…"`, the
+    same questions as `POST /build` and the console's Unanswered tab, each
+    with a default by rules, and a file that passes `check` (`build.py`).
+13. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
@@ -354,7 +398,7 @@ Five trees, all against real public APIs, all tested offline:
 It does not claim to answer sentences nobody wrote a tree for; it claims
 to say which tree would, and to write that tree's first draft. It does not
 claim to reach anything beyond HTTP yet. It does not claim trees are quick
-to write: the weather tree is 15 nodes for a two-call
+to write: the weather tree is 8 nodes for a two-call
 API, and that is the price of leaving nothing implicit. It does not claim
 the swarm is secure across a network boundary (Section 7). It does not
 claim the examples will keep working as the sites they read change; it

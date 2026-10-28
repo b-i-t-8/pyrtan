@@ -1,0 +1,69 @@
+# A GitHub repository at a glance: what it is, its stars, forks and open
+# issues, from GitHub's REST API (no token: sixty requests an hour).
+
+name = "github-repo"
+version = 1
+namespace = "pyrtan"
+description = "A GitHub repository at a glance: description, language, stars, forks, open issues."
+tags = ["github", "software", "read-only"]
+license = "MIT"
+hosts = ["api.github.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "how many stars does {repo:word} have"
+[[triggers]]
+pattern = "github (repo|repository) {repo:word}"
+[[triggers]]
+pattern = "tell me about the {repo:word} repo"
+
+[inputs.repo]
+type = "str"
+pattern = "^[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+$"
+description = "owner/name, as in: astral-sh/uv"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.github.com/repos/{{ inputs.repo }}", headers = { Accept = "application/vnd.github+json" } }
+into = "resp"
+extract = [
+  { into = "full", json = "json.full_name" },
+  { into = "about", json = "json.description" },
+  { into = "language", json = "json.language" },
+  { into = "stars", json = "json.stargazers_count" },
+  { into = "forks", json = "json.forks_count" },
+  { into = "issues", json = "json.open_issues_count" },
+  { into = "url", json = "json.html_url" },
+  { into = "archived", json = "json.archived" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-repo" },
+  { when = { in = [403, 429] }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.full }}: {{ state.about }} ({{ state.language }}) · {{ state.stars }} stars, {{ state.forks }} forks, {{ state.issues }} open issues. {{ state.url }}"
+output = { repo = "{{ state.full }}", description = "{{ state.about }}", language = "{{ state.language }}", stars = "{{ state.stars }}", forks = "{{ state.forks }}", open_issues = "{{ state.issues }}", archived = "{{ state.archived }}", url = "{{ state.url }}" }
+
+[nodes.no-repo]
+kind = "fail"
+reason = "no-repo"
+say = "GitHub has no public repository {{ inputs.repo }}."
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "GitHub is rate-limiting unauthenticated requests ({{ state.resp.status }})."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "GitHub answered {{ state.resp.status }}."

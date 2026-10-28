@@ -15,8 +15,8 @@ An outcome's ``status`` is one of:
     ``snapshot`` what :meth:`Runner.resume` needs to continue.
 ``error``
     The run could not proceed: a transport failure, an unhandled observation
-    (a ``decide`` with no matching branch, recorded as a gap), a host outside
-    the allow-list, a missing template value, or a limit reached. A
+    (a ``decide`` with no matching branch or a ``lookup`` with no matching
+    row, recorded as a gap), a host outside the allow-list, a missing template value, or a limit reached. A
     ``no-match`` error carries, in ``output.proposal``, the tree that would
     answer the sentence, so a dead end always points at the next tree.
 
@@ -39,7 +39,7 @@ from .registry import Ambiguous, NoMatch, Registry
 from .template import MISSING, TemplateError, render, resolve
 from .trace import Step, Trace
 from .transport import EgressRefused, Transport, TransportError, UrllibTransport
-from .tree import Node, Tree, TreeError
+from .tree import Node, Tree, TreeError, row_condition
 
 MAX_STEPS = 500
 MAX_DEPTH = 8
@@ -298,14 +298,15 @@ class Runner:
     def _do_decide(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         on = _state_path(node.get("on"))
         value = resolve(on, scope)
+        shown = _shown(on, value)
         for i, br in enumerate(node.get("branches")):
             if "else" in br:
-                return Step(node.id, "decide", f"{on} = {_brief(value)}", observed=_plain(value), chosen="else"), br["else"]
+                return Step(node.id, "decide", f"{on} = {_brief(shown)}", observed=_plain(shown), chosen="else"), br["else"]
             if conditions.holds(br["when"], value):
-                return Step(node.id, "decide", f"{on} = {_brief(value)}", observed=_plain(value), chosen=_cond_text(br["when"])), br["then"]
-        trace.gap(node.id, on, _plain(value))
-        trace.add(Step(node.id, "decide", f"{on} = {_brief(value)}: no branch", observed=_plain(value), depth=depth))
-        return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no branch for {on} = {_brief(value)}.", output={"gap": trace.gaps[-1]})
+                return Step(node.id, "decide", f"{on} = {_brief(shown)}", observed=_plain(shown), chosen=_cond_text(br["when"])), br["then"]
+        trace.gap(node.id, on, _plain(shown))
+        trace.add(Step(node.id, "decide", f"{on} = {_brief(shown)}: no branch", observed=_plain(shown), depth=depth))
+        return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no branch for {on} = {_brief(shown)}.", output={"gap": trace.gaps[-1]})
 
     def _do_set(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         state = scope["state"]
@@ -315,6 +316,26 @@ class Runner:
             _put(state, key, value)
             values[key] = value
         return Step(node.id, "set", ", ".join(f"{k}={_brief(v)}" for k, v in values.items()), observed=values), node.next
+
+    def _do_lookup(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
+        on = _state_path(node.get("on"))
+        value = resolve(on, scope)
+        into = node.get("into")
+        found, chosen = MISSING, None
+        for row in node.get("table"):
+            cond = row_condition(row)
+            if conditions.holds(cond, value):
+                found, chosen = row["value"], _cond_text(cond)
+                break
+        if found is MISSING:
+            if "default" not in node.spec:
+                trace.gap(node.id, on, _plain(value))
+                trace.add(Step(node.id, "lookup", f"{on} = {_brief(value)}: no row", observed=_plain(value), depth=depth))
+                return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no row for {on} = {_brief(value)}.", output={"gap": trace.gaps[-1]})
+            found, chosen = node.get("default"), "default"
+        result = render(found, scope)
+        _put(scope["state"], into, result)
+        return Step(node.id, "lookup", f"{on} = {_brief(value)}; {into}={_brief(result)}", observed=_plain(value), chosen=chosen), node.next
 
     def _do_each(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         state = scope["state"]
@@ -404,6 +425,15 @@ def _state_path(path: str) -> str:
     if head in ("inputs", "state", "item", "index", "tree", "now", "env"):
         return path
     return "state." + path
+
+
+def _shown(on: str, value: Any) -> Any:
+    """What a trace records of a decided value. A value from ``env`` is the
+    operator's (a token, a password): the trace says it is set, never what
+    it is, and so does a gap, which can travel to other hubs."""
+    if on.split(".")[0].split("[")[0] == "env" and value is not MISSING and value is not None:
+        return "<set>"
+    return value
 
 
 def _put(state: dict[str, Any], path: str, value: Any) -> None:

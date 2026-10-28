@@ -27,6 +27,22 @@ activity. A hub answers a ``Meet`` only from a hub that follows it, pairs
 it only with its own seats, and never passes one on: one hop, as
 everywhere in the federation.
 
+**Chat links (v0.17).** Following is trust: it routes sentences to the
+other hub's trees, so a hub follows few. That made the pool of strangers
+small. A hub started ``--chat-reach N`` also keeps up to N *chat links*
+with other hubs whose lobbies are open: hubs it heard of on the LAN or
+in its directory (public networks only), asked with a signed
+``ChatLink`` that carries a pair secret, as a ``Follow`` does. A link is
+for chat and nothing else: it is not a follow, so nothing is routed over
+it, nothing is announced or kept, and no directory travels on it. Both
+ends may send ``Meet`` over it, so the two lobbies share their
+strangers. A hub accepts a link only when its operator also gave
+``--chat-reach`` and its lobby is open to strangers anyway (``--chat-
+public``, or a hub with no token), takes at most twice its reach, and
+refuses them all when its federation is closed (``--closed`` or a
+federation secret). Links live in memory and are made again after a
+restart; one whose hub stops answering is dropped.
+
 **Typing.** While a person types, their client says so (``/chat/typing``)
 and the stranger sees "Stranger is typing…"; while a bot's trees run, its
 partner sees "Bot is thinking…". It is a state, never an event: it goes out
@@ -76,9 +92,15 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Union
 
+from .service import http_json
+
 if TYPE_CHECKING:
     from .federation import Remote
     from .hub import Hub
+
+LINK_TRIES = 2          # links tried per round (a round is the hub's poll)
+LINK_REFUSED = 86400.0  # a hub that refused a link is not asked again for a day
+LINK_FAILS = 3          # Meets in a row a linked hub may fail before the link is dropped
 
 WANTS = ("anyone", "people", "bot")
 SEAT_IDLE = 60.0      # a seat nobody polls for this long is let go
@@ -207,8 +229,12 @@ class Seat:
 
 
 class Lobby:
-    def __init__(self, hub: "Hub", *, typing: bool = True) -> None:
+    def __init__(self, hub: "Hub", *, typing: bool = True, reach: int = 0) -> None:
         self.hub = hub
+        self.reach = max(0, int(reach))    # chat links to keep with other open lobbies (--chat-reach)
+        self.links: dict[str, "Remote"] = {}   # hub id -> the link: chat only, never a follow
+        self._refused: dict[str, tuple[float, str]] = {}  # hub id -> (when it may be asked again, why it said no)
+        self._fails: dict[str, int] = {}
         self.typing = typing   # the hub's switch: off, nobody's typing is shared
         self.seats: dict[str, Seat] = {}
         self.refs: dict[str, Seat] = {}
@@ -231,7 +257,7 @@ class Lobby:
             "waiting": sum(1 for s in seats if s.state == "waiting"),
             "talking": sum(1 for s in seats if s.state == "talking"),
             "bots": 0 if guest else sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
-            "hubs": sum(1 for r in fed.following.values() if r.link != "down") if fed is not None else 0,
+            "hubs": (sum(1 for r in fed.following.values() if r.link != "down") if fed is not None else 0) + len(self.links),
             "typing": self.typing,
         }
 
@@ -352,7 +378,7 @@ class Lobby:
                 self._pair(seat, other)
                 return
             now = time.time()
-            far = fed is not None and bool(fed.following) and now - seat.asked >= self.meet_every
+            far = fed is not None and bool(fed.following or self.links) and now - seat.asked >= self.meet_every
             if far:
                 seat.busy, seat.asked = True, now
         if far:
@@ -370,11 +396,14 @@ class Lobby:
     def _meet_far(self, seat: Seat) -> bool:
         fed = self.hub.federation
         assert fed is not None
-        hubs = [r for r in fed.following.values() if r.kind == "hub" and r.state == "accepted" and r.link != "down"]
+        followed = [r for r in fed.following.values() if r.kind == "hub" and r.state == "accepted" and r.link != "down"]
+        hubs = followed + [r for url, r in list(self.links.items()) if url not in {f.url for f in followed}]
         random.shuffle(hubs)
         ref = seat.ref
         for remote in hubs[:MEET_HUBS]:
             ok, _, answer = fed.deliver(remote, fed._activity("Meet", {"ref": ref, "interests": seat.interests}))
+            if remote.url in self.links:
+                self._link_answered(remote.url, ok)
             if not (ok and isinstance(answer, dict) and answer.get("met") is True and isinstance(answer.get("ref"), str) and REF.match(answer["ref"])):
                 continue
             with self.cond:
@@ -483,7 +512,7 @@ class Lobby:
                     nap = min(nap, seat.heard - now)  # wake when the indicator goes out
                 if seat.state == "waiting":
                     # Wake to ask the hubs we follow again, or to meet a bot.
-                    if self.hub.federation is not None and self.hub.federation.following:
+                    if self.hub.federation is not None and (self.hub.federation.following or self.links):
                         nap = min(nap, seat.asked + self.meet_every - now)
                     if seat.want == "anyone":
                         nap = min(nap, seat.since + self.bot_after - now)
@@ -632,6 +661,94 @@ class Lobby:
             seat.heard = 0.0
             extra = {k: answer[k] for k in ("status", "reason", "tree", "peer", "via", "output", "trace") if answer.get(k) is not None}
             self._add(seat, "bot", text, **extra)
+
+    # ------------------------------------------------------------ chat links
+
+    def open(self) -> bool:
+        """Whether strangers may chat here anyway: a public lobby, or a hub with no token."""
+        return bool(self.hub.chat_public or not self.hub.token)
+
+    def link_for(self, hub: str) -> "Remote | None":
+        return self.links.get(hub.rstrip("/"))
+
+    def links_view(self) -> dict[str, Any]:
+        now = time.time()
+        return {"reach": self.reach, "open": self.open(), "links": [{"url": r.url, "name": r.name, "since": r.since} for r in list(self.links.values())],
+                "refused": [{"url": u, "reason": why, "until": until} for u, (until, why) in list(self._refused.items()) if until > now]}
+
+    def accept_link(self, remote: "Remote") -> tuple[int, dict[str, Any]]:
+        """Another hub asks for a chat link (it signed with the pair secret it sent)."""
+        if self.reach <= 0:
+            return 403, {"status": "error", "reason": "not-linking", "say": "This hub keeps no chat links (its operator did not give --chat-reach)."}
+        if not self.open():
+            return 403, {"status": "error", "reason": "private-lobby", "say": "This hub's lobby is not open to strangers, so it links with nobody for chat."}
+        with self.cond:
+            if remote.url not in self.links and len(self.links) >= 2 * self.reach:
+                return 503, {"status": "error", "reason": "links-full", "say": f"This hub keeps {len(self.links)} chat links already."}
+            self.links[remote.url] = remote
+            self._fails.pop(remote.url, None)
+        return 202, {"status": "ok", "linked": True}
+
+    def link(self, url: str) -> bool:
+        """Ask the hub at ``url`` for a chat link: a ``ChatLink`` carrying a
+        fresh pair secret, signed with it. True when it took it."""
+        from .federation import Remote
+
+        fed = self.hub.federation
+        if fed is None:
+            return False
+        url = url.rstrip("/")
+        try:
+            status, actor = http_json("GET", f"{url}/actor", timeout=5.0)
+        except Exception:
+            status, actor = 0, None
+        if status != 200 or not isinstance(actor, dict) or actor.get("type") != "Hub" or not isinstance(actor.get("inbox"), str) or str(actor.get("id", "")).rstrip("/") != url:
+            self._refused[url] = (time.time() + LINK_REFUSED, "no-actor")
+            return False
+        remote = Remote(url, actor["inbox"], secrets.token_hex(32), str(actor.get("name") or ""), state="accepted", kind="hub")
+        ok, _, answer = fed.deliver(remote, fed._activity("ChatLink", {"type": "Lobby", "id": fed.id}, secret=remote.secret, inbox=fed.inbox, name=self.hub.name))
+        if not (ok and isinstance(answer, dict) and answer.get("linked") is True):
+            self._refused[url] = (time.time() + LINK_REFUSED, str((answer.get("reason") if isinstance(answer, dict) else None) or "no-answer"))
+            return False
+        remote.last_ok = time.time()
+        with self.cond:
+            self.links[url] = remote
+            self._fails.pop(url, None)
+        return True
+
+    def reach_out(self) -> int:
+        """Keep up to ``reach`` links: try a hub or two it heard of on the
+        LAN, then in its directory (public networks only), that it neither
+        follows nor is followed by nor links with already. Called on the
+        hub's poll; returns the links made."""
+        fed = self.hub.federation
+        if fed is None or self.reach <= 0 or not self.open() or len(self.links) >= self.reach:
+            return 0
+        now = time.time()
+        public = fed._public_networks()
+        with fed._lock:
+            heard = sorted((e for e in fed.directory_entries.values() if e.get("network") in public and e.get("kind", "hub") == "hub"), key=lambda e: -e["seen"])
+            taken = set(fed.following) | {u for u, r in fed.followers.items() if r.kind == "hub"}
+        nearby = fed.lan.hubs() if fed.lan is not None else []
+        made = tried = 0
+        for url in dict.fromkeys(nearby + [e["id"].rstrip("/") for e in heard]):
+            if tried >= LINK_TRIES or len(self.links) >= self.reach:
+                break
+            if url == fed.id or url in taken or url in self.links or self._refused.get(url, (0.0, ""))[0] > now:
+                continue
+            tried += 1
+            made += 1 if self.link(url) else 0
+        return made
+
+    def _link_answered(self, url: str, ok: bool) -> None:
+        with self.cond:
+            if ok:
+                self._fails.pop(url, None)
+                return
+            self._fails[url] = self._fails.get(url, 0) + 1
+            if self._fails[url] >= LINK_FAILS:
+                self.links.pop(url, None)  # it stopped answering: make another in its place
+                self._fails.pop(url, None)
 
     # ------------------------------------------------------------ federation
 

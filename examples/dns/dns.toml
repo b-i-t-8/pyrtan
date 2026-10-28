@@ -1,0 +1,102 @@
+# A domain's DNS records, from Google's public DNS-over-HTTPS resolver.
+# The answer section alone is read; a name that does not exist is
+# NXDOMAIN (3), and a name with none of that type has no answer section.
+
+name = "dns"
+version = 1
+namespace = "pyrtan"
+description = "A domain's DNS records (A, AAAA, MX, TXT, NS or CNAME), from Google Public DNS."
+tags = ["network", "read-only"]
+license = "MIT"
+hosts = ["dns.google"]
+start = "fetch"
+
+[[triggers]]
+pattern = "dns [records] for {name:host}"
+[[triggers]]
+pattern = "{type:word} record for {name:host}"
+[[triggers]]
+pattern = "[what is the] ip [address] of {name:host}"
+inputs = { type = "A" }
+
+[inputs.name]
+type = "str"
+description = "A domain name, as in: example.com"
+
+[inputs.type]
+type = "str"
+default = "A"
+pattern = "(?i)^(a|aaaa|mx|txt|ns|cname)$"
+description = "A record type: A, AAAA, MX, TXT, NS or CNAME"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://dns.google/resolve?name={{ inputs.name | url }}&type={{ inputs.type | upper }}" }
+into = "resp"
+extract = [
+  { into = "rcode", json = "json.Status" },
+  { into = "answers", json = "json.Answer" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "rcode" },
+  { else = "unexpected" },
+]
+
+[nodes.rcode]
+kind = "decide"
+on = "rcode"
+branches = [
+  { when = { eq = 0 }, then = "any" },
+  { when = { eq = 3 }, then = "no-such-name" },
+  { else = "dns-error" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "answers"
+branches = [
+  { when = { empty = true }, then = "none" },
+  { else = "each" },
+]
+
+[nodes.each]
+kind = "each"
+over = "answers"
+limit = 20
+start = "one"
+into = "records"
+next = "reply"
+
+[nodes.one]
+kind = "done"
+output = "{{ item.data }}"
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.type | upper }} records for {{ inputs.name }}: {{ state.records | join }}"
+output = { name = "{{ inputs.name }}", type = "{{ inputs.type | upper }}", records = "{{ state.records }}" }
+
+[nodes.none]
+kind = "done"
+say = "{{ inputs.name }} has no {{ inputs.type | upper }} records."
+output = { name = "{{ inputs.name }}", type = "{{ inputs.type | upper }}", records = [] }
+
+[nodes.no-such-name]
+kind = "fail"
+reason = "no-such-name"
+say = "{{ inputs.name }} does not exist in DNS (NXDOMAIN)."
+
+[nodes.dns-error]
+kind = "fail"
+reason = "dns-error"
+say = "The resolver could not answer for {{ inputs.name }} (DNS status {{ state.rcode }})."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Google Public DNS answered {{ state.resp.status }}."

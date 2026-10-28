@@ -255,6 +255,38 @@ set = { url = "https://news.ycombinator.com/item?id={{ inputs.id }}", n = "{{ st
 next = "reply"
 ```
 
+### `lookup`: read a table
+
+```toml
+[nodes.sky]
+kind = "lookup"
+on = "code"               # a state path, as in decide
+into = "sky"              # where the row's value goes
+table = [
+  { eq = 0, value = "clear" },
+  { between = [1, 3], value = "cloudy" },
+  { between = [51, 67], value = "raining" },
+  { between = [95, 99], value = "stormy", note = "thunder, with or without hail" },
+]
+default = "weather code {{ state.code }}"   # optional
+next = "reply"
+```
+
+A row is a condition (the same tests as a `decide` branch's `when`, all of
+which must hold) and a `value`; `note` is free text for the reader. The
+first row whose condition holds is read; its value may be any TOML value
+(a table such as `{ word = "stormy", warn = true }` included), and strings in it are templates, rendered when the row is read, so a
+placeholder that resolves to nothing fails the node. `default` is the value
+when no row holds; without one, such a value is recorded as a **gap**,
+exactly as a `decide` without `else` records one, and `pyrtan grow` drafts
+the row it asks for. The trace names the row's condition (or `default`) as
+the step's `chosen`, and the value read.
+
+A lookup does not branch. It is for the decision whose every outcome is a
+value rather than a different next step: a code into a word, a status into
+a severity, a unit into its symbol. Where outcomes lead to different
+nodes, use `decide`.
+
 ### `each`: walk a list
 
 ```toml
@@ -326,8 +358,15 @@ the run, since the run is over.
 service was started with, for tokens). Paths take `.key`, `[0]`, `[-1]`,
 `["key"]`.
 
+An `env` value is the operator's, so it stays out of the trace: a
+`decide` on an `env` path tests the real value but records it as
+`<set>` (or absent), in the step and in any gap. Keep it out of `extract`,
+`set`, `say` and `output` too; those are shown as they are. Use it where
+it goes out and nowhere else: a header, a request body.
+
 Filters: `url`, `json`, `int`, `float`, `str`, `lower`, `upper`, `strip`,
-`title`, `first`, `last`, `length`.
+`title`, `first`, `last`, `length`, `join` (a list as `a, b, c`, for a
+sentence).
 
 A string that is exactly one placeholder keeps the value's type (a list
 stays a list). A placeholder that resolves to nothing fails the node, except
@@ -349,4 +388,7 @@ chosen, next, elapsed_ms, depth) and `gaps`.
 A `no-match` error also carries `output.proposal`: the tree that would
 answer the sentence, as `name`, `trigger` (slots where the sentence had
 numbers or hosts), `inputs`, and `scaffold`, the `pyrtan new … --from`
-command that writes it. The sentence is recorded at `/unanswered`.
+command that writes it. The sentence is recorded at `/unanswered`, and
+`pyrtan build --from "…"` (or `POST /build`, which the console's
+Unanswered tab uses) asks what the proposal cannot know, what the tree
+reads, decides and says, and writes the file those answers describe.
