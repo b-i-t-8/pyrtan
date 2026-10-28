@@ -867,6 +867,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 if body.get("typing_indicator"):
                     ask["partner_typing"] = state["typing"]  # woken when it changes
                 st, answer = post("/chat/poll", ask, timeout=40.0)
+                if stop.is_set():
+                    return  # leaving: whatever the hub answers now (a 404, once the seat is dropped) is not shown
             except Exception as e:
                 if stop.is_set():
                     return  # leaving: the hub not answering any more is expected
@@ -884,7 +886,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 if answer.get("state") == "left":
                     return
 
-    threading.Thread(target=pump, daemon=True).start()
+    threads = [threading.Thread(target=pump, daemon=True)]
+    threads[0].start()
 
     # This person's typing, at a terminal: sent when it starts or stops, and
     # again every couple of seconds while keys keep coming, from a thread of
@@ -914,7 +917,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
     if editor is not None:
         editor.changed = typed
-        threading.Thread(target=typist, daemon=True).start()
+        threads.append(threading.Thread(target=typist, daemon=True))
+        threads[-1].start()
 
     def said(line: str) -> bool:
         """One line from the person; False when it means leave."""
@@ -970,6 +974,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
             post("/chat/leave", {"seat": seat}, timeout=5.0)
         except Exception:
             pass
+        # Leaving wakes the poll and the typist; let them finish before the
+        # interpreter does, or a daemon thread still writing to stdout at
+        # shutdown aborts the process (exit -6).
+        for t in threads:
+            t.join(timeout=5.0)
     return 0
 
 
