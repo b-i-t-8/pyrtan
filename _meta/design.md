@@ -377,7 +377,7 @@ Five trees, all against real public APIs, all tested offline:
     that touches a tree); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
-14. **v0.25, built: memory across runs.** A seventh source, `memory`, with
+14. **v0.26, built: memory across runs.** A seventh source, `memory`, with
     its own allow-list, `keys`: an observe reads a key, an act writes,
     counts on or forgets one, with an optional `ttl`. A recording keeps
     what was read, so invariant 1 holds and a tree's tests replay it. The
