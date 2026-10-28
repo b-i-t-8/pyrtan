@@ -291,6 +291,36 @@
       "version": 1
      },
      {
+      "description": "Antonyms for an English word, from Datamuse.",
+      "hosts": [
+       "api.datamuse.com"
+      ],
+      "inputs": {
+       "word": {
+        "description": "One English word",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "antonyms",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "reference",
+       "language",
+       "read-only"
+      ],
+      "triggers": [
+       "[what is the] opposite of {word:word}",
+       "antonyms (for|of) {word:word}"
+      ],
+      "version": 1
+     },
+     {
       "description": "NASA's Astronomy Picture of the Day: its title, and the picture or video.",
       "hosts": [
        "api.nasa.gov"
@@ -346,6 +376,34 @@
       "version": 1
      },
      {
+      "description": "The capital city of a country, from CountriesNow.",
+      "hosts": [
+       "countriesnow.space"
+      ],
+      "inputs": {
+       "country": {
+        "description": "A country's name in English, as in: Norway",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "capital",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "geography",
+       "read-only"
+      ],
+      "triggers": [
+       "[what is the] capital (of|city of) {country}"
+      ],
+      "version": 1
+     },
+     {
       "description": "A random fact about cats, from catfact.ninja.",
       "hosts": [
        "catfact.ninja"
@@ -366,6 +424,37 @@
       "triggers": [
        "[tell me a] cat fact",
        "tell me something about cats"
+      ],
+      "version": 1
+     },
+     {
+      "description": "How to make a cocktail: its glass, ingredients and method, from TheCocktailDB.",
+      "hosts": [
+       "www.thecocktaildb.com"
+      ],
+      "inputs": {
+       "drink": {
+        "description": "A cocktail, as in: margarita",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "cocktail",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "food",
+       "drinks",
+       "read-only"
+      ],
+      "triggers": [
+       "cocktail {drink}",
+       "how do i (mix|make) a {drink} cocktail",
+       "what is in a {drink} cocktail"
       ],
       "version": 1
      },
@@ -391,6 +480,54 @@
       "triggers": [
        "count to {n:number}",
        "add {x:float} and {y:int}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The spot price of a cryptocurrency in a currency, from Coinbase.",
+      "hosts": [
+       "api.coinbase.com"
+      ],
+      "inputs": {
+       "coin": {
+        "description": "A ticker, as in: BTC",
+        "required": true,
+        "type": "str"
+       },
+       "currency": {
+        "default": "USD",
+        "description": "A three-letter currency code, as in: USD",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "crypto-price",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "money",
+       "crypto",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "[what's the] (bitcoin|btc) price [in {currency:word}]": {
+        "coin": "BTC"
+       },
+       "[what's the] (ethereum|eth) price [in {currency:word}]": {
+        "coin": "ETH"
+       },
+       "[what's the] (solana|sol) price [in {currency:word}]": {
+        "coin": "SOL"
+       }
+      },
+      "triggers": [
+       "[what's the] (bitcoin|btc) price [in {currency:word}]",
+       "[what's the] (ethereum|eth) price [in {currency:word}]",
+       "[what's the] (solana|sol) price [in {currency:word}]",
+       "[what's the] (crypto|coin) price of {coin:word} [in {currency:word}]"
       ],
       "version": 1
      },
@@ -480,6 +617,46 @@
        "disk space on {mount:word}"
       ],
       "version": 2
+     },
+     {
+      "description": "A domain's DNS records (A, AAAA, MX, TXT, NS or CNAME), from Google Public DNS.",
+      "hosts": [
+       "dns.google"
+      ],
+      "inputs": {
+       "name": {
+        "description": "A domain name, as in: example.com",
+        "required": true,
+        "type": "str"
+       },
+       "type": {
+        "default": "A",
+        "description": "A record type: A, AAAA, MX, TXT, NS or CNAME",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "dns",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "network",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "[what is the] ip [address] of {name:host}": {
+        "type": "A"
+       }
+      },
+      "triggers": [
+       "dns [records] for {name:host}",
+       "{type:word} record for {name:host}",
+       "[what is the] ip [address] of {name:host}"
+      ],
+      "version": 1
      },
      {
       "description": "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest.",
@@ -576,6 +753,29 @@
       "version": 1
      },
      {
+      "description": "Who finished first, second and third in the latest Formula 1 race.",
+      "hosts": [
+       "api.jolpi.ca"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "f1-results",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "sport",
+       "read-only"
+      ],
+      "triggers": [
+       "who won the (last|latest) (f1|formula 1|grand prix) [race]",
+       "[latest|last] (f1|formula 1) (results|race)"
+      ],
+      "version": 1
+     },
+     {
       "description": "echo for fixed",
       "hosts": [],
       "inputs": {
@@ -596,6 +796,35 @@
       },
       "triggers": [
        "the usual"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A food product by its barcode: name, brand, size and Nutri-Score, from Open Food Facts.",
+      "hosts": [
+       "world.openfoodfacts.org"
+      ],
+      "inputs": {
+       "code": {
+        "description": "An EAN or UPC barcode, as in: 3017624010701",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "food-barcode",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "food",
+       "read-only"
+      ],
+      "triggers": [
+       "what is barcode {code:word}",
+       "(food|product) barcode {code:word}"
       ],
       "version": 1
      },
@@ -1070,6 +1299,30 @@
       "version": 1
      },
      {
+      "description": "Natural events happening now, as NASA's EONET tracks them: storms, wildfires, volcanoes, ice.",
+      "hosts": [
+       "eonet.gsfc.nasa.gov"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "natural-events",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "science",
+       "earth",
+       "read-only"
+      ],
+      "triggers": [
+       "[current] natural events",
+       "what natural (events|disasters) are happening [now]"
+      ],
+      "version": 1
+     },
+     {
       "description": "The next rocket launch anywhere, when, and its status, from the Launch Library.",
       "hosts": [
        "ll.thespacedevs.com"
@@ -1089,6 +1342,36 @@
       "triggers": [
        "[when is the] next (launch|rocket launch)",
        "upcoming (launches|rocket launches)"
+      ],
+      "version": 1
+     },
+     {
+      "description": "How many times an npm package was downloaded in the last week.",
+      "hosts": [
+       "api.npmjs.org"
+      ],
+      "inputs": {
+       "package": {
+        "description": "A package name, as in: react or @types/node",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "npm-downloads",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "javascript",
+       "read-only"
+      ],
+      "triggers": [
+       "how many downloads does {package:word} have [on npm]",
+       "npm downloads (for|of) {package:word}"
       ],
       "version": 1
      },
@@ -1124,6 +1407,36 @@
       "version": 1
      },
      {
+      "description": "The latest published version of a NuGet (.NET) package.",
+      "hosts": [
+       "api.nuget.org"
+      ],
+      "inputs": {
+       "package": {
+        "description": "A package id, as in: Newtonsoft.Json",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "nuget",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "dotnet",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest version of {package:word} on nuget",
+       "nuget (package|version) {package:word}"
+      ],
+      "version": 1
+     },
+     {
       "description": "asks, then answers",
       "hosts": [],
       "inputs": {
@@ -1143,6 +1456,29 @@
       "tags": [],
       "triggers": [
        "order a {drink:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "How many people are in space right now, and who.",
+      "hosts": [
+       "corquaid.github.io"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "people-in-space",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "space",
+       "read-only"
+      ],
+      "triggers": [
+       "how many people are in space [now]",
+       "who is in space [now]"
       ],
       "version": 1
      },
@@ -1200,6 +1536,37 @@
        "pokemon {name:word}",
        "what type is {name:word}",
        "tell me about the pokemon {name:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Pollen counts for a place now (Europe): grass, birch, alder, mugwort, olive and ragweed, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "air-quality-api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "pollen",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "health",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] pollen [count] in {place}",
+       "is there pollen in {place}"
       ],
       "version": 1
      },
@@ -1471,6 +1838,30 @@
       "version": 1
      },
      {
+      "description": "A one-line programming joke, from JokeAPI's safe mode.",
+      "hosts": [
+       "v2.jokeapi.dev"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "programming-joke",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "software",
+       "read-only"
+      ],
+      "triggers": [
+       "tell me a (programming|coding|nerd) joke",
+       "[a] (programming|coding|nerd) joke"
+      ],
+      "version": 1
+     },
+     {
       "description": "The latest version of a Python package on PyPI, and what it says it is.",
       "hosts": [
        "pypi.org"
@@ -1498,6 +1889,59 @@
        "[what's the] latest version of {package:word} on pypi",
        "latest {package:word} on pypi",
        "(pypi|pip) (package|version) {package:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A random quotation and who said it.",
+      "hosts": [
+       "dummyjson.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "quote",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "read-only"
+      ],
+      "triggers": [
+       "give me a quote",
+       "[a] random quote",
+       "inspire me"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A recipe for a dish: where it is from, its ingredients and how to make it, from TheMealDB.",
+      "hosts": [
+       "www.themealdb.com"
+      ],
+      "inputs": {
+       "dish": {
+        "description": "A dish, as in: lasagna",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "recipe",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "food",
+       "read-only"
+      ],
+      "triggers": [
+       "[a] recipe for {dish}",
+       "how do i (cook|make) {dish}"
       ],
       "version": 1
      },
@@ -1855,6 +2299,37 @@
       "version": 1
      },
      {
+      "description": "The waves off a coastal place now: height, period and direction, from Open-Meteo's marine model.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "marine-api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "waves",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "sea",
+       "read-only"
+      ],
+      "triggers": [
+       "[how big are the] waves (in|at|off) {place}",
+       "[the] surf (in|at) {place}"
+      ],
+      "version": 1
+     },
+     {
       "description": "The Wayback Machine's latest copy of a site, if it has one.",
       "hosts": [
        "archive.org"
@@ -1925,6 +2400,29 @@
        "how [hot|cold|warm] is it in {place}"
       ],
       "version": 3
+     },
+     {
+      "description": "Roughly where you are, by your public IP address: city, region, country and network, from ipinfo.io.",
+      "hosts": [
+       "ipinfo.io"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "where-am-i",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "network",
+       "read-only"
+      ],
+      "triggers": [
+       "where am i",
+       "where is my ip [address] [from]"
+      ],
+      "version": 1
      },
      {
       "description": "The summary of a Wikipedia article.",
@@ -4027,17 +4525,24 @@
     "trees": [
      "advice",
      "air-quality",
+     "antonyms",
      "apod",
      "books",
+     "capital",
      "cat-fact",
+     "cocktail",
      "count",
+     "crypto-price",
      "dad-joke",
      "define",
      "disk-space",
+     "dns",
      "earthquakes",
      "elevation",
      "exchange-rate",
+     "f1-results",
      "fixed",
+     "food-barcode",
      "forecast",
      "github-release",
      "github-repo",
@@ -4054,11 +4559,16 @@
      "log-errors",
      "modem-check",
      "my-ip",
+     "natural-events",
      "next-launch",
+     "npm-downloads",
      "npm-package",
+     "nuget",
      "order",
+     "people-in-space",
      "ping",
      "pokemon",
+     "pollen",
      "postal-code",
      "postfinite-datasets",
      "postfinite-forecasts",
@@ -4067,7 +4577,10 @@
      "postfinite-reading",
      "postfinite-readings",
      "postfinite-search",
+     "programming-joke",
      "pypi-package",
+     "quote",
+     "recipe",
      "remind",
      "rendered-headline",
      "rhymes",
@@ -4080,8 +4593,10 @@
      "tie-a",
      "tie-b",
      "uv-index",
+     "waves",
      "wayback",
      "weather",
+     "where-am-i",
      "wikipedia"
     ],
     "unanswered": 1,
@@ -5888,11 +6403,11 @@
   },
   {
    "expect": {
-    "cleaned": "weather in Oslo",
+    "cleaned": "weather in Oslo for me",
     "considered": [
      {
       "inputs": {
-       "place": "Oslo"
+       "place": "Oslo for me"
       },
       "notes": [],
       "rejected": false,
@@ -5904,7 +6419,7 @@
     "matches": [
      {
       "inputs": {
-       "place": "Oslo"
+       "place": "Oslo for me"
       },
       "notes": [],
       "rejected": false,
@@ -5918,20 +6433,16 @@
      "kind": "intent",
      "node": "intent",
      "observed": {
-      "cleaned": "weather in Oslo",
+      "cleaned": "weather in Oslo for me",
       "inputs": {
-       "place": "Oslo"
+       "place": "Oslo for me"
       },
-      "steps": [
-       "fillers: 'for me'"
-      ],
+      "steps": [],
       "trigger": "[what's the] weather in {place}"
      },
-     "summary": "'weather in Oslo for me' -> 'weather in Oslo'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
+     "summary": "'weather in Oslo for me'; weather via \"[what's the] weather in {place}\" (18 literal chars)"
     },
-    "steps": [
-     "fillers: 'for me'"
-    ],
+    "steps": [],
     "text": "weather in Oslo for me"
    },
    "text": "weather in Oslo for me"
@@ -8610,7 +9121,7 @@
      "units": "celsius"
     },
     "reason": "transport",
-    "say": "geocode: no recorded response for GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json",
+    "say": "forecast: no recorded response for GET https://api.open-meteo.com/v1/forecast?latitude=48.85341&longitude=2.3488&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius",
     "status": "error",
     "trace": {
      "gaps": [],
@@ -8633,9 +9144,42 @@
       {
        "depth": 0,
        "kind": "observe",
-       "next": null,
+       "next": "found",
        "node": "geocode",
-       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json failed: no recorded response for GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json"
+       "observed": {
+        "country": "France",
+        "hit": {
+         "country": "France",
+         "latitude": 48.85341,
+         "longitude": 2.3488,
+         "name": "Paris"
+        },
+        "lat": 48.85341,
+        "lon": 2.3488,
+        "name": "Paris"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json -> 200; hit={'name': 'Paris', 'country': 'France', 'latitude': 48.85341, 'longitude': 2.348…, lat=48.85341, lon=2.3488, name=Paris, country=France"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "forecast",
+       "node": "found",
+       "observed": {
+        "country": "France",
+        "latitude": 48.85341,
+        "longitude": 2.3488,
+        "name": "Paris"
+       },
+       "summary": "state.hit = {'name': 'Paris', 'country': 'France', 'latitude': 48.85341, 'longitude': 2.348…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "forecast",
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=48.85341&longitude=2.3488&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius failed: no recorded response for GET https://api.open-meteo.com/v1/forecast?latitude=48.85341&longitude=2.3488&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius"
       }
      ],
      "tree": "weather"
@@ -14961,6 +15505,2750 @@
    "tree": "apod"
   },
   {
+   "expect": {
+    "inputs": {
+     "word": "happy"
+    },
+    "output": {
+     "antonyms": [
+      "sad",
+      "distressed",
+      "unhappy",
+      "dysphoric"
+     ],
+     "word": "happy"
+    },
+    "say": "The opposite of happy: sad, distressed, unhappy, dysphoric.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "opposite of happy",
+        "inputs": {
+         "word": "happy"
+        },
+        "steps": [],
+        "trigger": "[what is the] opposite of {word:word}"
+       },
+       "summary": "'opposite of happy'; antonyms via '[what is the] opposite of {word:word}' (19 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": [
+         "sad",
+         "distressed",
+         "unhappy",
+         "dysphoric"
+        ]
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_ant=happy&max=8 -> 200; words=['sad', 'distressed', 'unhappy', 'dysphoric']"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": [
+        "sad",
+        "distressed",
+        "unhappy",
+        "dysphoric"
+       ],
+       "summary": "state.words = ['sad', 'distressed', 'unhappy', 'dysphoric']"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The opposite of happy: sad, distressed, unhappy, dysphoric."
+      }
+     ],
+     "tree": "antonyms"
+    },
+    "tree": "antonyms"
+   },
+   "inputs": {
+    "word": "happy"
+   },
+   "intent": "opposite of happy",
+   "tree": "antonyms"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "qqzzx"
+    },
+    "reason": "no-antonyms",
+    "say": "Datamuse knows no opposite of qqzzx.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "antonyms for qqzzx",
+        "inputs": {
+         "word": "qqzzx"
+        },
+        "steps": [],
+        "trigger": "antonyms (for|of) {word:word}"
+       },
+       "summary": "'antonyms for qqzzx'; antonyms via 'antonyms (for|of) {word:word}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": []
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_ant=qqzzx&max=8 -> 200; words=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": [],
+       "summary": "state.words = []"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-antonyms: Datamuse knows no opposite of qqzzx."
+      }
+     ],
+     "tree": "antonyms"
+    },
+    "tree": "antonyms"
+   },
+   "inputs": {
+    "word": "qqzzx"
+   },
+   "intent": "antonyms for qqzzx",
+   "tree": "antonyms"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "country": "Norway"
+    },
+    "output": {
+     "capital": "Oslo",
+     "country": "Norway",
+     "iso2": "NO"
+    },
+    "say": "The capital of Norway is Oslo.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is the capital of Norway",
+        "inputs": {
+         "country": "Norway"
+        },
+        "steps": [],
+        "trigger": "[what is the] capital (of|city of) {country}"
+       },
+       "summary": "'what is the capital of Norway'; capital via '[what is the] capital (of|city of) {country}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "capital": "Oslo",
+        "code": "NO",
+        "name": "Norway"
+       },
+       "summary": "GET https://countriesnow.space/api/v0.1/countries/capital/q?country=Norway -> 200; name=Norway, capital=Oslo, code=NO"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-capital",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty False",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-capital",
+       "observed": "Oslo",
+       "summary": "state.capital = Oslo"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The capital of Norway is Oslo."
+      }
+     ],
+     "tree": "capital"
+    },
+    "tree": "capital"
+   },
+   "inputs": {
+    "country": "Norway"
+   },
+   "intent": "what is the capital of Norway",
+   "tree": "capital"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "country": "Narnia"
+    },
+    "reason": "unknown-country",
+    "say": "CountriesNow knows no country called Narnia.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "capital of Narnia",
+        "inputs": {
+         "country": "Narnia"
+        },
+        "steps": [],
+        "trigger": "[what is the] capital (of|city of) {country}"
+       },
+       "summary": "'capital of Narnia'; capital via '[what is the] capital (of|city of) {country}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "capital": null,
+        "code": null,
+        "name": null
+       },
+       "summary": "GET https://countriesnow.space/api/v0.1/countries/capital/q?country=Narnia -> 404; name=None, capital=None, code=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-country",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-country",
+       "summary": "unknown-country: CountriesNow knows no country called Narnia."
+      }
+     ],
+     "tree": "capital"
+    },
+    "tree": "capital"
+   },
+   "inputs": {
+    "country": "Narnia"
+   },
+   "intent": "capital of Narnia",
+   "tree": "capital"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Paris"
+    },
+    "output": {
+     "alder": 1.5,
+     "birch": 0.3,
+     "country": "France",
+     "grass": 12.4,
+     "mugwort": 0.6,
+     "olive": 0.1,
+     "place": "Paris",
+     "ragweed": 2.2,
+     "unit": "grains/m³"
+    },
+    "say": "Pollen in Paris, France (grains/m³): grass 12.4, birch 0.3, alder 1.5, mugwort 0.6, olive 0.1, ragweed 2.2.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "pollen in Paris",
+        "inputs": {
+         "place": "Paris"
+        },
+        "steps": [],
+        "trigger": "[what's the] pollen [count] in {place}"
+       },
+       "summary": "'pollen in Paris'; pollen via \"[what's the] pollen [count] in {place}\" (22 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "France",
+        "hit": {
+         "country": "France",
+         "latitude": 48.85341,
+         "longitude": 2.3488,
+         "name": "Paris"
+        },
+        "lat": 48.85341,
+        "lon": 2.3488,
+        "name": "Paris"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json -> 200; hit={'name': 'Paris', 'country': 'France', 'latitude': 48.85341, 'longitude': 2.348…, lat=48.85341, lon=2.3488, name=Paris, country=France"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "air",
+       "node": "found",
+       "observed": {
+        "country": "France",
+        "latitude": 48.85341,
+        "longitude": 2.3488,
+        "name": "Paris"
+       },
+       "summary": "state.hit = {'name': 'Paris', 'country': 'France', 'latitude': 48.85341, 'longitude': 2.348…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "covered",
+       "node": "air",
+       "observed": {
+        "alder": 1.5,
+        "birch": 0.3,
+        "grass": 12.4,
+        "mugwort": 0.6,
+        "olive": 0.1,
+        "ragweed": 2.2
+       },
+       "summary": "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=48.85341&longitude=2.3488&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen -> 200; grass=12.4, birch=0.3, alder=1.5, mugwort=0.6, olive=0.1, ragweed=2.2"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "covered",
+       "observed": 12.4,
+       "summary": "state.grass = 12.4"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Pollen in Paris, France (grains/m³): grass 12.4, birch 0.3, alder 1.5, mugwort 0.6, olive 0.1, ragweed 2.2."
+      }
+     ],
+     "tree": "pollen"
+    },
+    "tree": "pollen"
+   },
+   "inputs": {
+    "place": "Paris"
+   },
+   "intent": "pollen in Paris",
+   "tree": "pollen"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Sydney"
+    },
+    "reason": "not-covered",
+    "say": "Open-Meteo has no pollen reading for Sydney; its pollen model covers Europe.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "pollen in Sydney",
+        "inputs": {
+         "place": "Sydney"
+        },
+        "steps": [],
+        "trigger": "[what's the] pollen [count] in {place}"
+       },
+       "summary": "'pollen in Sydney'; pollen via \"[what's the] pollen [count] in {place}\" (22 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Australia",
+        "hit": {
+         "country": "Australia",
+         "elevation": 58.0,
+         "latitude": -33.86785,
+         "longitude": 151.20732,
+         "name": "Sydney",
+         "timezone": "Australia/Sydney"
+        },
+        "lat": -33.86785,
+        "lon": 151.20732,
+        "name": "Sydney"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Sydney&count=1&language=en&format=json -> 200; hit={'name': 'Sydney', 'country': 'Australia', 'latitude': -33.86785, 'longitude': …, lat=-33.86785, lon=151.20732, name=Sydney, country=Australia"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "air",
+       "node": "found",
+       "observed": {
+        "country": "Australia",
+        "elevation": 58.0,
+        "latitude": -33.86785,
+        "longitude": 151.20732,
+        "name": "Sydney",
+        "timezone": "Australia/Sydney"
+       },
+       "summary": "state.hit = {'name': 'Sydney', 'country': 'Australia', 'latitude': -33.86785, 'longitude': …"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "covered",
+       "node": "air",
+       "observed": {
+        "alder": null,
+        "birch": null,
+        "grass": null,
+        "mugwort": null,
+        "olive": null,
+        "ragweed": null
+       },
+       "summary": "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=-33.86785&longitude=151.20732&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen -> 200; grass=None, birch=None, alder=None, mugwort=None, olive=None, ragweed=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "not-covered",
+       "node": "covered",
+       "summary": "state.grass = None"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "not-covered",
+       "summary": "not-covered: Open-Meteo has no pollen reading for Sydney; its pollen model covers Europe."
+      }
+     ],
+     "tree": "pollen"
+    },
+    "tree": "pollen"
+   },
+   "inputs": {
+    "place": "Sydney"
+   },
+   "intent": "pollen in Sydney",
+   "tree": "pollen"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Lisbon"
+    },
+    "output": {
+     "country": "Portugal",
+     "place": "Lisbon",
+     "wave_direction_deg": 289,
+     "wave_height_m": 1.42,
+     "wave_period_s": 11.7
+    },
+    "say": "Off Lisbon, Portugal: waves 1.42 m every 11.7 s, from 289°.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "waves in Lisbon",
+        "inputs": {
+         "place": "Lisbon"
+        },
+        "steps": [],
+        "trigger": "[how big are the] waves (in|at|off) {place}"
+       },
+       "summary": "'waves in Lisbon'; waves via '[how big are the] waves (in|at|off) {place}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Portugal",
+        "hit": {
+         "country": "Portugal",
+         "latitude": 38.72509,
+         "longitude": -9.1498,
+         "name": "Lisbon"
+        },
+        "lat": 38.72509,
+        "lon": -9.1498,
+        "name": "Lisbon"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Lisbon&count=1&language=en&format=json -> 200; hit={'name': 'Lisbon', 'country': 'Portugal', 'latitude': 38.72509, 'longitude': -9…, lat=38.72509, lon=-9.1498, name=Lisbon, country=Portugal"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sea",
+       "node": "found",
+       "observed": {
+        "country": "Portugal",
+        "latitude": 38.72509,
+        "longitude": -9.1498,
+        "name": "Lisbon"
+       },
+       "summary": "state.hit = {'name': 'Lisbon', 'country': 'Portugal', 'latitude': 38.72509, 'longitude': -9…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "at-sea",
+       "node": "sea",
+       "observed": {
+        "from": 289,
+        "height": 1.42,
+        "period": 11.7
+       },
+       "summary": "GET https://marine-api.open-meteo.com/v1/marine?latitude=38.72509&longitude=-9.1498&current=wave_height,wave_period,wave_direction -> 200; height=1.42, period=11.7, from=289"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "at-sea",
+       "observed": 1.42,
+       "summary": "state.height = 1.42"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Off Lisbon, Portugal: waves 1.42 m every 11.7 s, from 289°."
+      }
+     ],
+     "tree": "waves"
+    },
+    "tree": "waves"
+   },
+   "inputs": {
+    "place": "Lisbon"
+   },
+   "intent": "waves in Lisbon",
+   "tree": "waves"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Munich"
+    },
+    "reason": "inland",
+    "say": "Open-Meteo has no sea at Munich: it is too far from the coast for its marine model.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "waves in Munich",
+        "inputs": {
+         "place": "Munich"
+        },
+        "steps": [],
+        "trigger": "[how big are the] waves (in|at|off) {place}"
+       },
+       "summary": "'waves in Munich'; waves via '[how big are the] waves (in|at|off) {place}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Germany",
+        "hit": {
+         "country": "Germany",
+         "latitude": 48.13743,
+         "longitude": 11.57549,
+         "name": "Munich"
+        },
+        "lat": 48.13743,
+        "lon": 11.57549,
+        "name": "Munich"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Munich&count=1&language=en&format=json -> 200; hit={'name': 'Munich', 'country': 'Germany', 'latitude': 48.13743, 'longitude': 11.…, lat=48.13743, lon=11.57549, name=Munich, country=Germany"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sea",
+       "node": "found",
+       "observed": {
+        "country": "Germany",
+        "latitude": 48.13743,
+        "longitude": 11.57549,
+        "name": "Munich"
+       },
+       "summary": "state.hit = {'name': 'Munich', 'country': 'Germany', 'latitude': 48.13743, 'longitude': 11.…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "at-sea",
+       "node": "sea",
+       "observed": {
+        "from": null,
+        "height": null,
+        "period": null
+       },
+       "summary": "GET https://marine-api.open-meteo.com/v1/marine?latitude=48.13743&longitude=11.57549&current=wave_height,wave_period,wave_direction -> 200; height=None, period=None, from=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "inland",
+       "node": "at-sea",
+       "summary": "state.height = None"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "inland",
+       "summary": "inland: Open-Meteo has no sea at Munich: it is too far from the coast for its marine model."
+      }
+     ],
+     "tree": "waves"
+    },
+    "tree": "waves"
+   },
+   "inputs": {
+    "place": "Munich"
+   },
+   "intent": "waves in Munich",
+   "tree": "waves"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "coin": "BTC",
+     "currency": "USD"
+    },
+    "output": {
+     "coin": "BTC",
+     "currency": "USD",
+     "price": 80645.125
+    },
+    "say": "1 BTC is 80645.125 USD (Coinbase spot price).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "bitcoin price",
+        "inputs": {
+         "coin": "BTC"
+        },
+        "steps": [],
+        "trigger": "[what's the] (bitcoin|btc) price [in {currency:word}]"
+       },
+       "summary": "'bitcoin price'; crypto-price via \"[what's the] (bitcoin|btc) price [in {currency:word}]\" (26 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "amount": "80645.125",
+        "base": "BTC",
+        "in": "USD"
+       },
+       "summary": "GET https://api.coinbase.com/v2/prices/BTC-USD/spot -> 200; amount=80645.125, base=BTC, in=USD"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "1 BTC is 80645.125 USD (Coinbase spot price)."
+      }
+     ],
+     "tree": "crypto-price"
+    },
+    "tree": "crypto-price"
+   },
+   "inputs": {
+    "coin": "BTC"
+   },
+   "intent": "bitcoin price",
+   "tree": "crypto-price"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "coin": "ETH",
+     "currency": "eur"
+    },
+    "output": {
+     "coin": "ETH",
+     "currency": "EUR",
+     "price": 2107.37
+    },
+    "say": "1 ETH is 2107.37 EUR (Coinbase spot price).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "ethereum price in eur",
+        "inputs": {
+         "coin": "ETH",
+         "currency": "eur"
+        },
+        "steps": [],
+        "trigger": "[what's the] (ethereum|eth) price [in {currency:word}]"
+       },
+       "summary": "'ethereum price in eur'; crypto-price via \"[what's the] (ethereum|eth) price [in {currency:word}]\" (27 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "amount": "2107.37",
+        "base": "ETH",
+        "in": "EUR"
+       },
+       "summary": "GET https://api.coinbase.com/v2/prices/ETH-EUR/spot -> 200; amount=2107.37, base=ETH, in=EUR"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "1 ETH is 2107.37 EUR (Coinbase spot price)."
+      }
+     ],
+     "tree": "crypto-price"
+    },
+    "tree": "crypto-price"
+   },
+   "inputs": {
+    "coin": "ETH",
+    "currency": "eur"
+   },
+   "intent": "ethereum price in eur",
+   "tree": "crypto-price"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "coin": "QQQ",
+     "currency": "USD"
+    },
+    "reason": "unknown-pair",
+    "say": "Coinbase has no price for QQQ in USD.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "crypto price of QQQ",
+        "inputs": {
+         "coin": "QQQ"
+        },
+        "steps": [],
+        "trigger": "[what's the] (crypto|coin) price of {coin:word} [in {currency:word}]"
+       },
+       "summary": "'crypto price of QQQ'; crypto-price via \"[what's the] (crypto|coin) price of {coin:word} [in {currency:word}]\" (28 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "amount": null,
+        "base": null,
+        "in": null
+       },
+       "summary": "GET https://api.coinbase.com/v2/prices/QQQ-USD/spot -> 404; amount=None, base=None, in=None"
+      },
+      {
+       "chosen": "in [400, 404]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-pair",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-pair",
+       "summary": "unknown-pair: Coinbase has no price for QQQ in USD."
+      }
+     ],
+     "tree": "crypto-price"
+    },
+    "tree": "crypto-price"
+   },
+   "inputs": {
+    "coin": "QQQ"
+   },
+   "intent": "crypto price of QQQ",
+   "tree": "crypto-price"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "@types/node"
+    },
+    "output": {
+     "downloads": 404009479,
+     "end": "2026-10-26",
+     "package": "@types/node",
+     "start": "2026-10-20"
+    },
+    "say": "@types/node was downloaded 404009479 times on npm from 2026-10-20 to 2026-10-26.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "npm downloads for @types/node",
+        "inputs": {
+         "package": "@types/node"
+        },
+        "steps": [],
+        "trigger": "npm downloads (for|of) {package:word}"
+       },
+       "summary": "'npm downloads for @types/node'; npm-downloads via 'npm downloads (for|of) {package:word}' (17 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "count": 404009479,
+        "from": "2026-10-20",
+        "to": "2026-10-26"
+       },
+       "summary": "GET https://api.npmjs.org/downloads/point/last-week/@types/node -> 200; count=404009479, from=2026-10-20, to=2026-10-26"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "@types/node was downloaded 404009479 times on npm from 2026-10-20 to 2026-10-26."
+      }
+     ],
+     "tree": "npm-downloads"
+    },
+    "tree": "npm-downloads"
+   },
+   "inputs": {
+    "package": "@types/node"
+   },
+   "intent": "npm downloads for @types/node",
+   "tree": "npm-downloads"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "nope-not-a-pkg-zz"
+    },
+    "reason": "no-package",
+    "say": "npm has no download counts for nope-not-a-pkg-zz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "npm downloads for nope-not-a-pkg-zz",
+        "inputs": {
+         "package": "nope-not-a-pkg-zz"
+        },
+        "steps": [],
+        "trigger": "npm downloads (for|of) {package:word}"
+       },
+       "summary": "'npm downloads for nope-not-a-pkg-zz'; npm-downloads via 'npm downloads (for|of) {package:word}' (17 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "count": null,
+        "from": null,
+        "to": null
+       },
+       "summary": "GET https://api.npmjs.org/downloads/point/last-week/nope-not-a-pkg-zz -> 404; count=None, from=None, to=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-package",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-package",
+       "summary": "no-package: npm has no download counts for nope-not-a-pkg-zz."
+      }
+     ],
+     "tree": "npm-downloads"
+    },
+    "tree": "npm-downloads"
+   },
+   "inputs": {
+    "package": "nope-not-a-pkg-zz"
+   },
+   "intent": "npm downloads for nope-not-a-pkg-zz",
+   "tree": "npm-downloads"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "Newtonsoft.Json"
+    },
+    "output": {
+     "package": "Newtonsoft.Json",
+     "url": "https://www.nuget.org/packages/Newtonsoft.Json",
+     "version": "14.0.1-beta2"
+    },
+    "say": "Newtonsoft.Json 14.0.1-beta2 on NuGet. https://www.nuget.org/packages/Newtonsoft.Json",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest version of Newtonsoft.Json on nuget",
+        "inputs": {
+         "package": "Newtonsoft.Json"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest version of {package:word} on nuget"
+       },
+       "summary": "'latest version of Newtonsoft.Json on nuget'; nuget via \"[what's the] latest version of {package:word} on nuget\" (31 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "latest": "14.0.1-beta2"
+       },
+       "summary": "GET https://api.nuget.org/v3-flatcontainer/newtonsoft.json/index.json -> 200; latest=14.0.1-beta2"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Newtonsoft.Json 14.0.1-beta2 on NuGet. https://www.nuget.org/packages/Newtonsoft.Json"
+      }
+     ],
+     "tree": "nuget"
+    },
+    "tree": "nuget"
+   },
+   "inputs": {
+    "package": "Newtonsoft.Json"
+   },
+   "intent": "latest version of Newtonsoft.Json on nuget",
+   "tree": "nuget"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "nope-qqzz"
+    },
+    "reason": "no-package",
+    "say": "NuGet has no package nope-qqzz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "nuget package nope-qqzz",
+        "inputs": {
+         "package": "nope-qqzz"
+        },
+        "steps": [],
+        "trigger": "nuget (package|version) {package:word}"
+       },
+       "summary": "'nuget package nope-qqzz'; nuget via 'nuget (package|version) {package:word}' (19 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "latest": null
+       },
+       "summary": "GET https://api.nuget.org/v3-flatcontainer/nope-qqzz/index.json -> 404; latest=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-package",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-package",
+       "summary": "no-package: NuGet has no package nope-qqzz."
+      }
+     ],
+     "tree": "nuget"
+    },
+    "tree": "nuget"
+   },
+   "inputs": {
+    "package": "nope-qqzz"
+   },
+   "intent": "nuget package nope-qqzz",
+   "tree": "nuget"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "gmail.com",
+     "type": "mx"
+    },
+    "output": {
+     "name": "gmail.com",
+     "records": [
+      "30 alt3.gmail-smtp-in.l.google.com.",
+      "5 gmail-smtp-in.l.google.com.",
+      "40 alt4.gmail-smtp-in.l.google.com.",
+      "20 alt2.gmail-smtp-in.l.google.com.",
+      "10 alt1.gmail-smtp-in.l.google.com."
+     ],
+     "type": "MX"
+    },
+    "say": "MX records for gmail.com: 30 alt3.gmail-smtp-in.l.google.com., 5 gmail-smtp-in.l.google.com., 40 alt4.gmail-smtp-in.l.google.com., 20 alt2.gmail-smtp-in.l.google.com., 10 alt1.gmail-smtp-in.l.google.com.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "mx record for gmail.com",
+        "inputs": {
+         "name": "gmail.com",
+         "type": "mx"
+        },
+        "steps": [],
+        "trigger": "{type:word} record for {name:host}"
+       },
+       "summary": "'mx record for gmail.com'; dns via '{type:word} record for {name:host}' (9 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "answers": [
+         {
+          "TTL": 1029,
+          "data": "30 alt3.gmail-smtp-in.l.google.com.",
+          "name": "gmail.com.",
+          "type": 15
+         },
+         {
+          "TTL": 1029,
+          "data": "5 gmail-smtp-in.l.google.com.",
+          "name": "gmail.com.",
+          "type": 15
+         },
+         {
+          "TTL": 1029,
+          "data": "40 alt4.gmail-smtp-in.l.google.com.",
+          "name": "gmail.com.",
+          "type": 15
+         },
+         {
+          "TTL": 1029,
+          "data": "20 alt2.gmail-smtp-in.l.google.com.",
+          "name": "gmail.com.",
+          "type": 15
+         },
+         {
+          "TTL": 1029,
+          "data": "10 alt1.gmail-smtp-in.l.google.com.",
+          "name": "gmail.com.",
+          "type": 15
+         }
+        ],
+        "rcode": 0
+       },
+       "summary": "GET https://dns.google/resolve?name=gmail.com&type=MX -> 200; rcode=0, answers=[{'name': 'gmail.com.', 'type': 15, 'TTL': 1029, 'data': '30 alt3.gmail-smtp-in…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rcode",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "rcode",
+       "observed": 0,
+       "summary": "state.rcode = 0"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "each",
+       "node": "any",
+       "observed": [
+        {
+         "TTL": 1029,
+         "data": "30 alt3.gmail-smtp-in.l.google.com.",
+         "name": "gmail.com.",
+         "type": 15
+        },
+        {
+         "TTL": 1029,
+         "data": "5 gmail-smtp-in.l.google.com.",
+         "name": "gmail.com.",
+         "type": 15
+        },
+        {
+         "TTL": 1029,
+         "data": "40 alt4.gmail-smtp-in.l.google.com.",
+         "name": "gmail.com.",
+         "type": 15
+        },
+        {
+         "TTL": 1029,
+         "data": "20 alt2.gmail-smtp-in.l.google.com.",
+         "name": "gmail.com.",
+         "type": 15
+        },
+        {
+         "TTL": 1029,
+         "data": "10 alt1.gmail-smtp-in.l.google.com.",
+         "name": "gmail.com.",
+         "type": 15
+        }
+       ],
+       "summary": "state.answers = [{'name': 'gmail.com.', 'type': 15, 'TTL': 1029, 'data': '30 alt3.gmail-smtp-in…"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "5 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "MX records for gmail.com: 30 alt3.gmail-smtp-in.l.google.com., 5 gmail-smtp-in.l.google.com., 40 alt4.gmail-smtp-in.l.google.com., 20 alt2.gmail-smtp-in.l.google.com., 10 alt1.gmail-smtp-in.l.google.com."
+      }
+     ],
+     "tree": "dns"
+    },
+    "tree": "dns"
+   },
+   "inputs": {
+    "name": "gmail.com",
+    "type": "mx"
+   },
+   "intent": "mx record for gmail.com",
+   "tree": "dns"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "example.com",
+     "type": "A"
+    },
+    "output": {
+     "name": "example.com",
+     "records": [
+      "172.66.147.243",
+      "104.20.23.154"
+     ],
+     "type": "A"
+    },
+    "say": "A records for example.com: 172.66.147.243, 104.20.23.154",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "dns for example.com",
+        "inputs": {
+         "name": "example.com"
+        },
+        "steps": [],
+        "trigger": "dns [records] for {name:host}"
+       },
+       "summary": "'dns for example.com'; dns via 'dns [records] for {name:host}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "answers": [
+         {
+          "TTL": 300,
+          "data": "172.66.147.243",
+          "name": "example.com.",
+          "type": 1
+         },
+         {
+          "TTL": 300,
+          "data": "104.20.23.154",
+          "name": "example.com.",
+          "type": 1
+         }
+        ],
+        "rcode": 0
+       },
+       "summary": "GET https://dns.google/resolve?name=example.com&type=A -> 200; rcode=0, answers=[{'name': 'example.com.', 'type': 1, 'TTL': 300, 'data': '172.66.147.243'}, {'n…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rcode",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "rcode",
+       "observed": 0,
+       "summary": "state.rcode = 0"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "each",
+       "node": "any",
+       "observed": [
+        {
+         "TTL": 300,
+         "data": "172.66.147.243",
+         "name": "example.com.",
+         "type": 1
+        },
+        {
+         "TTL": 300,
+         "data": "104.20.23.154",
+         "name": "example.com.",
+         "type": 1
+        }
+       ],
+       "summary": "state.answers = [{'name': 'example.com.', 'type': 1, 'TTL': 300, 'data': '172.66.147.243'}, {'n…"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "2 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "A records for example.com: 172.66.147.243, 104.20.23.154"
+      }
+     ],
+     "tree": "dns"
+    },
+    "tree": "dns"
+   },
+   "inputs": {
+    "name": "example.com"
+   },
+   "intent": "dns for example.com",
+   "tree": "dns"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "nope-qqzz.example",
+     "type": "A"
+    },
+    "reason": "no-such-name",
+    "say": "nope-qqzz.example does not exist in DNS (NXDOMAIN).",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "dns for nope-qqzz.example",
+        "inputs": {
+         "name": "nope-qqzz.example"
+        },
+        "steps": [],
+        "trigger": "dns [records] for {name:host}"
+       },
+       "summary": "'dns for nope-qqzz.example'; dns via 'dns [records] for {name:host}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "answers": null,
+        "rcode": 3
+       },
+       "summary": "GET https://dns.google/resolve?name=nope-qqzz.example&type=A -> 200; rcode=3, answers=None"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rcode",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 3",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-such-name",
+       "node": "rcode",
+       "observed": 3,
+       "summary": "state.rcode = 3"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-such-name",
+       "summary": "no-such-name: nope-qqzz.example does not exist in DNS (NXDOMAIN)."
+      }
+     ],
+     "tree": "dns"
+    },
+    "tree": "dns"
+   },
+   "inputs": {
+    "name": "nope-qqzz.example"
+   },
+   "intent": "dns for nope-qqzz.example",
+   "tree": "dns"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "nope-qqzz-empty.pyrtan.com",
+     "type": "txt"
+    },
+    "output": {
+     "name": "nope-qqzz-empty.pyrtan.com",
+     "records": [],
+     "type": "TXT"
+    },
+    "say": "nope-qqzz-empty.pyrtan.com has no TXT records.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "txt record for nope-qqzz-empty.pyrtan.com",
+        "inputs": {
+         "name": "nope-qqzz-empty.pyrtan.com",
+         "type": "txt"
+        },
+        "steps": [],
+        "trigger": "{type:word} record for {name:host}"
+       },
+       "summary": "'txt record for nope-qqzz-empty.pyrtan.com'; dns via '{type:word} record for {name:host}' (9 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "answers": null,
+        "rcode": 0
+       },
+       "summary": "GET https://dns.google/resolve?name=nope-qqzz-empty.pyrtan.com&type=TXT -> 200; rcode=0, answers=None"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rcode",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "rcode",
+       "observed": 0,
+       "summary": "state.rcode = 0"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "summary": "state.answers = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "none",
+       "summary": "nope-qqzz-empty.pyrtan.com has no TXT records."
+      }
+     ],
+     "tree": "dns"
+    },
+    "tree": "dns"
+   },
+   "inputs": {
+    "name": "nope-qqzz-empty.pyrtan.com",
+    "type": "txt"
+   },
+   "intent": "txt record for nope-qqzz-empty.pyrtan.com",
+   "tree": "dns"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "city": "Columbus",
+     "country": "US",
+     "ip": "203.0.113.7",
+     "network": "AS64496 Example Net",
+     "region": "Ohio",
+     "timezone": "America/New_York"
+    },
+    "say": "By your IP address (203.0.113.7) you are around Columbus, Ohio, US, on AS64496 Example Net.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "where am i",
+        "inputs": {},
+        "steps": [],
+        "trigger": "where am i"
+       },
+       "summary": "'where am i'; where-am-i via 'where am i' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "city": "Columbus",
+        "country": "US",
+        "ip": "203.0.113.7",
+        "org": "AS64496 Example Net",
+        "region": "Ohio",
+        "zone": "America/New_York"
+       },
+       "summary": "GET https://ipinfo.io/json -> 200; ip=203.0.113.7, city=Columbus, region=Ohio, country=US, org=AS64496 Example Net, zone=America/New_York"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "located",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "located",
+       "observed": "Columbus",
+       "summary": "state.city = Columbus"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "By your IP address (203.0.113.7) you are around Columbus, Ohio, US, on AS64496 Example Net."
+      }
+     ],
+     "tree": "where-am-i"
+    },
+    "tree": "where-am-i"
+   },
+   "inputs": {},
+   "intent": "where am i",
+   "tree": "where-am-i"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "author": "Rumi",
+     "quote": "Live life as if its rigged in your favor."
+    },
+    "say": "“Live life as if its rigged in your favor.” — Rumi",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "give me a quote",
+        "inputs": {},
+        "steps": [],
+        "trigger": "give me a quote"
+       },
+       "summary": "'give me a quote'; quote via 'give me a quote' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "author": "Rumi",
+        "quote": "Live life as if its rigged in your favor."
+       },
+       "summary": "GET https://dummyjson.com/quotes/random -> 200; quote=Live life as if its rigged in your favor., author=Rumi"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-quote",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-quote",
+       "observed": "Live life as if its rigged in your favor.",
+       "summary": "state.quote = Live life as if its rigged in your favor."
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "“Live life as if its rigged in your favor.” — Rumi"
+      }
+     ],
+     "tree": "quote"
+    },
+    "tree": "quote"
+   },
+   "inputs": {},
+   "intent": "give me a quote",
+   "tree": "quote"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "id": 50,
+     "joke": "Algorithm: A word used by programmers when they don't want to explain how their code works."
+    },
+    "say": "Algorithm: A word used by programmers when they don't want to explain how their code works.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tell me a programming joke",
+        "inputs": {},
+        "steps": [],
+        "trigger": "tell me a (programming|coding|nerd) joke"
+       },
+       "summary": "'tell me a programming joke'; programming-joke via 'tell me a (programming|coding|nerd) joke' (32 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "id": 50,
+        "joke": "Algorithm: A word used by programmers when they don't want to explain how their code works."
+       },
+       "summary": "GET https://v2.jokeapi.dev/joke/Programming?safe-mode&type=single -> 200; joke=Algorithm: A word used by programmers when they don't want to explain how their…, id=50"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-joke",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-joke",
+       "observed": "Algorithm: A word used by programmers when they don't want to explain how their code works.",
+       "summary": "state.joke = Algorithm: A word used by programmers when they don't want to explain how their…"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Algorithm: A word used by programmers when they don't want to explain how their code works."
+      }
+     ],
+     "tree": "programming-joke"
+    },
+    "tree": "programming-joke"
+   },
+   "inputs": {},
+   "intent": "tell me a programming joke",
+   "tree": "programming-joke"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "code": "3017624010701"
+    },
+    "output": {
+     "brand": "Ferrero",
+     "code": "3017624010701",
+     "nutriscore": "e",
+     "product": "Nutella",
+     "quantity": "400.0 g",
+     "url": "https://world.openfoodfacts.org/product/3017624010701"
+    },
+    "say": "3017624010701 is Nutella by Ferrero (400.0 g), Nutri-Score E.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is barcode 3017624010701",
+        "inputs": {
+         "code": "3017624010701"
+        },
+        "steps": [],
+        "trigger": "what is barcode {code:word}"
+       },
+       "summary": "'what is barcode 3017624010701'; food-barcode via 'what is barcode {code:word}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "brand": "Ferrero",
+        "found": 1,
+        "grade": "e",
+        "product": "Nutella",
+        "size": "400.0 g"
+       },
+       "summary": "GET https://world.openfoodfacts.org/api/v2/product/3017624010701.json?fields=product_name,brands,quantity,nutriscore_grade -> 200; found=1, product=Nutella, brand=Ferrero, size=400.0 g, grade=e"
+      },
+      {
+       "chosen": "in [200, 404]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "found",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 1",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "found",
+       "observed": 1,
+       "summary": "state.found = 1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "3017624010701 is Nutella by Ferrero (400.0 g), Nutri-Score E."
+      }
+     ],
+     "tree": "food-barcode"
+    },
+    "tree": "food-barcode"
+   },
+   "inputs": {
+    "code": "3017624010701"
+   },
+   "intent": "what is barcode 3017624010701",
+   "tree": "food-barcode"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "code": "00000000"
+    },
+    "reason": "no-product",
+    "say": "Open Food Facts has no product with barcode 00000000.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is barcode 00000000",
+        "inputs": {
+         "code": "00000000"
+        },
+        "steps": [],
+        "trigger": "what is barcode {code:word}"
+       },
+       "summary": "'what is barcode 00000000'; food-barcode via 'what is barcode {code:word}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "brand": null,
+        "found": 0,
+        "grade": null,
+        "product": null,
+        "size": null
+       },
+       "summary": "GET https://world.openfoodfacts.org/api/v2/product/00000000.json?fields=product_name,brands,quantity,nutriscore_grade -> 200; found=0, product=None, brand=None, size=None, grade=None"
+      },
+      {
+       "chosen": "in [200, 404]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "found",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-product",
+       "node": "found",
+       "observed": 0,
+       "summary": "state.found = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-product",
+       "summary": "no-product: Open Food Facts has no product with barcode 00000000."
+      }
+     ],
+     "tree": "food-barcode"
+    },
+    "tree": "food-barcode"
+   },
+   "inputs": {
+    "code": "00000000"
+   },
+   "intent": "what is barcode 00000000",
+   "tree": "food-barcode"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "dish": "lasagna"
+    },
+    "output": {
+     "area": "Italian",
+     "category": "Vegan",
+     "dish": "Vegan Lasagna",
+     "ingredients": [
+      "green red lentils",
+      "Carrots",
+      "onion",
+      "zucchini",
+      "coriander",
+      "spinach",
+      "lasagne sheets",
+      "vegan butter",
+      "flour",
+      "soya milk",
+      "mustard",
+      "vinegar"
+     ],
+     "instructions": "1) Preheat oven to 180 degrees celcius. \r\n2) Boil vegetables for 5-7 minutes, until soft. Add lentils and bring to a gentle simmer, adding a stock cube if desired. Continue cooking and stirring until the lentils are soft, which should take about 20 minutes. \r\n3) Blanch spinach leaves for a few minutes in a pan, before removing and setting aside. \r\n4) Top up the pan with water and cook the lasagne sheets. When cooked, drain and set aside.\r\n5) To make the sauce, melt the butter and add the flour, then gradually add the soya milk along with the mustard and the vinegar. Cook and stir until smooth and then assemble the lasagne as desired in a baking dish. \r\n6) Bake in the preheated oven for about 25 minutes.",
+     "url": "https://www.themealdb.com/meal/52775"
+    },
+    "say": "Vegan Lasagna (Italian, Vegan): green red lentils, Carrots, onion, zucchini, coriander, spinach, lasagne sheets, vegan butter, flour, soya milk, mustard, vinegar. https://www.themealdb.com/meal/52775",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "recipe for lasagna",
+        "inputs": {
+         "dish": "lasagna"
+        },
+        "steps": [],
+        "trigger": "[a] recipe for {dish}"
+       },
+       "summary": "'recipe for lasagna'; recipe via '[a] recipe for {dish}' (10 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "search",
+       "observed": {
+        "id": "52775"
+       },
+       "summary": "GET https://www.themealdb.com/api/json/v1/1/search.php?s=lasagna -> 200; id=52775"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "meal",
+       "node": "any",
+       "observed": "52775",
+       "summary": "state.id = 52775"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "has-meal",
+       "node": "meal",
+       "observed": {
+        "area": "Italian",
+        "category": "Vegan",
+        "how": "1) Preheat oven to 180 degrees celcius. \r\n2) Boil vegetables for 5-7 minutes, until soft. Add lentils and bring to a gentle simmer, adding a stock cube if desired. Continue cooking and stirring until the lentils are soft, which should take about 20 minutes. \r\n3) Blanch spinach leaves for a few minutes in a pan, before removing and setting aside. \r\n4) Top up the pan with water and cook the lasagne sheets. When cooked, drain and set aside.\r\n5) To make the sauce, melt the butter and add the flour, then gradually add the soya milk along with the mustard and the vinegar. Cook and stir until smooth and then assemble the lasagne as desired in a baking dish. \r\n6) Bake in the preheated oven for about 25 minutes.",
+        "ingredients": [
+         "green red lentils",
+         "Carrots",
+         "onion",
+         "zucchini",
+         "coriander",
+         "spinach",
+         "lasagne sheets",
+         "vegan butter",
+         "flour",
+         "soya milk",
+         "mustard",
+         "vinegar"
+        ],
+        "meal": "Vegan Lasagna"
+       },
+       "summary": "GET https://www.themealdb.com/api/json/v1/1/lookup.php?i=52775 -> 200; meal=Vegan Lasagna, area=Italian, category=Vegan, how=1) Preheat oven to 180 degrees celcius. \r\n2) Boil vegetables for 5-7 minutes, u…, ingredients=['green red lentils', 'Carrots', 'onion', 'zucchini', 'coriander', 'spinach', '…"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-meal",
+       "observed": "Vegan Lasagna",
+       "summary": "state.meal = Vegan Lasagna"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Vegan Lasagna (Italian, Vegan): green red lentils, Carrots, onion, zucchini, coriander, spinach, lasagne sheets, vegan butter, flour, soya milk, mustard, vinegar. https://www.themealdb.com/meal/52775"
+      }
+     ],
+     "tree": "recipe"
+    },
+    "tree": "recipe"
+   },
+   "inputs": {
+    "dish": "lasagna"
+   },
+   "intent": "recipe for lasagna",
+   "tree": "recipe"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "dish": "qqzzx"
+    },
+    "reason": "no-recipe",
+    "say": "TheMealDB has no recipe for qqzzx.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "recipe for qqzzx",
+        "inputs": {
+         "dish": "qqzzx"
+        },
+        "steps": [],
+        "trigger": "[a] recipe for {dish}"
+       },
+       "summary": "'recipe for qqzzx'; recipe via '[a] recipe for {dish}' (10 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "search",
+       "observed": {
+        "id": null
+       },
+       "summary": "GET https://www.themealdb.com/api/json/v1/1/search.php?s=qqzzx -> 200; id=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-recipe",
+       "node": "any",
+       "summary": "state.id = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-recipe",
+       "summary": "no-recipe: TheMealDB has no recipe for qqzzx."
+      }
+     ],
+     "tree": "recipe"
+    },
+    "tree": "recipe"
+   },
+   "inputs": {
+    "dish": "qqzzx"
+   },
+   "intent": "recipe for qqzzx",
+   "tree": "recipe"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "drink": "margarita"
+    },
+    "output": {
+     "drink": "Margarita",
+     "glass": "Cocktail glass",
+     "ingredients": [
+      "Tequila",
+      "Triple sec",
+      "Lime juice",
+      "Salt"
+     ],
+     "instructions": "Rub the rim of the glass with the lime slice to make the salt stick to it. Take care to moisten only the outer rim and sprinkle the salt on it. The salt should present to the lips of the imbiber and never mix into the cocktail. Shake the other ingredients with ice, then carefully pour into the glass."
+    },
+    "say": "Margarita, in a cocktail glass: Tequila, Triple sec, Lime juice, Salt. Rub the rim of the glass with the lime slice to make the salt stick to it. Take care to moisten only the outer rim and sprinkle the salt on it. The salt should present to the lips of the imbiber and never mix into the cocktail. Shake the other ingredients with ice, then carefully pour into the glass.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "cocktail margarita",
+        "inputs": {
+         "drink": "margarita"
+        },
+        "steps": [],
+        "trigger": "cocktail {drink}"
+       },
+       "summary": "'cocktail margarita'; cocktail via 'cocktail {drink}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "search",
+       "observed": {
+        "id": "11007"
+       },
+       "summary": "GET https://www.thecocktaildb.com/api/json/v1/1/search.php?s=margarita -> 200; id=11007"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "drink",
+       "node": "any",
+       "observed": "11007",
+       "summary": "state.id = 11007"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "has-drink",
+       "node": "drink",
+       "observed": {
+        "glass": "Cocktail glass",
+        "how": "Rub the rim of the glass with the lime slice to make the salt stick to it. Take care to moisten only the outer rim and sprinkle the salt on it. The salt should present to the lips of the imbiber and never mix into the cocktail. Shake the other ingredients with ice, then carefully pour into the glass.",
+        "ingredients": [
+         "Tequila",
+         "Triple sec",
+         "Lime juice",
+         "Salt"
+        ],
+        "name": "Margarita"
+       },
+       "summary": "GET https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i=11007 -> 200; name=Margarita, glass=Cocktail glass, how=Rub the rim of the glass with the lime slice to make the salt stick to it. Take…, ingredients=['Tequila', 'Triple sec', 'Lime juice', 'Salt']"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-drink",
+       "observed": "Margarita",
+       "summary": "state.name = Margarita"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Margarita, in a cocktail glass: Tequila, Triple sec, Lime juice, Salt. Rub the rim of the glass with the lime slice to make the salt stick to it. Take care to moisten only the outer rim and sprinkle the salt on it. The salt should present to the lips of the imbiber and never mix into the cocktail. Shake the other ingredients with ice, then carefully pour into the glass."
+      }
+     ],
+     "tree": "cocktail"
+    },
+    "tree": "cocktail"
+   },
+   "inputs": {
+    "drink": "margarita"
+   },
+   "intent": "cocktail margarita",
+   "tree": "cocktail"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "drink": "qqzzx"
+    },
+    "reason": "no-drink",
+    "say": "TheCocktailDB has no cocktail called qqzzx.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "cocktail qqzzx",
+        "inputs": {
+         "drink": "qqzzx"
+        },
+        "steps": [],
+        "trigger": "cocktail {drink}"
+       },
+       "summary": "'cocktail qqzzx'; cocktail via 'cocktail {drink}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "search",
+       "observed": {
+        "id": null
+       },
+       "summary": "GET https://www.thecocktaildb.com/api/json/v1/1/search.php?s=qqzzx -> 200; id=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-drink",
+       "node": "any",
+       "summary": "state.id = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-drink",
+       "summary": "no-drink: TheCocktailDB has no cocktail called qqzzx."
+      }
+     ],
+     "tree": "cocktail"
+    },
+    "tree": "cocktail"
+   },
+   "inputs": {
+    "drink": "qqzzx"
+   },
+   "intent": "cocktail qqzzx",
+   "tree": "cocktail"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "date": "2026-10-25",
+     "podium": [
+      {
+       "driver": "Andrea Kimi Antonelli",
+       "team": "Mercedes"
+      },
+      {
+       "driver": "Leclerc",
+       "team": "Ferrari"
+      },
+      {
+       "driver": "Verstappen",
+       "team": "Red Bull"
+      }
+     ],
+     "race": "United States Grand Prix"
+    },
+    "say": "United States Grand Prix (2026-10-25): Andrea Kimi Antonelli won for Mercedes, then Leclerc (Ferrari) and Verstappen (Red Bull).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "who won the last f1 race",
+        "inputs": {},
+        "steps": [],
+        "trigger": "who won the (last|latest) (f1|formula 1|grand prix) [race]"
+       },
+       "summary": "'who won the last f1 race'; f1-results via 'who won the (last|latest) (f1|formula 1|grand prix) [race]' (42 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": "2026-10-25",
+        "p1": "Antonelli",
+        "p1first": "Andrea Kimi",
+        "p1team": "Mercedes",
+        "p2": "Leclerc",
+        "p2team": "Ferrari",
+        "p3": "Verstappen",
+        "p3team": "Red Bull",
+        "race": "United States Grand Prix"
+       },
+       "summary": "GET https://api.jolpi.ca/ergast/f1/current/last/results.json?limit=3 -> 200; race=United States Grand Prix, day=2026-10-25, p1=Antonelli, p1first=Andrea Kimi, p1team=Mercedes, p2=Leclerc, p2team=Ferrari, p3=Verstappen, p3team=Red Bull"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "raced",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "raced",
+       "observed": "Antonelli",
+       "summary": "state.p1 = Antonelli"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "United States Grand Prix (2026-10-25): Andrea Kimi Antonelli won for Mercedes, then Leclerc (Ferrari) and Verstappen (Red Bull)."
+      }
+     ],
+     "tree": "f1-results"
+    },
+    "tree": "f1-results"
+   },
+   "inputs": {},
+   "intent": "who won the last f1 race",
+   "tree": "f1-results"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "events": [
+      "Tropical Cyclone Arnab",
+      "Tropical Storm Olana",
+      "Wildfire Range  47B, Forrest, Mississippi",
+      "Typhoon In-fa",
+      "Wildfire BEE HAVEN (2) (24-06), Hamilton, Florida"
+     ],
+     "source": "https://eonet.gsfc.nasa.gov/"
+    },
+    "say": "NASA is tracking 5 open events. The latest: Tropical Cyclone Arnab.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "natural events",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[current] natural events"
+       },
+       "summary": "'natural events'; natural-events via '[current] natural events' (20 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "events": [
+         {
+          "title": "Tropical Cyclone Arnab"
+         },
+         {
+          "title": "Tropical Storm Olana"
+         },
+         {
+          "title": "Wildfire Range  47B, Forrest, Mississippi"
+         },
+         {
+          "title": "Typhoon In-fa"
+         },
+         {
+          "title": "Wildfire BEE HAVEN (2) (24-06), Hamilton, Florida"
+         }
+        ]
+       },
+       "summary": "GET https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5 -> 200; events=[{'title': 'Tropical Cyclone Arnab'}, {'title': 'Tropical Storm Olana'}, {'titl…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "each",
+       "node": "any",
+       "observed": [
+        {
+         "title": "Tropical Cyclone Arnab"
+        },
+        {
+         "title": "Tropical Storm Olana"
+        },
+        {
+         "title": "Wildfire Range  47B, Forrest, Mississippi"
+        },
+        {
+         "title": "Typhoon In-fa"
+        },
+        {
+         "title": "Wildfire BEE HAVEN (2) (24-06), Hamilton, Florida"
+        }
+       ],
+       "summary": "state.events = [{'title': 'Tropical Cyclone Arnab'}, {'title': 'Tropical Storm Olana'}, {'titl…"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "5 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "NASA is tracking 5 open events. The latest: Tropical Cyclone Arnab."
+      }
+     ],
+     "tree": "natural-events"
+    },
+    "tree": "natural-events"
+   },
+   "inputs": {},
+   "intent": "natural events",
+   "tree": "natural-events"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "count": 10,
+     "people": [
+      "Zhu Yangzhu",
+      "Zhang Zhiyuan",
+      "Lai Ka-ying",
+      "Pyotr Dubrov",
+      "Anna Kikina",
+      "Anil Menon",
+      "Jessica Watkins",
+      "Luke Delaney",
+      "Joshua Kutryk",
+      "Sergey Teteryatnikov"
+     ]
+    },
+    "say": "10 people are in space: Zhu Yangzhu, Zhang Zhiyuan, Lai Ka-ying, Pyotr Dubrov, Anna Kikina, Anil Menon, Jessica Watkins, Luke Delaney, Joshua Kutryk, Sergey Teteryatnikov.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how many people are in space",
+        "inputs": {},
+        "steps": [],
+        "trigger": "how many people are in space [now]"
+       },
+       "summary": "'how many people are in space'; people-in-space via 'how many people are in space [now]' (26 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "count": 10,
+        "names": [
+         "Zhu Yangzhu",
+         "Zhang Zhiyuan",
+         "Lai Ka-ying",
+         "Pyotr Dubrov",
+         "Anna Kikina",
+         "Anil Menon",
+         "Jessica Watkins",
+         "Luke Delaney",
+         "Joshua Kutryk",
+         "Sergey Teteryatnikov"
+        ]
+       },
+       "summary": "GET https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json -> 200; count=10, names=['Zhu Yangzhu', 'Zhang Zhiyuan', 'Lai Ka-ying', 'Pyotr Dubrov', 'Anna Kikina', …"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "gt 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": 10,
+       "summary": "state.count = 10"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "10 people are in space: Zhu Yangzhu, Zhang Zhiyuan, Lai Ka-ying, Pyotr Dubrov, Anna Kikina, Anil Menon, Jessica Watkins, Luke Delaney, Joshua Kutryk, Sergey Teteryatnikov."
+      }
+     ],
+     "tree": "people-in-space"
+    },
+    "tree": "people-in-space"
+   },
+   "inputs": {},
+   "intent": "how many people are in space",
+   "tree": "people-in-space"
+  },
+  {
    "env": {
     "postfinite_email": "ops@example.org",
     "postfinite_password": "not-a-real-password"
@@ -17475,6 +20763,103 @@
    ],
    "version": 1
   },
+  "antonyms": {
+   "description": "Antonyms for an English word, from Datamuse.",
+   "hosts": [
+    "api.datamuse.com"
+   ],
+   "inputs": {
+    "word": {
+     "description": "One English word",
+     "pattern": "^[A-Za-z][A-Za-z'\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "antonyms",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "words"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "all": true,
+       "into": "words",
+       "regex": "\"word\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.datamuse.com/words?rel_ant={{ inputs.word | lower | url }}&max=8"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-antonyms",
+     "say": "Datamuse knows no opposite of {{ inputs.word }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "antonyms": "{{ state.words }}",
+      "word": "{{ inputs.word }}"
+     },
+     "say": "The opposite of {{ inputs.word }}: {{ state.words | join }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Datamuse answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "reference",
+    "language",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what is the] opposite of {word:word}"
+    },
+    {
+     "pattern": "antonyms (for|of) {word:word}"
+    }
+   ],
+   "version": 1
+  },
   "apod": {
    "description": "NASA's Astronomy Picture of the Day: its title, and the picture or video.",
    "hosts": [
@@ -17692,6 +21077,117 @@
    ],
    "version": 1
   },
+  "capital": {
+   "description": "The capital city of a country, from CountriesNow.",
+   "hosts": [
+    "countriesnow.space"
+   ],
+   "inputs": {
+    "country": {
+     "description": "A country's name in English, as in: Norway",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "capital",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "name",
+       "json": "json.data.name"
+      },
+      {
+       "into": "capital",
+       "json": "json.data.capital"
+      },
+      {
+       "into": "code",
+       "json": "json.data.iso2"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://countriesnow.space/api/v0.1/countries/capital/q?country={{ inputs.country | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-capital": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "empty": false
+       }
+      },
+      {
+       "else": "no-capital"
+      }
+     ],
+     "kind": "decide",
+     "on": "capital"
+    },
+    "no-capital": {
+     "kind": "fail",
+     "reason": "no-capital",
+     "say": "CountriesNow lists no capital for {{ state.name }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "capital": "{{ state.capital }}",
+      "country": "{{ state.name }}",
+      "iso2": "{{ state.code }}"
+     },
+     "say": "The capital of {{ state.name }} is {{ state.capital }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-capital",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "unknown-country",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "CountriesNow answered {{ state.resp.status }}."
+    },
+    "unknown-country": {
+     "kind": "fail",
+     "reason": "unknown-country",
+     "say": "CountriesNow knows no country called {{ inputs.country }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "geography",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what is the] capital (of|city of) {country}"
+    }
+   ],
+   "version": 1
+  },
   "cat-fact": {
    "description": "A random fact about cats, from catfact.ninja.",
    "hosts": [
@@ -17771,6 +21267,249 @@
     },
     {
      "pattern": "tell me something about cats"
+    }
+   ],
+   "version": 1
+  },
+  "cocktail": {
+   "description": "How to make a cocktail: its glass, ingredients and method, from TheCocktailDB.",
+   "hosts": [
+    "www.thecocktaildb.com"
+   ],
+   "inputs": {
+    "drink": {
+     "description": "A cocktail, as in: margarita",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "cocktail",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "drink",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-drink"
+      }
+     ],
+     "kind": "decide",
+     "on": "id"
+    },
+    "drink": {
+     "extract": [
+      {
+       "into": "name",
+       "json": "json.drinks[0].strDrink"
+      },
+      {
+       "into": "glass",
+       "json": "json.drinks[0].strGlass"
+      },
+      {
+       "into": "how",
+       "json": "json.drinks[0].strInstructions"
+      },
+      {
+       "all": true,
+       "into": "ingredients",
+       "regex": "\"strIngredient\\d+\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i={{ state.id }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "has-drink"
+    },
+    "has-drink": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-drink"
+      }
+     ],
+     "kind": "decide",
+     "on": "name"
+    },
+    "no-drink": {
+     "kind": "fail",
+     "reason": "no-drink",
+     "say": "TheCocktailDB has no cocktail called {{ inputs.drink }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "drink": "{{ state.name }}",
+      "glass": "{{ state.glass }}",
+      "ingredients": "{{ state.ingredients }}",
+      "instructions": "{{ state.how }}"
+     },
+     "say": "{{ state.name }}, in a {{ state.glass | lower }}: {{ state.ingredients | join }}. {{ state.how }}"
+    },
+    "search": {
+     "extract": [
+      {
+       "into": "id",
+       "json": "json.drinks[0].idDrink"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://www.thecocktaildb.com/api/json/v1/1/search.php?s={{ inputs.drink | url }}"
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    }
+   },
+   "start": "search",
+   "tags": [
+    "food",
+    "drinks",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "cocktail {drink}"
+    },
+    {
+     "pattern": "how do i (mix|make) a {drink} cocktail"
+    },
+    {
+     "pattern": "what is in a {drink} cocktail"
+    }
+   ],
+   "version": 1
+  },
+  "crypto-price": {
+   "description": "The spot price of a cryptocurrency in a currency, from Coinbase.",
+   "hosts": [
+    "api.coinbase.com"
+   ],
+   "inputs": {
+    "coin": {
+     "description": "A ticker, as in: BTC",
+     "pattern": "^[A-Za-z0-9]{2,10}$",
+     "type": "str"
+    },
+    "currency": {
+     "default": "USD",
+     "description": "A three-letter currency code, as in: USD",
+     "pattern": "^[A-Za-z]{3}$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "crypto-price",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "amount",
+       "json": "json.data.amount"
+      },
+      {
+       "into": "base",
+       "json": "json.data.base"
+      },
+      {
+       "into": "in",
+       "json": "json.data.currency"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.coinbase.com/v2/prices/{{ inputs.coin | upper }}-{{ inputs.currency | upper }}/spot"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "coin": "{{ state.base }}",
+      "currency": "{{ state.in }}",
+      "price": "{{ state.amount | float }}"
+     },
+     "say": "1 {{ state.base }} is {{ state.amount }} {{ state.in }} (Coinbase spot price)."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "unknown-pair",
+       "when": {
+        "in": [
+         400,
+         404
+        ]
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Coinbase answered {{ state.resp.status }}."
+    },
+    "unknown-pair": {
+     "kind": "fail",
+     "reason": "unknown-pair",
+     "say": "Coinbase has no price for {{ inputs.coin | upper }} in {{ inputs.currency | upper }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "money",
+    "crypto",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "inputs": {
+      "coin": "BTC"
+     },
+     "pattern": "[what's the] (bitcoin|btc) price [in {currency:word}]"
+    },
+    {
+     "inputs": {
+      "coin": "ETH"
+     },
+     "pattern": "[what's the] (ethereum|eth) price [in {currency:word}]"
+    },
+    {
+     "inputs": {
+      "coin": "SOL"
+     },
+     "pattern": "[what's the] (solana|sol) price [in {currency:word}]"
+    },
+    {
+     "pattern": "[what's the] (crypto|coin) price of {coin:word} [in {currency:word}]"
     }
    ],
    "version": 1
@@ -18115,6 +21854,164 @@
     }
    ],
    "version": 2
+  },
+  "dns": {
+   "description": "A domain's DNS records (A, AAAA, MX, TXT, NS or CNAME), from Google Public DNS.",
+   "hosts": [
+    "dns.google"
+   ],
+   "inputs": {
+    "name": {
+     "description": "A domain name, as in: example.com",
+     "type": "str"
+    },
+    "type": {
+     "default": "A",
+     "description": "A record type: A, AAAA, MX, TXT, NS or CNAME",
+     "pattern": "(?i)^(a|aaaa|mx|txt|ns|cname)$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "dns",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "each"
+      }
+     ],
+     "kind": "decide",
+     "on": "answers"
+    },
+    "dns-error": {
+     "kind": "fail",
+     "reason": "dns-error",
+     "say": "The resolver could not answer for {{ inputs.name }} (DNS status {{ state.rcode }})."
+    },
+    "each": {
+     "into": "records",
+     "kind": "each",
+     "limit": 20,
+     "next": "reply",
+     "over": "answers",
+     "start": "one"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "rcode",
+       "json": "json.Status"
+      },
+      {
+       "into": "answers",
+       "json": "json.Answer"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://dns.google/resolve?name={{ inputs.name | url }}&type={{ inputs.type | upper }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-such-name": {
+     "kind": "fail",
+     "reason": "no-such-name",
+     "say": "{{ inputs.name }} does not exist in DNS (NXDOMAIN)."
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "name": "{{ inputs.name }}",
+      "records": [],
+      "type": "{{ inputs.type | upper }}"
+     },
+     "say": "{{ inputs.name }} has no {{ inputs.type | upper }} records."
+    },
+    "one": {
+     "kind": "done",
+     "output": "{{ item.data }}"
+    },
+    "rcode": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "no-such-name",
+       "when": {
+        "eq": 3
+       }
+      },
+      {
+       "else": "dns-error"
+      }
+     ],
+     "kind": "decide",
+     "on": "rcode"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "name": "{{ inputs.name }}",
+      "records": "{{ state.records }}",
+      "type": "{{ inputs.type | upper }}"
+     },
+     "say": "{{ inputs.type | upper }} records for {{ inputs.name }}: {{ state.records | join }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "rcode",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Google Public DNS answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "network",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "dns [records] for {name:host}"
+    },
+    {
+     "pattern": "{type:word} record for {name:host}"
+    },
+    {
+     "inputs": {
+      "type": "A"
+     },
+     "pattern": "[what is the] ip [address] of {name:host}"
+    }
+   ],
+   "version": 1
   },
   "earthquakes": {
    "description": "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest.",
@@ -18487,6 +22384,269 @@
     },
     {
      "pattern": "{from:word} to {to:word} (rate|exchange rate)"
+    }
+   ],
+   "version": 1
+  },
+  "f1-results": {
+   "description": "Who finished first, second and third in the latest Formula 1 race.",
+   "hosts": [
+    "api.jolpi.ca"
+   ],
+   "license": "MIT",
+   "name": "f1-results",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "race",
+       "json": "json.MRData.RaceTable.Races[0].raceName"
+      },
+      {
+       "into": "day",
+       "json": "json.MRData.RaceTable.Races[0].date"
+      },
+      {
+       "into": "p1",
+       "json": "json.MRData.RaceTable.Races[0].Results[0].Driver.familyName"
+      },
+      {
+       "into": "p1first",
+       "json": "json.MRData.RaceTable.Races[0].Results[0].Driver.givenName"
+      },
+      {
+       "into": "p1team",
+       "json": "json.MRData.RaceTable.Races[0].Results[0].Constructor.name"
+      },
+      {
+       "into": "p2",
+       "json": "json.MRData.RaceTable.Races[0].Results[1].Driver.familyName"
+      },
+      {
+       "into": "p2team",
+       "json": "json.MRData.RaceTable.Races[0].Results[1].Constructor.name"
+      },
+      {
+       "into": "p3",
+       "json": "json.MRData.RaceTable.Races[0].Results[2].Driver.familyName"
+      },
+      {
+       "into": "p3team",
+       "json": "json.MRData.RaceTable.Races[0].Results[2].Constructor.name"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.jolpi.ca/ergast/f1/current/last/results.json?limit=3"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-race": {
+     "kind": "fail",
+     "reason": "no-race",
+     "say": "No Formula 1 race has finished this season yet."
+    },
+    "raced": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-race"
+      }
+     ],
+     "kind": "decide",
+     "on": "p1"
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "The Jolpica F1 API is asking for fewer requests (429); try again in a minute."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "date": "{{ state.day }}",
+      "podium": [
+       {
+        "driver": "{{ state.p1first }} {{ state.p1 }}",
+        "team": "{{ state.p1team }}"
+       },
+       {
+        "driver": "{{ state.p2 }}",
+        "team": "{{ state.p2team }}"
+       },
+       {
+        "driver": "{{ state.p3 }}",
+        "team": "{{ state.p3team }}"
+       }
+      ],
+      "race": "{{ state.race }}"
+     },
+     "say": "{{ state.race }} ({{ state.day }}): {{ state.p1first }} {{ state.p1 }} won for {{ state.p1team }}, then {{ state.p2 }} ({{ state.p2team }}) and {{ state.p3 }} ({{ state.p3team }})."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "raced",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Jolpica F1 API answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "sport",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "who won the (last|latest) (f1|formula 1|grand prix) [race]"
+    },
+    {
+     "pattern": "[latest|last] (f1|formula 1) (results|race)"
+    }
+   ],
+   "version": 1
+  },
+  "food-barcode": {
+   "description": "A food product by its barcode: name, brand, size and Nutri-Score, from Open Food Facts.",
+   "hosts": [
+    "world.openfoodfacts.org"
+   ],
+   "inputs": {
+    "code": {
+     "description": "An EAN or UPC barcode, as in: 3017624010701",
+     "pattern": "^[0-9]{8,14}$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "food-barcode",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "found",
+       "json": "json.status"
+      },
+      {
+       "into": "product",
+       "json": "json.product.product_name"
+      },
+      {
+       "into": "brand",
+       "json": "json.product.brands"
+      },
+      {
+       "into": "size",
+       "json": "json.product.quantity"
+      },
+      {
+       "into": "grade",
+       "json": "json.product.nutriscore_grade"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://world.openfoodfacts.org/api/v2/product/{{ inputs.code }}.json?fields=product_name,brands,quantity,nutriscore_grade"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 1
+       }
+      },
+      {
+       "else": "no-product"
+      }
+     ],
+     "kind": "decide",
+     "on": "found"
+    },
+    "no-product": {
+     "kind": "fail",
+     "reason": "no-product",
+     "say": "Open Food Facts has no product with barcode {{ inputs.code }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "brand": "{{ state.brand }}",
+      "code": "{{ inputs.code }}",
+      "nutriscore": "{{ state.grade }}",
+      "product": "{{ state.product }}",
+      "quantity": "{{ state.size }}",
+      "url": "https://world.openfoodfacts.org/product/{{ inputs.code }}"
+     },
+     "say": "{{ inputs.code }} is {{ state.product }} by {{ state.brand }} ({{ state.size }}), Nutri-Score {{ state.grade | upper }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "found",
+       "when": {
+        "in": [
+         200,
+         404
+        ]
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Open Food Facts answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "food",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "what is barcode {code:word}"
+    },
+    {
+     "pattern": "(food|product) barcode {code:word}"
     }
    ],
    "version": 1
@@ -20342,6 +24502,109 @@
    ],
    "version": 1
   },
+  "natural-events": {
+   "description": "Natural events happening now, as NASA's EONET tracks them: storms, wildfires, volcanoes, ice.",
+   "hosts": [
+    "eonet.gsfc.nasa.gov"
+   ],
+   "license": "MIT",
+   "name": "natural-events",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "each"
+      }
+     ],
+     "kind": "decide",
+     "on": "events"
+    },
+    "each": {
+     "into": "titles",
+     "kind": "each",
+     "limit": 5,
+     "next": "reply",
+     "over": "events",
+     "start": "one"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "events",
+       "json": "json.events"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "events": []
+     },
+     "say": "NASA's EONET has no open natural events right now."
+    },
+    "one": {
+     "kind": "done",
+     "output": "{{ item.title }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "events": "{{ state.titles }}",
+      "source": "https://eonet.gsfc.nasa.gov/"
+     },
+     "say": "NASA is tracking {{ state.titles | length }} open events. The latest: {{ state.titles | first }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "NASA's EONET answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "science",
+    "earth",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[current] natural events"
+    },
+    {
+     "pattern": "what natural (events|disasters) are happening [now]"
+    }
+   ],
+   "version": 1
+  },
   "next-launch": {
    "description": "The next rocket launch anywhere, when, and its status, from the Launch Library.",
    "hosts": [
@@ -20457,6 +24720,103 @@
    ],
    "version": 1
   },
+  "npm-downloads": {
+   "description": "How many times an npm package was downloaded in the last week.",
+   "hosts": [
+    "api.npmjs.org"
+   ],
+   "inputs": {
+    "package": {
+     "description": "A package name, as in: react or @types/node",
+     "pattern": "^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "npm-downloads",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "count",
+       "json": "json.downloads"
+      },
+      {
+       "into": "from",
+       "json": "json.start"
+      },
+      {
+       "into": "to",
+       "json": "json.end"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.npmjs.org/downloads/point/last-week/{{ inputs.package }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-package": {
+     "kind": "fail",
+     "reason": "no-package",
+     "say": "npm has no download counts for {{ inputs.package }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "downloads": "{{ state.count }}",
+      "end": "{{ state.to }}",
+      "package": "{{ inputs.package }}",
+      "start": "{{ state.from }}"
+     },
+     "say": "{{ inputs.package }} was downloaded {{ state.count }} times on npm from {{ state.from }} to {{ state.to }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-package",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "npm's download counts answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "javascript",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "how many downloads does {package:word} have [on npm]"
+    },
+    {
+     "pattern": "npm downloads (for|of) {package:word}"
+    }
+   ],
+   "version": 1
+  },
   "npm-package": {
    "description": "The latest version of an npm package, and what it says it is.",
    "hosts": [
@@ -20549,6 +24909,196 @@
     },
     {
      "pattern": "npm (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "nuget": {
+   "description": "The latest published version of a NuGet (.NET) package.",
+   "hosts": [
+    "api.nuget.org"
+   ],
+   "inputs": {
+    "package": {
+     "description": "A package id, as in: Newtonsoft.Json",
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "nuget",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "latest",
+       "json": "json.versions[-1]"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.nuget.org/v3-flatcontainer/{{ inputs.package | lower | url }}/index.json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-package": {
+     "kind": "fail",
+     "reason": "no-package",
+     "say": "NuGet has no package {{ inputs.package }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "package": "{{ inputs.package }}",
+      "url": "https://www.nuget.org/packages/{{ inputs.package }}",
+      "version": "{{ state.latest }}"
+     },
+     "say": "{{ inputs.package }} {{ state.latest }} on NuGet. https://www.nuget.org/packages/{{ inputs.package }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-package",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "NuGet answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "dotnet",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest version of {package:word} on nuget"
+    },
+    {
+     "pattern": "nuget (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "people-in-space": {
+   "description": "How many people are in space right now, and who.",
+   "hosts": [
+    "corquaid.github.io"
+   ],
+   "license": "MIT",
+   "name": "people-in-space",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "gt": 0
+       }
+      },
+      {
+       "then": "nobody",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "count"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "count",
+       "json": "json.number"
+      },
+      {
+       "all": true,
+       "into": "names",
+       "regex": "\"name\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "nobody": {
+     "kind": "done",
+     "output": {
+      "count": 0,
+      "people": []
+     },
+     "say": "Nobody is in space right now, by this list."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "count": "{{ state.count }}",
+      "people": "{{ state.names }}"
+     },
+     "say": "{{ state.count }} people are in space: {{ state.names | join }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The people-in-space list answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "space",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "how many people are in space [now]"
+    },
+    {
+     "pattern": "who is in space [now]"
     }
    ],
    "version": 1
@@ -20659,6 +25209,160 @@
     },
     {
      "pattern": "tell me about the pokemon {name:word}"
+    }
+   ],
+   "version": 1
+  },
+  "pollen": {
+   "description": "Pollen counts for a place now (Europe): grass, birch, alder, mugwort, olive and ragweed, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "air-quality-api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "pollen",
+   "namespace": "pyrtan",
+   "nodes": {
+    "air": {
+     "extract": [
+      {
+       "into": "grass",
+       "json": "json.current.grass_pollen"
+      },
+      {
+       "into": "birch",
+       "json": "json.current.birch_pollen"
+      },
+      {
+       "into": "alder",
+       "json": "json.current.alder_pollen"
+      },
+      {
+       "into": "mugwort",
+       "json": "json.current.mugwort_pollen"
+      },
+      {
+       "into": "olive",
+       "json": "json.current.olive_pollen"
+      },
+      {
+       "into": "ragweed",
+       "json": "json.current.ragweed_pollen"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ state.lat }}&longitude={{ state.lon }}&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen"
+     },
+     "into": "aq",
+     "kind": "observe",
+     "next": "covered"
+    },
+    "covered": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "not-covered"
+      }
+     ],
+     "kind": "decide",
+     "on": "grass"
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "air",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "not-covered": {
+     "kind": "fail",
+     "reason": "not-covered",
+     "say": "Open-Meteo has no pollen reading for {{ state.name }}; its pollen model covers Europe."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "alder": "{{ state.alder }}",
+      "birch": "{{ state.birch }}",
+      "country": "{{ state.country }}",
+      "grass": "{{ state.grass }}",
+      "mugwort": "{{ state.mugwort }}",
+      "olive": "{{ state.olive }}",
+      "place": "{{ state.name }}",
+      "ragweed": "{{ state.ragweed }}",
+      "unit": "grains/m³"
+     },
+     "say": "Pollen in {{ state.name }}, {{ state.country }} (grains/m³): grass {{ state.grass }}, birch {{ state.birch }}, alder {{ state.alder }}, mugwort {{ state.mugwort }}, olive {{ state.olive }}, ragweed {{ state.ragweed }}."
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "health",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] pollen [count] in {place}"
+    },
+    {
+     "pattern": "is there pollen in {place}"
     }
    ],
    "version": 1
@@ -22821,6 +27525,94 @@
    ],
    "version": 1
   },
+  "programming-joke": {
+   "description": "A one-line programming joke, from JokeAPI's safe mode.",
+   "hosts": [
+    "v2.jokeapi.dev"
+   ],
+   "license": "MIT",
+   "name": "programming-joke",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "joke",
+       "json": "json.joke"
+      },
+      {
+       "into": "id",
+       "json": "json.id"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://v2.jokeapi.dev/joke/Programming?safe-mode&type=single"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-joke": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "joke"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "id": "{{ state.id }}",
+      "joke": "{{ state.joke }}"
+     },
+     "say": "{{ state.joke }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-joke",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "JokeAPI answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "software",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "tell me a (programming|coding|nerd) joke"
+    },
+    {
+     "pattern": "[a] (programming|coding|nerd) joke"
+    }
+   ],
+   "version": 1
+  },
   "pypi-package": {
    "description": "The latest version of a Python package on PyPI, and what it says it is.",
    "hosts": [
@@ -22921,6 +27713,221 @@
     },
     {
      "pattern": "(pypi|pip) (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "quote": {
+   "description": "A random quotation and who said it.",
+   "hosts": [
+    "dummyjson.com"
+   ],
+   "license": "MIT",
+   "name": "quote",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "quote",
+       "json": "json.quote"
+      },
+      {
+       "into": "author",
+       "json": "json.author"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://dummyjson.com/quotes/random"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-quote": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "quote"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "author": "{{ state.author }}",
+      "quote": "{{ state.quote }}"
+     },
+     "say": "“{{ state.quote }}” — {{ state.author }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-quote",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "DummyJSON answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "give me a quote"
+    },
+    {
+     "pattern": "[a] random quote"
+    },
+    {
+     "pattern": "inspire me"
+    }
+   ],
+   "version": 1
+  },
+  "recipe": {
+   "description": "A recipe for a dish: where it is from, its ingredients and how to make it, from TheMealDB.",
+   "hosts": [
+    "www.themealdb.com"
+   ],
+   "inputs": {
+    "dish": {
+     "description": "A dish, as in: lasagna",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "recipe",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "meal",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-recipe"
+      }
+     ],
+     "kind": "decide",
+     "on": "id"
+    },
+    "has-meal": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-recipe"
+      }
+     ],
+     "kind": "decide",
+     "on": "meal"
+    },
+    "meal": {
+     "extract": [
+      {
+       "into": "meal",
+       "json": "json.meals[0].strMeal"
+      },
+      {
+       "into": "area",
+       "json": "json.meals[0].strArea"
+      },
+      {
+       "into": "category",
+       "json": "json.meals[0].strCategory"
+      },
+      {
+       "into": "how",
+       "json": "json.meals[0].strInstructions"
+      },
+      {
+       "all": true,
+       "into": "ingredients",
+       "regex": "\"strIngredient\\d+\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://www.themealdb.com/api/json/v1/1/lookup.php?i={{ state.id }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "has-meal"
+    },
+    "no-recipe": {
+     "kind": "fail",
+     "reason": "no-recipe",
+     "say": "TheMealDB has no recipe for {{ inputs.dish }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "area": "{{ state.area }}",
+      "category": "{{ state.category }}",
+      "dish": "{{ state.meal }}",
+      "ingredients": "{{ state.ingredients }}",
+      "instructions": "{{ state.how }}",
+      "url": "https://www.themealdb.com/meal/{{ state.id }}"
+     },
+     "say": "{{ state.meal }} ({{ state.area }}, {{ state.category }}): {{ state.ingredients | join }}. https://www.themealdb.com/meal/{{ state.id }}"
+    },
+    "search": {
+     "extract": [
+      {
+       "into": "id",
+       "json": "json.meals[0].idMeal"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://www.themealdb.com/api/json/v1/1/search.php?s={{ inputs.dish | url }}"
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    }
+   },
+   "start": "search",
+   "tags": [
+    "food",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[a] recipe for {dish}"
+    },
+    {
+     "pattern": "how do i (cook|make) {dish}"
     }
    ],
    "version": 1
@@ -24058,6 +29065,144 @@
    ],
    "version": 1
   },
+  "waves": {
+   "description": "The waves off a coastal place now: height, period and direction, from Open-Meteo's marine model.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "marine-api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "waves",
+   "namespace": "pyrtan",
+   "nodes": {
+    "at-sea": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "inland"
+      }
+     ],
+     "kind": "decide",
+     "on": "height"
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "sea",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "inland": {
+     "kind": "fail",
+     "reason": "inland",
+     "say": "Open-Meteo has no sea at {{ state.name }}: it is too far from the coast for its marine model."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "place": "{{ state.name }}",
+      "wave_direction_deg": "{{ state.from }}",
+      "wave_height_m": "{{ state.height }}",
+      "wave_period_s": "{{ state.period }}"
+     },
+     "say": "Off {{ state.name }}, {{ state.country }}: waves {{ state.height }} m every {{ state.period }} s, from {{ state.from }}°."
+    },
+    "sea": {
+     "extract": [
+      {
+       "into": "height",
+       "json": "json.current.wave_height"
+      },
+      {
+       "into": "period",
+       "json": "json.current.wave_period"
+      },
+      {
+       "into": "from",
+       "json": "json.current.wave_direction"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://marine-api.open-meteo.com/v1/marine?latitude={{ state.lat }}&longitude={{ state.lon }}&current=wave_height,wave_period,wave_direction"
+     },
+     "into": "sea",
+     "kind": "observe",
+     "next": "at-sea"
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "sea",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[how big are the] waves (in|at|off) {place}"
+    },
+    {
+     "pattern": "[the] surf (in|at) {place}"
+    }
+   ],
+   "version": 1
+  },
   "wayback": {
    "description": "The Wayback Machine's latest copy of a site, if it has one.",
    "hosts": [
@@ -24390,6 +29535,129 @@
     }
    ],
    "version": 3
+  },
+  "where-am-i": {
+   "description": "Roughly where you are, by your public IP address: city, region, country and network, from ipinfo.io.",
+   "hosts": [
+    "ipinfo.io"
+   ],
+   "license": "MIT",
+   "name": "where-am-i",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "ip",
+       "json": "json.ip"
+      },
+      {
+       "into": "city",
+       "json": "json.city"
+      },
+      {
+       "into": "region",
+       "json": "json.region"
+      },
+      {
+       "into": "country",
+       "json": "json.country"
+      },
+      {
+       "into": "org",
+       "json": "json.org"
+      },
+      {
+       "into": "zone",
+       "json": "json.timezone"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://ipinfo.io/json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "located": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown"
+      }
+     ],
+     "kind": "decide",
+     "on": "city"
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "ipinfo.io is asking for fewer requests (429); try again later."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "city": "{{ state.city }}",
+      "country": "{{ state.country }}",
+      "ip": "{{ state.ip }}",
+      "network": "{{ state.org }}",
+      "region": "{{ state.region }}",
+      "timezone": "{{ state.zone }}"
+     },
+     "say": "By your IP address ({{ state.ip }}) you are around {{ state.city }}, {{ state.region }}, {{ state.country }}, on {{ state.org }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "located",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "ipinfo.io answered {{ state.resp.status }}."
+    },
+    "unknown": {
+     "kind": "fail",
+     "reason": "unknown-location",
+     "say": "ipinfo.io does not know where {{ state.ip }} is."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "network",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "where am i"
+    },
+    {
+     "pattern": "where is my ip [address] [from]"
+    }
+   ],
+   "version": 1
   },
   "wikipedia": {
    "description": "The summary of a Wikipedia article.",

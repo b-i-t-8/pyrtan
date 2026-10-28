@@ -1,0 +1,58 @@
+# Who is in space right now, from a community-kept list on GitHub Pages
+# (corquaid/international-space-station-APIs).
+
+name = "people-in-space"
+version = 1
+namespace = "pyrtan"
+description = "How many people are in space right now, and who."
+tags = ["space", "read-only"]
+license = "MIT"
+hosts = ["corquaid.github.io"]
+start = "fetch"
+
+[[triggers]]
+pattern = "how many people are in space [now]"
+[[triggers]]
+pattern = "who is in space [now]"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json" }
+into = "resp"
+extract = [
+  { into = "count", json = "json.number" },
+  { into = "names", regex = "\"name\":\\s*\"([^\"]+)\"", all = true },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "count"
+branches = [
+  { when = { gt = 0 }, then = "reply" },
+  { when = { eq = 0 }, then = "nobody" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.count }} people are in space: {{ state.names | join }}."
+output = { count = "{{ state.count }}", people = "{{ state.names }}" }
+
+[nodes.nobody]
+kind = "done"
+say = "Nobody is in space right now, by this list."
+output = { count = 0, people = [] }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The people-in-space list answered {{ state.resp.status }}."

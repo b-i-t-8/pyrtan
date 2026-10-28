@@ -1,0 +1,65 @@
+# What a food's barcode is, from Open Food Facts: the product, its brand,
+# its size and its Nutri-Score.
+
+name = "food-barcode"
+version = 1
+namespace = "pyrtan"
+description = "A food product by its barcode: name, brand, size and Nutri-Score, from Open Food Facts."
+tags = ["food", "read-only"]
+license = "MIT"
+hosts = ["world.openfoodfacts.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "what is barcode {code:word}"
+[[triggers]]
+pattern = "(food|product) barcode {code:word}"
+
+[inputs.code]
+type = "str"
+pattern = "^[0-9]{8,14}$"
+description = "An EAN or UPC barcode, as in: 3017624010701"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://world.openfoodfacts.org/api/v2/product/{{ inputs.code }}.json?fields=product_name,brands,quantity,nutriscore_grade" }
+into = "resp"
+extract = [
+  { into = "found", json = "json.status" },
+  { into = "product", json = "json.product.product_name" },
+  { into = "brand", json = "json.product.brands" },
+  { into = "size", json = "json.product.quantity" },
+  { into = "grade", json = "json.product.nutriscore_grade" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { in = [200, 404] }, then = "found" },
+  { else = "unexpected" },
+]
+
+[nodes.found]
+kind = "decide"
+on = "found"
+branches = [
+  { when = { eq = 1 }, then = "reply" },
+  { else = "no-product" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.code }} is {{ state.product }} by {{ state.brand }} ({{ state.size }}), Nutri-Score {{ state.grade | upper }}."
+output = { code = "{{ inputs.code }}", product = "{{ state.product }}", brand = "{{ state.brand }}", quantity = "{{ state.size }}", nutriscore = "{{ state.grade }}", url = "https://world.openfoodfacts.org/product/{{ inputs.code }}" }
+
+[nodes.no-product]
+kind = "fail"
+reason = "no-product"
+say = "Open Food Facts has no product with barcode {{ inputs.code }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Open Food Facts answered {{ state.resp.status }}."

@@ -1,0 +1,54 @@
+# The latest published version of a NuGet package (.NET), from the NuGet
+# flat container, which lists every version oldest first.
+
+name = "nuget"
+version = 1
+namespace = "pyrtan"
+description = "The latest published version of a NuGet (.NET) package."
+tags = ["software", "dotnet", "read-only"]
+license = "MIT"
+hosts = ["api.nuget.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest version of {package:word} on nuget"
+[[triggers]]
+pattern = "nuget (package|version) {package:word}"
+
+[inputs.package]
+type = "str"
+pattern = "^[A-Za-z0-9][A-Za-z0-9._\\-]*$"
+description = "A package id, as in: Newtonsoft.Json"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.nuget.org/v3-flatcontainer/{{ inputs.package | lower | url }}/index.json" }
+into = "resp"
+extract = [
+  { into = "latest", json = "json.versions[-1]" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-package" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.package }} {{ state.latest }} on NuGet. https://www.nuget.org/packages/{{ inputs.package }}"
+output = { package = "{{ inputs.package }}", version = "{{ state.latest }}", url = "https://www.nuget.org/packages/{{ inputs.package }}" }
+
+[nodes.no-package]
+kind = "fail"
+reason = "no-package"
+say = "NuGet has no package {{ inputs.package }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "NuGet answered {{ state.resp.status }}."
