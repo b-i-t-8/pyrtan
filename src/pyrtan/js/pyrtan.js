@@ -1,7 +1,7 @@
 /* pyrtan.js: the tree runtime, in JavaScript.
  *
  * The same tree files the Python runtime reads (as JSON, the TOML's own
- * table), walked the same way: observe, act, decide, set, each, delegate,
+ * table), walked the same way: observe, act, decide, set, lookup, each, delegate,
  * ask, done, fail; the same templates, conditions and extraction; the same
  * trace. tests/conformance holds the vectors both runtimes must agree on.
  *
@@ -1475,6 +1475,27 @@
       const values = {};
       for (const [key, tmpl] of Object.entries(node.get("set"))) { const value = render(tmpl, scope); put(scope.state, key, value); values[key] = value; }
       return [step(node.id, "set", Object.keys(values).map((k) => `${k}=${brief(values[k])}`).join(", "), { observed: values }), node.next];
+    }
+    do_lookup(tree, node, scope, trace, depth) {
+      const on = statePath(node.get("on"));
+      const value = resolve(on, scope);
+      const into = node.get("into");
+      let found = MISSING, chosen = null;
+      for (const row of node.get("table")) {
+        const cond = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "value" && k !== "note"));
+        if (holds(cond, value)) { found = row.value; chosen = condText(cond); break; }
+      }
+      if (isMissing(found)) {
+        if (!("default" in node.spec)) {
+          trace.gap(node.id, on, plain(value));
+          trace.add(step(node.id, "lookup", `${on} = ${brief(value)}: no row`, { observed: plain(value), depth }));
+          return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no row for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+        }
+        found = node.spec.default; chosen = "default";
+      }
+      const result = render(found, scope);
+      put(scope.state, into, result);
+      return [step(node.id, "lookup", `${on} = ${brief(value)}; ${into}=${brief(result)}`, { observed: plain(value), chosen }), node.next];
     }
     async do_each(tree, node, scope, trace, depth) {
       const state = scope.state;

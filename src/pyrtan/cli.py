@@ -838,7 +838,7 @@ def cmd_grow(args: argparse.Namespace) -> int:
         seen.add(key)
         draft = draft_branch(tree, g)
         if draft is None:
-            skipped.append(f"{tree.name}.{g.get('node')}: {g.get('on')} = {json.dumps(g.get('observed'), default=str)} is covered already, or names no decide node")
+            skipped.append(f"{tree.name}.{g.get('node')}: {g.get('on')} = {json.dumps(g.get('observed'), default=str)} is covered already, or names no decide or lookup node")
             continue
         drafts.append((tree, draft))
     if args.json:
@@ -860,7 +860,8 @@ def cmd_grow(args: argparse.Namespace) -> int:
                 continue
             try:
                 apply_draft(tree.source, draft)
-                print(f"# written into {tree.source}; now edit [nodes.{draft.then}] to say what the value means, then: pyrtan check {tree.source}")
+                what = f"the new row's value in [nodes.{draft.node}]" if draft.list_key == "table" else f"[nodes.{draft.then}]"
+                print(f"# written into {tree.source}; now edit {what} to say what the value means, then: pyrtan check {tree.source}")
             except TreeError as e:
                 print(f"# {e}", file=sys.stderr)
                 worst = 1

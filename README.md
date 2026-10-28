@@ -35,8 +35,7 @@ trace: weather
   found (decide) [exists True]: state.hit = {…} -> forecast
   forecast (observe): GET https://api.open-meteo.com/v1/forecast?latitude=59.91&… -> 200; temp=4.2, humidity=80, wind=12.3, code=61, unit=°C -> have-temp
   have-temp (decide) [type 'number']: state.temp = 4.2 -> sky
-  sky (decide) [between [51, 67]]: state.code = 61 -> rain
-  rain (set): sky=raining -> reply
+  sky (lookup) [between [51, 67]]: state.code = 61; sky=raining -> reply
   reply (done): Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
 
 Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
@@ -114,7 +113,8 @@ say = "GitHub answered {{ state.resp.status }}."
 ```
 
 Node kinds: `observe` (read; retried), `act` (change; never retried),
-`decide` (one value, plain conditions, one branch), `set`, `each` (walk a
+`decide` (one value, plain conditions, one branch), `set`, `lookup` (one
+value, plain conditions, one row of a table read into state), `each` (walk a
 list with a limit, through another tree or a local sub-flow), `delegate`
 (hand a sentence or a tree name to the swarm), `ask` (pause for an input),
 `done` and `fail`. Trees do not loop; `pyrtan check` refuses a cycle. The
@@ -562,17 +562,17 @@ gaps (from a running service or hub, a `--gaps` file, or the federation's
 reports for your catalog trees) and drafts, by rules, the branch each one
 asks for: `{ exists = false }` for a missing value, the range of the hole
 a number fell into between the ranges the node already has, `{ eq = … }`
-otherwise, and a new `fail` node that says what was seen. `--apply`
-writes it into the file, which must still check clean; the person then
-says what the value means.
+otherwise, and a new `fail` node that says what was seen. A `lookup`
+with no `default` gets a row instead: the same condition, with the value
+seen as its value. `--apply` writes it into the file, which must still
+check clean; the person then says what the value means.
 
 ```
 $ pyrtan grow --at http://127.0.0.1:8700 --trees trees --apply
-# weather: in [nodes.sky], add to branches (before the else, if any):
-  { when = { between = [68, 70] }, then = "sky-70" },
-...
+# weather: in [nodes.sky], add to table:
+  { between = [68, 70], value = 70 },
 # why: the value falls in the hole between 67 and 71, which the ranges around it leave open
-# written into trees/weather.toml; now edit [nodes.sky-70] to say what the value means
+# written into trees/weather.toml; now edit the new row's value in [nodes.sky] to say what the value means
 ```
 
 Unanswered sentences survive a restart too, with `--unanswered FILE` on a
@@ -651,7 +651,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.15.0. The core, the service, the hub, the command, the console, the
+0.16.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; the default one is built
@@ -661,7 +661,8 @@ part of the swarm), the blobs they keep and the trees they run
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
-for, drafted by rules), and the chat lobby (strangers on the hub and the
+for, drafted by rules), lookup tables (a code into a word in one node),
+and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, and lobbies open to the public) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,

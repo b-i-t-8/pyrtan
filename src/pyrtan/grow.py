@@ -33,7 +33,7 @@ from typing import Any
 
 from . import conditions
 from .intent import Trigger, TriggerError, normalise
-from .tree import Tree, TreeError, check, load_tree
+from .tree import Tree, TreeError, check, load_tree, row_condition
 
 # Words that carry no meaning for a tree's name: dropped from the name,
 # kept in the trigger (where "what's the" is worth matching literally).
@@ -309,34 +309,46 @@ class Draft:
     branch: str
     node_text: str
     reason: str = ""
+    list_key: str = "branches"  # "table" for a lookup: the draft is a row, and there is no new node
 
     def to_dict(self) -> dict[str, Any]:
-        return {"tree": self.tree, "node": self.node, "on": self.on, "observed": self.observed, "when": self.when, "then": self.then, "branch": self.branch, "node_text": self.node_text, "reason": self.reason}
+        return {"tree": self.tree, "node": self.node, "on": self.on, "observed": self.observed, "when": self.when, "then": self.then, "branch": self.branch, "node_text": self.node_text, "reason": self.reason, "list": self.list_key}
 
     def render(self) -> str:
+        if self.list_key == "table":
+            return f"# {self.tree}: in [nodes.{self.node}], add to table:\n  {self.branch}"
         return f"# {self.tree}: in [nodes.{self.node}], add to branches (before the else, if any):\n  {self.branch}\n\n{self.node_text}"
 
 
 def draft_branch(tree: Tree, gap: dict[str, Any]) -> Draft | None:
     """The branch a gap on ``tree`` asks for, or None when the gap names
-    no decide node of this tree or a branch already covers the value
-    (the file is newer than the gap).
+    no decide or lookup node of this tree or a branch already covers the
+    value (the file is newer than the gap).
 
     Rules: a missing value asks for ``{ exists = false }``; a number that
     falls in a hole between the ``between`` ranges or ``eq`` points the
     node already has asks for the range of that hole; anything else asks
     for ``{ eq = value }`` (``{ type = ... }`` for a value a report could
     only carry as its type). The new node is a ``fail`` that says what
-    was seen; the author decides what it means."""
+    was seen; the author decides what it means. For a ``lookup`` the
+    draft is a row with that condition whose value is the value seen,
+    with no new node; the author writes what it should read as."""
     node = tree.nodes.get(str(gap.get("node", "")))
-    if node is None or node.kind != "decide":
+    if node is None or node.kind not in ("decide", "lookup"):
         return None
     on = str(gap.get("on") or node.get("on") or "")
     observed = gap.get("observed")
-    branches = [b for b in (node.get("branches") or []) if isinstance(b, dict)]
+    if node.kind == "lookup":
+        branches = [{"when": row_condition(r)} for r in (node.get("table") or []) if isinstance(r, dict)]
+    else:
+        branches = [b for b in (node.get("branches") or []) if isinstance(b, dict)]
     if any("when" in b and conditions.holds(b["when"], observed) for b in branches):
         return None
     when, reason = _condition_for(observed, branches)
+    if node.kind == "lookup":
+        # The row gives back the value it was asked about until someone says what it means.
+        row = "{ " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in when.items()) + f", value = {_toml_value(observed if observed is not None else '')} }},"
+        return Draft(tree.name, node.id, on, observed, when, "", row, "", reason, "table")
     then = _unique_node(tree, f"{node.id}-{_slug(observed)}")
     slug = _slug(observed)
     branch = "{ when = " + _toml_inline(when) + f', then = "{then}" }},'
@@ -425,9 +437,10 @@ def apply_draft(path: str | Path, draft: Draft) -> str:
     if start is None:
         raise TreeError(f"{path}: no {header} table")
     end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
-    b = next((i for i in range(start, end) if re.match(r"^\s*branches\s*=\s*\[", lines[i])), None)
+    key = draft.list_key
+    b = next((i for i in range(start, end) if re.match(rf"^\s*{key}\s*=\s*\[", lines[i])), None)
     if b is None:
-        raise TreeError(f"{path}: {header} has no branches list")
+        raise TreeError(f"{path}: {header} has no {key} list")
     indent = "  "
     if "]" in lines[b].split("[", 1)[1]:
         # A one-line list.
@@ -448,7 +461,8 @@ def apply_draft(path: str | Path, draft: Draft) -> str:
     text = "".join(lines)
     if not text.endswith("\n"):
         text += "\n"
-    text += "\n" + draft.node_text
+    if draft.node_text:
+        text += "\n" + draft.node_text
     path.write_text(text, encoding="utf-8")
     try:
         tree = load_tree(path)

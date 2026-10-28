@@ -81,7 +81,8 @@ CASES: list[dict] = [
 
 
 # Trees that exercise what the examples do not: every slot kind, synonyms
-# (a word and a phrase), typos, fixed inputs, a tie, and an ask.
+# (a word and a phrase), typos, fixed inputs, a tie, an ask, and a lookup
+# that meets a templated value, a table value, an absent value and a gap.
 def _echo(name: str, triggers: list, inputs: dict, **extra) -> dict:
     return {"name": name, "version": 1, "description": f"echo for {name}", "hosts": [], "start": "reply", "triggers": triggers,
             "inputs": inputs, "nodes": {"reply": {"kind": "done", "say": "ok", "output": {k: f"{{{{ inputs.{k} }}}}" for k in inputs}}}, **extra}
@@ -101,6 +102,13 @@ LANGUAGE_TREES: list[dict] = [
      "nodes": {"size": {"kind": "ask", "prompt": "What size of {{ inputs.drink }}?", "into": "state.size", "next": "shots"},
                "shots": {"kind": "ask", "prompt": "How many shots?", "into": "inputs.shots", "next": "reply"},
                "reply": {"kind": "done", "say": "A {{ state.size }} {{ inputs.drink }}, {{ inputs.shots }} shot(s).", "output": {"size": "{{ state.size }}", "shots": "{{ inputs.shots }}"}}}},
+    {"name": "grade", "version": 1, "description": "a score, looked up", "hosts": [], "start": "word",
+     "triggers": ["grade {score:int}"], "inputs": {"score": {"type": "int", "required": False}, "strict": {"type": "bool", "default": False}},
+     "nodes": {"word": {"kind": "lookup", "on": "inputs.score", "into": "word", "next": "mark",
+                        "table": [{"between": [90, 100], "value": "excellent"}, {"between": [50, 89], "value": "a pass, {{ inputs.score }}"},
+                                  {"exists": False, "value": {"word": "absent", "points": 0}, "note": "a table value"}]},
+               "mark": {"kind": "lookup", "on": "inputs.strict", "into": "mark", "next": "reply", "table": [{"eq": True, "value": "strict"}], "default": "~"},
+               "reply": {"kind": "done", "say": "{{ state.mark }}", "output": {"word": "{{ state.word }}", "mark": "{{ state.mark }}"}}}},
 ]
 
 READINGS = [
@@ -170,6 +178,10 @@ HUB = [
     ("POST", "/intent", {"text": "order a mocha"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "small"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "many"}),
+    ("POST", "/intent", {"text": "grade 95"}),
+    ("POST", "/run", {"tree": "grade", "inputs": {"score": 60, "strict": True}}),
+    ("POST", "/run", {"tree": "grade", "inputs": {"strict": True}}),
+    ("POST", "/intent", {"text": "grade 10"}),
     ("POST", "/intent", {"text": "temperature in the hall"}),
     ("POST", "/intent", {"text": "what's the temperature in the hall"}),
     ("GET", "/gaps", None),

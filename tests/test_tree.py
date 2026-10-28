@@ -159,3 +159,34 @@ def test_slot_kinds_must_fit_their_inputs():
         load_tree_text('name = "t"\nstart = "s"\n[language]\nsynonyms = "no"\n[nodes.s]\nkind = "done"\nsay = "x"\n')
     with pytest.raises(TreeError, match="unknown key"):
         load_tree_text('name = "t"\nstart = "s"\n[language]\nstemming = true\n[nodes.s]\nkind = "done"\nsay = "x"\n')
+
+
+def test_lookup_rows_need_a_condition_and_a_value():
+    base = MINIMAL.replace('next = "ok"', 'next = "word"') + """
+[nodes.word]
+kind = "lookup"
+on = "r.status"
+into = "word"
+table = [ { eq = 200, value = "fine" }, { between = [500, 599], value = "down" } ]
+next = "ok"
+"""
+    notes = problems(base)
+    assert not [n for n in notes if n.startswith("error")]
+    assert any("no 'default'" in n for n in notes)
+    assert not any("no 'default'" in n for n in problems(base.replace('next = "ok"\n', 'default = "odd"\nnext = "ok"\n')))
+    for row, message in [
+        ('{ eq = 200 }', "needs a 'value'"),
+        ('{ value = "x" }', "needs a condition"),
+        ('{ eq = 200, then = "ok" }', "gives a value, not a node"),
+        ('{ else = "x" }', "gives a value, not a node"),
+        ('{ around = 200, value = "x" }', "unknown condition keys"),
+        ('"fine"', "a row is a table"),
+    ]:
+        with pytest.raises(TreeError, match=message):
+            load_tree_text(base.replace('{ eq = 200, value = "fine" }', row))
+    with pytest.raises(TreeError, match="non-empty 'table'"):
+        load_tree_text(base.replace('table = [ { eq = 200, value = "fine" }, { between = [500, 599], value = "down" } ]', "table = []"))
+    with pytest.raises(TreeError, match="needs 'into'"):
+        load_tree_text(base.replace('into = "word"\n', ""))
+    with pytest.raises(TreeError, match="needs 'next'"):
+        load_tree_text(base[: base.rindex('next = "ok"')])
