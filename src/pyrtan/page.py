@@ -17,8 +17,9 @@ browser is the hub: ``pyrtan.js``'s ``LocalHub`` answers the same
 endpoints inside the page, with trees it needs no network for: every
 console carries the default trees (:mod:`pyrtan.defaults`; or what
 ``pyrtan console --trees`` gave it), embedded in the shape of a catalog's
-``trees.json``. A catalog named in the address (``?catalog=``) or one
-beside the page (``../catalog/``) is fresher and taken first; only a page
+``trees.json``. A catalog named in the address (``?catalog=``, on the
+page's own origin only) or one beside the page (``../catalog/``) is
+fresher and taken first; only a page
 that carries no trees asks pyrtan.com's, then the copy this browser kept.
 It reads sentences and runs trees here, keeping gaps and unanswered
 sentences in the browser's local storage, so they outlive the page, under
@@ -915,7 +916,9 @@ async function detect() {
 // which need no network at all; only a page that carries none asks
 // pyrtan.com's catalog, then the copy this browser kept.
 const params = new URLSearchParams(location.search);
-const CATALOGS = [params.get("catalog"), "../catalog/"].filter(Boolean);
+// ?catalog= only on this page's own origin: a link elsewhere would have this browser fetch, run and keep trees a stranger chose.
+const sameOrigin = (u) => { try { return new URL(u, location.href).origin === location.origin; } catch (e) { return false; } };
+const CATALOGS = [params.get("catalog"), "../catalog/"].filter((c) => c && sameOrigin(c));
 const FARTHER = ["https://pyrtan.com/catalog/"];
 const CARRIED = (() => { try { const d = JSON.parse($("#pyrtan-trees").textContent); return Array.isArray(d.trees) ? d.trees : []; } catch (e) { return []; } })();
 const TREES_KEY = "pyrtan.console.trees";

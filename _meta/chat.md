@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). |
 | **Date** | 2026-10-27 |
-| **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing is kept. |
+| **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing said between people is kept; a line said to a bot is a sentence at `/intent`, and one no tree answers is recorded as unanswered, as it would be there (only callers with the token or a key granted `chat` meet bots). |
 | **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
 
 ## 0. The brief

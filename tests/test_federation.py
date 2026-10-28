@@ -417,7 +417,12 @@ def test_snapshot_bakes_and_bootstraps(two, tmp_path, monkeypatch, capsys):
     old = tmp_path / "old.json"
     old.write_text(json.dumps({"pyrtan-directory": 1, "hubs": [{"id": "http://gone.example", "name": "gone", "trees": ["x"], "seen": time.time() - 3600}, {"id": "http://ancient.example", "trees": [], "seen": time.time() - 30 * 86400}]}))
     out = tmp_path / "directory.json"
-    run = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--previous", str(tmp_path / "missing.json"), "--previous", str(old)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
+    # Hubs on this machine are not on the public internet: the runner asks none of them unless told to.
+    run = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
+    assert run.returncode == 0, run.stderr
+    silent = json.loads(out.read_text())["listed"]["silent"]
+    assert {x["hub"] for x in silent} == {"http://127.0.0.1:9", a.url} and all("not a public address" in x["error"] for x in silent)
+    run = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--any-address", "--previous", str(tmp_path / "missing.json"), "--previous", str(old)], capture_output=True, text=True, cwd=str(EXAMPLES.parent))
     assert run.returncode == 0, run.stderr
     snap = json.loads(out.read_text())
     assert snap["pyrtan-directory"] == 1 and snap["listed"]["answered"] == [a.url] and snap["listed"]["silent"][0]["hub"] == "http://127.0.0.1:9"
@@ -649,7 +654,8 @@ class TrustedMember(Member):
         self.answers = answers or {}
 
     def follow(self, secret: str | None = None, token: str | None = None):
-        activity = {"id": f"{self.id}/activities/follow", "actor": self.id, "published": "now", "type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}
+        self.sent = getattr(self, "sent", 0) + 1  # its own id each time, as a browser's: a second Follow alike in every byte would be a replay
+        activity = {"id": f"{self.id}/activities/follow-{self.sent}", "actor": self.id, "published": "now", "type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}
         headers = sign(secret or self.secret, self.id, "POST", "/inbox", activity)
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -845,7 +851,7 @@ def test_reports_command_and_snapshot(two, tmp_path, capsys, monkeypatch):
 
     listed = tmp_path / "hubs.json"
     listed.write_text(json.dumps({"hubs": [a.url]}))
-    out = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(tmp_path / "directory.json"), "--reports", str(tmp_path / "reports.json")], capture_output=True, text=True, cwd=str(ROOT))
+    out = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(tmp_path / "directory.json"), "--reports", str(tmp_path / "reports.json"), "--any-address"], capture_output=True, text=True, cwd=str(ROOT))
     assert out.returncode == 0, out.stderr
     baked = json.loads((tmp_path / "reports.json").read_text())
     assert baked["count"] == 1 and baked["reports"][0]["id"] == "pyrtan/weather@1" and baked["reports"][0]["count"] == 4
@@ -1024,7 +1030,7 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
     b.fed.merge_directory([{"id": "http://public.example", "name": "q", "trees": [], "seen": time.time()}], via="x", network=default.id)
     b.hub.token = None  # as anyone sees it, the private part included: the snapshot must still drop it
     out = tmp_path / "directory.json"
-    done = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--network", str(network)], capture_output=True, text=True, cwd=str(ROOT))
+    done = subprocess.run([_sys.executable, "site/snapshot.py", str(listed), str(out), "--network", str(network), "--any-address"], capture_output=True, text=True, cwd=str(ROOT))
     assert done.returncode == 0, done.stderr
     ids = {h["id"] for h in json.loads(out.read_text())["hubs"]}
     assert "http://public.example" in ids and "http://private.example" not in ids and b.url in ids
@@ -1115,6 +1121,21 @@ def test_an_open_hub_takes_so_many_strangers_and_lets_idle_ones_go(two, monkeypa
     # A member that never polls is let go after a while; the store and mailbox with it.
     a.fed.followers[members[1].id].last_ok = time.time() - fedmod.MEMBER_IDLE - 1
     assert a.fed.expire_members() == 1 and members[1].id not in a.fed.followers and members[0].id in a.fed.followers
+
+
+def test_a_hub_with_no_token_shows_its_private_networks_only_on_its_own_machine(tmp_path):
+    from pyrtan.service import PEER_HEADER
+
+    (tmp_path / "c").mkdir()
+    c = Swarm("c", tmp_path / "c", listed=True)   # no token
+    try:
+        home = c.fed.create_network("home")
+        _, mine = http_json("GET", f"{c.url}/directory")   # from this machine: the operator's own view
+        assert mine["networks"] == {home.id: "home"}
+        _, theirs = c.hub.route("GET", "/directory", None, {PEER_HEADER: "203.0.113.7"})   # from anywhere else
+        assert theirs["networks"] == {} and all(not h["networks"] for h in theirs["hubs"])
+    finally:
+        c.stop()
 
 
 def test_a_lost_phone_is_let_go(tmp_path, capsys):

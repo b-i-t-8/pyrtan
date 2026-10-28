@@ -159,3 +159,15 @@ def test_match_explains_a_sentence(capsys):
     code, out, _ = run(capsys, "match", "weather in Oslo", "--trees", str(EXAMPLES), "--json")
     assert code == 0 and json.loads(out)["matches"][0]["tree"] == "weather"
     assert run(capsys, "match", "x", "--trees", str(EXAMPLES), "--now", "yesterday")[0] == 2
+
+
+def test_a_secret_on_the_command_line_is_warned_about(capsys):
+    from pyrtan.cli import _warn_secret_flags
+
+    _warn_secret_flags(["peers", "--at", "http://x", "--token", "s3cret"])
+    _warn_secret_flags(["hub", "--federation-secret=abc"])
+    err = capsys.readouterr().err
+    assert "--token on the command line can be read by anyone on this machine (ps); set $PYRTAN_TOKEN instead" in err
+    assert "set $PYRTAN_FEDERATION_SECRET instead" in err
+    _warn_secret_flags(["peers", "--at", "http://x"])
+    assert capsys.readouterr().err == ""

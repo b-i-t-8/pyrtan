@@ -644,7 +644,7 @@ def verify_request(audience: str, method: str, path: str, body: Any, headers: di
     if not key or not signature:
         raise IdentityError("no key signature")
     key = normal(key)
-    if not date.isdigit():
+    if not (date.isascii() and date.isdigit()):  # "١٢" is digits to isdigit(), not to int()
         raise IdentityError("no date")
     now = time.time() if now is None else now
     if abs(now - int(date)) > WINDOW:

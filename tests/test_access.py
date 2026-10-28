@@ -259,3 +259,22 @@ def test_a_body_must_say_it_is_json():
         assert _raw(f"{server.url}/intent", {"Content-Type": "application/json; charset=utf-8"}, "POST", body)[0] == 200
     finally:
         server.stop()
+
+
+def test_odd_dates_and_lone_surrogates_are_refused_not_fatal():
+    hub = Hub(name="solo", token="tok")
+    server = Server(hub.route, port=0, quiet=True, token="tok", keyed=True).start()
+    try:
+        # "²³" (Latin-1, as headers are read) is digits to str.isdigit(), not to int(): a refusal, not a dead handler.
+        host, port = server.url.split("//")[1].split(":")
+        with socket.create_connection((host, int(port)), timeout=5) as sock:
+            sock.sendall(b"POST /intent HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 13\r\n"
+                         b"X-Pyrtan-Key: pyr:x\r\nX-Pyrtan-Key-Signature: AA\r\nX-Pyrtan-Date: \xb2\xb3\r\nConnection: close\r\n\r\n{\"text\":\"hi\"}")
+            reply = sock.recv(4096)
+        assert reply.startswith(b"HTTP/1.0 401") or reply.startswith(b"HTTP/1.1 401"), reply[:80]
+        status, _, out = _raw(f"{server.url}/intent", {"Content-Type": "application/json", "Authorization": "Bearer tok"}, "POST", b'{"text":"\\ud800"}')
+        assert status == 400 and json.loads(out)["reason"] == "bad-json"
+        assert http_json("GET", f"{server.url}/health")[0] == 200   # still serving
+    finally:
+        server.stop()
+        hub.stop()

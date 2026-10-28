@@ -34,6 +34,7 @@ SEEDS = [
 VALUES = [
     None, True, 0, -12, 12345678901, "", "plain", "é ü 日本 🙂", "quote \" back \\ slash\nline",
     [], {}, [1, "two", [3]], {"b": 1, "a": {"d": [], "c": None}}, {"text": "echo hi", "trace": True},
+    {"\uff01": 1, "\U0001f642": 2, "z": 3},   # UTF-16 order: the emoji's surrogates (D83D) come before U+FF01
 ]
 
 
