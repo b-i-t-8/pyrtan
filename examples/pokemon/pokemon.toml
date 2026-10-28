@@ -1,0 +1,60 @@
+# A Pokémon's number, types, height and weight, from PokéAPI. The API
+# gives height in decimetres and weight in hectograms.
+
+name = "pokemon"
+version = 1
+namespace = "pyrtan"
+description = "A Pokémon's number, types, height and weight, from PokéAPI."
+tags = ["fun", "games", "read-only"]
+license = "MIT"
+hosts = ["pokeapi.co"]
+start = "fetch"
+
+[[triggers]]
+pattern = "pokemon {name:word}"
+[[triggers]]
+pattern = "what type is {name:word}"
+[[triggers]]
+pattern = "tell me about the pokemon {name:word}"
+
+[inputs.name]
+type = "str"
+pattern = "^[A-Za-z0-9\\-]+$"
+description = "A Pokémon's name or number, as in: pikachu"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://pokeapi.co/api/v2/pokemon/{{ inputs.name | lower | url }}" }
+into = "resp"
+extract = [
+  { into = "id", json = "json.id" },
+  { into = "name", json = "json.name" },
+  { into = "types", regex = "\"type\":\\s*\\{\\s*\"name\":\\s*\"([a-z]+)\"", all = true },
+  { into = "dm", json = "json.height" },
+  { into = "hg", json = "json.weight" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-pokemon" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "#{{ state.id }} {{ state.name | title }}, {{ state.types | join }} type."
+output = { number = "{{ state.id }}", name = "{{ state.name }}", types = "{{ state.types }}", height_dm = "{{ state.dm }}", weight_hg = "{{ state.hg }}" }
+
+[nodes.no-pokemon]
+kind = "fail"
+reason = "no-pokemon"
+say = "PokéAPI knows no Pokémon called {{ inputs.name }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "PokéAPI answered {{ state.resp.status }}."

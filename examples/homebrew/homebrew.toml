@@ -1,0 +1,57 @@
+# A Homebrew formula: what it is and its current stable version, from
+# formulae.brew.sh.
+
+name = "homebrew"
+version = 1
+namespace = "pyrtan"
+description = "A Homebrew formula's current stable version and what it is, from formulae.brew.sh."
+tags = ["software", "macos", "read-only"]
+license = "MIT"
+hosts = ["formulae.brew.sh"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest version of {formula:word} on homebrew"
+[[triggers]]
+pattern = "(brew|homebrew) (formula|version) {formula:word}"
+
+[inputs.formula]
+type = "str"
+pattern = "^[a-z0-9][a-z0-9@+._\\-]*$"
+description = "A formula name, as in: wget"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://formulae.brew.sh/api/formula/{{ inputs.formula | lower | url }}.json" }
+into = "resp"
+extract = [
+  { into = "name", json = "json.name" },
+  { into = "version", json = "json.versions.stable" },
+  { into = "about", json = "json.desc" },
+  { into = "home", json = "json.homepage" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-formula" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }} {{ state.version }} on Homebrew: {{ state.about }}. {{ state.home }}"
+output = { formula = "{{ state.name }}", version = "{{ state.version }}", description = "{{ state.about }}", homepage = "{{ state.home }}", install = "brew install {{ state.name }}" }
+
+[nodes.no-formula]
+kind = "fail"
+reason = "no-formula"
+say = "Homebrew has no formula called {{ inputs.formula }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "formulae.brew.sh answered {{ state.resp.status }}."

@@ -674,5 +674,349 @@
         "word": "joyful"
       }
     ]
+  },
+  "GET https://pokeapi.co/api/v2/pokemon/charizard": {
+    "status": 200,
+    "body": {
+      "id": 6,
+      "name": "charizard",
+      "height": 17,
+      "weight": 905,
+      "types": [
+        {
+          "slot": 1,
+          "type": {
+            "name": "fire"
+          }
+        },
+        {
+          "slot": 2,
+          "type": {
+            "name": "flying"
+          }
+        }
+      ]
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=La%20Paz&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "La Paz",
+          "country": "Mexico",
+          "latitude": 24.14231,
+          "longitude": -110.31316,
+          "timezone": "America/Mazatlan",
+          "elevation": 33.0
+        }
+      ]
+    }
+  },
+  "GET https://timeapi.io/api/time/current/zone?timeZone=America%2FMazatlan": {
+    "status": 200,
+    "body": {
+      "dateTime": "2026-10-27T17:50:58.7188947",
+      "time": "17:50",
+      "dayOfWeek": "Tuesday",
+      "timeZone": "America/Mazatlan"
+    }
+  },
+  "GET https://api.adviceslip.com/advice": {
+    "status": 200,
+    "body": {
+      "slip": {
+        "id": 66,
+        "advice": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance."
+      }
+    }
+  },
+  "GET https://formulae.brew.sh/api/formula/nope-qqzz.json": {
+    "status": 404,
+    "body": "<!DOCTYPE html><title>404</title>"
+  },
+  "GET https://api.zippopotam.us/us/00000": {
+    "status": 404,
+    "body": {}
+  },
+  "GET https://api.datamuse.com/words?rel_rhy=cat&max=10": {
+    "status": 200,
+    "body": [
+      {
+        "word": "flat"
+      },
+      {
+        "word": "caveat"
+      },
+      {
+        "word": "brat"
+      },
+      {
+        "word": "pat"
+      },
+      {
+        "word": "combat"
+      },
+      {
+        "word": "slat"
+      },
+      {
+        "word": "that"
+      },
+      {
+        "word": "rat"
+      },
+      {
+        "word": "diplomat"
+      },
+      {
+        "word": "fat"
+      }
+    ]
+  },
+  "GET https://api.spaceflightnewsapi.net/v4/articles/?limit=3": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "title": "Ukrainian startup, GomSpace test satellite for future communications network",
+          "news_site": "SpaceNews",
+          "url": "https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/",
+          "published_at": "2026-10-27T20:21:30Z"
+        },
+        {
+          "title": "NASA Invites Media to Crew Completion of Yearlong Mars Simulation",
+          "news_site": "NASA",
+          "url": "https://www.nasa.gov/news-release/nasa-invites-media-to-crew-completion-of-yearlong-mars-simulation/",
+          "published_at": "2026-10-27T19:27:22Z"
+        },
+        {
+          "title": "NASA’s Neo Surveyor Sunshade",
+          "news_site": "NASA",
+          "url": "https://www.nasa.gov/image-article/nasas-neo-surveyor-sunshade/",
+          "published_at": "2026-10-27T17:58:57Z"
+        }
+      ]
+    }
+  },
+  "GET https://api.ipify.org?format=json": {
+    "status": 200,
+    "body": {
+      "ip": "203.0.113.7"
+    }
+  },
+  "GET https://proxy.golang.org/github.com/gorilla/mux/@latest": {
+    "status": 200,
+    "body": {
+      "Version": "v1.8.1",
+      "Time": "2023-10-18T11:23:00Z"
+    }
+  },
+  "GET https://api.zippopotam.us/gb/SW1A": {
+    "status": 200,
+    "body": {
+      "country": "Great Britain",
+      "places": [
+        {
+          "place name": "Westminster Abbey",
+          "state": "England",
+          "latitude": "51.4841",
+          "longitude": "-0.1966"
+        }
+      ]
+    }
+  },
+  "GET https://pokeapi.co/api/v2/pokemon/notapokemonqq": {
+    "status": 404,
+    "body": {
+      "status": 404,
+      "message": "Not Found"
+    }
+  },
+  "GET https://proxy.golang.org/github.com/nope/nope-qq/@latest": {
+    "status": 404,
+    "body": "not found: module github.com/nope/nope-qq: git ls-remote -q --end-of-options htt"
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Sydney&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Sydney",
+          "country": "Australia",
+          "latitude": -33.86785,
+          "longitude": 151.20732,
+          "timezone": "Australia/Sydney",
+          "elevation": 58.0
+        }
+      ]
+    }
+  },
+  "GET https://archive.org/wayback/available?url=nothing-here-qqzz.example": {
+    "status": 200,
+    "body": {
+      "url": "nothing-here-qqzz.example",
+      "archived_snapshots": {}
+    }
+  },
+  "GET https://formulae.brew.sh/api/formula/wget.json": {
+    "status": 200,
+    "body": {
+      "name": "wget",
+      "desc": "Internet file retriever",
+      "homepage": "https://www.gnu.org/software/wget/",
+      "versions": {
+        "stable": "1.25.0"
+      }
+    }
+  },
+  "GET https://pokeapi.co/api/v2/pokemon/pikachu": {
+    "status": 200,
+    "body": {
+      "id": 25,
+      "name": "pikachu",
+      "height": 4,
+      "weight": 60,
+      "types": [
+        {
+          "slot": 1,
+          "type": {
+            "name": "electric"
+          }
+        }
+      ]
+    }
+  },
+  "GET https://catfact.ninja/fact": {
+    "status": 200,
+    "body": {
+      "fact": "A cat has more bones than a human; humans have 206, and the cat - 230.",
+      "length": 70
+    }
+  },
+  "GET https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=1&mode=list&hide_recent_previous=true": {
+    "status": 200,
+    "body": {
+      "count": 474,
+      "results": [
+        {
+          "name": "Falcon 9 Block 5 | Starlink Group 15-18",
+          "net": "2026-10-30T04:02:00Z",
+          "status": {
+            "name": "Go for Launch"
+          }
+        }
+      ]
+    }
+  },
+  "GET https://api.zippopotam.us/us/90210": {
+    "status": 200,
+    "body": {
+      "country": "United States",
+      "places": [
+        {
+          "place name": "Beverly Hills",
+          "state": "California",
+          "latitude": "34.0901",
+          "longitude": "-118.4065"
+        }
+      ]
+    }
+  },
+  "GET https://api.datamuse.com/words?rel_rhy=qqzzx&max=10": {
+    "status": 200,
+    "body": []
+  },
+  "GET https://archive.org/wayback/available?url=example.com": {
+    "status": 200,
+    "body": {
+      "url": "example.com",
+      "archived_snapshots": {
+        "closest": {
+          "status": "200",
+          "available": true,
+          "url": "http://web.archive.org/web/20261027205234/https://example.com/",
+          "timestamp": "20261027205234"
+        }
+      }
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2": {
+    "status": 200,
+    "body": {
+      "daily_units": {
+        "temperature_2m_max": "°C"
+      },
+      "daily": {
+        "time": [
+          "2026-10-28",
+          "2026-10-29"
+        ],
+        "weather_code": [
+          51,
+          61
+        ],
+        "temperature_2m_max": [
+          12.1,
+          9.4
+        ],
+        "temperature_2m_min": [
+          7.7,
+          5.9
+        ],
+        "precipitation_probability_max": [
+          21,
+          80
+        ]
+      }
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=-33.86785&longitude=151.20732&current=uv_index&daily=uv_index_max&timezone=auto&forecast_days=1": {
+    "status": 200,
+    "body": {
+      "current": {
+        "uv_index": 6.3
+      },
+      "daily": {
+        "uv_index_max": [
+          11.2
+        ]
+      }
+    }
+  },
+  "GET https://api.github.com/repos/astral-sh/uv": {
+    "status": 200,
+    "body": {
+      "full_name": "astral-sh/uv",
+      "description": "An extremely fast Python package and project manager, written in Rust.",
+      "language": "Rust",
+      "stargazers_count": 71234,
+      "forks_count": 2210,
+      "open_issues_count": 2004,
+      "html_url": "https://github.com/astral-sh/uv",
+      "archived": false
+    }
+  },
+  "GET https://api.github.com/repos/b-i-t-8/nothing-here": {
+    "status": 404,
+    "body": {
+      "message": "Not Found"
+    }
+  },
+  "GET https://api.github.com/repos/b-i-t-8/busy": {
+    "status": 403,
+    "body": {
+      "message": "API rate limit exceeded"
+    }
+  },
+  "GET https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY": {
+    "status": 200,
+    "body": {
+      "date": "2026-10-28",
+      "title": "Day and Night over the Clouds",
+      "media_type": "image",
+      "url": "https://apod.nasa.gov/apod/image/2610/example_1024.jpg",
+      "explanation": "Sometimes it's night on the ground but day in the air."
+    }
   }
 }
