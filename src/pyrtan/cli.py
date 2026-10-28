@@ -70,6 +70,17 @@ from .tree import TreeError, check, load_tree
 
 
 
+SECRET_FLAGS = {"--token": "PYRTAN_TOKEN", "--federation-secret": "PYRTAN_FEDERATION_SECRET"}
+
+
+def _warn_secret_flags(argv: list[str]) -> None:
+    """A secret given as a flag is in the process list, where every user of the
+    machine can read it (ps); the environment variable is not."""
+    for flag, env in SECRET_FLAGS.items():
+        if any(a == flag or a.startswith(flag + "=") for a in argv):
+            print(f"pyrtan: {flag} on the command line can be read by anyone on this machine (ps); set ${env} instead", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pyrtan", description="A core set of expandable services that act on all forms of I/O through inspectable decision trees.")
     parser.add_argument("--version", action="version", version=f"pyrtan {__version__}")
@@ -407,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
         q.add_argument("--dir", type=Path, default=None, help="where your key and document live (default $PYRTAN_IDENTITY or ~/.config/pyrtan/identity)")
 
     args = parser.parse_args(argv)
+    _warn_secret_flags(sys.argv[1:] if argv is None else argv)
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,

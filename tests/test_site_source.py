@@ -42,3 +42,10 @@ def test_notes_reflow_and_trailers():
     assert "- a list\n- kept" in source.notes(body)
     assert "Co-Authored-By" in source.notes(body)
     assert "Co-Authored-By" not in source.notes(body, trailers=False)
+
+
+def test_links_that_leave_the_site_are_only_web_and_mail():
+    assert source.outside("https://pyrtan.com/") == "https://pyrtan.com/" and source.outside("mailto:a@b.c") == "mailto:a@b.c"
+    assert source.outside("#usage") == "#usage" and source.outside("docs/x.md") is None
+    for bad in ("javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>", "vbscript:x"):
+        assert source.outside(bad) == "#", bad   # a Markdown file merged to main is no script on pyrtan.com

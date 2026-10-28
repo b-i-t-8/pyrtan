@@ -211,7 +211,8 @@ join one, the browser is the hub. It holds trees with no network to
 fetch them from: every console carries the default trees (the examples and
 the catalog, which a release ships inside the package; `pyrtan console
 --trees DIR` carries others), and takes a fresher catalog only from its own
-site (`../catalog/`) or one named in the address (`?catalog=`). It reads the
+site (`../catalog/`, or one on the same origin named in the address,
+`?catalog=`). It reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
 while the page is open. Every example runs there but six: weather
@@ -798,7 +799,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.23.1. The core, the service, the hub, the command, the console (which
+0.23.2. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

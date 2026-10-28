@@ -108,7 +108,7 @@ from typing import Any, Callable, Iterable
 from . import __version__
 from .service import http_json
 from .identity import Replays
-from .store import BlobStore, StoreError, check_key, digest as blob_digest, write_private
+from .store import BlobStore, StoreError, canonical as store_canonical, check_key, digest as blob_digest, write_private
 
 DEFAULT_HUB_LIST = "https://pyrtan.com/rendezvous/hubs.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
@@ -283,7 +283,7 @@ def first_live_hub(hubs: list[str] | None = None) -> str | None:
 
 
 def canonical(body: Any) -> bytes:
-    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return store_canonical(body)  # the same bytes the identity signatures are over (store.canonical)
 
 
 def sign(secret: str, actor: str, method: str, path: str, body: Any, date: float | None = None) -> dict[str, str]:
@@ -298,7 +298,7 @@ def verify(secret: str, method: str, path: str, body: Any, headers: dict[str, st
     """None if the signature holds; otherwise what is wrong with it."""
     date_text = headers.get("X-Pyrtan-Date", "")
     mac = headers.get("X-Pyrtan-Signature", "")
-    if not date_text.isdigit() or not mac:
+    if not (date_text.isascii() and date_text.isdigit()) or not mac:
         return "no signature"
     if abs((now if now is not None else time.time()) - int(date_text)) > SIGNATURE_WINDOW:
         return "signature too old"
