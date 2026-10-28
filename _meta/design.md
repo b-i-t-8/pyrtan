@@ -377,7 +377,13 @@ Five trees, all against real public APIs, all tested offline:
     that touches a tree); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
-14. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+14. **v0.24, built: memory across runs.** A seventh source, `memory`, with
+    its own allow-list, `keys`: an observe reads a key, an act writes,
+    counts on or forgets one, with an optional `ttl`. A recording keeps
+    what was read, so invariant 1 holds and a tree's tests replay it. The
+    store is the box's own file (`--memory`), refused under `--egress
+    public`, never served or gossiped (`memory.py`, `io.md`).
+15. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

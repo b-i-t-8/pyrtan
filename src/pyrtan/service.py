@@ -171,6 +171,7 @@ class Service:
         unanswered: str | Path | None = None,
         watch: bool = False,
         suggestions: str | Path | None = None,
+        memory: Any = None,
     ) -> None:
         self.registry = registry
         self.name = name
@@ -179,7 +180,7 @@ class Service:
         self.token = token or None
         self.egress = egress
         self.started = time.time()
-        adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress)
+        adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress, memory=memory)
         self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {}, adapters=adapters)
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
         self.unanswered = Unanswered(path=unanswered)
@@ -496,9 +497,10 @@ def serve(
     unanswered: str | Path | None = None,
     watch: bool = False,
     suggestions: str | Path | None = None,
+    memory: str | Path | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
-    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions)
+    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions, memory=memory)
     server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a

@@ -174,6 +174,7 @@ class Tree:
     commands: list[str] = field(default_factory=list)   # what ``shell`` nodes may run
     devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
+    keys: list[str] = field(default_factory=list)       # what ``memory`` nodes may read and write
     tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
 
     def node(self, node_id: str) -> Node:
@@ -228,6 +229,9 @@ class Tree:
                 return ("host-not-allowed", f"{host} is outside this tree's hosts {self.hosts}.")
             topic = str(spec.get("topic", ""))
             return None if adapters.topic_allowed(self.topics, topic) else ("topic-not-allowed", f"{topic!r} is outside this tree's topics {self.topics}.")
+        if source == "memory":
+            key = str(spec.get("key", ""))
+            return None if adapters.key_allowed(self.keys, key) else ("key-not-allowed", f"{key!r} is outside this tree's keys {self.keys}.")
         return None
 
     def watch_kinds(self) -> list[str]:
@@ -263,7 +267,7 @@ class Tree:
             "description": self.description,
             "tags": self.tags,
             "hosts": self.hosts,
-            **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics") if getattr(self, k)},
+            **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
             "license": self.license,
@@ -309,7 +313,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     if not isinstance(hosts, list) or not all(isinstance(h, str) and h for h in hosts):
         raise TreeError(f"{name}: 'hosts' must be a list of host names")
     lists: dict[str, list[str]] = {}
-    for key, noun in (("paths", "paths or globs"), ("commands", "program names"), ("devices", "device paths or globs"), ("topics", "topic filters")):
+    for key, noun in (("paths", "paths or globs"), ("commands", "program names"), ("devices", "device paths or globs"), ("topics", "topic filters"), ("keys", "memory keys or globs")):
         value = raw.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
             raise TreeError(f"{name}: '{key}' must be a list of {noun}")
@@ -642,7 +646,7 @@ def check(tree: Tree) -> list[Problem]:
     return problems
 
 
-_NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}}
+_NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}}
 WATCH_KINDS = ("every", "file", "queue", "serial")
 WATCH_ROOTS = ("event", "env", "now")
 
@@ -926,7 +930,46 @@ def _check_http(tree: Tree, node: Node, http: Any, err, warn) -> None:
         err(where, "'headers' is a table")
 
 
-_SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue}
+def _check_memory(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import memory
+
+    where = f"nodes.{node.id}.memory"
+    if not isinstance(spec, dict) or not isinstance(spec.get("key"), str) or not spec["key"]:
+        err(where, "'memory' is a table with 'key' and, to change it, one of 'write', 'add' or 'delete', and optionally 'ttl'")
+        return
+    unknown = sorted(set(spec) - {"key", "ttl", *memory.MODES})
+    if unknown:
+        err(where, f"unknown keys {unknown}; a memory table has key, write, add, delete and ttl")
+    modes = [m for m in memory.MODES if m in spec]
+    if len(modes) > 1:
+        err(where, f"one of 'write', 'add' or 'delete', not {' and '.join(modes)}")
+    if modes and node.kind == "observe":
+        err(where, f"'{modes[0]}' changes what is kept; make this an act node")
+    if not modes and node.kind == "act":
+        warn(where, "an act that only reads; an observe node would retry it safely")
+    if "delete" in spec and spec["delete"] is not True:
+        err(where, "'delete' is true, or absent")
+    if "add" in spec and not (isinstance(spec["add"], (int, float)) and not isinstance(spec["add"], bool)) and not (isinstance(spec["add"], str) and PLACEHOLDER.search(spec["add"])):
+        err(where, "'add' is a number (a missing key counts from 0)")
+    if "ttl" in spec:
+        if not ({"write", "add"} & set(spec)):
+            err(where, "'ttl' goes with 'write' or 'add': how long the value is kept")
+        elif not (isinstance(spec["ttl"], str) and PLACEHOLDER.search(spec["ttl"])):
+            try:
+                memory.ttl_seconds(spec["ttl"])
+            except memory.MemoryRefused as e:
+                err(where, str(e))
+    key = _literal(spec["key"])
+    if key is None:
+        warn(where, "the key is decided at run time; the runtime refuses keys outside the list")
+    else:
+        if not memory.KEY.match(key):
+            err(where, f"{key!r} is not a memory key: up to 200 letters, digits and . _ : @ / -, starting with a letter or digit")
+        if tree.keys and not adapters.key_allowed(tree.keys, key):
+            err(where, f"{key!r} is not in this tree's keys")
+
+
+_SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue, "memory": _check_memory}
 
 
 def row_condition(row: dict[str, Any]) -> dict[str, Any]:

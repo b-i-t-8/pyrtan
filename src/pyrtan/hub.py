@@ -867,6 +867,7 @@ def serve_hub(
     report_gaps: bool = False,
     unanswered: str | Path | None = None,
     watch: bool = False,
+    memory: str | Path | None = None,
     lan: bool = False,
     chat_reach: int = 0,
     chat: bool = False,
@@ -889,7 +890,7 @@ def serve_hub(
     granted = Grants(keep)
     for who, may in specs:
         granted.allow(who, may)
-    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
+    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch, memory=memory) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
