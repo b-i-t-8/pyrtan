@@ -64,6 +64,7 @@ from .identity import ABILITIES, KINDS, IdentityError
 from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, page
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
+from . import term
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
 from .adapters import LocalAdapters
 from .transport import EGRESS_POLICIES, RecordedTransport, RecordingTransport, UrllibTransport
@@ -142,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     who.add_argument("--people", action="store_true", help="meet people only; never a bot")
     p.add_argument("--interests", default="", metavar="WORDS", help="up to five words, comma-separated; a stranger or bot that shares one is met first")
     p.add_argument("--trace", action="store_true", help="print the path behind each bot line")
-    p.add_argument("--no-typing", action="store_true", help="turn the typing indicator off: no \"Stranger is typing…\" (a terminal reads whole lines, so it never says you are typing)")
+    p.add_argument("--no-typing", action="store_true", help="turn the typing indicator off: neither \"Stranger is typing…\" here nor your typing shown to them (at a terminal the chat reads keys as you type them; from a pipe, whole lines)")
     _token_arg(p, "the token the hub requires, if any")
 
     p = sub.add_parser("serve", help="host trees as a service")
@@ -755,7 +756,18 @@ def cmd_chat(args: argparse.Namespace) -> int:
     state = {"after": 0, "owed": 0, "partner": body.get("partner"), "typing": False}  # owed: lines said to a bot it has not answered yet
     lock = threading.Condition()
     stop = threading.Event()
-    print("Type to talk. /next for someone new, /quit or Ctrl-D to leave.", flush=True)
+    keyed = term.interactive(sys.stdin) and sys.stdout.isatty()  # a terminal: keys as they are typed
+    out = threading.RLock()  # one writer at a time: the lines that arrive, and the line being typed
+    editor = term.LineEditor(lambda text: (sys.stdout.write(text), sys.stdout.flush())) if keyed else None
+
+    def emit(text: str) -> None:
+        with out:
+            if editor is not None:
+                editor.above(text)
+            else:
+                print(text, flush=True)
+
+    emit("Type to talk. /next for someone new, /quit or Ctrl-D to leave.")
 
     def show(answer: dict[str, Any]) -> None:
         with lock:
@@ -765,18 +777,19 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 state["after"] = e["n"]
                 text = clean_line(str(e.get("text", "")))  # whatever a hub sends, no line steers this terminal
                 if e["kind"] == "system":
-                    print(f"  {text}", flush=True)
+                    emit(f"  {text}")
                 elif e["kind"] == "bot":
-                    print(f"Bot: {text}", flush=True)
+                    emit(f"Bot: {text}")
                     if args.trace and isinstance(e.get("trace"), dict):
-                        print(outcome_from_dict({**e, "say": e["text"]}).trace.render(), flush=True)
+                        for row in outcome_from_dict({**e, "say": e["text"]}).trace.render().splitlines():
+                            emit(row)
                     state["owed"] = max(0, state["owed"] - 1)
                 elif e["kind"] == "stranger":
-                    print(f"Stranger: {text}", flush=True)
+                    emit(f"Stranger: {text}")
             state["partner"] = answer.get("partner")
             typing = bool(answer.get("partner_typing"))
             if typing and not state["typing"]:
-                print("  Bot is thinking…" if (state["partner"] or {}).get("kind") == "bot" else "  Stranger is typing…", flush=True)
+                emit("  Bot is thinking…" if (state["partner"] or {}).get("kind") == "bot" else "  Stranger is typing…")
             state["typing"] = typing
             lock.notify_all()
 
@@ -792,11 +805,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
             except Exception as e:
                 if stop.is_set():
                     return  # leaving: the hub not answering any more is expected
-                print(f"  ({at} did not answer: {e})", flush=True)
+                emit(f"  ({at} did not answer: {e})")
                 stop.wait(2)
                 continue
             if st == 404:
-                print("  This seat is gone; start again.", flush=True)
+                emit("  This seat is gone; start again.")
                 stop.set()
                 with lock:
                     lock.notify_all()
@@ -807,35 +820,87 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     return
 
     threading.Thread(target=pump, daemon=True).start()
+
+    # This person's typing, at a terminal: sent when it starts or stops, and
+    # again every couple of seconds while keys keep coming, from a thread of
+    # its own so no key waits on the network. Only to a stranger, and only
+    # with the indicator on (it is both ways or not at all).
+    typing = {"want": False, "sent": False, "at": 0.0, "key": 0.0}
+    tick = threading.Event()
+
+    def typed(line: str) -> None:
+        typing["want"], typing["key"] = bool(line.strip()), time.time()
+        tick.set()
+
+    def typist() -> None:
+        while not stop.is_set():
+            tick.wait(1.0)
+            tick.clear()
+            if not body.get("typing_indicator") or (state["partner"] or {}).get("kind") != "stranger":
+                typing["sent"] = False
+                continue
+            want, now = typing["want"], time.time()
+            if want != typing["sent"] or (want and typing["key"] > typing["at"] and now - typing["at"] >= 2.0):
+                try:
+                    post("/chat/typing", {"seat": seat, "typing": want}, timeout=5.0)
+                except Exception:
+                    pass
+                typing["sent"], typing["at"] = want, now
+
+    if editor is not None:
+        editor.changed = typed
+        threading.Thread(target=typist, daemon=True).start()
+
+    def said(line: str) -> bool:
+        """One line from the person; False when it means leave."""
+        line = line.strip()
+        if stop.is_set() or line in ("/quit", "/q"):
+            return False
+        if line in ("/next", "/n"):
+            typing["want"] = typing["sent"] = False
+            st, answer = post("/chat/next", {"seat": seat, "after": state["after"]})
+            if st == 200 and isinstance(answer, dict):
+                show(answer)
+            return True
+        if not line:
+            return True
+        with lock:
+            to_bot = (state["partner"] or {}).get("kind") == "bot"
+            if to_bot:
+                state["owed"] += 1
+        typing["want"] = typing["sent"] = False  # the line ends the typing, on the hub too
+        st, answer = post("/chat/say", {"seat": seat, "text": line})
+        if st != 200:
+            with lock:
+                state["owed"] -= 1 if to_bot else 0
+            emit(f"  {answer.get('say') if isinstance(answer, dict) else answer}")
+        return True
+
     try:
-        for line in sys.stdin:
-            line = line.strip()
-            if stop.is_set() or line in ("/quit", "/q"):
-                break
-            if line in ("/next", "/n"):
-                st, answer = post("/chat/next", {"seat": seat, "after": state["after"]})
-                if st == 200 and isinstance(answer, dict):
-                    show(answer)
-                continue
-            if not line:
-                continue
-            with lock:
-                to_bot = (state["partner"] or {}).get("kind") == "bot"
-                if to_bot:
-                    state["owed"] += 1
-            st, answer = post("/chat/say", {"seat": seat, "text": line})
-            if st != 200:
-                with lock:
-                    state["owed"] -= 1 if to_bot else 0
-                print(f"  {answer.get('say') if isinstance(answer, dict) else answer}", flush=True)
+        if editor is not None:
+            fd = sys.stdin.fileno()
+            with term.cbreak(fd):
+                with out:
+                    editor.redraw()
+                for chunk in term.keys(fd):
+                    with out:
+                        lines = editor.feed(chunk)
+                    if any(line is term.EOF or not said(str(line)) for line in lines):
+                        break
+                sys.stdout.write("\r\x1b[K")
         else:
-            # Input ran out (a pipe): wait for the bot to answer what it was told.
-            with lock:
-                lock.wait_for(lambda: state["owed"] <= 0 or stop.is_set(), timeout=60)
+            for line in sys.stdin:
+                if not said(line):
+                    break
+            else:
+                # Input ran out (a pipe): wait for the bot to answer what it was told.
+                with lock:
+                    lock.wait_for(lambda: state["owed"] <= 0 or stop.is_set(), timeout=60)
     except KeyboardInterrupt:
         pass
     finally:
         stop.set()
+        tick.set()
         try:
             post("/chat/leave", {"seat": seat}, timeout=5.0)
         except Exception:
