@@ -298,14 +298,15 @@ class Runner:
     def _do_decide(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         on = _state_path(node.get("on"))
         value = resolve(on, scope)
+        shown = _shown(on, value)
         for i, br in enumerate(node.get("branches")):
             if "else" in br:
-                return Step(node.id, "decide", f"{on} = {_brief(value)}", observed=_plain(value), chosen="else"), br["else"]
+                return Step(node.id, "decide", f"{on} = {_brief(shown)}", observed=_plain(shown), chosen="else"), br["else"]
             if conditions.holds(br["when"], value):
-                return Step(node.id, "decide", f"{on} = {_brief(value)}", observed=_plain(value), chosen=_cond_text(br["when"])), br["then"]
-        trace.gap(node.id, on, _plain(value))
-        trace.add(Step(node.id, "decide", f"{on} = {_brief(value)}: no branch", observed=_plain(value), depth=depth))
-        return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no branch for {on} = {_brief(value)}.", output={"gap": trace.gaps[-1]})
+                return Step(node.id, "decide", f"{on} = {_brief(shown)}", observed=_plain(shown), chosen=_cond_text(br["when"])), br["then"]
+        trace.gap(node.id, on, _plain(shown))
+        trace.add(Step(node.id, "decide", f"{on} = {_brief(shown)}: no branch", observed=_plain(shown), depth=depth))
+        return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no branch for {on} = {_brief(shown)}.", output={"gap": trace.gaps[-1]})
 
     def _do_set(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         state = scope["state"]
@@ -404,6 +405,15 @@ def _state_path(path: str) -> str:
     if head in ("inputs", "state", "item", "index", "tree", "now", "env"):
         return path
     return "state." + path
+
+
+def _shown(on: str, value: Any) -> Any:
+    """What a trace records of a decided value. A value from ``env`` is the
+    operator's (a token, a password): the trace says it is set, never what
+    it is, and so does a gap, which can travel to other hubs."""
+    if on.split(".")[0].split("[")[0] == "env" and value is not MISSING and value is not None:
+        return "<set>"
+    return value
 
 
 def _put(state: dict[str, Any], path: str, value: Any) -> None:

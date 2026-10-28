@@ -54,7 +54,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .gaps import GapStore
-from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
+from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .grow import Unanswered
 from .registry import Registry
 from .runtime import Outcome, Runner
@@ -258,7 +258,7 @@ class Service:
         if method == "GET" and path == "/watches":
             return 200, self.watcher.status() if self.watcher else {"count": 0, "watches": [], "watching": False}
         if method == "GET" and path in ("/", "/index.html", "/console"):
-            return 200, PAGE
+            return 200, default_page()
         if method == "GET" and path == "/manifest.webmanifest":
             return 200, ("application/manifest+json", MANIFEST)
         if method == "GET" and path == "/sw.js":

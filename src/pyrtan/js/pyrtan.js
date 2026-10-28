@@ -1463,13 +1463,15 @@
     do_decide(tree, node, scope, trace, depth) {
       const on = statePath(node.get("on"));
       const value = resolve(on, scope);
+      // A value from env is the operator's (a token, a password): the trace says it is set, never what it is.
+      const shown = on.split(".")[0].split("[")[0] === "env" && !isMissing(value) && value !== null && value !== undefined ? "<set>" : value;
       for (const br of node.get("branches")) {
-        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: "else" }), br.else];
-        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: condText(br.when) }), br.then];
+        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: "else" }), br.else];
+        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: condText(br.when) }), br.then];
       }
-      trace.gap(node.id, on, plain(value));
-      trace.add(step(node.id, "decide", `${on} = ${brief(value)}: no branch`, { observed: plain(value), depth }));
-      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+      trace.gap(node.id, on, plain(shown));
+      trace.add(step(node.id, "decide", `${on} = ${brief(shown)}: no branch`, { observed: plain(shown), depth }));
+      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(shown)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
     }
     do_set(tree, node, scope) {
       const values = {};

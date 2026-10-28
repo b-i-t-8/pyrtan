@@ -70,7 +70,7 @@ from .grants import Grants, ability_for, parse_may
 from .identity import IdentityError
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
-from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
+from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .registry import Registry
 from .runtime import Outcome
 from .tree import Tree
@@ -698,7 +698,7 @@ class Hub:
                 return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
             return self.lobby.route(method, path, body, guest=not self._trusted(headers, may))
         if method == "GET" and path in ("/", "/index.html", "/console"):
-            return 200, PAGE
+            return 200, default_page()
         if method == "GET" and path == "/manifest.webmanifest":
             return 200, ("application/manifest+json", MANIFEST)
         if method == "GET" and path == "/sw.js":

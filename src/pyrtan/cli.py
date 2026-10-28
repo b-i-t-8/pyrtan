@@ -26,7 +26,7 @@
     pyrtan search [WORDS] [--catalog URL]    find trees in a catalog
     pyrtan pull   NAME[@VERSION] [--dir]     fetch a tree from a catalog, verified
     pyrtan index  DIR [--out FILE]           build a catalog index from a directory
-    pyrtan console --out FILE                write the console as one static HTML file
+    pyrtan console --out FILE [--trees DIR]  write the console as one static HTML file, carrying trees
     pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
     pyrtan id     resolve NAME@DOMAIN        what identity a name is, pinned the first time
     pyrtan allow  WHO --may ask,run --at HUB  grant an identity abilities on your hub; allowed, disallow
@@ -53,7 +53,7 @@ from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_u
 from .federation import bootstrap_candidates
 from .grow import Proposal, propose
 from .identity import ABILITIES, KINDS, IdentityError
-from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
+from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, page
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
@@ -297,8 +297,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
     _token_arg(p, "your hub's token, if any")
 
-    p = sub.add_parser("console", help="write the console as one static HTML file, to host anywhere")
+    p = sub.add_parser("console", help="write the console as one static HTML file, to host anywhere; it carries the default trees, so it needs no hub and no network to hold them")
     p.add_argument("--out", required=True, help="the file to write ('-' for stdout)")
+    p.add_argument("--trees", nargs="+", metavar="DIR", help="the trees the console carries, instead of the default trees (examples and catalog)")
 
     p = sub.add_parser("id", help="your identity: a key, reachable at any domain, named by any domain (_meta/identity.md)")
     ids = p.add_subparsers(dest="id_command", required=True)
@@ -1306,16 +1307,24 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 
 def cmd_console(args: argparse.Namespace) -> int:
+    from .defaults import bundle
+
+    if args.trees:
+        reg = Registry.from_paths(args.trees)
+        for path, err in sorted(reg.errors.items()):
+            print(f"pyrtan console: {path}: {err} (left out)", file=sys.stderr)
+    carried = bundle(args.trees)
+    html = page(carried)
     if args.out == "-":
-        sys.stdout.write(PAGE)
+        sys.stdout.write(html)
         return 0
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(PAGE, encoding="utf-8")
+    out.write_text(html, encoding="utf-8")
     (out.parent / "manifest.webmanifest").write_text(MANIFEST, encoding="utf-8")
     (out.parent / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")
     (out.parent / "pyrtan.js").write_text(PYRTAN_JS, encoding="utf-8")
-    print(f"wrote {out}, manifest.webmanifest, sw.js and pyrtan.js beside it; serve the folder from any static host: there the browser is a hub of its own, with a catalog's trees.json (../catalog/ beside it, else pyrtan.com's), until it joins a hub started with --cors for that host")
+    print(f"wrote {out}, manifest.webmanifest, sw.js and pyrtan.js beside it, carrying {carried['count']} trees; serve the folder from any static host, or open the file: there the browser is a hub of its own, holding those trees (or a catalog's trees.json beside it, ../catalog/, when there is one), until it joins a hub started with --cors for that host")
     return 0
 
 

@@ -326,6 +326,12 @@ the run, since the run is over.
 service was started with, for tokens). Paths take `.key`, `[0]`, `[-1]`,
 `["key"]`.
 
+An `env` value is the operator's, so it stays out of the trace: a
+`decide` on an `env` path tests the real value but records it as
+`<set>` (or absent), in the step and in any gap. Keep it out of `extract`,
+`set`, `say` and `output` too; those are shown as they are. Use it where
+it goes out and nowhere else: a header, a request body.
+
 Filters: `url`, `json`, `int`, `float`, `str`, `lower`, `upper`, `strip`,
 `title`, `first`, `last`, `length`.
 

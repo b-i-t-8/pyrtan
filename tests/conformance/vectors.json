@@ -585,6 +585,234 @@
       "version": 1
      },
      {
+      "description": "The datasets Postfinite publishes: each one's source, licence, cadence, theme, and what this account holds of it.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-datasets",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "catalogue",
+       "read-only"
+      ],
+      "triggers": [
+       "postfinite (datasets|data sets|catalogue|catalog)",
+       "what (data|datasets) does postfinite (have|publish|hold)",
+       "[list] [the] (datasets|data) (on|in) postfinite"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Postfinite's horizon tables for this account: what each forecasts, how far ahead, and which method is scoring best against what happened.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-forecasts",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "forecasts",
+       "read-only"
+      ],
+      "triggers": [
+       "postfinite forecasts",
+       "what is postfinite forecasting",
+       "forecasts (on|in|from) postfinite",
+       "how good are [the] postfinite forecasts"
+      ],
+      "version": 1
+     },
+     {
+      "description": "How one metric of one Postfinite entity moved over a span: how many readings, from when to when, and the latest bucket's average, low and high.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {
+       "entity": {
+        "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+        "required": true,
+        "type": "str"
+       },
+       "metric": {
+        "description": "A metric the entity reports, as its readings name it: carbon_intensity, water_level, rate",
+        "required": true,
+        "type": "str"
+       },
+       "span": {
+        "default": 86400,
+        "description": "How far back, in seconds (a day unless the sentence says)",
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-history",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "history",
+       "read-only"
+      ],
+      "triggers": [
+       "{metric:word} for {entity:word} over the last {span:duration} (on|in) postfinite",
+       "{metric:word} of {entity:word} over the last {span:duration} (on|in) postfinite",
+       "{metric:word} at {entity:word} over the last {span:duration} (on|in) postfinite",
+       "history of {metric:word} for {entity:word} (on|in) postfinite",
+       "history of {metric:word} of {entity:word} (on|in) postfinite",
+       "history of {metric:word} at {entity:word} (on|in) postfinite"
+      ],
+      "version": 1
+     },
+     {
+      "description": "What a Postfinite account holds: published entities and forecast tables, its own devices and readings, open incidents.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-overview",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "read-only"
+      ],
+      "triggers": [
+       "postfinite",
+       "[what is] (in|on) postfinite",
+       "postfinite (overview|summary|census)",
+       "how is postfinite [doing]"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The latest value one Postfinite entity reported for one metric, with its unit and time.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {
+       "entity": {
+        "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+        "required": true,
+        "type": "str"
+       },
+       "metric": {
+        "description": "A metric the entity reports, as its readings name it: carbon_intensity, water_level, rate",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-reading",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "read-only"
+      ],
+      "triggers": [
+       "[latest] {metric:word} for {entity:word} (on|in) postfinite",
+       "[latest] {metric:word} of {entity:word} (on|in) postfinite",
+       "[latest] {metric:word} at {entity:word} (on|in) postfinite",
+       "[latest] {metric:word} from {entity:word} (on|in) postfinite"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The latest value of every metric one Postfinite entity reports, and how many readings it holds.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {
+       "entity": {
+        "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-readings",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "read-only"
+      ],
+      "triggers": [
+       "[latest] readings (for|of|from) {entity:word} (on|in) postfinite",
+       "what does {entity:word} read (on|in) postfinite"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Entities on Postfinite whose id, name or location contains the words: published points (grids, gauges, ports, central banks…) and the account's own.",
+      "hosts": [
+       "postfinite.com"
+      ],
+      "inputs": {
+       "count": {
+        "default": 10,
+        "description": "How many entities to return",
+        "type": "int"
+       },
+       "query": {
+        "description": "Words to look for in an entity's id, name or location",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "postfinite-search",
+      "namespace": "postfinite",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "postfinite",
+       "data",
+       "search",
+       "read-only"
+      ],
+      "triggers": [
+       "search postfinite for {query}",
+       "find {query} (on|in) postfinite",
+       "postfinite entities (matching|for|about|in) {query}"
+      ],
+      "version": 1
+     },
+     {
       "description": "The latest version of a Python package on PyPI, and what it says it is.",
       "hosts": [
        "pypi.org"
@@ -10603,6 +10831,2217 @@
    "inputs": {},
    "intent": "tell me a joke",
    "tree": "dad-joke"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "census": {
+      "alert_rules": 2,
+      "connectors": 1,
+      "declared_metrics": 96,
+      "edges": 2,
+      "entities": 3,
+      "forecasted": true,
+      "global_entities": 1184,
+      "horizon_tables": 1,
+      "open_incidents": 0,
+      "readings": 5120,
+      "reference_tables": 18,
+      "types": 41
+     }
+    },
+    "say": "Postfinite holds 1184 published entities and 18 reference forecast tables for this account, beside 3 entities of its own with 5120 readings; 0 incidents open.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "postfinite",
+        "inputs": {},
+        "steps": [],
+        "trigger": "postfinite"
+       },
+       "summary": "'postfinite'; postfinite-overview via 'postfinite' (10 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "census": {
+         "alert_rules": 2,
+         "connectors": 1,
+         "declared_metrics": 96,
+         "edges": 2,
+         "entities": 3,
+         "forecasted": true,
+         "global_entities": 1184,
+         "horizon_tables": 1,
+         "open_incidents": 0,
+         "readings": 5120,
+         "reference_tables": 18,
+         "types": 41
+        }
+       },
+       "summary": "GET https://postfinite.com/api/t/home -> 200; census={'entities': 3, 'global_entities': 1184, 'types': 41, 'declared_metrics': 96, '…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Postfinite holds 1184 published entities and 18 reference forecast tables for this account, beside 3 entities of its own with 5120 readings; 0 incidents open."
+      }
+     ],
+     "tree": "postfinite-overview"
+    },
+    "tree": "postfinite-overview"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {},
+   "intent": "postfinite",
+   "tree": "postfinite-overview"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "datasets": [
+      {
+       "cadence": "half-hourly",
+       "dataset_key": "grid_carbon",
+       "entity_count": 1,
+       "held": true,
+       "latest": "2026-10-27T23:30:00.000Z",
+       "licence": "CC-BY-4.0",
+       "name": "Grid carbon intensity, half-hourly",
+       "readings": 672,
+       "source_name": "NESO Carbon Intensity API",
+       "source_url": "https://carbonintensity.org.uk/",
+       "theme": "Energy"
+      },
+      {
+       "cadence": "6-minute",
+       "dataset_key": "tides",
+       "entity_count": 2,
+       "held": true,
+       "latest": "2026-10-27T23:54:00.000Z",
+       "licence": "US Government public domain",
+       "name": "Tide gauges",
+       "readings": 6720,
+       "source_name": "NOAA CO-OPS",
+       "source_url": "https://tidesandcurrents.noaa.gov/",
+       "theme": "Water"
+      },
+      {
+       "cadence": "3-hourly",
+       "dataset_key": "space_weather",
+       "entity_count": 1,
+       "held": true,
+       "latest": "2026-10-27T21:00:00.000Z",
+       "licence": "US Government public domain",
+       "name": "Geomagnetic activity",
+       "readings": 112,
+       "source_name": "NOAA Space Weather Prediction Center",
+       "source_url": "https://www.swpc.noaa.gov/",
+       "theme": "Space"
+      }
+     ],
+     "themes": [
+      "Energy",
+      "Water",
+      "Space",
+      "Money"
+     ]
+    },
+    "say": "Postfinite publishes 3 datasets in 4 themes. The first: Grid carbon intensity, half-hourly, from NESO Carbon Intensity API under CC-BY-4.0, half-hourly.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what data does postfinite have",
+        "inputs": {},
+        "steps": [],
+        "trigger": "what (data|datasets) does postfinite (have|publish|hold)"
+       },
+       "summary": "'what data does postfinite have'; postfinite-datasets via 'what (data|datasets) does postfinite (have|publish|hold)' (45 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "datasets": [
+         {
+          "cadence": "half-hourly",
+          "dataset_key": "grid_carbon",
+          "entity_count": 1,
+          "held": true,
+          "latest": "2026-10-27T23:30:00.000Z",
+          "licence": "CC-BY-4.0",
+          "name": "Grid carbon intensity, half-hourly",
+          "readings": 672,
+          "source_name": "NESO Carbon Intensity API",
+          "source_url": "https://carbonintensity.org.uk/",
+          "theme": "Energy"
+         },
+         {
+          "cadence": "6-minute",
+          "dataset_key": "tides",
+          "entity_count": 2,
+          "held": true,
+          "latest": "2026-10-27T23:54:00.000Z",
+          "licence": "US Government public domain",
+          "name": "Tide gauges",
+          "readings": 6720,
+          "source_name": "NOAA CO-OPS",
+          "source_url": "https://tidesandcurrents.noaa.gov/",
+          "theme": "Water"
+         },
+         {
+          "cadence": "3-hourly",
+          "dataset_key": "space_weather",
+          "entity_count": 1,
+          "held": true,
+          "latest": "2026-10-27T21:00:00.000Z",
+          "licence": "US Government public domain",
+          "name": "Geomagnetic activity",
+          "readings": 112,
+          "source_name": "NOAA Space Weather Prediction Center",
+          "source_url": "https://www.swpc.noaa.gov/",
+          "theme": "Space"
+         }
+        ],
+        "themes": [
+         "Energy",
+         "Water",
+         "Space",
+         "Money"
+        ]
+       },
+       "summary": "GET https://postfinite.com/api/t/datasets -> 200; datasets=[{'dataset_key': 'grid_carbon', 'name': 'Grid carbon intensity, half-hourly', '…, themes=['Energy', 'Water', 'Space', 'Money']"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": [
+        {
+         "cadence": "half-hourly",
+         "dataset_key": "grid_carbon",
+         "entity_count": 1,
+         "held": true,
+         "latest": "2026-10-27T23:30:00.000Z",
+         "licence": "CC-BY-4.0",
+         "name": "Grid carbon intensity, half-hourly",
+         "readings": 672,
+         "source_name": "NESO Carbon Intensity API",
+         "source_url": "https://carbonintensity.org.uk/",
+         "theme": "Energy"
+        },
+        {
+         "cadence": "6-minute",
+         "dataset_key": "tides",
+         "entity_count": 2,
+         "held": true,
+         "latest": "2026-10-27T23:54:00.000Z",
+         "licence": "US Government public domain",
+         "name": "Tide gauges",
+         "readings": 6720,
+         "source_name": "NOAA CO-OPS",
+         "source_url": "https://tidesandcurrents.noaa.gov/",
+         "theme": "Water"
+        },
+        {
+         "cadence": "3-hourly",
+         "dataset_key": "space_weather",
+         "entity_count": 1,
+         "held": true,
+         "latest": "2026-10-27T21:00:00.000Z",
+         "licence": "US Government public domain",
+         "name": "Geomagnetic activity",
+         "readings": 112,
+         "source_name": "NOAA Space Weather Prediction Center",
+         "source_url": "https://www.swpc.noaa.gov/",
+         "theme": "Space"
+        }
+       ],
+       "summary": "state.datasets = [{'dataset_key': 'grid_carbon', 'name': 'Grid carbon intensity, half-hourly', '…"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Postfinite publishes 3 datasets in 4 themes. The first: Grid carbon intensity, half-hourly, from NESO Carbon Intensity API under CC-BY-4.0, half-hourly."
+      }
+     ],
+     "tree": "postfinite-datasets"
+    },
+    "tree": "postfinite-datasets"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {},
+   "intent": "what data does postfinite have",
+   "tree": "postfinite-datasets"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "count": 10,
+     "query": "rotterdam"
+    },
+    "output": {
+     "entities": [
+      {
+       "entity_id": "pf:weather:rotterdam",
+       "entity_type": "weather_point",
+       "last_metric": "air_temperature",
+       "last_reading_at": "2026-10-27T23:00:00.000Z",
+       "last_unit": "°C",
+       "last_value": 9.4,
+       "location": "Rotterdam",
+       "name": "Rotterdam weather",
+       "origin": "global"
+      },
+      {
+       "entity_id": "pf:port:rotterdam",
+       "entity_type": "port",
+       "last_metric": null,
+       "last_reading_at": null,
+       "last_unit": null,
+       "last_value": null,
+       "location": "Rotterdam",
+       "name": "Port of Rotterdam",
+       "origin": "global"
+      }
+     ],
+     "total": 2
+    },
+    "say": "2 on Postfinite match 'rotterdam'. First: Rotterdam weather (pf:weather:rotterdam), last air_temperature = 9.4 °C at 2026-10-27T23:00:00.000Z.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "search postfinite for rotterdam",
+        "inputs": {
+         "query": "rotterdam"
+        },
+        "steps": [],
+        "trigger": "search postfinite for {query}"
+       },
+       "summary": "'search postfinite for rotterdam'; postfinite-search via 'search postfinite for {query}' (19 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "entities": [
+         {
+          "entity_id": "pf:weather:rotterdam",
+          "entity_type": "weather_point",
+          "last_metric": "air_temperature",
+          "last_reading_at": "2026-10-27T23:00:00.000Z",
+          "last_unit": "°C",
+          "last_value": 9.4,
+          "location": "Rotterdam",
+          "name": "Rotterdam weather",
+          "origin": "global"
+         },
+         {
+          "entity_id": "pf:port:rotterdam",
+          "entity_type": "port",
+          "last_metric": null,
+          "last_reading_at": null,
+          "last_unit": null,
+          "last_value": null,
+          "location": "Rotterdam",
+          "name": "Port of Rotterdam",
+          "origin": "global"
+         }
+        ],
+        "total": 2
+       },
+       "summary": "GET https://postfinite.com/api/t/entities?q=rotterdam&limit=10 -> 200; total=2, entities=[{'entity_id': 'pf:weather:rotterdam', 'name': 'Rotterdam weather', 'entity_typ…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "gt 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "read-yet",
+       "node": "any",
+       "observed": 2,
+       "summary": "state.total = 2"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unit",
+       "node": "read-yet",
+       "observed": "2026-10-27T23:00:00.000Z",
+       "summary": "state.entities[0].last_reading_at = 2026-10-27T23:00:00.000Z"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "unit",
+       "observed": "°C",
+       "summary": "state.entities[0].last_unit = °C"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "2 on Postfinite match 'rotterdam'. First: Rotterdam weather (pf:weather:rotterdam), last air_temperature = 9.4 °C at 2026-10-27T23:00:00.000Z."
+      }
+     ],
+     "tree": "postfinite-search"
+    },
+    "tree": "postfinite-search"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "query": "rotterdam"
+   },
+   "intent": "search postfinite for rotterdam",
+   "tree": "postfinite-search"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "count": 10,
+     "query": "port of"
+    },
+    "output": {
+     "entities": [
+      {
+       "entity_id": "pf:port:rotterdam",
+       "entity_type": "port",
+       "last_metric": null,
+       "last_reading_at": null,
+       "last_unit": null,
+       "last_value": null,
+       "location": "Rotterdam",
+       "name": "Port of Rotterdam",
+       "origin": "global"
+      }
+     ],
+     "total": 1
+    },
+    "say": "1 on Postfinite match 'port of'. First: Port of Rotterdam (pf:port:rotterdam), with no readings yet.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "find port of on postfinite",
+        "inputs": {
+         "query": "port of"
+        },
+        "steps": [],
+        "trigger": "find {query} (on|in) postfinite"
+       },
+       "summary": "'find port of on postfinite'; postfinite-search via 'find {query} (on|in) postfinite' (18 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "entities": [
+         {
+          "entity_id": "pf:port:rotterdam",
+          "entity_type": "port",
+          "last_metric": null,
+          "last_reading_at": null,
+          "last_unit": null,
+          "last_value": null,
+          "location": "Rotterdam",
+          "name": "Port of Rotterdam",
+          "origin": "global"
+         }
+        ],
+        "total": 1
+       },
+       "summary": "GET https://postfinite.com/api/t/entities?q=port%20of&limit=10 -> 200; total=1, entities=[{'entity_id': 'pf:port:rotterdam', 'name': 'Port of Rotterdam', 'entity_type':…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "gt 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "read-yet",
+       "node": "any",
+       "observed": 1,
+       "summary": "state.total = 1"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply-quiet",
+       "node": "read-yet",
+       "summary": "state.entities[0].last_reading_at = None"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply-quiet",
+       "summary": "1 on Postfinite match 'port of'. First: Port of Rotterdam (pf:port:rotterdam), with no readings yet."
+      }
+     ],
+     "tree": "postfinite-search"
+    },
+    "tree": "postfinite-search"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "query": "port of"
+   },
+   "intent": "find port of on postfinite",
+   "tree": "postfinite-search"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "count": 10,
+     "query": "atlantis"
+    },
+    "reason": "nothing-found",
+    "say": "Nothing on Postfinite matches 'atlantis'. Try fewer words, or ask for postfinite datasets.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "search postfinite for atlantis",
+        "inputs": {
+         "query": "atlantis"
+        },
+        "steps": [],
+        "trigger": "search postfinite for {query}"
+       },
+       "summary": "'search postfinite for atlantis'; postfinite-search via 'search postfinite for {query}' (19 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "entities": [],
+        "total": 0
+       },
+       "summary": "GET https://postfinite.com/api/t/entities?q=atlantis&limit=10 -> 200; total=0, entities=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "nothing",
+       "node": "any",
+       "observed": 0,
+       "summary": "state.total = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "nothing",
+       "summary": "nothing-found: Nothing on Postfinite matches 'atlantis'. Try fewer words, or ask for postfinite datasets."
+      }
+     ],
+     "tree": "postfinite-search"
+    },
+    "tree": "postfinite-search"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "query": "atlantis"
+   },
+   "intent": "search postfinite for atlantis",
+   "tree": "postfinite-search"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb"
+    },
+    "output": {
+     "entity": "pf:grid:gb",
+     "latest": [
+      {
+       "metric_name": "carbon_intensity",
+       "metric_value": 142,
+       "ts": "2026-10-27T23:30:00.000Z",
+       "unit": "gCO2/kWh"
+      },
+      {
+       "metric_name": "carbon_intensity_forecast",
+       "metric_value": 138,
+       "ts": "2026-10-28T00:00:00.000Z",
+       "unit": "gCO2/kWh"
+      }
+     ],
+     "readings": 672
+    },
+    "say": "pf:grid:gb on Postfinite: 2 metrics, 672 readings. carbon_intensity = 142 gCO2/kWh at 2026-10-27T23:30:00.000Z.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest readings for pf:grid:gb on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb"
+        },
+        "steps": [],
+        "trigger": "[latest] readings (for|of|from) {entity:word} (on|in) postfinite"
+       },
+       "summary": "'latest readings for pf:grid:gb on postfinite'; postfinite-readings via '[latest] readings (for|of|from) {entity:word} (on|in) postfinite' (37 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "latest": [
+         {
+          "metric_name": "carbon_intensity",
+          "metric_value": 142,
+          "ts": "2026-10-27T23:30:00.000Z",
+          "unit": "gCO2/kWh"
+         },
+         {
+          "metric_name": "carbon_intensity_forecast",
+          "metric_value": 138,
+          "ts": "2026-10-28T00:00:00.000Z",
+          "unit": "gCO2/kWh"
+         }
+        ],
+        "total": 672
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings -> 200; latest=[{'metric_name': 'carbon_intensity', 'metric_value': 142, 'unit': 'gCO2/kWh', '…, total=672"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unit",
+       "node": "any",
+       "observed": [
+        {
+         "metric_name": "carbon_intensity",
+         "metric_value": 142,
+         "ts": "2026-10-27T23:30:00.000Z",
+         "unit": "gCO2/kWh"
+        },
+        {
+         "metric_name": "carbon_intensity_forecast",
+         "metric_value": 138,
+         "ts": "2026-10-28T00:00:00.000Z",
+         "unit": "gCO2/kWh"
+        }
+       ],
+       "summary": "state.latest = [{'metric_name': 'carbon_intensity', 'metric_value': 142, 'unit': 'gCO2/kWh', '…"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "unit",
+       "observed": "gCO2/kWh",
+       "summary": "state.latest[0].unit = gCO2/kWh"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "pf:grid:gb on Postfinite: 2 metrics, 672 readings. carbon_intensity = 142 gCO2/kWh at 2026-10-27T23:30:00.000Z."
+      }
+     ],
+     "tree": "postfinite-readings"
+    },
+    "tree": "postfinite-readings"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb"
+   },
+   "intent": "latest readings for pf:grid:gb on postfinite",
+   "tree": "postfinite-readings"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:nowhere"
+    },
+    "reason": "no-readings",
+    "say": "Postfinite has no readings for pf:nowhere. Is the id right? search postfinite for a name to find it.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "readings for pf:nowhere on postfinite",
+        "inputs": {
+         "entity": "pf:nowhere"
+        },
+        "steps": [],
+        "trigger": "[latest] readings (for|of|from) {entity:word} (on|in) postfinite"
+       },
+       "summary": "'readings for pf:nowhere on postfinite'; postfinite-readings via '[latest] readings (for|of|from) {entity:word} (on|in) postfinite' (37 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "latest": [],
+        "total": 0
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Anowhere/readings -> 200; latest=[], total=0"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": [],
+       "summary": "state.latest = []"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-readings: Postfinite has no readings for pf:nowhere. Is the id right? search postfinite for a name to find it."
+      }
+     ],
+     "tree": "postfinite-readings"
+    },
+    "tree": "postfinite-readings"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:nowhere"
+   },
+   "intent": "readings for pf:nowhere on postfinite",
+   "tree": "postfinite-readings"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb",
+     "metric": "carbon_intensity"
+    },
+    "output": {
+     "entity": "pf:grid:gb",
+     "metric": "carbon_intensity",
+     "ts": "2026-10-27T23:30:00.000Z",
+     "unit": "gCO2/kWh",
+     "value": 142
+    },
+    "say": "carbon_intensity for pf:grid:gb: 142 gCO2/kWh at 2026-10-27T23:30:00.000Z.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest carbon_intensity for pf:grid:gb on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb",
+         "metric": "carbon_intensity"
+        },
+        "steps": [],
+        "trigger": "[latest] {metric:word} for {entity:word} (on|in) postfinite"
+       },
+       "summary": "'latest carbon_intensity for pf:grid:gb on postfinite'; postfinite-reading via '[latest] {metric:word} for {entity:word} (on|in) postfinite' (23 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "readings": [
+         {
+          "metric_value": 142,
+          "ts": "2026-10-27T23:30:00.000Z",
+          "unit": "gCO2/kWh"
+         }
+        ]
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings?metric=carbon_intensity&limit=1 -> 200; readings=[{'ts': '2026-10-27T23:30:00.000Z', 'metric_value': 142, 'unit': 'gCO2/kWh'}]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unit",
+       "node": "any",
+       "observed": [
+        {
+         "metric_value": 142,
+         "ts": "2026-10-27T23:30:00.000Z",
+         "unit": "gCO2/kWh"
+        }
+       ],
+       "summary": "state.readings = [{'ts': '2026-10-27T23:30:00.000Z', 'metric_value': 142, 'unit': 'gCO2/kWh'}]"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "unit",
+       "observed": "gCO2/kWh",
+       "summary": "state.readings[0].unit = gCO2/kWh"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "carbon_intensity for pf:grid:gb: 142 gCO2/kWh at 2026-10-27T23:30:00.000Z."
+      }
+     ],
+     "tree": "postfinite-reading"
+    },
+    "tree": "postfinite-reading"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb",
+    "metric": "carbon_intensity"
+   },
+   "intent": "latest carbon_intensity for pf:grid:gb on postfinite",
+   "tree": "postfinite-reading"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:space:kp",
+     "metric": "kp"
+    },
+    "output": {
+     "entity": "pf:space:kp",
+     "metric": "kp",
+     "ts": "2026-10-27T21:00:00.000Z",
+     "value": 3.33
+    },
+    "say": "kp for pf:space:kp: 3.33 at 2026-10-27T21:00:00.000Z.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "kp at pf:space:kp on postfinite",
+        "inputs": {
+         "entity": "pf:space:kp",
+         "metric": "kp"
+        },
+        "steps": [],
+        "trigger": "[latest] {metric:word} at {entity:word} (on|in) postfinite"
+       },
+       "summary": "'kp at pf:space:kp on postfinite'; postfinite-reading via '[latest] {metric:word} at {entity:word} (on|in) postfinite' (22 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "readings": [
+         {
+          "metric_value": 3.33,
+          "ts": "2026-10-27T21:00:00.000Z",
+          "unit": null
+         }
+        ]
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Aspace%3Akp/readings?metric=kp&limit=1 -> 200; readings=[{'ts': '2026-10-27T21:00:00.000Z', 'metric_value': 3.33, 'unit': None}]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unit",
+       "node": "any",
+       "observed": [
+        {
+         "metric_value": 3.33,
+         "ts": "2026-10-27T21:00:00.000Z",
+         "unit": null
+        }
+       ],
+       "summary": "state.readings = [{'ts': '2026-10-27T21:00:00.000Z', 'metric_value': 3.33, 'unit': None}]"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply-bare",
+       "node": "unit",
+       "summary": "state.readings[0].unit = None"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply-bare",
+       "summary": "kp for pf:space:kp: 3.33 at 2026-10-27T21:00:00.000Z."
+      }
+     ],
+     "tree": "postfinite-reading"
+    },
+    "tree": "postfinite-reading"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:space:kp",
+    "metric": "kp"
+   },
+   "intent": "kp at pf:space:kp on postfinite",
+   "tree": "postfinite-reading"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb",
+     "metric": "wind"
+    },
+    "reason": "no-readings",
+    "say": "Postfinite has no wind readings for pf:grid:gb. readings for pf:grid:gb on postfinite lists what it does report.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "wind for pf:grid:gb on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb",
+         "metric": "wind"
+        },
+        "steps": [],
+        "trigger": "[latest] {metric:word} for {entity:word} (on|in) postfinite"
+       },
+       "summary": "'wind for pf:grid:gb on postfinite'; postfinite-reading via '[latest] {metric:word} for {entity:word} (on|in) postfinite' (23 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "readings": []
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings?metric=wind&limit=1 -> 200; readings=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": [],
+       "summary": "state.readings = []"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-readings: Postfinite has no wind readings for pf:grid:gb. readings for pf:grid:gb on postfinite lists what it does report."
+      }
+     ],
+     "tree": "postfinite-reading"
+    },
+    "tree": "postfinite-reading"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb",
+    "metric": "wind"
+   },
+   "intent": "wind for pf:grid:gb on postfinite",
+   "tree": "postfinite-reading"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb",
+     "metric": "carbon_intensity",
+     "span": 172800
+    },
+    "output": {
+     "buckets": [
+      {
+       "avg": 150,
+       "max": 150,
+       "min": 150,
+       "n": 1,
+       "t": "2026-10-27T23:00:00.000Z"
+      },
+      {
+       "avg": 142,
+       "max": 142,
+       "min": 142,
+       "n": 1,
+       "t": "2026-10-27T23:30:00.000Z"
+      }
+     ],
+     "entity": "pf:grid:gb",
+     "from": "2026-10-26T00:00:00.000Z",
+     "metric": "carbon_intensity",
+     "readings": 96,
+     "to": "2026-10-28T00:00:00.000Z",
+     "unit": "gCO2/kWh"
+    },
+    "say": "carbon_intensity for pf:grid:gb from 2026-10-26T00:00:00.000Z to 2026-10-28T00:00:00.000Z: 96 readings in 2 buckets; the latest averaged 142 gCO2/kWh (low 142, high 142).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "carbon_intensity for pf:grid:gb over the last 2 days on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb",
+         "metric": "carbon_intensity",
+         "span": 172800
+        },
+        "notes": [
+         "span: '2 days' read as 172800"
+        ],
+        "steps": [],
+        "trigger": "{metric:word} for {entity:word} over the last {span:duration} (on|in) postfinite"
+       },
+       "summary": "'carbon_intensity for pf:grid:gb over the last 2 days on postfinite'; postfinite-history via '{metric:word} for {entity:word} over the last {span:duration} (on|in) postfinite' (28 literal chars); span: '2 days' read as 172800"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "buckets": [
+         {
+          "avg": 150,
+          "max": 150,
+          "min": 150,
+          "n": 1,
+          "t": "2026-10-27T23:00:00.000Z"
+         },
+         {
+          "avg": 142,
+          "max": 142,
+          "min": 142,
+          "n": 1,
+          "t": "2026-10-27T23:30:00.000Z"
+         }
+        ],
+        "count": 96,
+        "from": "2026-10-26T00:00:00.000Z",
+        "last": {
+         "avg": 142,
+         "max": 142,
+         "min": 142,
+         "n": 1,
+         "t": "2026-10-27T23:30:00.000Z"
+        },
+        "to": "2026-10-28T00:00:00.000Z",
+        "unit": "gCO2/kWh"
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=carbon_intensity&span=172800 -> 200; count=96, unit=gCO2/kWh, from=2026-10-26T00:00:00.000Z, to=2026-10-28T00:00:00.000Z, buckets=[{'t': '2026-10-27T23:00:00.000Z', 'avg': 150, 'min': 150, 'max': 150, 'n': 1},…, last={'t': '2026-10-27T23:30:00.000Z', 'avg': 142, 'min': 142, 'max': 142, 'n': 1}"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "gt 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unit",
+       "node": "any",
+       "observed": 96,
+       "summary": "state.count = 96"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "unit",
+       "observed": "gCO2/kWh",
+       "summary": "state.unit = gCO2/kWh"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "carbon_intensity for pf:grid:gb from 2026-10-26T00:00:00.000Z to 2026-10-28T00:00:00.000Z: 96 readings in 2 buckets; the latest averaged 142 gCO2/kWh (low 142, high 142)."
+      }
+     ],
+     "tree": "postfinite-history"
+    },
+    "tree": "postfinite-history"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb",
+    "metric": "carbon_intensity",
+    "span": 172800
+   },
+   "intent": "carbon_intensity for pf:grid:gb over the last 2 days on postfinite",
+   "tree": "postfinite-history"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb",
+     "metric": "carbon_intensity",
+     "span": 86400
+    },
+    "reason": "bad-range",
+    "say": "Postfinite would not read that range: That range took longer than 8s to summarise. Try a shorter one.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "history of carbon_intensity for pf:grid:gb on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb",
+         "metric": "carbon_intensity"
+        },
+        "steps": [],
+        "trigger": "history of {metric:word} for {entity:word} (on|in) postfinite"
+       },
+       "summary": "'history of carbon_intensity for pf:grid:gb on postfinite'; postfinite-history via 'history of {metric:word} for {entity:word} (on|in) postfinite' (26 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "buckets": null,
+        "count": null,
+        "from": null,
+        "last": null,
+        "to": null,
+        "unit": null
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=carbon_intensity&span=86400 -> 400; count=None, unit=None, from=None, to=None, buckets=None, last=None"
+      },
+      {
+       "chosen": "eq 400",
+       "depth": 0,
+       "kind": "decide",
+       "next": "refused-range",
+       "node": "status",
+       "observed": 400,
+       "summary": "state.resp.status = 400"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "refused-range",
+       "summary": "bad-range: Postfinite would not read that range: That range took longer than 8s to summarise. Try a shorter one."
+      }
+     ],
+     "tree": "postfinite-history"
+    },
+    "tree": "postfinite-history"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb",
+    "metric": "carbon_intensity"
+   },
+   "intent": "history of carbon_intensity for pf:grid:gb on postfinite",
+   "tree": "postfinite-history"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {
+     "entity": "pf:grid:gb",
+     "metric": "solar",
+     "span": 86400
+    },
+    "reason": "no-readings",
+    "say": "Postfinite has no solar readings for pf:grid:gb in that span.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "history of solar for pf:grid:gb on postfinite",
+        "inputs": {
+         "entity": "pf:grid:gb",
+         "metric": "solar"
+        },
+        "steps": [],
+        "trigger": "history of {metric:word} for {entity:word} (on|in) postfinite"
+       },
+       "summary": "'history of solar for pf:grid:gb on postfinite'; postfinite-history via 'history of {metric:word} for {entity:word} (on|in) postfinite' (26 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "buckets": [],
+        "count": 0,
+        "from": "2026-10-27T00:00:00.000Z",
+        "last": null,
+        "to": "2026-10-28T00:00:00.000Z",
+        "unit": null
+       },
+       "summary": "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=solar&span=86400 -> 200; count=0, unit=None, from=2026-10-27T00:00:00.000Z, to=2026-10-28T00:00:00.000Z, buckets=[], last=None"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": 0,
+       "summary": "state.count = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-readings: Postfinite has no solar readings for pf:grid:gb in that span."
+      }
+     ],
+     "tree": "postfinite-history"
+    },
+    "tree": "postfinite-history"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {
+    "entity": "pf:grid:gb",
+    "metric": "solar"
+   },
+   "intent": "history of solar for pf:grid:gb on postfinite",
+   "tree": "postfinite-history"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org",
+    "postfinite_password": "not-a-real-password"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "tables": [
+      {
+       "connectors": [],
+       "dataset": {
+        "key": "grid_carbon",
+        "name": "Grid carbon intensity, half-hourly"
+       },
+       "future": [],
+       "horizon": "1 day",
+       "id": 7,
+       "leaderboard": [
+        {
+         "mae": 9.1,
+         "mape_pct": 6.4,
+         "method": "seasonal_linear",
+         "n_points": 240,
+         "rank": 1,
+         "runs": 10,
+         "value_column": "carbon_intensity"
+        }
+       ],
+       "methods": [
+        "linear",
+        "seasonal_linear",
+        "seasonal_naive"
+       ],
+       "published": true,
+       "resolution": "01:00:00",
+       "schema": "reference",
+       "table": "grid_carbon",
+       "time_column": "ts"
+      }
+     ]
+    },
+    "say": "Forecast tables on Postfinite for this account: 1. reference.grid_carbon looks 1 day ahead; best so far: seasonal_linear on carbon_intensity, 6.4% off.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "postfinite forecasts",
+        "inputs": {},
+        "steps": [],
+        "trigger": "postfinite forecasts"
+       },
+       "summary": "'postfinite forecasts'; postfinite-forecasts via 'postfinite forecasts' (19 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sign-in",
+       "node": "password",
+       "observed": "<set>",
+       "summary": "env.postfinite_password = <set>"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "signed-in",
+       "node": "sign-in",
+       "summary": "POST https://postfinite.com/api/auth/login -> 200"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fetch",
+       "node": "signed-in",
+       "observed": 200,
+       "summary": "state.login.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "tables": [
+         {
+          "connectors": [],
+          "dataset": {
+           "key": "grid_carbon",
+           "name": "Grid carbon intensity, half-hourly"
+          },
+          "future": [],
+          "horizon": "1 day",
+          "id": 7,
+          "leaderboard": [
+           {
+            "mae": 9.1,
+            "mape_pct": 6.4,
+            "method": "seasonal_linear",
+            "n_points": 240,
+            "rank": 1,
+            "runs": 10,
+            "value_column": "carbon_intensity"
+           }
+          ],
+          "methods": [
+           "linear",
+           "seasonal_linear",
+           "seasonal_naive"
+          ],
+          "published": true,
+          "resolution": "01:00:00",
+          "schema": "reference",
+          "table": "grid_carbon",
+          "time_column": "ts"
+         }
+        ]
+       },
+       "summary": "GET https://postfinite.com/api/t/forecasts -> 200; tables=[{'id': 7, 'schema': 'reference', 'table': 'grid_carbon', 'time_column': 'ts', …"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "scored",
+       "node": "any",
+       "observed": [
+        {
+         "connectors": [],
+         "dataset": {
+          "key": "grid_carbon",
+          "name": "Grid carbon intensity, half-hourly"
+         },
+         "future": [],
+         "horizon": "1 day",
+         "id": 7,
+         "leaderboard": [
+          {
+           "mae": 9.1,
+           "mape_pct": 6.4,
+           "method": "seasonal_linear",
+           "n_points": 240,
+           "rank": 1,
+           "runs": 10,
+           "value_column": "carbon_intensity"
+          }
+         ],
+         "methods": [
+          "linear",
+          "seasonal_linear",
+          "seasonal_naive"
+         ],
+         "published": true,
+         "resolution": "01:00:00",
+         "schema": "reference",
+         "table": "grid_carbon",
+         "time_column": "ts"
+        }
+       ],
+       "summary": "state.tables = [{'id': 7, 'schema': 'reference', 'table': 'grid_carbon', 'time_column': 'ts', …"
+      },
+      {
+       "chosen": "type 'list'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "scored",
+       "observed": [
+        {
+         "mae": 9.1,
+         "mape_pct": 6.4,
+         "method": "seasonal_linear",
+         "n_points": 240,
+         "rank": 1,
+         "runs": 10,
+         "value_column": "carbon_intensity"
+        }
+       ],
+       "summary": "state.tables[0].leaderboard = [{'method': 'seasonal_linear', 'value_column': 'carbon_intensity', 'runs': 10, …"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Forecast tables on Postfinite for this account: 1. reference.grid_carbon looks 1 day ahead; best so far: seasonal_linear on carbon_intensity, 6.4% off."
+      }
+     ],
+     "tree": "postfinite-forecasts"
+    },
+    "tree": "postfinite-forecasts"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {},
+   "intent": "postfinite forecasts",
+   "tree": "postfinite-forecasts"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "reason": "no-credentials",
+    "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give).",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how is postfinite doing",
+        "inputs": {},
+        "steps": [],
+        "trigger": "how is postfinite [doing]"
+       },
+       "summary": "'how is postfinite doing'; postfinite-overview via 'how is postfinite [doing]' (20 literal chars)"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-credentials",
+       "node": "credentials",
+       "summary": "env.postfinite_email = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-credentials",
+       "summary": "no-credentials: These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+      }
+     ],
+     "tree": "postfinite-overview"
+    },
+    "tree": "postfinite-overview"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {},
+   "intent": "how is postfinite doing",
+   "tree": "postfinite-overview"
+  },
+  {
+   "env": {
+    "postfinite_email": "ops@example.org"
+   },
+   "expect": {
+    "inputs": {},
+    "reason": "no-credentials",
+    "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give).",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "credentials",
+       "node": "intent",
+       "observed": {
+        "cleaned": "postfinite datasets",
+        "inputs": {},
+        "steps": [],
+        "trigger": "postfinite (datasets|data sets|catalogue|catalog)"
+       },
+       "summary": "'postfinite datasets'; postfinite-datasets via 'postfinite (datasets|data sets|catalogue|catalog)' (42 literal chars)"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "password",
+       "node": "credentials",
+       "observed": "<set>",
+       "summary": "env.postfinite_email = <set>"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-credentials",
+       "node": "password",
+       "summary": "env.postfinite_password = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-credentials",
+       "summary": "no-credentials: These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+      }
+     ],
+     "tree": "postfinite-datasets"
+    },
+    "tree": "postfinite-datasets"
+   },
+   "fixture": "tests/fixtures/postfinite.json",
+   "inputs": {},
+   "intent": "postfinite datasets",
+   "tree": "postfinite-datasets"
   }
  ],
  "trees": {
@@ -12483,6 +14922,2049 @@
     },
     {
      "pattern": "npm (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-datasets": {
+   "description": "The datasets Postfinite publishes: each one's source, licence, cadence, theme, and what this account holds of it.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "license": "MIT",
+   "name": "postfinite-datasets",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "reply",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "datasets"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "datasets",
+       "json": "json.datasets"
+      },
+      {
+       "into": "themes",
+       "json": "json.themes"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/datasets"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-datasets",
+     "say": "Postfinite lists no published datasets for this account."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "datasets": "{{ state.datasets }}",
+      "themes": "{{ state.themes }}"
+     },
+     "say": "Postfinite publishes {{ state.datasets | length }} datasets in {{ state.themes | length }} themes. The first: {{ state.datasets[0].name }}, from {{ state.datasets[0].source_name }} under {{ state.datasets[0].licence }}, {{ state.datasets[0].cadence }}."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "catalogue",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "postfinite (datasets|data sets|catalogue|catalog)"
+    },
+    {
+     "pattern": "what (data|datasets) does postfinite (have|publish|hold)"
+    },
+    {
+     "pattern": "[list] [the] (datasets|data) (on|in) postfinite"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-forecasts": {
+   "description": "Postfinite's horizon tables for this account: what each forecasts, how far ahead, and which method is scoring best against what happened.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "license": "MIT",
+   "name": "postfinite-forecasts",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "scored",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "tables"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "tables",
+       "json": "json.tables"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/forecasts"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-forecasts",
+     "say": "Postfinite has no horizon tables for this account yet."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "tables": "{{ state.tables }}"
+     },
+     "say": "Forecast tables on Postfinite for this account: {{ state.tables | length }}. {{ state.tables[0].schema }}.{{ state.tables[0].table }} looks {{ state.tables[0].horizon }} ahead; best so far: {{ state.tables[0].leaderboard[0].method }} on {{ state.tables[0].leaderboard[0].value_column }}, {{ state.tables[0].leaderboard[0].mape_pct }}% off."
+    },
+    "reply-unscored": {
+     "kind": "done",
+     "output": {
+      "tables": "{{ state.tables }}"
+     },
+     "say": "Forecast tables on Postfinite for this account: {{ state.tables | length }}. {{ state.tables[0].schema }}.{{ state.tables[0].table }} looks {{ state.tables[0].horizon }} ahead and has not been scored yet."
+    },
+    "scored": {
+     "branches": [
+      {
+       "then": "reply-unscored",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "reply",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "reply-unscored"
+      }
+     ],
+     "kind": "decide",
+     "on": "tables[0].leaderboard"
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "forecasts",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "postfinite forecasts"
+    },
+    {
+     "pattern": "what is postfinite forecasting"
+    },
+    {
+     "pattern": "forecasts (on|in|from) postfinite"
+    },
+    {
+     "pattern": "how good are [the] postfinite forecasts"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-history": {
+   "description": "How one metric of one Postfinite entity moved over a span: how many readings, from when to when, and the latest bucket's average, low and high.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "inputs": {
+    "entity": {
+     "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+     "pattern": "^[A-Za-z0-9:_.\\-]+$",
+     "type": "str"
+    },
+    "metric": {
+     "description": "A metric the entity reports, as its readings name it: carbon_intensity, water_level, rate",
+     "pattern": "^[A-Za-z0-9_.\\-]+$",
+     "type": "str"
+    },
+    "span": {
+     "default": 86400,
+     "description": "How far back, in seconds (a day unless the sentence says)",
+     "max": 31622400,
+     "min": 60,
+     "type": "int"
+    }
+   },
+   "license": "MIT",
+   "name": "postfinite-history",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "unit",
+       "when": {
+        "gt": 0
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "count"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "count",
+       "json": "json.readings"
+      },
+      {
+       "into": "unit",
+       "json": "json.unit"
+      },
+      {
+       "into": "from",
+       "json": "json.from"
+      },
+      {
+       "into": "to",
+       "json": "json.to"
+      },
+      {
+       "into": "buckets",
+       "json": "json.buckets"
+      },
+      {
+       "into": "last",
+       "json": "json.buckets[-1]"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/entities/{{ inputs.entity | url }}/series?metric={{ inputs.metric | url }}&span={{ inputs.span }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-readings",
+     "say": "Postfinite has no {{ inputs.metric }} readings for {{ inputs.entity }} in that span."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "refused-range": {
+     "kind": "fail",
+     "reason": "bad-range",
+     "say": "Postfinite would not read that range: {{ state.resp.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "buckets": "{{ state.buckets }}",
+      "entity": "{{ inputs.entity }}",
+      "from": "{{ state.from }}",
+      "metric": "{{ inputs.metric }}",
+      "readings": "{{ state.count }}",
+      "to": "{{ state.to }}",
+      "unit": "{{ state.unit }}"
+     },
+     "say": "{{ inputs.metric }} for {{ inputs.entity }} from {{ state.from }} to {{ state.to }}: {{ state.count }} readings in {{ state.buckets | length }} buckets; the latest averaged {{ state.last.avg }} {{ state.unit }} (low {{ state.last.min }}, high {{ state.last.max }})."
+    },
+    "reply-bare": {
+     "kind": "done",
+     "output": {
+      "buckets": "{{ state.buckets }}",
+      "entity": "{{ inputs.entity }}",
+      "from": "{{ state.from }}",
+      "metric": "{{ inputs.metric }}",
+      "readings": "{{ state.count }}",
+      "to": "{{ state.to }}"
+     },
+     "say": "{{ inputs.metric }} for {{ inputs.entity }} from {{ state.from }} to {{ state.to }}: {{ state.count }} readings in {{ state.buckets | length }} buckets; the latest averaged {{ state.last.avg }} (low {{ state.last.min }}, high {{ state.last.max }})."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused-range",
+       "when": {
+        "eq": 400
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    },
+    "unit": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "reply-bare"
+      }
+     ],
+     "kind": "decide",
+     "on": "unit"
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "history",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "{metric:word} for {entity:word} over the last {span:duration} (on|in) postfinite"
+    },
+    {
+     "pattern": "{metric:word} of {entity:word} over the last {span:duration} (on|in) postfinite"
+    },
+    {
+     "pattern": "{metric:word} at {entity:word} over the last {span:duration} (on|in) postfinite"
+    },
+    {
+     "pattern": "history of {metric:word} for {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "history of {metric:word} of {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "history of {metric:word} at {entity:word} (on|in) postfinite"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-overview": {
+   "description": "What a Postfinite account holds: published entities and forecast tables, its own devices and readings, open incidents.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "license": "MIT",
+   "name": "postfinite-overview",
+   "namespace": "postfinite",
+   "nodes": {
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "census",
+       "json": "json.census"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/home"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "census": "{{ state.census }}"
+     },
+     "say": "Postfinite holds {{ state.census.global_entities }} published entities and {{ state.census.reference_tables }} reference forecast tables for this account, beside {{ state.census.entities }} entities of its own with {{ state.census.readings }} readings; {{ state.census.open_incidents }} incidents open."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "postfinite"
+    },
+    {
+     "pattern": "[what is] (in|on) postfinite"
+    },
+    {
+     "pattern": "postfinite (overview|summary|census)"
+    },
+    {
+     "pattern": "how is postfinite [doing]"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-reading": {
+   "description": "The latest value one Postfinite entity reported for one metric, with its unit and time.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "inputs": {
+    "entity": {
+     "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+     "pattern": "^[A-Za-z0-9:_.\\-]+$",
+     "type": "str"
+    },
+    "metric": {
+     "description": "A metric the entity reports, as its readings name it: carbon_intensity, water_level, rate",
+     "pattern": "^[A-Za-z0-9_.\\-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "postfinite-reading",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "unit",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "readings"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "readings",
+       "json": "json.readings"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/entities/{{ inputs.entity | url }}/readings?metric={{ inputs.metric | url }}&limit=1"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-readings",
+     "say": "Postfinite has no {{ inputs.metric }} readings for {{ inputs.entity }}. readings for {{ inputs.entity }} on postfinite lists what it does report."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "entity": "{{ inputs.entity }}",
+      "metric": "{{ inputs.metric }}",
+      "ts": "{{ state.readings[0].ts }}",
+      "unit": "{{ state.readings[0].unit }}",
+      "value": "{{ state.readings[0].metric_value }}"
+     },
+     "say": "{{ inputs.metric }} for {{ inputs.entity }}: {{ state.readings[0].metric_value }} {{ state.readings[0].unit }} at {{ state.readings[0].ts }}."
+    },
+    "reply-bare": {
+     "kind": "done",
+     "output": {
+      "entity": "{{ inputs.entity }}",
+      "metric": "{{ inputs.metric }}",
+      "ts": "{{ state.readings[0].ts }}",
+      "value": "{{ state.readings[0].metric_value }}"
+     },
+     "say": "{{ inputs.metric }} for {{ inputs.entity }}: {{ state.readings[0].metric_value }} at {{ state.readings[0].ts }}."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    },
+    "unit": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "reply-bare"
+      }
+     ],
+     "kind": "decide",
+     "on": "readings[0].unit"
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[latest] {metric:word} for {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "[latest] {metric:word} of {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "[latest] {metric:word} at {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "[latest] {metric:word} from {entity:word} (on|in) postfinite"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-readings": {
+   "description": "The latest value of every metric one Postfinite entity reports, and how many readings it holds.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "inputs": {
+    "entity": {
+     "description": "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices",
+     "pattern": "^[A-Za-z0-9:_.\\-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "postfinite-readings",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "then": "unit",
+       "when": {
+        "type": "list"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "latest"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "latest",
+       "json": "json.latest"
+      },
+      {
+       "into": "total",
+       "json": "json.total_readings"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/entities/{{ inputs.entity | url }}/readings"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-readings",
+     "say": "Postfinite has no readings for {{ inputs.entity }}. Is the id right? search postfinite for a name to find it."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "entity": "{{ inputs.entity }}",
+      "latest": "{{ state.latest }}",
+      "readings": "{{ state.total }}"
+     },
+     "say": "{{ inputs.entity }} on Postfinite: {{ state.latest | length }} metrics, {{ state.total }} readings. {{ state.latest[0].metric_name }} = {{ state.latest[0].metric_value }} {{ state.latest[0].unit }} at {{ state.latest[0].ts }}."
+    },
+    "reply-bare": {
+     "kind": "done",
+     "output": {
+      "entity": "{{ inputs.entity }}",
+      "latest": "{{ state.latest }}",
+      "readings": "{{ state.total }}"
+     },
+     "say": "{{ inputs.entity }} on Postfinite: {{ state.latest | length }} metrics, {{ state.total }} readings. {{ state.latest[0].metric_name }} = {{ state.latest[0].metric_value }} at {{ state.latest[0].ts }}."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    },
+    "unit": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "reply-bare"
+      }
+     ],
+     "kind": "decide",
+     "on": "latest[0].unit"
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[latest] readings (for|of|from) {entity:word} (on|in) postfinite"
+    },
+    {
+     "pattern": "what does {entity:word} read (on|in) postfinite"
+    }
+   ],
+   "version": 1
+  },
+  "postfinite-search": {
+   "description": "Entities on Postfinite whose id, name or location contains the words: published points (grids, gauges, ports, central banks…) and the account's own.",
+   "hosts": [
+    "postfinite.com"
+   ],
+   "inputs": {
+    "count": {
+     "default": 10,
+     "description": "How many entities to return",
+     "max": 200,
+     "min": 1,
+     "type": "int"
+    },
+    "query": {
+     "description": "Words to look for in an entity's id, name or location",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "postfinite-search",
+   "namespace": "postfinite",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "nothing",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "read-yet",
+       "when": {
+        "gt": 0
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "total"
+    },
+    "credentials": {
+     "branches": [
+      {
+       "then": "password",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_email"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "total",
+       "json": "json.total"
+      },
+      {
+       "into": "entities",
+       "json": "json.entities"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Authorization": "Bearer {{ state.login.json.token }}"
+      },
+      "method": "GET",
+      "url": "https://postfinite.com/api/t/entities?q={{ inputs.query | url }}&limit={{ inputs.count }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "locked-out": {
+     "kind": "fail",
+     "reason": "locked-out",
+     "say": "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+    },
+    "no-access": {
+     "kind": "fail",
+     "reason": "no-access",
+     "say": "Postfinite refused: {{ state.resp.json.error }}"
+    },
+    "no-credentials": {
+     "kind": "fail",
+     "reason": "no-credentials",
+     "say": "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+    },
+    "not-a-password-account": {
+     "kind": "fail",
+     "reason": "not-a-password-account",
+     "say": "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+    },
+    "nothing": {
+     "kind": "fail",
+     "reason": "nothing-found",
+     "say": "Nothing on Postfinite matches '{{ inputs.query }}'. Try fewer words, or ask for postfinite datasets."
+    },
+    "password": {
+     "branches": [
+      {
+       "then": "sign-in",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-credentials"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.postfinite_password"
+    },
+    "postfinite-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Postfinite is rate-limiting this account; try again in a minute."
+    },
+    "read-yet": {
+     "branches": [
+      {
+       "then": "unit",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "reply-quiet"
+      }
+     ],
+     "kind": "decide",
+     "on": "entities[0].last_reading_at"
+    },
+    "refused": {
+     "kind": "fail",
+     "reason": "sign-in-refused",
+     "say": "Postfinite refused the sign-in: {{ state.login.json.error }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "entities": "{{ state.entities }}",
+      "total": "{{ state.total }}"
+     },
+     "say": "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), last {{ state.entities[0].last_metric }} = {{ state.entities[0].last_value }} {{ state.entities[0].last_unit }} at {{ state.entities[0].last_reading_at }}."
+    },
+    "reply-bare": {
+     "kind": "done",
+     "output": {
+      "entities": "{{ state.entities }}",
+      "total": "{{ state.total }}"
+     },
+     "say": "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), last {{ state.entities[0].last_metric }} = {{ state.entities[0].last_value }} at {{ state.entities[0].last_reading_at }}."
+    },
+    "reply-quiet": {
+     "kind": "done",
+     "output": {
+      "entities": "{{ state.entities }}",
+      "total": "{{ state.total }}"
+     },
+     "say": "{{ state.total }} on Postfinite match '{{ inputs.query }}'. First: {{ state.entities[0].name }} ({{ state.entities[0].entity_id }}), with no readings yet."
+    },
+    "session-refused": {
+     "kind": "fail",
+     "reason": "session-refused",
+     "say": "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+    },
+    "sign-in": {
+     "http": {
+      "body": {
+       "email": "{{ env.postfinite_email }}",
+       "password": "{{ env.postfinite_password }}"
+      },
+      "method": "POST",
+      "url": "https://postfinite.com/api/auth/login"
+     },
+     "into": "login",
+     "kind": "act",
+     "next": "signed-in"
+    },
+    "sign-in-down": {
+     "kind": "fail",
+     "reason": "upstream-down",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+    },
+    "signed-in": {
+     "branches": [
+      {
+       "then": "fetch",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "not-a-password-account",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "locked-out",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "sign-in-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected-sign-in"
+      }
+     ],
+     "kind": "decide",
+     "on": "login.status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "session-refused",
+       "when": {
+        "eq": 401
+       }
+      },
+      {
+       "then": "no-access",
+       "when": {
+        "eq": 403
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "then": "postfinite-down",
+       "when": {
+        "gte": 500
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"
+    },
+    "unexpected-sign-in": {
+     "kind": "fail",
+     "reason": "unexpected-response",
+     "say": "Postfinite answered the sign-in with {{ state.login.status }}."
+    },
+    "unit": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "reply-bare"
+      }
+     ],
+     "kind": "decide",
+     "on": "entities[0].last_unit"
+    }
+   },
+   "start": "credentials",
+   "tags": [
+    "postfinite",
+    "data",
+    "search",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "search postfinite for {query}"
+    },
+    {
+     "pattern": "find {query} (on|in) postfinite"
+    },
+    {
+     "pattern": "postfinite entities (matching|for|about|in) {query}"
     }
    ],
    "version": 1

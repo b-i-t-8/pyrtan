@@ -1,0 +1,317 @@
+{
+  "POST https://postfinite.com/api/auth/login": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "token": "pf-test-session-token",
+      "user": {
+        "username": "pyrtan_bot",
+        "tenant_key": "pyrtan",
+        "role": "viewer"
+      },
+      "console_url": "https://pyrtan.postfinite.com/console.html"
+    }
+  },
+  "GET https://postfinite.com/api/t/home": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "census": {
+        "entities": 3,
+        "global_entities": 1184,
+        "types": 41,
+        "declared_metrics": 96,
+        "readings": 5120,
+        "edges": 2,
+        "horizon_tables": 1,
+        "reference_tables": 18,
+        "forecasted": true,
+        "open_incidents": 0,
+        "alert_rules": 2,
+        "connectors": 1
+      }
+    }
+  },
+  "GET https://postfinite.com/api/t/datasets": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entitlement": "internal",
+      "themes": [
+        "Energy",
+        "Water",
+        "Space",
+        "Money"
+      ],
+      "datasets": [
+        {
+          "dataset_key": "grid_carbon",
+          "name": "Grid carbon intensity, half-hourly",
+          "theme": "Energy",
+          "source_name": "NESO Carbon Intensity API",
+          "source_url": "https://carbonintensity.org.uk/",
+          "licence": "CC-BY-4.0",
+          "cadence": "half-hourly",
+          "held": true,
+          "entity_count": 1,
+          "readings": 672,
+          "latest": "2026-10-27T23:30:00.000Z"
+        },
+        {
+          "dataset_key": "tides",
+          "name": "Tide gauges",
+          "theme": "Water",
+          "source_name": "NOAA CO-OPS",
+          "source_url": "https://tidesandcurrents.noaa.gov/",
+          "licence": "US Government public domain",
+          "cadence": "6-minute",
+          "held": true,
+          "entity_count": 2,
+          "readings": 6720,
+          "latest": "2026-10-27T23:54:00.000Z"
+        },
+        {
+          "dataset_key": "space_weather",
+          "name": "Geomagnetic activity",
+          "theme": "Space",
+          "source_name": "NOAA Space Weather Prediction Center",
+          "source_url": "https://www.swpc.noaa.gov/",
+          "licence": "US Government public domain",
+          "cadence": "3-hourly",
+          "held": true,
+          "entity_count": 1,
+          "readings": 112,
+          "latest": "2026-10-27T21:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities?q=rotterdam&limit=10": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "total": 2,
+      "limit": 10,
+      "offset": 0,
+      "query": "rotterdam",
+      "type": null,
+      "origin": null,
+      "entities": [
+        {
+          "entity_id": "pf:weather:rotterdam",
+          "name": "Rotterdam weather",
+          "entity_type": "weather_point",
+          "location": "Rotterdam",
+          "origin": "global",
+          "last_reading_at": "2026-10-27T23:00:00.000Z",
+          "last_metric": "air_temperature",
+          "last_value": 9.4,
+          "last_unit": "°C"
+        },
+        {
+          "entity_id": "pf:port:rotterdam",
+          "name": "Port of Rotterdam",
+          "entity_type": "port",
+          "location": "Rotterdam",
+          "origin": "global",
+          "last_reading_at": null,
+          "last_metric": null,
+          "last_value": null,
+          "last_unit": null
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities?q=port%20of&limit=10": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "total": 1,
+      "entities": [
+        {
+          "entity_id": "pf:port:rotterdam",
+          "name": "Port of Rotterdam",
+          "entity_type": "port",
+          "location": "Rotterdam",
+          "origin": "global",
+          "last_reading_at": null,
+          "last_metric": null,
+          "last_value": null,
+          "last_unit": null
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities?q=atlantis&limit=10": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "total": 0,
+      "entities": []
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:grid:gb",
+      "total_readings": 672,
+      "latest": [
+        {
+          "metric_name": "carbon_intensity",
+          "metric_value": 142,
+          "unit": "gCO2/kWh",
+          "ts": "2026-10-27T23:30:00.000Z"
+        },
+        {
+          "metric_name": "carbon_intensity_forecast",
+          "metric_value": 138,
+          "unit": "gCO2/kWh",
+          "ts": "2026-10-28T00:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Anowhere/readings": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:nowhere",
+      "total_readings": 0,
+      "latest": []
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings?metric=carbon_intensity&limit=1": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:grid:gb",
+      "metric": "carbon_intensity",
+      "readings": [
+        {
+          "ts": "2026-10-27T23:30:00.000Z",
+          "metric_value": 142,
+          "unit": "gCO2/kWh"
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Aspace%3Akp/readings?metric=kp&limit=1": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:space:kp",
+      "metric": "kp",
+      "readings": [
+        {
+          "ts": "2026-10-27T21:00:00.000Z",
+          "metric_value": 3.33,
+          "unit": null
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/readings?metric=wind&limit=1": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:grid:gb",
+      "metric": "wind",
+      "readings": []
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=carbon_intensity&span=172800": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:grid:gb",
+      "metric": "carbon_intensity",
+      "unit": "gCO2/kWh",
+      "from": "2026-10-26T00:00:00.000Z",
+      "to": "2026-10-28T00:00:00.000Z",
+      "bucket_ms": 1800000,
+      "extent": {
+        "first": "2026-10-14T00:00:00.000Z",
+        "last": "2026-10-27T23:30:00.000Z"
+      },
+      "readings": 96,
+      "aggregated": false,
+      "buckets": [
+        {
+          "t": "2026-10-27T23:00:00.000Z",
+          "avg": 150,
+          "min": 150,
+          "max": 150,
+          "n": 1
+        },
+        {
+          "t": "2026-10-27T23:30:00.000Z",
+          "avg": 142,
+          "min": 142,
+          "max": 142,
+          "n": 1
+        }
+      ]
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=carbon_intensity&span=86400": {
+    "status": 400,
+    "body": {
+      "success": false,
+      "error": "That range took longer than 8s to summarise. Try a shorter one."
+    }
+  },
+  "GET https://postfinite.com/api/t/entities/pf%3Agrid%3Agb/series?metric=solar&span=86400": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "entity_id": "pf:grid:gb",
+      "metric": "solar",
+      "unit": null,
+      "extent": null,
+      "readings": 0,
+      "buckets": [],
+      "from": "2026-10-27T00:00:00.000Z",
+      "to": "2026-10-28T00:00:00.000Z"
+    }
+  },
+  "GET https://postfinite.com/api/t/forecasts": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "tables": [
+        {
+          "id": 7,
+          "schema": "reference",
+          "table": "grid_carbon",
+          "time_column": "ts",
+          "horizon": "1 day",
+          "resolution": "01:00:00",
+          "published": true,
+          "dataset": {
+            "key": "grid_carbon",
+            "name": "Grid carbon intensity, half-hourly"
+          },
+          "methods": [
+            "linear",
+            "seasonal_linear",
+            "seasonal_naive"
+          ],
+          "leaderboard": [
+            {
+              "method": "seasonal_linear",
+              "value_column": "carbon_intensity",
+              "runs": 10,
+              "n_points": 240,
+              "mape_pct": 6.4,
+              "mae": 9.1,
+              "rank": 1
+            }
+          ],
+          "future": [],
+          "connectors": []
+        }
+      ]
+    }
+  }
+}
