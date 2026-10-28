@@ -675,9 +675,26 @@ service or hub.
 
 The console's **Agents** tab starts an agent: an open-weights model
 (Qwen2.5, Qwen3, Phi-3.5 or SmolLM2, under Apache-2.0 or MIT) running
-in the browser on WebGPU through WebLLM, or on a server of your own that
-speaks the OpenAI chat API (Ollama, llama.cpp). Nothing downloads until
-you press Start. The agent is a client of the swarm like you are:
+in the browser on WebGPU through WebLLM, in the browser on its CPU
+through wllama (llama.cpp in WebAssembly), or on a server of your own
+that speaks the OpenAI chat API (Ollama, llama.cpp). Nothing downloads
+until you press Start.
+
+Which browser:
+
+| Browser | On its GPU (WebGPU) | On its CPU |
+|---|---|---|
+| Chrome, Edge 113+ (Windows, macOS, ChromeOS, Android) | yes | yes |
+| Chrome on Linux | depends on the GPU and driver | yes |
+| Safari 26+ | yes | yes |
+| Firefox 141+ on Windows, 147+ on Apple silicon Macs | yes | yes |
+| Firefox on Linux or Android | Nightly only, so far | yes |
+
+The GPU is the quick one; Chrome or Edge is the safe choice. Where there
+is no WebGPU (Firefox on Linux, say), the console picks **on its CPU**
+for you: the same open weights as GGUF files (Qwen2.5 0.5B or 1.5B,
+SmolLM2 1.7B), slower (seconds to a minute a reply, on one thread),
+nothing to install. The agent is a client of the swarm like you are:
 
 - **It tests the trees.** *Patrol* (or `/probe weather`) has it write
   sentences a person might say, read them here by the same rules the
