@@ -278,3 +278,20 @@ def test_odd_dates_and_lone_surrogates_are_refused_not_fatal():
     finally:
         server.stop()
         hub.stop()
+
+
+def test_only_the_pyrtan_documents_under_well_known_skip_the_token():
+    from pyrtan.service import public_path
+
+    assert public_path("/.well-known/pyrtan/id/abc.json") and public_path("/.well-known/pyrtan/name/barry.json") and public_path("/.well-known/pyrtan/names.json")
+    for closed in ("/.well-known/other", "/.well-known/pyrtan/", "/.well-known/pyrtan/id/a/b.json", "/.well-known/pyrtan/id/abc", "/.well-known/pyrtan/secrets.json"):
+        assert not public_path(closed), closed
+
+
+def test_the_console_is_never_framed(locked_service):
+    _, server = locked_service
+    status, headers, _ = _raw(f"{server.url}/")
+    assert status == 200
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"] and "object-src 'none'" in headers["Content-Security-Policy"]
+    assert headers["X-Frame-Options"] == "DENY"
+    assert "Content-Security-Policy" not in _raw(f"{server.url}/api")[1]   # JSON needs none
