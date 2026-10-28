@@ -256,7 +256,7 @@ the platform's own keychain, to seal the backup instead of a passphrase.
 Support is uneven across browsers today; the passphrase stays, and a
 passkey would be a second way to open the same backup.
 
-## 5b. A person's devices share their gaps, with no hub
+## 5b. A person's devices share their gaps, with no hub (v0.26)
 
 A console that has joined no hub keeps the gaps and unanswered sentences
 it met under its device (`platform.md`). The devices of one identity
