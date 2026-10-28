@@ -391,7 +391,7 @@ Five trees, all against real public APIs, all tested offline:
     modelled exactly as `conditions.py` runs them, as intervals and
     points; anything else is left alone, so it can miss a dead branch but
     never reports a live one (`analysis.py`).
-16. **v0.31, built: acts that ask first, and dry runs.** An `act` may carry
+16. **v0.32, built: acts that ask first, and dry runs.** An `act` may carry
     `confirm` (true, or its own question): the run pauses as an `ask`
     does, with the request it would send, and only a plain yes does it.
     A dry run treats every act that way, observes for real, and never

@@ -832,7 +832,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             else:
                 print(text, flush=True)
 
-    emit("Type to talk. /next for someone new, /quit or Ctrl-D to leave.")
+    emit("Type to talk. /next for someone new, /quit or Ctrl-D to leave." + (" Up and Down for what you sent." if keyed else ""))
 
     def show(answer: dict[str, Any]) -> None:
         with lock:
