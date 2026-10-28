@@ -85,7 +85,7 @@ from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .registry import Registry
 from .runtime import Outcome
 from .tree import Tree
-from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, set_egress, signed_path, build_answer
+from .service import PEER_HEADER, Server, Service, bearer_ok, http_json, outcome_from_dict, set_egress, signed_path, build_answer
 from .store import StoreError, check_key
 from .transport import EgressRefused, check_egress
 
@@ -163,6 +163,7 @@ class Hub:
         self._names_domain = names_domain
         self._names_cache: tuple[tuple, Any] | None = None
         self.grants = grants if grants is not None else Grants()
+        self.replays = identity.Replays()  # key signatures taken: each POST once
         self.grants.on_change = self._grant_changed
         self._audience = audience
         self.advertised = False   # named with --advertise: then only that name is an audience here
@@ -252,6 +253,11 @@ class Hub:
         if self.token and needed is not None and needed not in may:
             granted = f"it may {', '.join(sorted(may))}" if may else "this hub grants it nothing"
             return signer, may, (403, {"status": "error", "reason": "not-granted", "say": f"{identity.short(signer.root)} may not {needed} here: {granted}."})
+        if method == "POST":
+            # Taken once: a signature seen again within its window is someone replaying it (a refused one may be sent again).
+            h = {k.lower(): v for k, v in headers.items()}
+            if not self.replays.fresh(h.get("x-pyrtan-key-signature", ""), h.get("x-pyrtan-date")):
+                return None, set(), (401, {"status": "error", "reason": "replayed", "say": "This signed request was taken already; sign it again to send it again."})
         return signer, may, None
 
     def _audience_for(self, headers: dict[str, str]) -> str | None:
@@ -366,6 +372,9 @@ class Hub:
             self.refresh(peer)
         self.grants.refresh()
         if self.federation is not None:
+            # A device note runs out with no grant changing: look at every member that has one.
+            for root in {r.identity for r in list(self.federation.followers.values()) if r.kind == "member" and r.identity and r.note is not None}:
+                self._grant_changed(root)
             self.federation.refresh_all()
             self.federation.announce()  # only when what we hold changed
             if self.lobby is not None:
@@ -783,7 +792,9 @@ class Hub:
         if is_chat_path(path):
             if self.lobby is None:
                 return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
-            return self.lobby.route(method, path, body, guest=not self._trusted(headers, may))
+            holder = (bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)) or "chat" in may
+            address = None if holder else (headers.get(PEER_HEADER) or "?")
+            return self.lobby.route(method, path, body, guest=not self._trusted(headers, may), address=address)
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, default_page()
         if method == "GET" and path == "/manifest.webmanifest":
@@ -832,11 +843,13 @@ def _rank(peer: Local | Peer | Remote) -> int:
 def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
     """Join a network from an invite (``name:secret[@hub]``), or the default
     network (built in) when ``invite`` is empty or ``default``, and follow a
-    hub in it: for the default network, the hubs this one already knows in
-    it first, then the hub list, then the snapshot, each fetched only when
-    the ones before it did not do. When ``$PYRTAN_NETWORK`` names a default
-    network that cannot be read, the first listed hub that answers is
-    followed outside any network, as before networks."""
+    hub in it: for the default network, the hubs this one already follows
+    or heard on its LAN first, then the hub list, then the snapshot, each
+    fetched only when the ones before it did not do. A hub that only
+    directory gossip named is never followed: any member may gossip an
+    entry. When ``$PYRTAN_NETWORK`` names a default network that cannot be
+    read, the first listed hub that answers is followed outside any
+    network, as before networks."""
     tried: list[str] = []
     if invite in (None, "", "default"):
         net = default_network()
@@ -844,7 +857,7 @@ def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
             known = net.id
 
             def candidates() -> Iterator[str]:
-                for source in (lambda: fed.known_hubs(known), rendezvous_hubs, snapshot_hubs):
+                for source in (lambda: fed.known_hubs(known, heard=False), rendezvous_hubs, snapshot_hubs):  # never a hub only gossip named
                     for url in source():
                         if url not in tried and url != fed.id:
                             tried.append(url)

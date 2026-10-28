@@ -32,7 +32,13 @@ every event, and it wakes on its own when the seat is due to ask another
 hub or meet a bot, so nothing runs in the background. A seat's own lines
 come back to it as events too, so the log a client shows is the hub's, in
 the hub's order. A seat nobody polls for a minute is let go and its
-partner told, which is how a closed tab ends a conversation.
+partner told, which is how a closed tab ends a conversation. One poll
+waits per seat: a newer one answers the older at once, so a seat holds
+one thread however many polls it sends. A caller without the token or a
+key granted `chat` holds at most eight seats from one address, and
+strangers together leave a hundred of the 500 seats for those who have
+them. Lines lose their control characters, here and from other hubs, and
+`pyrtan chat` strips them again from whatever a hub sends.
 
 The lobby follows the hub's access rule: with a token, only callers with
 the token chat, or with a key the hub grants `chat` (`identity.md` §7).
@@ -115,8 +121,14 @@ cannot reach the next conversation.
 
 The trust rules are federation's. A hub answers a `Meet` only from a hub
 that follows it: following is the operator's choice, and a hub that is
-followed serves its followers. A `Say` or `Part` is taken only for a
-conversation that hub is in. A hub pairs a `Meet` only with its own seats
+followed serves its followers. A lobby behind the hub's token (not
+public) answers a `Meet` only from a follower its operator follows back:
+anyone may follow an open hub, and following is not an invitation into a
+private lobby. A `Say` or `Part` is taken only for a conversation that
+hub is in, and a stranger's lines from another hub have the same burst
+limit as a person's here (five at once, then one a second). The more
+seats wait, the less often each asks other hubs, so a busy lobby does
+not turn into a stream of `Meet`s. A hub pairs a `Meet` only with its own seats
 and never passes one on. Members do not meet across hubs: a member is a
 browser that chats through its hub's lobby like anyone.
 

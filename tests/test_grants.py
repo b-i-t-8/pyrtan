@@ -235,6 +235,7 @@ def test_operate_manages_grants(hub, root, phone, capsys, monkeypatch, tmp_path)
     assert f"grants {phone.id}" in out and "may ask,chat" in out
     assert main(["id", "push", "--at", srv.url]) == 0
     assert h.grants.document(root.id) is not None
+    time.sleep(1.05)  # the same /disallow as above, by the same key: signed in the same second it would be the same request, a replay
     assert main(["disallow", phone.id, "--at", srv.url, "--sign"]) == 0
     assert main(["allowed", "--at", srv.url]) == 3                 # neither token nor key
 
@@ -447,3 +448,35 @@ def test_a_public_lobby_takes_an_ungranted_key_as_a_guest(tmp_path, root, phone)
     finally:
         h.stop()
         srv.stop()
+
+
+def test_a_signed_request_is_taken_once(hub, root):
+    h, srv = hub
+    h.grants.allow(root.id, ["ask"])
+    body = {"text": "echo once"}
+    headers = identity.sign_request(root, srv.url.rstrip("/"), "POST", "/intent", body)
+    assert http_json("POST", f"{srv.url}/intent", body, headers=headers)[0] == 200
+    status, out = http_json("POST", f"{srv.url}/intent", body, headers=headers)   # someone on the path sends it again
+    assert status == 401 and out["reason"] == "replayed"
+    reads = identity.sign_request(root, srv.url.rstrip("/"), "GET", "/capabilities", None)
+    assert [http_json("GET", f"{srv.url}/capabilities", headers=reads)[0] for _ in range(2)] == [200, 200]   # a read changes nothing
+
+
+def test_the_grants_and_the_state_are_the_owners_alone(hub, root, phone, tmp_path):
+    h, srv = hub
+    h.grants.allow(root.id, ["ask"])
+    assert follow_as(srv.url, phone, identity.make_device(root, phone.id, ["ask"]))[0] == 202
+    for name in ("grants.json", "state.json"):
+        assert (tmp_path / name).stat().st_mode & 0o777 == 0o600, name   # pair and network secrets, who may do what
+
+
+def test_a_member_whose_note_runs_out_is_let_go(hub, root, phone):
+    h, srv = hub
+    h.grants.allow(root.id, ["run"])
+    note = identity.make_device(root, phone.id, ["run"], expires=int(time.time()) + 2)
+    assert follow_as(srv.url, phone, note)[0] == 202 and phone.id in h.federation.followers
+    h.refresh_all()
+    assert phone.id in h.federation.followers
+    time.sleep(2.5)
+    h.refresh_all()   # nothing granted or revoked: the note ran out by itself
+    assert phone.id not in h.federation.followers
