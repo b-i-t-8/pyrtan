@@ -1,0 +1,66 @@
+# The next rocket launch anywhere, from The Space Devs' Launch Library:
+# what flies, when (UTC), and whether it is go. Launches that already flew
+# are left out. Without a key the API allows fifteen requests an hour.
+
+name = "next-launch"
+version = 1
+namespace = "pyrtan"
+description = "The next rocket launch anywhere, when, and its status, from the Launch Library."
+tags = ["space", "read-only"]
+license = "MIT"
+hosts = ["ll.thespacedevs.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[when is the] next (launch|rocket launch)"
+[[triggers]]
+pattern = "upcoming (launches|rocket launches)"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=1&mode=list&hide_recent_previous=true" }
+into = "resp"
+extract = [
+  { into = "name", json = "json.results[0].name" },
+  { into = "net", json = "json.results[0].net" },
+  { into = "state", json = "json.results[0].status.name" },
+  { into = "count", json = "json.count" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "name"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "none" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Next launch: {{ state.name }}, {{ state.net }} UTC ({{ state.state }}). {{ state.count }} launches are scheduled."
+output = { name = "{{ state.name }}", net_utc = "{{ state.net }}", status = "{{ state.state }}", upcoming = "{{ state.count }}" }
+
+[nodes.none]
+kind = "done"
+say = "The Launch Library lists no upcoming launches."
+output = { upcoming = 0 }
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "The Launch Library allows fifteen requests an hour without a key; try again later."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Launch Library answered {{ state.resp.status }}."

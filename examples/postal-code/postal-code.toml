@@ -1,0 +1,65 @@
+# Where a postal code is, from Zippopotam.us: the place, its state or
+# region, and where it lies. A US ZIP code needs no country.
+
+name = "postal-code"
+version = 1
+namespace = "pyrtan"
+description = "The place a postal code belongs to, from Zippopotam.us (US ZIP codes, or a code in another country)."
+tags = ["geography", "read-only"]
+license = "MIT"
+hosts = ["api.zippopotam.us"]
+start = "fetch"
+
+[[triggers]]
+pattern = "where is zip [code] {code:word}"
+inputs = { country = "us" }
+[[triggers]]
+pattern = "[where is] (postcode|postal code) {code:word} in {country:word}"
+
+[inputs.code]
+type = "str"
+pattern = "^[A-Za-z0-9-]{2,10}$"
+description = "A postal code, as in: 90210"
+
+[inputs.country]
+type = "str"
+default = "us"
+pattern = "^[A-Za-z]{2}$"
+description = "A two-letter country code, as in: US, DE, GB"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.zippopotam.us/{{ inputs.country | lower }}/{{ inputs.code | url }}" }
+into = "resp"
+extract = [
+  { into = "place", json = "json.places[0][\"place name\"]" },
+  { into = "region", json = "json.places[0].state" },
+  { into = "country_name", json = "json.country" },
+  { into = "lat", json = "json.places[0].latitude" },
+  { into = "lon", json = "json.places[0].longitude" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "unknown-code" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.code | upper }} is {{ state.place }}, {{ state.region }}, {{ state.country_name }}."
+output = { code = "{{ inputs.code | upper }}", place = "{{ state.place }}", region = "{{ state.region }}", country = "{{ state.country_name }}", latitude = "{{ state.lat | float }}", longitude = "{{ state.lon | float }}" }
+
+[nodes.unknown-code]
+kind = "fail"
+reason = "unknown-code"
+say = "Zippopotam.us knows no postal code {{ inputs.code | upper }} in {{ inputs.country | upper }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Zippopotam.us answered {{ state.resp.status }}."

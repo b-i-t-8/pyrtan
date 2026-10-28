@@ -1,0 +1,67 @@
+# How high a place is above the sea, from Open-Meteo's geocoder, which
+# carries each place's elevation with its name.
+
+name = "elevation"
+version = 1
+namespace = "pyrtan"
+description = "How high a place is above sea level, from Open-Meteo's geocoder."
+tags = ["geography", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "how high (is|above sea level is) {place}"
+[[triggers]]
+pattern = "[the] (elevation|altitude) of {place}"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m above sea level."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", elevation_m = "{{ state.height }}" }
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+  { into = "zone", json = "json.results[0].timezone" },
+  { into = "height", json = "json.results[0].elevation" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "has-height" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+
+
+[nodes.has-height]
+kind = "decide"
+on = "height"
+branches = [
+  { when = { type = "number" }, then = "reply" },
+  { else = "no-height" },
+]
+
+[nodes.no-height]
+kind = "fail"
+reason = "no-height"
+say = "Open-Meteo knows {{ state.name }} but not how high it is."

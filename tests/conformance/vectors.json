@@ -158,6 +158,29 @@
     "name": "this browser",
     "trees": [
      {
+      "description": "A random piece of advice, from the Advice Slip API.",
+      "hosts": [
+       "api.adviceslip.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "advice",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "read-only"
+      ],
+      "triggers": [
+       "give me [some] advice",
+       "[any] advice"
+      ],
+      "version": 1
+     },
+     {
       "description": "Current air quality for a place: the European AQI, its band, and PM2.5 and PM10, from Open-Meteo.",
       "hosts": [
        "geocoding-api.open-meteo.com",
@@ -190,6 +213,30 @@
       "version": 1
      },
      {
+      "description": "NASA's Astronomy Picture of the Day: its title, and the picture or video.",
+      "hosts": [
+       "api.nasa.gov"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "apod",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "space",
+       "science",
+       "read-only"
+      ],
+      "triggers": [
+       "astronomy picture of the day",
+       "[nasa] (apod|space picture) [of the day|today]"
+      ],
+      "version": 1
+     },
+     {
       "description": "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out.",
       "hosts": [
        "openlibrary.org"
@@ -217,6 +264,30 @@
        "who wrote {title}",
        "find the book {title}",
        "books by {title}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A random fact about cats, from catfact.ninja.",
+      "hosts": [
+       "catfact.ninja"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "cat-fact",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "animals",
+       "read-only"
+      ],
+      "triggers": [
+       "[tell me a] cat fact",
+       "tell me something about cats"
       ],
       "version": 1
      },
@@ -357,6 +428,35 @@
       "version": 1
      },
      {
+      "description": "How high a place is above sea level, from Open-Meteo's geocoder.",
+      "hosts": [
+       "geocoding-api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "elevation",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "geography",
+       "read-only"
+      ],
+      "triggers": [
+       "how high (is|above sea level is) {place}",
+       "[the] (elevation|altitude) of {place}"
+      ],
+      "version": 1
+     },
+     {
       "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",
       "hosts": [
        "api.frankfurter.dev"
@@ -422,6 +522,37 @@
       "version": 1
      },
      {
+      "description": "Tomorrow's weather for a place: sky, high and low, and chance of rain, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "forecast",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] weather (in|for) {place} tomorrow",
+       "[what's the] weather tomorrow (in|for) {place}",
+       "will it rain tomorrow in {place}"
+      ],
+      "version": 1
+     },
+     {
       "description": "The latest release of a GitHub repository.",
       "hosts": [
        "api.github.com"
@@ -449,6 +580,67 @@
        "latest {repo:word} release"
       ],
       "version": 2
+     },
+     {
+      "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
+      "hosts": [
+       "api.github.com"
+      ],
+      "inputs": {
+       "repo": {
+        "description": "owner/name, as in: astral-sh/uv",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "github-repo",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "github",
+       "software",
+       "read-only"
+      ],
+      "triggers": [
+       "how many stars does {repo:word} have",
+       "github (repo|repository) {repo:word}",
+       "tell me about the {repo:word} repo"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
+      "hosts": [
+       "proxy.golang.org"
+      ],
+      "inputs": {
+       "module": {
+        "description": "A module path, as in: github.com/gorilla/mux",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "go-module",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "go",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest version of {module:word} on go",
+       "go (module|version) {module:word}"
+      ],
+      "version": 1
      },
      {
       "description": "Top stories on Hacker News, from its public API.",
@@ -573,6 +765,36 @@
       "version": 1
      },
      {
+      "description": "A Homebrew formula's current stable version and what it is, from formulae.brew.sh.",
+      "hosts": [
+       "formulae.brew.sh"
+      ],
+      "inputs": {
+       "formula": {
+        "description": "A formula name, as in: wget",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "homebrew",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "macos",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest version of {formula:word} on homebrew",
+       "(brew|homebrew) (formula|version) {formula:word}"
+      ],
+      "version": 1
+     },
+     {
       "description": "Where the International Space Station is right now: latitude, longitude, altitude and speed.",
       "hosts": [
        "api.wheretheiss.at"
@@ -627,6 +849,36 @@
       "triggers": [
        "(find|search) books by {author}",
        "top story on book club"
+      ],
+      "version": 1
+     },
+     {
+      "description": "What time it is now in a place, and its time zone.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "timeapi.io"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "local-time",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "time",
+       "read-only"
+      ],
+      "triggers": [
+       "what time is it in {place}",
+       "[the] (time|local time) in {place}"
       ],
       "version": 1
      },
@@ -694,6 +946,52 @@
        "is the modem on {device:word} up"
       ],
       "version": 2
+     },
+     {
+      "description": "The public IP address requests from here come from, from ipify.",
+      "hosts": [
+       "api.ipify.org"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "my-ip",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "network",
+       "read-only"
+      ],
+      "triggers": [
+       "what is my [public] ip [address]",
+       "my [public] ip [address]"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The next rocket launch anywhere, when, and its status, from the Launch Library.",
+      "hosts": [
+       "ll.thespacedevs.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "next-launch",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "space",
+       "read-only"
+      ],
+      "triggers": [
+       "[when is the] next (launch|rocket launch)",
+       "upcoming (launches|rocket launches)"
+      ],
+      "version": 1
      },
      {
       "description": "The latest version of an npm package, and what it says it is.",
@@ -772,6 +1070,76 @@
        "ping {host:host}",
        "fetch {url:url}",
        "mail {to:email}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A Pokémon's number, types, height and weight, from PokéAPI.",
+      "hosts": [
+       "pokeapi.co"
+      ],
+      "inputs": {
+       "name": {
+        "description": "A Pokémon's name or number, as in: pikachu",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "pokemon",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "games",
+       "read-only"
+      ],
+      "triggers": [
+       "pokemon {name:word}",
+       "what type is {name:word}",
+       "tell me about the pokemon {name:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The place a postal code belongs to, from Zippopotam.us (US ZIP codes, or a code in another country).",
+      "hosts": [
+       "api.zippopotam.us"
+      ],
+      "inputs": {
+       "code": {
+        "description": "A postal code, as in: 90210",
+        "required": true,
+        "type": "str"
+       },
+       "country": {
+        "default": "us",
+        "description": "A two-letter country code, as in: US, DE, GB",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "postal-code",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "geography",
+       "read-only"
+      ],
+      "trigger_inputs": {
+       "where is zip [code] {code:word}": {
+        "country": "us"
+       }
+      },
+      "triggers": [
+       "where is zip [code] {code:word}",
+       "[where is] (postcode|postal code) {code:word} in {country:word}"
       ],
       "version": 1
      },
@@ -859,6 +1227,35 @@
        "what does {url:url} say"
       ],
       "version": 2
+     },
+     {
+      "description": "Words that rhyme with a word, from Datamuse.",
+      "hosts": [
+       "api.datamuse.com"
+      ],
+      "inputs": {
+       "word": {
+        "description": "One English word",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "rhymes",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "language",
+       "read-only"
+      ],
+      "triggers": [
+       "what rhymes with {word:word}",
+       "(rhymes|words that rhyme) (for|with) {word:word}"
+      ],
+      "version": 1
      },
      {
       "description": "The temperature a room's sensor last published, over MQTT.",
@@ -978,6 +1375,30 @@
       "version": 1
      },
      {
+      "description": "The three latest spaceflight news articles, from the Spaceflight News API.",
+      "hosts": [
+       "api.spaceflightnewsapi.net"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "space-news",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "space",
+       "news",
+       "read-only"
+      ],
+      "triggers": [
+       "[latest] (space|spaceflight) news",
+       "what's new in space"
+      ],
+      "version": 1
+     },
+     {
       "description": "Today's sunrise and sunset for a place, in its local time, from Open-Meteo.",
       "hosts": [
        "geocoding-api.open-meteo.com",
@@ -1072,6 +1493,67 @@
       "tags": [],
       "triggers": [
        "shout {y:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The UV index for a place, now and today's highest, with its WHO band, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "uv-index",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "health",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] (uv|uv index) in {place}",
+       "do i need sunscreen in {place}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The Wayback Machine's latest copy of a site, if it has one.",
+      "hosts": [
+       "archive.org"
+      ],
+      "inputs": {
+       "site": {
+        "description": "A host name, as in: example.com",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "wayback",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "web",
+       "read-only"
+      ],
+      "triggers": [
+       "is {site:host} archived",
+       "wayback [machine] {site:host}",
+       "[the] archived copy of {site:host}"
       ],
       "version": 1
      },
@@ -2967,37 +3449,54 @@
     "status": "ok",
     "suggestions": 3,
     "trees": [
+     "advice",
      "air-quality",
+     "apod",
      "books",
+     "cat-fact",
      "count",
      "dad-joke",
      "define",
      "disk-space",
      "earthquakes",
+     "elevation",
      "exchange-rate",
      "fixed",
+     "forecast",
      "github-release",
+     "github-repo",
+     "go-module",
      "hacker-news",
      "hacker-news-item",
      "hn-search",
      "holidays",
+     "homebrew",
      "iss",
      "library",
+     "local-time",
      "log-errors",
      "modem-check",
+     "my-ip",
+     "next-launch",
      "npm-package",
      "order",
      "ping",
+     "pokemon",
+     "postal-code",
      "pypi-package",
      "remind",
      "rendered-headline",
+     "rhymes",
      "room-temperature",
      "site-status",
      "small-talk",
+     "space-news",
      "sun",
      "synonyms",
      "tie-a",
      "tie-b",
+     "uv-index",
+     "wayback",
      "weather",
      "wikipedia"
     ],
@@ -11575,9 +12074,2344 @@
    },
    "intent": "another word for qqqzzz",
    "tree": "synonyms"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo"
+    },
+    "output": {
+     "country": "Norway",
+     "date": "2026-10-29",
+     "high": 9.4,
+     "low": 5.9,
+     "place": "Oslo",
+     "rain_chance": 80,
+     "sky": "rain",
+     "unit": "°C"
+    },
+    "say": "Oslo, Norway, tomorrow (2026-10-29): rain, 5.9 to 9.4°C, 80% chance of rain.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "weather in Oslo tomorrow",
+        "inputs": {
+         "place": "Oslo"
+        },
+        "steps": [],
+        "trigger": "[what's the] weather (in|for) {place} tomorrow"
+       },
+       "summary": "'weather in Oslo tomorrow'; forecast via \"[what's the] weather (in|for) {place} tomorrow\" (29 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "height": null,
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo",
+        "zone": null
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway, zone=None, height=None"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "tomorrow",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "have-day",
+       "node": "tomorrow",
+       "observed": {
+        "code": 61,
+        "day": "2026-10-29",
+        "high": 9.4,
+        "low": 5.9,
+        "rain": 80,
+        "unit": "°C"
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2 -> 200; day=2026-10-29, code=61, high=9.4, low=5.9, rain=80, unit=°C"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "sky",
+       "node": "have-day",
+       "observed": 9.4,
+       "summary": "state.high = 9.4"
+      },
+      {
+       "chosen": "between [51, 67]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rain",
+       "node": "sky",
+       "observed": 61,
+       "summary": "state.code = 61"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "rain",
+       "observed": {
+        "sky": "rain"
+       },
+       "summary": "sky=rain"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Oslo, Norway, tomorrow (2026-10-29): rain, 5.9 to 9.4°C, 80% chance of rain."
+      }
+     ],
+     "tree": "forecast"
+    },
+    "tree": "forecast"
+   },
+   "inputs": {
+    "place": "Oslo"
+   },
+   "intent": "weather in Oslo tomorrow",
+   "tree": "forecast"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Sydney"
+    },
+    "output": {
+     "band": "extreme",
+     "country": "Australia",
+     "place": "Sydney",
+     "uv_max": 11.2,
+     "uv_now": 6.3
+    },
+    "say": "Sydney, Australia: UV index 6.3 now, up to 11.2 today (extreme): stay out of the midday sun.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "uv index in Sydney",
+        "inputs": {
+         "place": "Sydney"
+        },
+        "steps": [],
+        "trigger": "[what's the] (uv|uv index) in {place}"
+       },
+       "summary": "'uv index in Sydney'; uv-index via \"[what's the] (uv|uv index) in {place}\" (20 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Australia",
+        "height": 58.0,
+        "hit": {
+         "country": "Australia",
+         "elevation": 58.0,
+         "latitude": -33.86785,
+         "longitude": 151.20732,
+         "name": "Sydney",
+         "timezone": "Australia/Sydney"
+        },
+        "lat": -33.86785,
+        "lon": 151.20732,
+        "name": "Sydney",
+        "zone": "Australia/Sydney"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Sydney&count=1&language=en&format=json -> 200; hit={'name': 'Sydney', 'country': 'Australia', 'latitude': -33.86785, 'longitude': …, lat=-33.86785, lon=151.20732, name=Sydney, country=Australia, zone=Australia/Sydney, height=58.0"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "uv",
+       "node": "found",
+       "observed": {
+        "country": "Australia",
+        "elevation": 58.0,
+        "latitude": -33.86785,
+        "longitude": 151.20732,
+        "name": "Sydney",
+        "timezone": "Australia/Sydney"
+       },
+       "summary": "state.hit = {'name': 'Sydney', 'country': 'Australia', 'latitude': -33.86785, 'longitude': …"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "band",
+       "node": "uv",
+       "observed": {
+        "max": 11.2,
+        "now": 6.3
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=-33.86785&longitude=151.20732&current=uv_index&daily=uv_index_max&timezone=auto&forecast_days=1 -> 200; now=6.3, max=11.2"
+      },
+      {
+       "chosen": "gte 11",
+       "depth": 0,
+       "kind": "decide",
+       "next": "extreme",
+       "node": "band",
+       "observed": 11.2,
+       "summary": "state.max = 11.2"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "extreme",
+       "observed": {
+        "advice": "stay out of the midday sun",
+        "band": "extreme"
+       },
+       "summary": "band=extreme, advice=stay out of the midday sun"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Sydney, Australia: UV index 6.3 now, up to 11.2 today (extreme): stay out of the midday sun."
+      }
+     ],
+     "tree": "uv-index"
+    },
+    "tree": "uv-index"
+   },
+   "inputs": {
+    "place": "Sydney"
+   },
+   "intent": "uv index in Sydney",
+   "tree": "uv-index"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "La Paz"
+    },
+    "output": {
+     "country": "Mexico",
+     "date": "2026-10-27",
+     "place": "La Paz",
+     "time": "17:50",
+     "timezone": "America/Mazatlan",
+     "weekday": "Tuesday"
+    },
+    "say": "It is 17:50 on Tuesday 2026-10-27 in La Paz, Mexico (America/Mazatlan).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what time is it in La Paz",
+        "inputs": {
+         "place": "La Paz"
+        },
+        "steps": [],
+        "trigger": "what time is it in {place}"
+       },
+       "summary": "'what time is it in La Paz'; local-time via 'what time is it in {place}' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Mexico",
+        "height": 33.0,
+        "hit": {
+         "country": "Mexico",
+         "elevation": 33.0,
+         "latitude": 24.14231,
+         "longitude": -110.31316,
+         "name": "La Paz",
+         "timezone": "America/Mazatlan"
+        },
+        "lat": 24.14231,
+        "lon": -110.31316,
+        "name": "La Paz",
+        "zone": "America/Mazatlan"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=La%20Paz&count=1&language=en&format=json -> 200; hit={'name': 'La Paz', 'country': 'Mexico', 'latitude': 24.14231, 'longitude': -110…, lat=24.14231, lon=-110.31316, name=La Paz, country=Mexico, zone=America/Mazatlan, height=33.0"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "clock",
+       "node": "found",
+       "observed": {
+        "country": "Mexico",
+        "elevation": 33.0,
+        "latitude": 24.14231,
+        "longitude": -110.31316,
+        "name": "La Paz",
+        "timezone": "America/Mazatlan"
+       },
+       "summary": "state.hit = {'name': 'La Paz', 'country': 'Mexico', 'latitude': 24.14231, 'longitude': -110…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "clock",
+       "observed": {
+        "date": "2026-10-27",
+        "time": "17:50",
+        "weekday": "Tuesday"
+       },
+       "summary": "GET https://timeapi.io/api/time/current/zone?timeZone=America%2FMazatlan -> 200; time=17:50, weekday=Tuesday, date=2026-10-27"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "It is 17:50 on Tuesday 2026-10-27 in La Paz, Mexico (America/Mazatlan)."
+      }
+     ],
+     "tree": "local-time"
+    },
+    "tree": "local-time"
+   },
+   "inputs": {
+    "place": "La Paz"
+   },
+   "intent": "what time is it in La Paz",
+   "tree": "local-time"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "La Paz"
+    },
+    "output": {
+     "country": "Mexico",
+     "elevation_m": 33.0,
+     "place": "La Paz"
+    },
+    "say": "La Paz, Mexico is 33 m above sea level.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how high is La Paz",
+        "inputs": {
+         "place": "La Paz"
+        },
+        "steps": [],
+        "trigger": "how high (is|above sea level is) {place}"
+       },
+       "summary": "'how high is La Paz'; elevation via 'how high (is|above sea level is) {place}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Mexico",
+        "height": 33.0,
+        "hit": {
+         "country": "Mexico",
+         "elevation": 33.0,
+         "latitude": 24.14231,
+         "longitude": -110.31316,
+         "name": "La Paz",
+         "timezone": "America/Mazatlan"
+        },
+        "lat": 24.14231,
+        "lon": -110.31316,
+        "name": "La Paz",
+        "zone": "America/Mazatlan"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=La%20Paz&count=1&language=en&format=json -> 200; hit={'name': 'La Paz', 'country': 'Mexico', 'latitude': 24.14231, 'longitude': -110…, lat=24.14231, lon=-110.31316, name=La Paz, country=Mexico, zone=America/Mazatlan, height=33.0"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-height",
+       "node": "found",
+       "observed": {
+        "country": "Mexico",
+        "elevation": 33.0,
+        "latitude": 24.14231,
+        "longitude": -110.31316,
+        "name": "La Paz",
+        "timezone": "America/Mazatlan"
+       },
+       "summary": "state.hit = {'name': 'La Paz', 'country': 'Mexico', 'latitude': 24.14231, 'longitude': -110…"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-height",
+       "observed": 33.0,
+       "summary": "state.height = 33.0"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "La Paz, Mexico is 33 m above sea level."
+      }
+     ],
+     "tree": "elevation"
+    },
+    "tree": "elevation"
+   },
+   "inputs": {
+    "place": "La Paz"
+   },
+   "intent": "how high is La Paz",
+   "tree": "elevation"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo"
+    },
+    "reason": "no-height",
+    "say": "Open-Meteo knows Oslo but not how high it is.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how high is Oslo",
+        "inputs": {
+         "place": "Oslo"
+        },
+        "steps": [],
+        "trigger": "how high (is|above sea level is) {place}"
+       },
+       "summary": "'how high is Oslo'; elevation via 'how high (is|above sea level is) {place}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "height": null,
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo",
+        "zone": null
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway, zone=None, height=None"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-height",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-height",
+       "node": "has-height",
+       "summary": "state.height = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-height",
+       "summary": "no-height: Open-Meteo knows Oslo but not how high it is."
+      }
+     ],
+     "tree": "elevation"
+    },
+    "tree": "elevation"
+   },
+   "inputs": {
+    "place": "Oslo"
+   },
+   "intent": "how high is Oslo",
+   "tree": "elevation"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "code": "90210",
+     "country": "us"
+    },
+    "output": {
+     "code": "90210",
+     "country": "United States",
+     "latitude": 34.0901,
+     "longitude": -118.4065,
+     "place": "Beverly Hills",
+     "region": "California"
+    },
+    "say": "90210 is Beverly Hills, California, United States.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "where is zip 90210",
+        "inputs": {
+         "code": "90210",
+         "country": "us"
+        },
+        "steps": [],
+        "trigger": "where is zip [code] {code:word}"
+       },
+       "summary": "'where is zip 90210'; postal-code via 'where is zip [code] {code:word}' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "country_name": "United States",
+        "lat": "34.0901",
+        "lon": "-118.4065",
+        "place": "Beverly Hills",
+        "region": "California"
+       },
+       "summary": "GET https://api.zippopotam.us/us/90210 -> 200; place=Beverly Hills, region=California, country_name=United States, lat=34.0901, lon=-118.4065"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "90210 is Beverly Hills, California, United States."
+      }
+     ],
+     "tree": "postal-code"
+    },
+    "tree": "postal-code"
+   },
+   "inputs": {
+    "code": "90210",
+    "country": "us"
+   },
+   "intent": "where is zip 90210",
+   "tree": "postal-code"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "code": "SW1A",
+     "country": "GB"
+    },
+    "output": {
+     "code": "SW1A",
+     "country": "Great Britain",
+     "latitude": 51.4841,
+     "longitude": -0.1966,
+     "place": "Westminster Abbey",
+     "region": "England"
+    },
+    "say": "SW1A is Westminster Abbey, England, Great Britain.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "postcode SW1A in GB",
+        "inputs": {
+         "code": "SW1A",
+         "country": "GB"
+        },
+        "steps": [],
+        "trigger": "[where is] (postcode|postal code) {code:word} in {country:word}"
+       },
+       "summary": "'postcode SW1A in GB'; postal-code via '[where is] (postcode|postal code) {code:word} in {country:word}' (27 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "country_name": "Great Britain",
+        "lat": "51.4841",
+        "lon": "-0.1966",
+        "place": "Westminster Abbey",
+        "region": "England"
+       },
+       "summary": "GET https://api.zippopotam.us/gb/SW1A -> 200; place=Westminster Abbey, region=England, country_name=Great Britain, lat=51.4841, lon=-0.1966"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "SW1A is Westminster Abbey, England, Great Britain."
+      }
+     ],
+     "tree": "postal-code"
+    },
+    "tree": "postal-code"
+   },
+   "inputs": {
+    "code": "SW1A",
+    "country": "GB"
+   },
+   "intent": "postcode SW1A in GB",
+   "tree": "postal-code"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "code": "00000",
+     "country": "us"
+    },
+    "reason": "unknown-code",
+    "say": "Zippopotam.us knows no postal code 00000 in US.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "where is zip 00000",
+        "inputs": {
+         "code": "00000",
+         "country": "us"
+        },
+        "steps": [],
+        "trigger": "where is zip [code] {code:word}"
+       },
+       "summary": "'where is zip 00000'; postal-code via 'where is zip [code] {code:word}' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "country_name": null,
+        "lat": null,
+        "lon": null,
+        "place": null,
+        "region": null
+       },
+       "summary": "GET https://api.zippopotam.us/us/00000 -> 404; place=None, region=None, country_name=None, lat=None, lon=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-code",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-code",
+       "summary": "unknown-code: Zippopotam.us knows no postal code 00000 in US."
+      }
+     ],
+     "tree": "postal-code"
+    },
+    "tree": "postal-code"
+   },
+   "inputs": {
+    "code": "00000",
+    "country": "us"
+   },
+   "intent": "where is zip 00000",
+   "tree": "postal-code"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "site": "example.com"
+    },
+    "output": {
+     "site": "example.com",
+     "timestamp": "20261027205234",
+     "url": "http://web.archive.org/web/20261027205234/https://example.com/"
+    },
+    "say": "The Wayback Machine has example.com. Its latest copy: http://web.archive.org/web/20261027205234/https://example.com/",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is example.com archived",
+        "inputs": {
+         "site": "example.com"
+        },
+        "steps": [],
+        "trigger": "is {site:host} archived"
+       },
+       "summary": "'is example.com archived'; wayback via 'is {site:host} archived' (10 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "copy": "http://web.archive.org/web/20261027205234/https://example.com/",
+        "stamp": "20261027205234"
+       },
+       "summary": "GET https://archive.org/wayback/available?url=example.com -> 200; copy=http://web.archive.org/web/20261027205234/https://example.com/, stamp=20261027205234"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": "http://web.archive.org/web/20261027205234/https://example.com/",
+       "summary": "state.copy = http://web.archive.org/web/20261027205234/https://example.com/"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The Wayback Machine has example.com. Its latest copy: http://web.archive.org/web/20261027205234/https://example.com/"
+      }
+     ],
+     "tree": "wayback"
+    },
+    "tree": "wayback"
+   },
+   "inputs": {
+    "site": "example.com"
+   },
+   "intent": "is example.com archived",
+   "tree": "wayback"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "site": "nothing-here-qqzz.example"
+    },
+    "output": {
+     "site": "nothing-here-qqzz.example",
+     "url": ""
+    },
+    "say": "The Wayback Machine has no copy of nothing-here-qqzz.example.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is nothing-here-qqzz.example archived",
+        "inputs": {
+         "site": "nothing-here-qqzz.example"
+        },
+        "steps": [],
+        "trigger": "is {site:host} archived"
+       },
+       "summary": "'is nothing-here-qqzz.example archived'; wayback via 'is {site:host} archived' (10 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "copy": null,
+        "stamp": null
+       },
+       "summary": "GET https://archive.org/wayback/available?url=nothing-here-qqzz.example -> 200; copy=None, stamp=None"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "summary": "state.copy = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "none",
+       "summary": "The Wayback Machine has no copy of nothing-here-qqzz.example."
+      }
+     ],
+     "tree": "wayback"
+    },
+    "tree": "wayback"
+   },
+   "inputs": {
+    "site": "nothing-here-qqzz.example"
+   },
+   "intent": "is nothing-here-qqzz.example archived",
+   "tree": "wayback"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "cat"
+    },
+    "output": {
+     "rhymes": [
+      "flat",
+      "caveat",
+      "brat",
+      "pat",
+      "combat",
+      "slat",
+      "that",
+      "rat",
+      "diplomat",
+      "fat"
+     ],
+     "word": "cat"
+    },
+    "say": "Rhymes with cat: flat, caveat, brat, pat, combat, slat, that, rat, diplomat, fat.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what rhymes with cat",
+        "inputs": {
+         "word": "cat"
+        },
+        "steps": [],
+        "trigger": "what rhymes with {word:word}"
+       },
+       "summary": "'what rhymes with cat'; rhymes via 'what rhymes with {word:word}' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": [
+         "flat",
+         "caveat",
+         "brat",
+         "pat",
+         "combat",
+         "slat",
+         "that",
+         "rat",
+         "diplomat",
+         "fat"
+        ]
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_rhy=cat&max=10 -> 200; words=['flat', 'caveat', 'brat', 'pat', 'combat', 'slat', 'that', 'rat', 'diplomat', …"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": [
+        "flat",
+        "caveat",
+        "brat",
+        "pat",
+        "combat",
+        "slat",
+        "that",
+        "rat",
+        "diplomat",
+        "fat"
+       ],
+       "summary": "state.words = ['flat', 'caveat', 'brat', 'pat', 'combat', 'slat', 'that', 'rat', 'diplomat', …"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Rhymes with cat: flat, caveat, brat, pat, combat, slat, that, rat, diplomat, fat."
+      }
+     ],
+     "tree": "rhymes"
+    },
+    "tree": "rhymes"
+   },
+   "inputs": {
+    "word": "cat"
+   },
+   "intent": "what rhymes with cat",
+   "tree": "rhymes"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "qqzzx"
+    },
+    "reason": "no-rhymes",
+    "say": "Datamuse knows nothing that rhymes with qqzzx.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what rhymes with qqzzx",
+        "inputs": {
+         "word": "qqzzx"
+        },
+        "steps": [],
+        "trigger": "what rhymes with {word:word}"
+       },
+       "summary": "'what rhymes with qqzzx'; rhymes via 'what rhymes with {word:word}' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": []
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_rhy=qqzzx&max=10 -> 200; words=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": [],
+       "summary": "state.words = []"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-rhymes: Datamuse knows nothing that rhymes with qqzzx."
+      }
+     ],
+     "tree": "rhymes"
+    },
+    "tree": "rhymes"
+   },
+   "inputs": {
+    "word": "qqzzx"
+   },
+   "intent": "what rhymes with qqzzx",
+   "tree": "rhymes"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "astral-sh/uv"
+    },
+    "output": {
+     "archived": false,
+     "description": "An extremely fast Python package and project manager, written in Rust.",
+     "forks": 2210,
+     "language": "Rust",
+     "open_issues": 2004,
+     "repo": "astral-sh/uv",
+     "stars": 71234,
+     "url": "https://github.com/astral-sh/uv"
+    },
+    "say": "astral-sh/uv: An extremely fast Python package and project manager, written in Rust. (Rust) · 71234 stars, 2210 forks, 2004 open issues. https://github.com/astral-sh/uv",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how many stars does astral-sh/uv have",
+        "inputs": {
+         "repo": "astral-sh/uv"
+        },
+        "steps": [],
+        "trigger": "how many stars does {repo:word} have"
+       },
+       "summary": "'how many stars does astral-sh/uv have'; github-repo via 'how many stars does {repo:word} have' (20 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": "An extremely fast Python package and project manager, written in Rust.",
+        "archived": false,
+        "forks": 2210,
+        "full": "astral-sh/uv",
+        "issues": 2004,
+        "language": "Rust",
+        "stars": 71234,
+        "url": "https://github.com/astral-sh/uv"
+       },
+       "summary": "GET https://api.github.com/repos/astral-sh/uv -> 200; full=astral-sh/uv, about=An extremely fast Python package and project manager, written in Rust., language=Rust, stars=71234, forks=2210, issues=2004, url=https://github.com/astral-sh/uv, archived=False"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "astral-sh/uv: An extremely fast Python package and project manager, written in Rust. (Rust) · 71234 stars, 2210 forks, 2004 open issues. https://github.com/astral-sh/uv"
+      }
+     ],
+     "tree": "github-repo"
+    },
+    "tree": "github-repo"
+   },
+   "inputs": {
+    "repo": "astral-sh/uv"
+   },
+   "intent": "how many stars does astral-sh/uv have",
+   "tree": "github-repo"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "b-i-t-8/nothing-here"
+    },
+    "reason": "no-repo",
+    "say": "GitHub has no public repository b-i-t-8/nothing-here.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "github repo b-i-t-8/nothing-here",
+        "inputs": {
+         "repo": "b-i-t-8/nothing-here"
+        },
+        "steps": [],
+        "trigger": "github (repo|repository) {repo:word}"
+       },
+       "summary": "'github repo b-i-t-8/nothing-here'; github-repo via 'github (repo|repository) {repo:word}' (20 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": null,
+        "archived": null,
+        "forks": null,
+        "full": null,
+        "issues": null,
+        "language": null,
+        "stars": null,
+        "url": null
+       },
+       "summary": "GET https://api.github.com/repos/b-i-t-8/nothing-here -> 404; full=None, about=None, language=None, stars=None, forks=None, issues=None, url=None, archived=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-repo",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-repo",
+       "summary": "no-repo: GitHub has no public repository b-i-t-8/nothing-here."
+      }
+     ],
+     "tree": "github-repo"
+    },
+    "tree": "github-repo"
+   },
+   "inputs": {
+    "repo": "b-i-t-8/nothing-here"
+   },
+   "intent": "github repo b-i-t-8/nothing-here",
+   "tree": "github-repo"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "module": "github.com/gorilla/mux"
+    },
+    "output": {
+     "module": "github.com/gorilla/mux",
+     "published": "2023-10-18",
+     "url": "https://pkg.go.dev/github.com/gorilla/mux",
+     "version": "v1.8.1"
+    },
+    "say": "github.com/gorilla/mux v1.8.1, published 2023-10-18. https://pkg.go.dev/github.com/gorilla/mux",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest version of github.com/gorilla/mux on go",
+        "inputs": {
+         "module": "github.com/gorilla/mux"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest version of {module:word} on go"
+       },
+       "summary": "'latest version of github.com/gorilla/mux on go'; go-module via \"[what's the] latest version of {module:word} on go\" (28 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": "2023-10-18",
+        "version": "v1.8.1"
+       },
+       "summary": "GET https://proxy.golang.org/github.com/gorilla/mux/@latest -> 200; version=v1.8.1, day=2023-10-18"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "github.com/gorilla/mux v1.8.1, published 2023-10-18. https://pkg.go.dev/github.com/gorilla/mux"
+      }
+     ],
+     "tree": "go-module"
+    },
+    "tree": "go-module"
+   },
+   "inputs": {
+    "module": "github.com/gorilla/mux"
+   },
+   "intent": "latest version of github.com/gorilla/mux on go",
+   "tree": "go-module"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "module": "github.com/nope/nope-qq"
+    },
+    "reason": "no-module",
+    "say": "The Go module proxy has no module github.com/nope/nope-qq.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "go module github.com/nope/nope-qq",
+        "inputs": {
+         "module": "github.com/nope/nope-qq"
+        },
+        "steps": [],
+        "trigger": "go (module|version) {module:word}"
+       },
+       "summary": "'go module github.com/nope/nope-qq'; go-module via 'go (module|version) {module:word}' (15 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": null,
+        "version": null
+       },
+       "summary": "GET https://proxy.golang.org/github.com/nope/nope-qq/@latest -> 404; version=None, day=None"
+      },
+      {
+       "chosen": "in [404, 410]",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-module",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-module",
+       "summary": "no-module: The Go module proxy has no module github.com/nope/nope-qq."
+      }
+     ],
+     "tree": "go-module"
+    },
+    "tree": "go-module"
+   },
+   "inputs": {
+    "module": "github.com/nope/nope-qq"
+   },
+   "intent": "go module github.com/nope/nope-qq",
+   "tree": "go-module"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "formula": "wget"
+    },
+    "output": {
+     "description": "Internet file retriever",
+     "formula": "wget",
+     "homepage": "https://www.gnu.org/software/wget/",
+     "install": "brew install wget",
+     "version": "1.25.0"
+    },
+    "say": "wget 1.25.0 on Homebrew: Internet file retriever. https://www.gnu.org/software/wget/",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "brew formula wget",
+        "inputs": {
+         "formula": "wget"
+        },
+        "steps": [],
+        "trigger": "(brew|homebrew) (formula|version) {formula:word}"
+       },
+       "summary": "'brew formula wget'; homebrew via '(brew|homebrew) (formula|version) {formula:word}' (26 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": "Internet file retriever",
+        "home": "https://www.gnu.org/software/wget/",
+        "name": "wget",
+        "version": "1.25.0"
+       },
+       "summary": "GET https://formulae.brew.sh/api/formula/wget.json -> 200; name=wget, version=1.25.0, about=Internet file retriever, home=https://www.gnu.org/software/wget/"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "wget 1.25.0 on Homebrew: Internet file retriever. https://www.gnu.org/software/wget/"
+      }
+     ],
+     "tree": "homebrew"
+    },
+    "tree": "homebrew"
+   },
+   "inputs": {
+    "formula": "wget"
+   },
+   "intent": "brew formula wget",
+   "tree": "homebrew"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "formula": "nope-qqzz"
+    },
+    "reason": "no-formula",
+    "say": "Homebrew has no formula called nope-qqzz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "brew formula nope-qqzz",
+        "inputs": {
+         "formula": "nope-qqzz"
+        },
+        "steps": [],
+        "trigger": "(brew|homebrew) (formula|version) {formula:word}"
+       },
+       "summary": "'brew formula nope-qqzz'; homebrew via '(brew|homebrew) (formula|version) {formula:word}' (26 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": null,
+        "home": null,
+        "name": null,
+        "version": null
+       },
+       "summary": "GET https://formulae.brew.sh/api/formula/nope-qqzz.json -> 404; name=None, version=None, about=None, home=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-formula",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-formula",
+       "summary": "no-formula: Homebrew has no formula called nope-qqzz."
+      }
+     ],
+     "tree": "homebrew"
+    },
+    "tree": "homebrew"
+   },
+   "inputs": {
+    "formula": "nope-qqzz"
+   },
+   "intent": "brew formula nope-qqzz",
+   "tree": "homebrew"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "pikachu"
+    },
+    "output": {
+     "height_dm": 4,
+     "name": "pikachu",
+     "number": 25,
+     "types": [
+      "electric"
+     ],
+     "weight_hg": 60
+    },
+    "say": "#25 Pikachu, electric type.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "pokemon pikachu",
+        "inputs": {
+         "name": "pikachu"
+        },
+        "steps": [],
+        "trigger": "pokemon {name:word}"
+       },
+       "summary": "'pokemon pikachu'; pokemon via 'pokemon {name:word}' (7 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "dm": 4,
+        "hg": 60,
+        "id": 25,
+        "name": "pikachu",
+        "types": [
+         "electric"
+        ]
+       },
+       "summary": "GET https://pokeapi.co/api/v2/pokemon/pikachu -> 200; id=25, name=pikachu, types=['electric'], dm=4, hg=60"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "#25 Pikachu, electric type."
+      }
+     ],
+     "tree": "pokemon"
+    },
+    "tree": "pokemon"
+   },
+   "inputs": {
+    "name": "pikachu"
+   },
+   "intent": "pokemon pikachu",
+   "tree": "pokemon"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "charizard"
+    },
+    "output": {
+     "height_dm": 17,
+     "name": "charizard",
+     "number": 6,
+     "types": [
+      "fire",
+      "flying"
+     ],
+     "weight_hg": 905
+    },
+    "say": "#6 Charizard, fire, flying type.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what type is charizard",
+        "inputs": {
+         "name": "charizard"
+        },
+        "steps": [],
+        "trigger": "what type is {name:word}"
+       },
+       "summary": "'what type is charizard'; pokemon via 'what type is {name:word}' (10 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "dm": 17,
+        "hg": 905,
+        "id": 6,
+        "name": "charizard",
+        "types": [
+         "fire",
+         "flying"
+        ]
+       },
+       "summary": "GET https://pokeapi.co/api/v2/pokemon/charizard -> 200; id=6, name=charizard, types=['fire', 'flying'], dm=17, hg=905"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "#6 Charizard, fire, flying type."
+      }
+     ],
+     "tree": "pokemon"
+    },
+    "tree": "pokemon"
+   },
+   "inputs": {
+    "name": "charizard"
+   },
+   "intent": "what type is charizard",
+   "tree": "pokemon"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "name": "notapokemonqq"
+    },
+    "reason": "no-pokemon",
+    "say": "PokéAPI knows no Pokémon called notapokemonqq.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "pokemon notapokemonqq",
+        "inputs": {
+         "name": "notapokemonqq"
+        },
+        "steps": [],
+        "trigger": "pokemon {name:word}"
+       },
+       "summary": "'pokemon notapokemonqq'; pokemon via 'pokemon {name:word}' (7 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "dm": null,
+        "hg": null,
+        "id": null,
+        "name": null,
+        "types": []
+       },
+       "summary": "GET https://pokeapi.co/api/v2/pokemon/notapokemonqq -> 404; id=None, name=None, types=[], dm=None, hg=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-pokemon",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-pokemon",
+       "summary": "no-pokemon: PokéAPI knows no Pokémon called notapokemonqq."
+      }
+     ],
+     "tree": "pokemon"
+    },
+    "tree": "pokemon"
+   },
+   "inputs": {
+    "name": "notapokemonqq"
+   },
+   "intent": "pokemon notapokemonqq",
+   "tree": "pokemon"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "ip": "203.0.113.7"
+    },
+    "say": "Your public IP address is 203.0.113.7.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is my ip",
+        "inputs": {},
+        "steps": [],
+        "trigger": "what is my [public] ip [address]"
+       },
+       "summary": "'what is my ip'; my-ip via 'what is my [public] ip [address]' (23 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "ip": "203.0.113.7"
+       },
+       "summary": "GET https://api.ipify.org?format=json -> 200; ip=203.0.113.7"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-ip",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-ip",
+       "observed": "203.0.113.7",
+       "summary": "state.ip = 203.0.113.7"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Your public IP address is 203.0.113.7."
+      }
+     ],
+     "tree": "my-ip"
+    },
+    "tree": "my-ip"
+   },
+   "inputs": {},
+   "intent": "what is my ip",
+   "tree": "my-ip"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "advice": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance.",
+     "id": 66
+    },
+    "say": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "give me some advice",
+        "inputs": {},
+        "steps": [],
+        "trigger": "give me [some] advice"
+       },
+       "summary": "'give me some advice'; advice via 'give me [some] advice' (16 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "advice": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance.",
+        "id": 66
+       },
+       "summary": "GET https://api.adviceslip.com/advice -> 200; advice=Take time once in a while to look up at the stars for at least 5 minutes, in or…, id=66"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-advice",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-advice",
+       "observed": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance.",
+       "summary": "state.advice = Take time once in a while to look up at the stars for at least 5 minutes, in or…"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Take time once in a while to look up at the stars for at least 5 minutes, in order to comprehend your cosmic significance."
+      }
+     ],
+     "tree": "advice"
+    },
+    "tree": "advice"
+   },
+   "inputs": {},
+   "intent": "give me some advice",
+   "tree": "advice"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "fact": "A cat has more bones than a human; humans have 206, and the cat - 230."
+    },
+    "say": "A cat has more bones than a human; humans have 206, and the cat - 230.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tell me a cat fact",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[tell me a] cat fact"
+       },
+       "summary": "'tell me a cat fact'; cat-fact via '[tell me a] cat fact' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "fact": "A cat has more bones than a human; humans have 206, and the cat - 230."
+       },
+       "summary": "GET https://catfact.ninja/fact -> 200; fact=A cat has more bones than a human; humans have 206, and the cat - 230."
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-fact",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-fact",
+       "observed": "A cat has more bones than a human; humans have 206, and the cat - 230.",
+       "summary": "state.fact = A cat has more bones than a human; humans have 206, and the cat - 230."
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "A cat has more bones than a human; humans have 206, and the cat - 230."
+      }
+     ],
+     "tree": "cat-fact"
+    },
+    "tree": "cat-fact"
+   },
+   "inputs": {},
+   "intent": "tell me a cat fact",
+   "tree": "cat-fact"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "name": "Falcon 9 Block 5 | Starlink Group 15-18",
+     "net_utc": "2026-10-30T04:02:00Z",
+     "status": "Go for Launch",
+     "upcoming": 474
+    },
+    "say": "Next launch: Falcon 9 Block 5 | Starlink Group 15-18, 2026-10-30T04:02:00Z UTC (Go for Launch). 474 launches are scheduled.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "when is the next launch",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[when is the] next (launch|rocket launch)"
+       },
+       "summary": "'when is the next launch'; next-launch via '[when is the] next (launch|rocket launch)' (31 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "count": 474,
+        "name": "Falcon 9 Block 5 | Starlink Group 15-18",
+        "net": "2026-10-30T04:02:00Z",
+        "state": "Go for Launch"
+       },
+       "summary": "GET https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=1&mode=list&hide_recent_previous=true -> 200; name=Falcon 9 Block 5 | Starlink Group 15-18, net=2026-10-30T04:02:00Z, state=Go for Launch, count=474"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": "Falcon 9 Block 5 | Starlink Group 15-18",
+       "summary": "state.name = Falcon 9 Block 5 | Starlink Group 15-18"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Next launch: Falcon 9 Block 5 | Starlink Group 15-18, 2026-10-30T04:02:00Z UTC (Go for Launch). 474 launches are scheduled."
+      }
+     ],
+     "tree": "next-launch"
+    },
+    "tree": "next-launch"
+   },
+   "inputs": {},
+   "intent": "when is the next launch",
+   "tree": "next-launch"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "stories": [
+      {
+       "published": "2026-10-27T20:21:30Z",
+       "site": "SpaceNews",
+       "title": "Ukrainian startup, GomSpace test satellite for future communications network",
+       "url": "https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/"
+      },
+      {
+       "published": "2026-10-27T19:27:22Z",
+       "site": "NASA",
+       "title": "NASA Invites Media to Crew Completion of Yearlong Mars Simulation",
+       "url": "https://www.nasa.gov/news-release/nasa-invites-media-to-crew-completion-of-yearlong-mars-simulation/"
+      },
+      {
+       "published": "2026-10-27T17:58:57Z",
+       "site": "NASA",
+       "title": "NASA’s Neo Surveyor Sunshade",
+       "url": "https://www.nasa.gov/image-article/nasas-neo-surveyor-sunshade/"
+      }
+     ]
+    },
+    "say": "Latest in space: Ukrainian startup, GomSpace test satellite for future communications network (SpaceNews) https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "space news",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[latest] (space|spaceflight) news"
+       },
+       "summary": "'space news'; space-news via '[latest] (space|spaceflight) news' (26 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "articles": [
+         {
+          "news_site": "SpaceNews",
+          "published_at": "2026-10-27T20:21:30Z",
+          "title": "Ukrainian startup, GomSpace test satellite for future communications network",
+          "url": "https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/"
+         },
+         {
+          "news_site": "NASA",
+          "published_at": "2026-10-27T19:27:22Z",
+          "title": "NASA Invites Media to Crew Completion of Yearlong Mars Simulation",
+          "url": "https://www.nasa.gov/news-release/nasa-invites-media-to-crew-completion-of-yearlong-mars-simulation/"
+         },
+         {
+          "news_site": "NASA",
+          "published_at": "2026-10-27T17:58:57Z",
+          "title": "NASA’s Neo Surveyor Sunshade",
+          "url": "https://www.nasa.gov/image-article/nasas-neo-surveyor-sunshade/"
+         }
+        ],
+        "site": "SpaceNews",
+        "title": "Ukrainian startup, GomSpace test satellite for future communications network",
+        "url": "https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/"
+       },
+       "summary": "GET https://api.spaceflightnewsapi.net/v4/articles/?limit=3 -> 200; articles=[{'title': 'Ukrainian startup, GomSpace test satellite for future communication…, title=Ukrainian startup, GomSpace test satellite for future communications network, site=SpaceNews, url=https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-comm…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "each",
+       "node": "any",
+       "observed": [
+        {
+         "news_site": "SpaceNews",
+         "published_at": "2026-10-27T20:21:30Z",
+         "title": "Ukrainian startup, GomSpace test satellite for future communications network",
+         "url": "https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/"
+        },
+        {
+         "news_site": "NASA",
+         "published_at": "2026-10-27T19:27:22Z",
+         "title": "NASA Invites Media to Crew Completion of Yearlong Mars Simulation",
+         "url": "https://www.nasa.gov/news-release/nasa-invites-media-to-crew-completion-of-yearlong-mars-simulation/"
+        },
+        {
+         "news_site": "NASA",
+         "published_at": "2026-10-27T17:58:57Z",
+         "title": "NASA’s Neo Surveyor Sunshade",
+         "url": "https://www.nasa.gov/image-article/nasas-neo-surveyor-sunshade/"
+        }
+       ],
+       "summary": "state.articles = [{'title': 'Ukrainian startup, GomSpace test satellite for future communication…"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "3 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Latest in space: Ukrainian startup, GomSpace test satellite for future communications network (SpaceNews) https://spacenews.com/ukrainian-startup-gomspace-test-satellite-for-future-communications-network/"
+      }
+     ],
+     "tree": "space-news"
+    },
+    "tree": "space-news"
+   },
+   "inputs": {},
+   "intent": "space news",
+   "tree": "space-news"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "date": "2026-10-28",
+     "explanation": "Sometimes it's night on the ground but day in the air.",
+     "media_type": "image",
+     "page": "https://apod.nasa.gov/apod/astropix.html",
+     "title": "Day and Night over the Clouds",
+     "url": "https://apod.nasa.gov/apod/image/2610/example_1024.jpg"
+    },
+    "say": "Astronomy Picture of the Day, 2026-10-28: Day and Night over the Clouds. https://apod.nasa.gov/apod/image/2610/example_1024.jpg",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "astronomy picture of the day",
+        "inputs": {},
+        "steps": [],
+        "trigger": "astronomy picture of the day"
+       },
+       "summary": "'astronomy picture of the day'; apod via 'astronomy picture of the day' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": "Sometimes it's night on the ground but day in the air.",
+        "day": "2026-10-28",
+        "kind": "image",
+        "media": "https://apod.nasa.gov/apod/image/2610/example_1024.jpg",
+        "title": "Day and Night over the Clouds"
+       },
+       "summary": "GET https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY -> 200; title=Day and Night over the Clouds, day=2026-10-28, media=https://apod.nasa.gov/apod/image/2610/example_1024.jpg, kind=image, about=Sometimes it's night on the ground but day in the air."
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Astronomy Picture of the Day, 2026-10-28: Day and Night over the Clouds. https://apod.nasa.gov/apod/image/2610/example_1024.jpg"
+      }
+     ],
+     "tree": "apod"
+    },
+    "tree": "apod"
+   },
+   "inputs": {},
+   "intent": "astronomy picture of the day",
+   "tree": "apod"
   }
  ],
  "trees": {
+  "advice": {
+   "description": "A random piece of advice, from the Advice Slip API.",
+   "hosts": [
+    "api.adviceslip.com"
+   ],
+   "license": "MIT",
+   "name": "advice",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "advice",
+       "json": "json.slip.advice"
+      },
+      {
+       "into": "id",
+       "json": "json.slip.id"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.adviceslip.com/advice"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-advice": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "advice"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "advice": "{{ state.advice }}",
+      "id": "{{ state.id }}"
+     },
+     "say": "{{ state.advice }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-advice",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Advice Slip API answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "give me [some] advice"
+    },
+    {
+     "pattern": "[any] advice"
+    }
+   ],
+   "version": 1
+  },
   "air-quality": {
    "description": "Current air quality for a place: the European AQI, its band, and PM2.5 and PM10, from Open-Meteo.",
    "hosts": [
@@ -11793,6 +14627,106 @@
    ],
    "version": 1
   },
+  "apod": {
+   "description": "NASA's Astronomy Picture of the Day: its title, and the picture or video.",
+   "hosts": [
+    "api.nasa.gov"
+   ],
+   "license": "MIT",
+   "name": "apod",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      },
+      {
+       "into": "day",
+       "json": "json.date"
+      },
+      {
+       "into": "media",
+       "json": "json.url"
+      },
+      {
+       "into": "kind",
+       "json": "json.media_type"
+      },
+      {
+       "into": "about",
+       "json": "json.explanation"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "NASA's demo key has used up its hour from this address; try again later, or see https://apod.nasa.gov/apod/astropix.html"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "date": "{{ state.day }}",
+      "explanation": "{{ state.about }}",
+      "media_type": "{{ state.kind }}",
+      "page": "https://apod.nasa.gov/apod/astropix.html",
+      "title": "{{ state.title }}",
+      "url": "{{ state.media }}"
+     },
+     "say": "Astronomy Picture of the Day, {{ state.day }}: {{ state.title }}. {{ state.media }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "NASA's API answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "space",
+    "science",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "astronomy picture of the day"
+    },
+    {
+     "pattern": "[nasa] (apod|space picture) [of the day|today]"
+    }
+   ],
+   "version": 1
+  },
   "books": {
    "description": "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out.",
    "hosts": [
@@ -11906,6 +14840,89 @@
     },
     {
      "pattern": "books by {title}"
+    }
+   ],
+   "version": 1
+  },
+  "cat-fact": {
+   "description": "A random fact about cats, from catfact.ninja.",
+   "hosts": [
+    "catfact.ninja"
+   ],
+   "license": "MIT",
+   "name": "cat-fact",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "fact",
+       "json": "json.fact"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://catfact.ninja/fact"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-fact": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "fact"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "fact": "{{ state.fact }}"
+     },
+     "say": "{{ state.fact }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-fact",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "catfact.ninja answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "animals",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[tell me a] cat fact"
+    },
+    {
+     "pattern": "tell me something about cats"
     }
    ],
    "version": 1
@@ -12371,6 +15388,125 @@
    ],
    "version": 1
   },
+  "elevation": {
+   "description": "How high a place is above sea level, from Open-Meteo's geocoder.",
+   "hosts": [
+    "geocoding-api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "elevation",
+   "namespace": "pyrtan",
+   "nodes": {
+    "found": {
+     "branches": [
+      {
+       "then": "has-height",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      },
+      {
+       "into": "zone",
+       "json": "json.results[0].timezone"
+      },
+      {
+       "into": "height",
+       "json": "json.results[0].elevation"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "has-height": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "no-height"
+      }
+     ],
+     "kind": "decide",
+     "on": "height"
+    },
+    "no-height": {
+     "kind": "fail",
+     "reason": "no-height",
+     "say": "Open-Meteo knows {{ state.name }} but not how high it is."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "elevation_m": "{{ state.height }}",
+      "place": "{{ state.name }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m above sea level."
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "geography",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "how high (is|above sea level is) {place}"
+    },
+    {
+     "pattern": "[the] (elevation|altitude) of {place}"
+    }
+   ],
+   "version": 1
+  },
   "exchange-rate": {
    "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",
    "hosts": [
@@ -12507,6 +15643,296 @@
    ],
    "version": 1
   },
+  "forecast": {
+   "description": "Tomorrow's weather for a place: sky, high and low, and chance of rain, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "forecast",
+   "namespace": "pyrtan",
+   "nodes": {
+    "clear": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "clear"
+     }
+    },
+    "cloudy": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "cloudy"
+     }
+    },
+    "fog": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "foggy"
+     }
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "tomorrow",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      },
+      {
+       "into": "zone",
+       "json": "json.results[0].timezone"
+      },
+      {
+       "into": "height",
+       "json": "json.results[0].elevation"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "have-day": {
+     "branches": [
+      {
+       "then": "sky",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "no-forecast"
+      }
+     ],
+     "kind": "decide",
+     "on": "high"
+    },
+    "no-forecast": {
+     "kind": "fail",
+     "reason": "no-forecast",
+     "say": "Open-Meteo found {{ state.name }} but gave no forecast for tomorrow (status {{ state.fc.status }})."
+    },
+    "rain": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "rain"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "date": "{{ state.day }}",
+      "high": "{{ state.high }}",
+      "low": "{{ state.low }}",
+      "place": "{{ state.name }}",
+      "rain_chance": "{{ state.rain }}",
+      "sky": "{{ state.sky }}",
+      "unit": "{{ state.unit }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }}, tomorrow ({{ state.day }}): {{ state.sky }}, {{ state.low }} to {{ state.high }}{{ state.unit }}, {{ state.rain }}% chance of rain."
+    },
+    "sky": {
+     "branches": [
+      {
+       "then": "clear",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "cloudy",
+       "when": {
+        "between": [
+         1,
+         3
+        ]
+       }
+      },
+      {
+       "then": "fog",
+       "when": {
+        "between": [
+         45,
+         48
+        ]
+       }
+      },
+      {
+       "then": "rain",
+       "when": {
+        "between": [
+         51,
+         67
+        ]
+       }
+      },
+      {
+       "then": "snow",
+       "when": {
+        "between": [
+         71,
+         77
+        ]
+       }
+      },
+      {
+       "then": "rain",
+       "when": {
+        "between": [
+         80,
+         82
+        ]
+       }
+      },
+      {
+       "then": "snow",
+       "when": {
+        "between": [
+         85,
+         86
+        ]
+       }
+      },
+      {
+       "then": "storm",
+       "when": {
+        "between": [
+         95,
+         99
+        ]
+       }
+      },
+      {
+       "else": "unknown-sky"
+      }
+     ],
+     "kind": "decide",
+     "on": "code"
+    },
+    "snow": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "snow"
+     }
+    },
+    "storm": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "storms"
+     }
+    },
+    "tomorrow": {
+     "extract": [
+      {
+       "into": "day",
+       "json": "json.daily.time[1]"
+      },
+      {
+       "into": "code",
+       "json": "json.daily.weather_code[1]"
+      },
+      {
+       "into": "high",
+       "json": "json.daily.temperature_2m_max[1]"
+      },
+      {
+       "into": "low",
+       "json": "json.daily.temperature_2m_min[1]"
+      },
+      {
+       "into": "rain",
+       "json": "json.daily.precipitation_probability_max[1]"
+      },
+      {
+       "into": "unit",
+       "json": "json.daily_units.temperature_2m_max"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2"
+     },
+     "into": "fc",
+     "kind": "observe",
+     "next": "have-day"
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    },
+    "unknown-sky": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "sky": "weather code {{ state.code }}"
+     }
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] weather (in|for) {place} tomorrow"
+    },
+    {
+     "pattern": "[what's the] weather tomorrow (in|for) {place}"
+    },
+    {
+     "pattern": "will it rain tomorrow in {place}"
+    }
+   ],
+   "version": 1
+  },
   "github-release": {
    "description": "The latest release of a GitHub repository.",
    "hosts": [
@@ -12629,6 +16055,244 @@
     }
    ],
    "version": 2
+  },
+  "github-repo": {
+   "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
+   "hosts": [
+    "api.github.com"
+   ],
+   "inputs": {
+    "repo": {
+     "description": "owner/name, as in: astral-sh/uv",
+     "pattern": "^[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "github-repo",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "full",
+       "json": "json.full_name"
+      },
+      {
+       "into": "about",
+       "json": "json.description"
+      },
+      {
+       "into": "language",
+       "json": "json.language"
+      },
+      {
+       "into": "stars",
+       "json": "json.stargazers_count"
+      },
+      {
+       "into": "forks",
+       "json": "json.forks_count"
+      },
+      {
+       "into": "issues",
+       "json": "json.open_issues_count"
+      },
+      {
+       "into": "url",
+       "json": "json.html_url"
+      },
+      {
+       "into": "archived",
+       "json": "json.archived"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Accept": "application/vnd.github+json"
+      },
+      "method": "GET",
+      "url": "https://api.github.com/repos/{{ inputs.repo }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-repo": {
+     "kind": "fail",
+     "reason": "no-repo",
+     "say": "GitHub has no public repository {{ inputs.repo }}."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "GitHub is rate-limiting unauthenticated requests ({{ state.resp.status }})."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "archived": "{{ state.archived }}",
+      "description": "{{ state.about }}",
+      "forks": "{{ state.forks }}",
+      "language": "{{ state.language }}",
+      "open_issues": "{{ state.issues }}",
+      "repo": "{{ state.full }}",
+      "stars": "{{ state.stars }}",
+      "url": "{{ state.url }}"
+     },
+     "say": "{{ state.full }}: {{ state.about }} ({{ state.language }}) · {{ state.stars }} stars, {{ state.forks }} forks, {{ state.issues }} open issues. {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-repo",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "in": [
+         403,
+         429
+        ]
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "GitHub answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "github",
+    "software",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "how many stars does {repo:word} have"
+    },
+    {
+     "pattern": "github (repo|repository) {repo:word}"
+    },
+    {
+     "pattern": "tell me about the {repo:word} repo"
+    }
+   ],
+   "version": 1
+  },
+  "go-module": {
+   "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
+   "hosts": [
+    "proxy.golang.org"
+   ],
+   "inputs": {
+    "module": {
+     "description": "A module path, as in: github.com/gorilla/mux",
+     "pattern": "^[a-z0-9.\\-]+(/[A-Za-z0-9._~\\-]+)+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "go-module",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "version",
+       "json": "json.Version"
+      },
+      {
+       "from": "json.Time",
+       "into": "day",
+       "regex": "^(\\d{4}-\\d\\d-\\d\\d)"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://proxy.golang.org/{{ inputs.module | lower }}/@latest"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-module": {
+     "kind": "fail",
+     "reason": "no-module",
+     "say": "The Go module proxy has no module {{ inputs.module }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "module": "{{ inputs.module }}",
+      "published": "{{ state.day }}",
+      "url": "https://pkg.go.dev/{{ inputs.module }}",
+      "version": "{{ state.version }}"
+     },
+     "say": "{{ inputs.module }} {{ state.version }}, published {{ state.day }}. https://pkg.go.dev/{{ inputs.module }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-module",
+       "when": {
+        "in": [
+         404,
+         410
+        ]
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Go module proxy answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "go",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest version of {module:word} on go"
+    },
+    {
+     "pattern": "go (module|version) {module:word}"
+    }
+   ],
+   "version": 1
   },
   "hacker-news": {
    "description": "Top stories on Hacker News, from its public API.",
@@ -13137,6 +16801,108 @@
    ],
    "version": 1
   },
+  "homebrew": {
+   "description": "A Homebrew formula's current stable version and what it is, from formulae.brew.sh.",
+   "hosts": [
+    "formulae.brew.sh"
+   ],
+   "inputs": {
+    "formula": {
+     "description": "A formula name, as in: wget",
+     "pattern": "^[a-z0-9][a-z0-9@+._\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "homebrew",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "name",
+       "json": "json.name"
+      },
+      {
+       "into": "version",
+       "json": "json.versions.stable"
+      },
+      {
+       "into": "about",
+       "json": "json.desc"
+      },
+      {
+       "into": "home",
+       "json": "json.homepage"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://formulae.brew.sh/api/formula/{{ inputs.formula | lower | url }}.json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-formula": {
+     "kind": "fail",
+     "reason": "no-formula",
+     "say": "Homebrew has no formula called {{ inputs.formula }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "description": "{{ state.about }}",
+      "formula": "{{ state.name }}",
+      "homepage": "{{ state.home }}",
+      "install": "brew install {{ state.name }}",
+      "version": "{{ state.version }}"
+     },
+     "say": "{{ state.name }} {{ state.version }} on Homebrew: {{ state.about }}. {{ state.home }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-formula",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "formulae.brew.sh answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "macos",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest version of {formula:word} on homebrew"
+    },
+    {
+     "pattern": "(brew|homebrew) (formula|version) {formula:word}"
+    }
+   ],
+   "version": 1
+  },
   "iss": {
    "description": "Where the International Space Station is right now: latitude, longitude, altitude and speed.",
    "hosts": [
@@ -13291,6 +17057,153 @@
     },
     {
      "pattern": "(iss|space station) (position|location)"
+    }
+   ],
+   "version": 1
+  },
+  "local-time": {
+   "description": "What time it is now in a place, and its time zone.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "timeapi.io"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "local-time",
+   "namespace": "pyrtan",
+   "nodes": {
+    "clock": {
+     "extract": [
+      {
+       "into": "time",
+       "json": "json.time"
+      },
+      {
+       "into": "weekday",
+       "json": "json.dayOfWeek"
+      },
+      {
+       "from": "json.dateTime",
+       "into": "date",
+       "regex": "^(\\d{4}-\\d\\d-\\d\\d)"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://timeapi.io/api/time/current/zone?timeZone={{ state.zone | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "clock",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      },
+      {
+       "into": "zone",
+       "json": "json.results[0].timezone"
+      },
+      {
+       "into": "height",
+       "json": "json.results[0].elevation"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "no-clock": {
+     "kind": "fail",
+     "reason": "no-clock",
+     "say": "timeapi.io gave no time for {{ state.zone }} (status {{ state.resp.status }})."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "date": "{{ state.date }}",
+      "place": "{{ state.name }}",
+      "time": "{{ state.time }}",
+      "timezone": "{{ state.zone }}",
+      "weekday": "{{ state.weekday }}"
+     },
+     "say": "It is {{ state.time }} on {{ state.weekday }} {{ state.date }} in {{ state.name }}, {{ state.country }} ({{ state.zone }})."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "no-clock"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "time",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "what time is it in {place}"
+    },
+    {
+     "pattern": "[the] (time|local time) in {place}"
     }
    ],
    "version": 1
@@ -13499,6 +17412,203 @@
    ],
    "version": 2
   },
+  "my-ip": {
+   "description": "The public IP address requests from here come from, from ipify.",
+   "hosts": [
+    "api.ipify.org"
+   ],
+   "license": "MIT",
+   "name": "my-ip",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "ip",
+       "json": "json.ip"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.ipify.org?format=json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-ip": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "ip"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "ip": "{{ state.ip }}"
+     },
+     "say": "Your public IP address is {{ state.ip }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-ip",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "ipify answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "network",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "what is my [public] ip [address]"
+    },
+    {
+     "pattern": "my [public] ip [address]"
+    }
+   ],
+   "version": 1
+  },
+  "next-launch": {
+   "description": "The next rocket launch anywhere, when, and its status, from the Launch Library.",
+   "hosts": [
+    "ll.thespacedevs.com"
+   ],
+   "license": "MIT",
+   "name": "next-launch",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "none"
+      }
+     ],
+     "kind": "decide",
+     "on": "name"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "net",
+       "json": "json.results[0].net"
+      },
+      {
+       "into": "state",
+       "json": "json.results[0].status.name"
+      },
+      {
+       "into": "count",
+       "json": "json.count"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=1&mode=list&hide_recent_previous=true"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "upcoming": 0
+     },
+     "say": "The Launch Library lists no upcoming launches."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "The Launch Library allows fifteen requests an hour without a key; try again later."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "name": "{{ state.name }}",
+      "net_utc": "{{ state.net }}",
+      "status": "{{ state.state }}",
+      "upcoming": "{{ state.count }}"
+     },
+     "say": "Next launch: {{ state.name }}, {{ state.net }} UTC ({{ state.state }}). {{ state.count }} launches are scheduled."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Launch Library answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "space",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[when is the] next (launch|rocket launch)"
+    },
+    {
+     "pattern": "upcoming (launches|rocket launches)"
+    }
+   ],
+   "version": 1
+  },
   "npm-package": {
    "description": "The latest version of an npm package, and what it says it is.",
    "hosts": [
@@ -13591,6 +17701,231 @@
     },
     {
      "pattern": "npm (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "pokemon": {
+   "description": "A Pokémon's number, types, height and weight, from PokéAPI.",
+   "hosts": [
+    "pokeapi.co"
+   ],
+   "inputs": {
+    "name": {
+     "description": "A Pokémon's name or number, as in: pikachu",
+     "pattern": "^[A-Za-z0-9\\-]+$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "pokemon",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "id",
+       "json": "json.id"
+      },
+      {
+       "into": "name",
+       "json": "json.name"
+      },
+      {
+       "all": true,
+       "into": "types",
+       "regex": "\"type\":\\s*\\{\\s*\"name\":\\s*\"([a-z]+)\""
+      },
+      {
+       "into": "dm",
+       "json": "json.height"
+      },
+      {
+       "into": "hg",
+       "json": "json.weight"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://pokeapi.co/api/v2/pokemon/{{ inputs.name | lower | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-pokemon": {
+     "kind": "fail",
+     "reason": "no-pokemon",
+     "say": "PokéAPI knows no Pokémon called {{ inputs.name }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "height_dm": "{{ state.dm }}",
+      "name": "{{ state.name }}",
+      "number": "{{ state.id }}",
+      "types": "{{ state.types }}",
+      "weight_hg": "{{ state.hg }}"
+     },
+     "say": "#{{ state.id }} {{ state.name | title }}, {{ state.types | join }} type."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-pokemon",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "PokéAPI answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "games",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "pokemon {name:word}"
+    },
+    {
+     "pattern": "what type is {name:word}"
+    },
+    {
+     "pattern": "tell me about the pokemon {name:word}"
+    }
+   ],
+   "version": 1
+  },
+  "postal-code": {
+   "description": "The place a postal code belongs to, from Zippopotam.us (US ZIP codes, or a code in another country).",
+   "hosts": [
+    "api.zippopotam.us"
+   ],
+   "inputs": {
+    "code": {
+     "description": "A postal code, as in: 90210",
+     "pattern": "^[A-Za-z0-9-]{2,10}$",
+     "type": "str"
+    },
+    "country": {
+     "default": "us",
+     "description": "A two-letter country code, as in: US, DE, GB",
+     "pattern": "^[A-Za-z]{2}$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "postal-code",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "place",
+       "json": "json.places[0][\"place name\"]"
+      },
+      {
+       "into": "region",
+       "json": "json.places[0].state"
+      },
+      {
+       "into": "country_name",
+       "json": "json.country"
+      },
+      {
+       "into": "lat",
+       "json": "json.places[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.places[0].longitude"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.zippopotam.us/{{ inputs.country | lower }}/{{ inputs.code | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "code": "{{ inputs.code | upper }}",
+      "country": "{{ state.country_name }}",
+      "latitude": "{{ state.lat | float }}",
+      "longitude": "{{ state.lon | float }}",
+      "place": "{{ state.place }}",
+      "region": "{{ state.region }}"
+     },
+     "say": "{{ inputs.code | upper }} is {{ state.place }}, {{ state.region }}, {{ state.country_name }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "unknown-code",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Zippopotam.us answered {{ state.resp.status }}."
+    },
+    "unknown-code": {
+     "kind": "fail",
+     "reason": "unknown-code",
+     "say": "Zippopotam.us knows no postal code {{ inputs.code | upper }} in {{ inputs.country | upper }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "geography",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "inputs": {
+      "country": "us"
+     },
+     "pattern": "where is zip [code] {code:word}"
+    },
+    {
+     "pattern": "[where is] (postcode|postal code) {code:word} in {country:word}"
     }
    ],
    "version": 1
@@ -13796,6 +18131,102 @@
     }
    ],
    "version": 2
+  },
+  "rhymes": {
+   "description": "Words that rhyme with a word, from Datamuse.",
+   "hosts": [
+    "api.datamuse.com"
+   ],
+   "inputs": {
+    "word": {
+     "description": "One English word",
+     "pattern": "^[A-Za-z][A-Za-z'\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "rhymes",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "words"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "all": true,
+       "into": "words",
+       "regex": "\"word\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.datamuse.com/words?rel_rhy={{ inputs.word | lower | url }}&max=10"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-rhymes",
+     "say": "Datamuse knows nothing that rhymes with {{ inputs.word }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "rhymes": "{{ state.words }}",
+      "word": "{{ inputs.word }}"
+     },
+     "say": "Rhymes with {{ inputs.word }}: {{ state.words | join }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Datamuse answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "language",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "what rhymes with {word:word}"
+    },
+    {
+     "pattern": "(rhymes|words that rhyme) (for|with) {word:word}"
+    }
+   ],
+   "version": 1
   },
   "room-temperature": {
    "description": "The temperature a room's sensor last published, over MQTT.",
@@ -14163,6 +18594,125 @@
    ],
    "version": 1
   },
+  "space-news": {
+   "description": "The three latest spaceflight news articles, from the Spaceflight News API.",
+   "hosts": [
+    "api.spaceflightnewsapi.net"
+   ],
+   "license": "MIT",
+   "name": "space-news",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "each"
+      }
+     ],
+     "kind": "decide",
+     "on": "articles"
+    },
+    "each": {
+     "into": "stories",
+     "kind": "each",
+     "limit": 3,
+     "next": "reply",
+     "over": "articles",
+     "start": "one"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "articles",
+       "json": "json.results"
+      },
+      {
+       "into": "title",
+       "json": "json.results[0].title"
+      },
+      {
+       "into": "site",
+       "json": "json.results[0].news_site"
+      },
+      {
+       "into": "url",
+       "json": "json.results[0].url"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.spaceflightnewsapi.net/v4/articles/?limit=3"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "stories": []
+     },
+     "say": "The Spaceflight News API has no articles right now."
+    },
+    "one": {
+     "kind": "done",
+     "output": {
+      "published": "{{ item.published_at }}",
+      "site": "{{ item.news_site }}",
+      "title": "{{ item.title }}",
+      "url": "{{ item.url }}"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "stories": "{{ state.stories }}"
+     },
+     "say": "Latest in space: {{ state.title }} ({{ state.site }}) {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Spaceflight News API answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "space",
+    "news",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[latest] (space|spaceflight) news"
+    },
+    {
+     "pattern": "what's new in space"
+    }
+   ],
+   "version": 1
+  },
   "sun": {
    "description": "Today's sunrise and sunset for a place, in its local time, from Open-Meteo.",
    "hosts": [
@@ -14406,6 +18956,318 @@
     },
     {
      "pattern": "what is another word for {word:word}"
+    }
+   ],
+   "version": 1
+  },
+  "uv-index": {
+   "description": "The UV index for a place, now and today's highest, with its WHO band, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "uv-index",
+   "namespace": "pyrtan",
+   "nodes": {
+    "band": {
+     "branches": [
+      {
+       "then": "low",
+       "when": {
+        "lt": 3,
+        "type": "number"
+       }
+      },
+      {
+       "then": "moderate",
+       "when": {
+        "lt": 6
+       }
+      },
+      {
+       "then": "high",
+       "when": {
+        "lt": 8
+       }
+      },
+      {
+       "then": "very-high",
+       "when": {
+        "lt": 11
+       }
+      },
+      {
+       "then": "extreme",
+       "when": {
+        "gte": 11
+       }
+      },
+      {
+       "else": "no-reading"
+      }
+     ],
+     "kind": "decide",
+     "on": "max"
+    },
+    "extreme": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "advice": "stay out of the midday sun",
+      "band": "extreme"
+     }
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "uv",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      },
+      {
+       "into": "zone",
+       "json": "json.results[0].timezone"
+      },
+      {
+       "into": "height",
+       "json": "json.results[0].elevation"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "high": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "advice": "sunscreen, a hat, and shade at midday",
+      "band": "high"
+     }
+    },
+    "low": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "advice": "no protection needed",
+      "band": "low"
+     }
+    },
+    "moderate": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "advice": "sunscreen and a hat around midday",
+      "band": "moderate"
+     }
+    },
+    "no-reading": {
+     "kind": "fail",
+     "reason": "no-reading",
+     "say": "Open-Meteo found {{ state.name }} but gave no UV index (status {{ state.fc.status }})."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "band": "{{ state.band }}",
+      "country": "{{ state.country }}",
+      "place": "{{ state.name }}",
+      "uv_max": "{{ state.max }}",
+      "uv_now": "{{ state.now }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }}: UV index {{ state.now }} now, up to {{ state.max }} today ({{ state.band }}): {{ state.advice }}."
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    },
+    "uv": {
+     "extract": [
+      {
+       "into": "now",
+       "json": "json.current.uv_index"
+      },
+      {
+       "into": "max",
+       "json": "json.daily.uv_index_max[0]"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&current=uv_index&daily=uv_index_max&timezone=auto&forecast_days=1"
+     },
+     "into": "fc",
+     "kind": "observe",
+     "next": "band"
+    },
+    "very-high": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "advice": "avoid the midday sun",
+      "band": "very high"
+     }
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "health",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] (uv|uv index) in {place}"
+    },
+    {
+     "pattern": "do i need sunscreen in {place}"
+    }
+   ],
+   "version": 1
+  },
+  "wayback": {
+   "description": "The Wayback Machine's latest copy of a site, if it has one.",
+   "hosts": [
+    "archive.org"
+   ],
+   "inputs": {
+    "site": {
+     "description": "A host name, as in: example.com",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "wayback",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "none"
+      }
+     ],
+     "kind": "decide",
+     "on": "copy"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "copy",
+       "json": "json.archived_snapshots.closest.url"
+      },
+      {
+       "into": "stamp",
+       "json": "json.archived_snapshots.closest.timestamp"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://archive.org/wayback/available?url={{ inputs.site | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "site": "{{ inputs.site }}",
+      "url": ""
+     },
+     "say": "The Wayback Machine has no copy of {{ inputs.site }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "site": "{{ inputs.site }}",
+      "timestamp": "{{ state.stamp }}",
+      "url": "{{ state.copy }}"
+     },
+     "say": "The Wayback Machine has {{ inputs.site }}. Its latest copy: {{ state.copy }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The Wayback Machine answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "web",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "is {site:host} archived"
+    },
+    {
+     "pattern": "wayback [machine] {site:host}"
+    },
+    {
+     "pattern": "[the] archived copy of {site:host}"
     }
    ],
    "version": 1

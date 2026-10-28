@@ -206,11 +206,15 @@ its `link`; and the gaps. The same console lives at
 join one, the browser is the hub. It holds the catalog's trees, reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
-while the page is open. Nineteen of the examples run there: weather,
-sunrise and sunset, air quality, Wikipedia, a dictionary, synonyms,
-exchange rates, Hacker News (top stories, an item, a search), books,
-npm and PyPI versions, GitHub releases, earthquakes, where the ISS is,
-public holidays, a dad joke, and small talk. Trees that need a box (files, programs, serial
+while the page is open. Every example runs there but six: weather
+today and tomorrow, sunrise, UV and air quality, local time, elevation,
+postcodes, Wikipedia, words (definitions, synonyms, rhymes), exchange
+rates, Hacker News, GitHub, packages (npm, PyPI, Go, Homebrew), books,
+earthquakes, the ISS, launches, space news, NASA's picture of the day,
+holidays, the Wayback Machine, Pokémon, your IP, jokes, advice and cat
+facts. The six that need a hub reach a box or any site at all:
+`disk-space`, `log-errors`, `modem-check`, `room-temperature`,
+`rendered-headline` and `site-status`. Trees that need a box (files, programs, serial
 lines, brokers, a browser to drive) or a site that does not let a page
 read it say so; for those, join a hub started with
 `--cors https://pyrtan.com` by giving its URL and token. Forget it and the

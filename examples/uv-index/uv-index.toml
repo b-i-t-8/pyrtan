@@ -1,0 +1,103 @@
+# The ultraviolet index for a place, now and at its highest today, from
+# Open-Meteo, with the WHO's band for it.
+
+name = "uv-index"
+version = 1
+namespace = "pyrtan"
+description = "The UV index for a place, now and today's highest, with its WHO band, from Open-Meteo."
+tags = ["weather", "health", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[what's the] (uv|uv index) in {place}"
+[[triggers]]
+pattern = "do i need sunscreen in {place}"
+
+[nodes.uv]
+kind = "observe"
+http = { method = "GET", url = "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&current=uv_index&daily=uv_index_max&timezone=auto&forecast_days=1" }
+into = "fc"
+extract = [
+  { into = "now", json = "json.current.uv_index" },
+  { into = "max", json = "json.daily.uv_index_max[0]" },
+]
+next = "band"
+
+# The WHO's UV index bands, for today's highest.
+[nodes.band]
+kind = "decide"
+on = "max"
+branches = [
+  { when = { type = "number", lt = 3 }, then = "low" },
+  { when = { lt = 6 }, then = "moderate" },
+  { when = { lt = 8 }, then = "high" },
+  { when = { lt = 11 }, then = "very-high" },
+  { when = { gte = 11 }, then = "extreme" },
+  { else = "no-reading" },
+]
+
+[nodes.low]
+kind = "set"
+set = { band = "low", advice = "no protection needed" }
+next = "reply"
+[nodes.moderate]
+kind = "set"
+set = { band = "moderate", advice = "sunscreen and a hat around midday" }
+next = "reply"
+[nodes.high]
+kind = "set"
+set = { band = "high", advice = "sunscreen, a hat, and shade at midday" }
+next = "reply"
+[nodes.very-high]
+kind = "set"
+set = { band = "very high", advice = "avoid the midday sun" }
+next = "reply"
+[nodes.extreme]
+kind = "set"
+set = { band = "extreme", advice = "stay out of the midday sun" }
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, {{ state.country }}: UV index {{ state.now }} now, up to {{ state.max }} today ({{ state.band }}): {{ state.advice }}."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", uv_now = "{{ state.now }}", uv_max = "{{ state.max }}", band = "{{ state.band }}" }
+
+[nodes.no-reading]
+kind = "fail"
+reason = "no-reading"
+say = "Open-Meteo found {{ state.name }} but gave no UV index (status {{ state.fc.status }})."
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+  { into = "zone", json = "json.results[0].timezone" },
+  { into = "height", json = "json.results[0].elevation" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "uv" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+

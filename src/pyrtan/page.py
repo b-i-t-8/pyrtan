@@ -486,6 +486,17 @@ const examples = {
   "holidays": "next holiday in US",
   "exchange-rate": "convert 100 USD to EUR",
   "synonyms": "synonyms for happy",
+  "forecast": "weather in Oslo tomorrow",
+  "uv-index": "uv index in Sydney",
+  "local-time": "what time is it in Tokyo",
+  "elevation": "how high is Quito",
+  "postal-code": "where is zip 90210",
+  "wayback": "is example.com archived",
+  "rhymes": "what rhymes with moon",
+  "github-repo": "how many stars does astral-sh/uv have",
+  "go-module": "latest version of github.com/gorilla/mux on go",
+  "homebrew": "brew formula wget",
+  "pokemon": "pokemon pikachu",
 };
 // Served by a Pyrtan, only its token is kept, under its own origin; served elsewhere, the hub URL and token.
 const KEY = "pyrtan.console:" + location.origin;
