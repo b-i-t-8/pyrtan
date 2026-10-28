@@ -44,8 +44,8 @@ def ability_for(method: str, path: str) -> str | None:
     from .service import public_path
     if public_path(path) or path in OPEN:
         return None
-    if path in ("/intent", "/run", "/resume") or (method == "GET" and path == "/capabilities"):
-        return "ask"
+    if path in ("/intent", "/run", "/resume") or (method == "GET" and path == "/capabilities") or (method == "POST" and path == "/suggestions"):
+        return "ask"  # an agent's report is as much as an ask: its asks record gaps already
     if path == "/chat" or path.startswith("/chat/"):
         return "chat"
     return "operate"

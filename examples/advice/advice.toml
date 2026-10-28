@@ -1,0 +1,48 @@
+# A piece of advice, from the Advice Slip API.
+
+name = "advice"
+version = 1
+namespace = "pyrtan"
+description = "A random piece of advice, from the Advice Slip API."
+tags = ["fun", "read-only"]
+license = "MIT"
+hosts = ["api.adviceslip.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "give me [some] advice"
+[[triggers]]
+pattern = "[any] advice"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.adviceslip.com/advice" }
+into = "resp"
+extract = [{ into = "advice", json = "json.slip.advice" }, { into = "id", json = "json.slip.id" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-advice" },
+  { else = "unexpected" },
+]
+
+[nodes.has-advice]
+kind = "decide"
+on = "advice"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.advice }}"
+output = { advice = "{{ state.advice }}", id = "{{ state.id }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Advice Slip API answered {{ state.resp.status }}."

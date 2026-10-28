@@ -13,6 +13,7 @@
     pyrtan hub    --federate --advertise URL [--follow URL ...] [--listed]  and between hubs
     pyrtan hub    --chat                     and keep a lobby: strangers and bots, Omegle-style
     pyrtan hub    --lan --join default       and find the hubs on this LAN by multicast, with nobody to ask
+    pyrtan hub    --chat-public --chat-reach 8  and link its lobby with other open lobbies, for chat only
     pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: join the default network
     pyrtan unfollow URL --at HUB
     pyrtan peers  --at HUB                   services, and hubs followed and following
@@ -30,6 +31,7 @@
     pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
     pyrtan id     resolve NAME@DOMAIN        what identity a name is, pinned the first time
     pyrtan allow  WHO --may ask,run --at HUB  grant an identity abilities on your hub; allowed, disallow
+    pyrtan names  init DIR --domain D | gate  a network's own names, in any git repository
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
 bearer token, ``--cors ORIGIN`` to let a browser elsewhere call them, and
@@ -123,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V")
     p.add_argument("--gaps", metavar="FILE", help="keep gaps in this file (JSON lines) so they survive a restart")
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file (JSON lines) so they survive a restart (default $PYRTAN_UNANSWERED)")
+    p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file (JSON lines) across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="'public' refuses private, loopback and link-local addresses (default $PYRTAN_EGRESS or any)")
     _access_args(p)
@@ -148,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from", dest="source", metavar="FILE", help="read gaps from a file: a --gaps JSON-lines file, a /gaps answer, or a reports.json")
     p.add_argument("--reports", nargs="?", const="", metavar="HUB_OR_FILE", help="read the federation's gap reports for your catalog trees (from a hub's URL, a baked reports.json, or pyrtan.com)")
     p.add_argument("--tree", action="append", default=[], help="only gaps of this tree (repeatable)")
+    p.add_argument("--suggestions", nargs="?", const="", metavar="HUB_OR_FILE", help="draft what agents suggested instead of gaps: from a hub's or service's URL (default --at), or a file the console saved")
+    p.add_argument("--dir", metavar="DIR", help="with --suggestions, where a suggested new tree is written (default: the first --trees directory)")
     p.add_argument("--apply", action="store_true", help="write each draft into its tree file (the file must load clean afterwards)")
     p.add_argument("--json", action="store_true")
     _token_arg(p, "the token the service or hub requires, if any")
@@ -161,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value the hub's own trees may read as {{ env.K }}")
     p.add_argument("--gaps", metavar="FILE", help="keep the hub's own trees' gaps in this file")
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file across restarts (default $PYRTAN_UNANSWERED)")
+    p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the hub's own trees' [[watches]] (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees: 'public' refuses private addresses")
     p.add_argument("--peer", action="append", default=[], help="a service URL to start with (repeatable; services may also register themselves)")
@@ -178,8 +184,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
     p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
     p.add_argument("--allow", action="append", default=[a for a in os.environ.get("PYRTAN_ALLOW", "").split() if a], metavar="WHO=ABILITIES", help="grant an identity (pyr:… or name@domain, resolved and pinned now) abilities here: ask, chat, run, operate (repeatable; default $PYRTAN_ALLOW, space-separated)")
+    p.add_argument("--names", metavar="DIR", default=os.environ.get("PYRTAN_NAMES"), help="serve the name claims in DIR (a checkout of a names repository, `pyrtan names init`) at /.well-known/pyrtan/, as this network's name provider (default $PYRTAN_NAMES)")
+    p.add_argument("--names-domain", metavar="DOMAIN", default=os.environ.get("PYRTAN_NAMES_DOMAIN"), help="the domain the names are for (default $PYRTAN_NAMES_DOMAIN, else this hub's own host); the hub must be reachable at https://DOMAIN")
     p.add_argument("--grants", metavar="FILE", default=os.environ.get("PYRTAN_GRANTS"), help="keep the grants in this file (default $PYRTAN_GRANTS, else grants.json beside --state, else in memory)")
     p.add_argument("--lan", action="store_true", default=os.environ.get("PYRTAN_LAN", "").lower() in ("1", "true", "yes"), help="find hubs on this local network with no one to ask: announce this hub over UDP multicast (TTL 1) and try the hubs heard there when joining a network; needs --advertise with a LAN address (default $PYRTAN_LAN)")
+    p.add_argument("--chat-reach", type=int, metavar="N", default=int(os.environ.get("PYRTAN_CHAT_REACH", "0") or 0), help="keep up to N chat links with other open lobbies this hub hears of (LAN, directory), so its strangers can meet theirs: for chat only, never a follow; needs an open lobby (--chat-public, or no token) (default $PYRTAN_CHAT_REACH or 0)")
     p.add_argument("--chat-public", action="store_true", default=os.environ.get("PYRTAN_CHAT_PUBLIC", "").lower() in ("1", "true", "yes"), help="open the lobby to callers without the token (implies --chat): they meet people only, never a bot, and everything else still needs the token (default $PYRTAN_CHAT_PUBLIC)")
     p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
@@ -253,6 +262,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--scaffold", metavar="DIR", help="write a tree file for each sentence into DIR (existing files are kept)")
     _token_arg(p, "the token the service or hub requires, if any")
 
+    p = sub.add_parser("suggestions", help="what agents beside the swarm suggested: a branch's meaning, a trigger, a tree")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="a running service or hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--json", action="store_true")
+    _token_arg(p, "the token the service or hub requires, if any")
+
     p = sub.add_parser("new", help="scaffold a tree file")
     p.add_argument("name", nargs="?", help="the tree's name (derived from --from when omitted)")
     p.add_argument("--from", dest="sentence", metavar="TEXT", help="the sentence the tree should answer; numbers and hosts in it become slots")
@@ -280,6 +294,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", help="the tree file; it must carry 'namespace' and 'license'")
     p.add_argument("--into", required=True, metavar="CHECKOUT", help="a checkout of github.com/b-i-t-8/pyrtan (or any repository with a catalog/ directory)")
     p.add_argument("--owner", action="append", default=[], metavar="LOGIN", help="GitHub login(s) that own the namespace; needed when the namespace is new")
+
+    p = sub.add_parser("names", help="a network's own names, in any git repository: make one, or run its gate")
+    nms = p.add_subparsers(dest="names_command", required=True)
+    q = nms.add_parser("init", help="write a names repository for DOMAIN: README, names/, and the gate and Pages for its git host")
+    q.add_argument("dir", type=Path)
+    q.add_argument("--domain", required=True, help="the domain the names are for: name@DOMAIN, served at https://DOMAIN/.well-known/pyrtan/")
+    q.add_argument("--host", choices=["github", "gitlab", "plain"], default="github", help="github: Actions (pull_request_target) and Pages; gitlab: .gitlab-ci.yml and Pages; plain: neither (default github)")
+    q.add_argument("--pyrtan-ref", default="main", metavar="REF", help="the pyrtan the gate installs (a branch, tag or commit; pin a commit you have read; default main)")
+    q = nms.add_parser("gate", help="judge a change to a directory of names owned by their keys: HEAD against BASE")
+    q.add_argument("head", type=Path, help="the names directory as the change leaves it")
+    q.add_argument("--base", type=Path, help="the names directory the change starts from (its merge base); omit for a first commit")
+    q.add_argument("--domain", required=True)
 
     p = sub.add_parser("allow", help="grant an identity abilities on your hub: ask, chat, run, operate")
     p.add_argument("who", metavar="pyr:…|NAME@DOMAIN", help="an identity, or a name your hub resolves and pins now")
@@ -326,13 +352,23 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--github", type=int, metavar="USER_ID", help="your numeric GitHub user id, for a name at pyrtan.com (with --into, looked up from the name when omitted)")
     where = q.add_mutually_exclusive_group()
     where.add_argument("--out", help="write the claim here (default: stdout)")
-    where.add_argument("--into", type=Path, metavar="CHECKOUT", help="put the claim and your identity document into a checkout of this repository's site/names/, ready for a pull request")
+    where.add_argument("--into", type=Path, metavar="CHECKOUT", help="put the claim and your identity document into a checkout of a network's names repository (pyrtan names init), or of this repository's site/names/, ready for a pull request")
+    q.add_argument("--handover-from", type=Path, metavar="KEY-FILE", help="the key that holds the name now (its root.key): it signs the handover that moves the name to you")
+    q = ids.add_parser("release", help="sign that you give up a name, to replace your claim with in the names repository")
+    q.add_argument("name", metavar="NAME@DOMAIN")
+    q.add_argument("--out", help="write the release here (default: stdout)")
     q = ids.add_parser("resolve", help="what identity a name@domain is, pinned the first time")
     q.add_argument("name", metavar="NAME@DOMAIN")
     q.add_argument("--repin", action="store_true", help="accept a different identity than the one pinned")
     q.add_argument("--json", action="store_true", help="print the claim, and the identity document if the domain serves one")
     q = ids.add_parser("pins", help="the names you have resolved, and the identity each is pinned to")
     q.add_argument("--forget", metavar="NAME@DOMAIN", help="drop a pin, so the next resolve takes what the domain says")
+    q = ids.add_parser("backup", help="write your key, encrypted with a passphrase, and your identity document, to keep somewhere only you can read")
+    q.add_argument("--out", required=True, help="the file to write (a private place: your disk, your own private repository; never a public one)")
+    q.add_argument("--passphrase-env", metavar="VAR", help="read the passphrase from this environment variable instead of asking")
+    q = ids.add_parser("restore", help="make this machine your identity again, from a backup (the console's or `pyrtan id backup`'s)")
+    q.add_argument("file", help="the backup file")
+    q.add_argument("--passphrase-env", metavar="VAR", help="read the passphrase from this environment variable instead of asking")
     q = ids.add_parser("push", help="give a hub your newest identity document, so it knows your devices and revocations now")
     q.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the hub (default $PYRTAN_AT or the local hub)")
     q = ids.add_parser("wellknown", help="build /.well-known/pyrtan/ from a directory of name claims, for any domain to serve")
@@ -345,11 +381,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
-        "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
+        "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
-        "allow": cmd_allow, "allowed": cmd_allowed, "disallow": cmd_disallow,
+        "allow": cmd_allow, "allowed": cmd_allowed, "disallow": cmd_disallow, "names": cmd_names,
     }
     return commands[args.command](args)
 
@@ -699,7 +735,7 @@ def _report(outcome: Outcome, as_json: bool, with_trace: bool) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -783,6 +819,8 @@ def cmd_watches(args: argparse.Namespace) -> int:
 def cmd_grow(args: argparse.Namespace) -> int:
     from .grow import apply_draft, draft_branch
 
+    if args.suggestions is not None:
+        return _grow_suggestions(args)
     gaps: list[dict[str, Any]] = []
     if args.at:
         try:
@@ -873,6 +911,143 @@ def cmd_grow(args: argparse.Namespace) -> int:
     return worst
 
 
+def _load_suggestions(args: argparse.Namespace, source: str) -> list[dict[str, Any]] | None:
+    """Suggestions from a running service or hub, or a file: a /suggestions
+    answer, a list, or JSON lines."""
+    if source.startswith(("http://", "https://")):
+        try:
+            status, body = _call(args, "GET", f"{source.rstrip('/')}/suggestions")
+        except Exception as e:
+            print(f"pyrtan: {source}: {e}", file=sys.stderr)
+            return None
+        if status != 200 or not isinstance(body, dict):
+            print(f"pyrtan: {source} answered {status}" + (": pass --token, or --sign as an identity it grants operate" if status == 401 else ""), file=sys.stderr)
+            return None
+        return [s for s in body.get("suggestions", []) if isinstance(s, dict)]
+    text = Path(source).read_text(encoding="utf-8")
+    try:
+        data = json.loads(text)
+        rows = data.get("suggestions", [data]) if isinstance(data, dict) else data
+    except json.JSONDecodeError:
+        rows = [json.loads(l) for l in text.splitlines() if l.strip()]
+    return [s for s in rows if isinstance(s, dict)]
+
+
+def cmd_suggestions(args: argparse.Namespace) -> int:
+    rows = _load_suggestions(args, args.at)
+    if rows is None:
+        return 3
+    if args.json:
+        print(json.dumps({"suggestions": rows}, indent=2, ensure_ascii=False, default=str))
+        return 0
+    if not rows:
+        print("no suggestions: no agent has reported to this Pyrtan yet")
+        return 0
+    for s in rows:
+        by = s.get("by") or {}
+        who = by.get("agent", "an agent") + (f" ({by['model']})" if by.get("model") else "")
+        count = f"  x{s.get('count', 1)}"
+        if s.get("kind") == "branch":
+            m = s.get("meaning") or {}
+            print(f"branch  {s.get('tree')}.{s.get('node')}: {s.get('on')} = {json.dumps(s.get('observed'), ensure_ascii=False, default=str)} means {m.get('kind')}: {m.get('say')!r}{count}")
+        elif s.get("kind") == "trigger":
+            print(f"trigger {s.get('tree')}: {s.get('pattern')!r}, covering {', '.join(repr(c) for c in s.get('covers', []))}{count}")
+        else:
+            print(f"tree    {s.get('text')!r}: {s.get('description') or 'no description'}{count}")
+        print(f"        by {who}" + (f": {s['why']}" if s.get("why") else ""))
+    print("\nnow: pyrtan grow --suggestions " + args.at + " --trees DIR  (add --apply to write them)")
+    return 0
+
+
+def _grow_suggestions(args: argparse.Namespace) -> int:
+    """``pyrtan grow --suggestions``: each suggestion drafted by the rules
+    and checked, nothing trusted because an agent said it."""
+    from .grow import apply_draft
+    from . import suggestions as sg
+
+    say = (lambda *a, **k: None) if args.json else print
+    source = args.suggestions or args.at
+    if not source:
+        print("pyrtan grow --suggestions: say where they are: a hub's URL, a file, or --at URL", file=sys.stderr)
+        return 2
+    rows = _load_suggestions(args, source)
+    if rows is None:
+        return 3
+    if args.tree:
+        rows = [s for s in rows if s.get("tree") in args.tree]  # a new tree has none, so --tree leaves it out
+    reg = Registry.from_paths(_paths(args.trees))
+    for path, err in reg.errors.items():
+        print(f"pyrtan: {path}: {err}", file=sys.stderr)
+    out_dir = Path(args.dir) if args.dir else next((Path(t) for t in _paths(args.trees) if Path(t).is_dir()), Path("trees"))
+    worst, done, report = 0, 0, []
+    for s in rows:
+        why = sg.problem(s)
+        label = f"{s.get('kind')} {s.get('tree') or s.get('text')!r}"
+        if why:
+            say(f"refused {label}: {why}")
+            report.append({"suggestion": s, "refused": why})
+            continue
+        kind = s["kind"]
+        if kind == "tree":
+            name, text = sg.tree_text(s)
+            if reg.get(name):
+                say(f"skipped {label}: a tree named {name} is here already")
+                continue
+            say(f"\n# a new tree, {out_dir / (name + '.toml')}:\n{text}")
+            if args.apply:
+                try:
+                    path = sg.write_tree(out_dir, s)
+                    say(f"# written: {path}; now say what it observes and how it decides, then: pyrtan check {path}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+            report.append({"suggestion": s, "file": str(out_dir / (name + ".toml")), "text": text})
+            continue
+        tree = reg.get(s["tree"])
+        if tree is None:
+            say(f"skipped {label}: not among the trees here")
+            continue
+        if kind == "branch":
+            d = sg.draft(tree, s)
+            if d is None:
+                say(f"skipped {label}.{s.get('node')}: {s.get('on')} = {json.dumps(s.get('observed'), default=str)} is covered already, or names no decide node")
+                continue
+            say(f"\n{d.render()}")
+            say(f"# why: {d.reason}")
+            report.append({"suggestion": s, "file": str(tree.source), "draft": d.to_dict()})
+            if args.apply:
+                try:
+                    apply_draft(tree.source, d)
+                    say(f"# written into {tree.source}; read it, then: pyrtan check {tree.source}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+        else:
+            say(f"\n# {tree.name}: add after its last [[triggers]]:\n{sg.trigger_text(s)}")
+            report.append({"suggestion": s, "file": str(tree.source), "text": sg.trigger_text(s)})
+            if args.apply:
+                try:
+                    sg.apply_trigger(tree.source, tree, s, reg)
+                    say(f"# written into {tree.source}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+        reg.reload()
+    if args.json:
+        print(json.dumps({"drafts": report}, indent=2, ensure_ascii=False, default=str))
+    if not rows:
+        say("nothing to draft: no suggestions")
+        return 1
+    if not args.apply:
+        say("\n# nothing written; --apply puts each into its file, checked, for you to read")
+    elif done:
+        say(f"\n# {done} written; bump each tree's version when you keep it")
+    return worst
+
+
 def _from_report(r: dict[str, Any]) -> dict[str, Any]:
     """A federation report (id namespace/name@version) as a gap (tree name)."""
     if "tree" in r:
@@ -891,11 +1066,11 @@ def cmd_hub(args: argparse.Namespace) -> int:
     try:
         hub, server = serve_hub(
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
-            federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan, advertise=args.advertise, federation_secret=args.federation_secret,
+            federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan or args.chat_reach > 0, advertise=args.advertise, federation_secret=args.federation_secret,
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
             trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan,
-            allow=args.allow, grants=args.grants,
+            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
+            allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain,
         )
     except IdentityError as e:
         print(f"pyrtan hub: {e}", file=sys.stderr)
@@ -908,6 +1083,8 @@ def cmd_hub(args: argparse.Namespace) -> int:
         local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
     if hub.lobby is not None:
         local += ", chatting at /chat" + (" (open to callers without the token, people only)" if hub.chat_public and args.token else "")
+        if hub.lobby.reach:
+            local += f", linking with up to {hub.lobby.reach} other open lobbies" if hub.lobby.open() else ", but --chat-reach links only an open lobby (--chat-public, or no token)"
     if hub.lan is not None:
         lan = hub.lan.view()
         local += f", on the LAN ({lan['group']}): " + (f"cannot join it: {hub.lan.error}" if hub.lan.error else f"heard {len(lan['hubs'])} hub(s)" + ("" if lan["announcing"] else "; listening only, since this hub's id is not a LAN address (give --advertise http://<its LAN address>:PORT)"))
@@ -1397,6 +1574,7 @@ def cmd_id(args: argparse.Namespace) -> int:
             "new": _id_new, "show": _id_show, "check": _id_check, "device": _id_device,
             "revoke": _id_revoke, "route": _id_route, "name": _id_name,
             "resolve": _id_resolve, "pins": _id_pins, "wellknown": _id_wellknown, "push": _id_push,
+            "backup": _id_backup, "restore": _id_restore, "release": _id_release,
         }[args.id_command](args, directory)
     except IdentityError as e:
         print(f"pyrtan id: {e}", file=sys.stderr)
@@ -1484,6 +1662,10 @@ def _id_check(args: argparse.Namespace, directory: Path) -> int:
         print(f"{thing}: the identity document of {doc['id']}, signed by it; {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
     elif kind == "device":
         print(f"{thing}: {doc['device']} may {','.join(doc['may']) or 'nothing'} for {doc['root']}, until {time.strftime('%Y-%m-%d', time.localtime(doc['expires']))}")
+    elif kind == "release":
+        print(f"{thing}: {doc['id']} gives up {doc['name']}@{doc['domain']}, signed by it")
+    elif kind == "backup":
+        print(f"{thing}: a key backup of {doc['id']}, {doc['kdf']['iterations']} PBKDF2 rounds" + (", with its identity document" if doc.get("document") else "") + "; `pyrtan id restore` opens it")
     else:
         print(f"{thing}: {doc['id']} claims {doc['name']}@{doc['domain']}, signed by it")
     return 0
@@ -1525,27 +1707,44 @@ def _id_route(args: argparse.Namespace, directory: Path) -> int:
 def _id_name(args: argparse.Namespace, directory: Path) -> int:
     from . import identity, names
     key, doc = _id_load(directory)
+    network = names.repo_domain(args.into) if args.into else None
     github = args.github
-    if args.into and github is None:
+    if args.into and network is None and github is None:
         local = identity.parse(args.name).name
         github = names.github_id(local)
         print(f"GitHub says {local} is user {github}", file=sys.stderr)
     extra = {"github": github} if github is not None else {}
-    claim = identity.make_name(key, args.name, **extra)
+    old = identity.Key.load(args.handover_from) if args.handover_from else None
+    claim = identity.make_name(key, args.name, handover_from=old, **extra)
     text = json.dumps(claim, indent=2, ensure_ascii=False) + "\n"
     if args.into:
         written = names.place(args.into, claim, doc)
-        problems = names.gate(args.into)
+        problems = names.gate_key(args.into / "names", None, network) if network else names.gate(args.into)
         for p in problems:
             print(f"gate: {p}", file=sys.stderr)
         if problems:
             return 1
         print("wrote " + " and ".join(str(w) for w in written))
-        print(f"now: git checkout -b names/{claim['name']} && git add {names.NAMES_DIR} && git commit && git push -u origin HEAD, and open a pull request from the GitHub account {claim['name']}")
+        where = "names" if network else names.NAMES_DIR
+        print(f"now: git checkout -b names/{claim['name']} && git add {where} && git commit && git push -u origin HEAD, and open a pull request"
+              + ("" if network else f" from the GitHub account {claim['name']}"))
         return 0
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"wrote {args.out}: {claim['id']} claims {claim['name']}@{claim['domain']}; the domain serves it at /.well-known/pyrtan/name/{claim['name']}.json")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def _id_release(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, _ = _id_load(directory)
+    release = identity.make_release(key, args.name)
+    text = json.dumps(release, indent=2, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"wrote {args.out}: {key.id} gives up {release['name']}@{release['domain']}; put it in place of names/{release['name']}.json")
     else:
         sys.stdout.write(text)
     return 0
@@ -1602,6 +1801,64 @@ def _id_wellknown(args: argparse.Namespace, directory: Path) -> int:
     return 1 if problems else 0
 
 
+def _passphrase(args: argparse.Namespace, *, twice: bool) -> str:
+    import getpass
+    if args.passphrase_env:
+        value = os.environ.get(args.passphrase_env)
+        if not value:
+            raise IdentityError(f"${args.passphrase_env} is empty")
+        return value
+    first = getpass.getpass("passphrase: ")
+    if twice and getpass.getpass("again: ") != first:
+        raise IdentityError("the two passphrases differ")
+    return first
+
+
+def _id_backup(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, doc = _id_load(directory)
+    out = Path(args.out)
+    if out.exists():
+        raise IdentityError(f"{out} exists; a backup is not overwritten")
+    backup = identity.make_backup(key, _passphrase(args, twice=True), document=doc)
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(backup, indent=2) + "\n")
+    print(f"wrote {out}: {key.id}, encrypted with your passphrase, and your identity document")
+    print("keep it where only you can read it (your disk, your own private repository), never in a public one: anyone with a copy can guess at the passphrase forever")
+    return 0
+
+
+def _id_restore(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    try:
+        backup = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise IdentityError(f"{args.file}: {e}") from None
+    problem = identity.backup_problem(backup)
+    if problem:
+        raise IdentityError(f"{args.file}: {problem}")
+    key_file = directory / "root.key"
+    if key_file.exists():
+        held = identity.Key.load(key_file)
+        if held.id != backup["id"].lower():
+            raise IdentityError(f"{directory} already holds {held.id}; move it away first, knowing that it is an identity")
+    key = identity.open_backup(backup, _passphrase(args, twice=False))
+    doc = backup.get("document") or identity.make_identity(key)
+    current = None
+    if (directory / "identity.json").exists():
+        try:
+            current = json.loads((directory / "identity.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            current = None
+    doc = identity.newest([doc, current], ident=key.id) or doc
+    if not key_file.exists():
+        key.save(key_file)
+    _id_save(directory, doc)
+    print(f"you are {key.id} again, in {directory}" + ("" if backup.get("document") else "; the backup held no identity document, so a new one lists no devices"))
+    return 0
+
+
 def _id_push(args: argparse.Namespace, directory: Path) -> int:
     _, doc = _id_load(directory)
     at = args.at.rstrip("/")
@@ -1615,6 +1872,34 @@ def _id_push(args: argparse.Namespace, directory: Path) -> int:
         return 1
     print(f"{at} holds your document of {time.strftime('%Y-%m-%d %H:%M', time.localtime(doc['updated']))}: {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
     return 0
+
+
+# ---------------------------------------------------------------- a network's names
+
+
+def cmd_names(args: argparse.Namespace) -> int:
+    from . import identity, names
+    try:
+        if args.names_command == "init":
+            written, kept = names.init_repo(args.dir, args.domain, host=args.host, pyrtan_ref=args.pyrtan_ref)
+            for path in written:
+                print(f"wrote {path}")
+            for path in kept:
+                print(f"kept  {path} (already there)")
+            print(f"next: commit it, push it to your git host, point {args.domain} at its Pages (or at a hub started --names {args.dir / 'names'}),"
+                  f" and claim the first name: pyrtan id name <you>@{args.domain} --into {args.dir}")
+            return 0
+        domain = identity.check_host(args.domain.lower())
+        if not args.head.is_dir():
+            raise IdentityError(f"{args.head} is not a directory")
+        problems = names.gate_key(args.head, args.base, domain, label=args.head.name or "names")
+    except IdentityError as e:
+        print(f"pyrtan names: {e}", file=sys.stderr)
+        return 2
+    for p in problems:
+        print(f"gate: {p}")
+    print(f"gate: {'refused' if problems else 'open'} ({domain}, names owned by their keys)")
+    return 1 if problems else 0
 
 
 # ---------------------------------------------------------------- grants

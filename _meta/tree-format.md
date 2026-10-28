@@ -333,7 +333,8 @@ An `env` value is the operator's, so it stays out of the trace: a
 it goes out and nowhere else: a header, a request body.
 
 Filters: `url`, `json`, `int`, `float`, `str`, `lower`, `upper`, `strip`,
-`title`, `first`, `last`, `length`.
+`title`, `first`, `last`, `length`, `join` (a list as `a, b, c`, for a
+sentence).
 
 A string that is exactly one placeholder keeps the value's type (a list
 stays a list). A placeholder that resolves to nothing fails the node, except

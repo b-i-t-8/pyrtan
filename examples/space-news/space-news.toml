@@ -1,0 +1,71 @@
+# The latest spaceflight news, from the Spaceflight News API: the newest
+# three articles across the sites it follows.
+
+name = "space-news"
+version = 1
+namespace = "pyrtan"
+description = "The three latest spaceflight news articles, from the Spaceflight News API."
+tags = ["space", "news", "read-only"]
+license = "MIT"
+hosts = ["api.spaceflightnewsapi.net"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[latest] (space|spaceflight) news"
+[[triggers]]
+pattern = "what's new in space"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.spaceflightnewsapi.net/v4/articles/?limit=3" }
+into = "resp"
+extract = [
+  { into = "articles", json = "json.results" },
+  { into = "title", json = "json.results[0].title" },
+  { into = "site", json = "json.results[0].news_site" },
+  { into = "url", json = "json.results[0].url" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "articles"
+branches = [
+  { when = { empty = true }, then = "none" },
+  { else = "each" },
+]
+
+[nodes.each]
+kind = "each"
+over = "articles"
+limit = 3
+start = "one"
+into = "stories"
+next = "reply"
+
+[nodes.one]
+kind = "done"
+output = { title = "{{ item.title }}", site = "{{ item.news_site }}", url = "{{ item.url }}", published = "{{ item.published_at }}" }
+
+[nodes.reply]
+kind = "done"
+say = "Latest in space: {{ state.title }} ({{ state.site }}) {{ state.url }}"
+output = { stories = "{{ state.stories }}" }
+
+[nodes.none]
+kind = "done"
+say = "The Spaceflight News API has no articles right now."
+output = { stories = [] }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Spaceflight News API answered {{ state.resp.status }}."

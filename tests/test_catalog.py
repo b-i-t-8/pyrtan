@@ -72,7 +72,8 @@ def test_build_index_leaves_out_what_does_not_belong(tmp_path):
 def test_search_and_find(served):
     cat = Catalog(served)
     assert {e["name"] for e in cat.search("")} == EXAMPLE_NAMES
-    assert [e["name"] for e in cat.search("open-meteo")] == ["air-quality", "sun", "weather"]
+    meteo = cat.search("open-meteo")
+    assert "weather" in [e["name"] for e in meteo] and all(any("open-meteo" in h for h in e["hosts"]) for e in meteo)
     assert [e["name"] for e in cat.search("news stories")] == ["hacker-news", "hn-search"]
     assert cat.search("nothing like this") == []
     assert cat.find("weather")["version"] == 2

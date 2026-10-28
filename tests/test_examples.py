@@ -236,3 +236,97 @@ def test_dad_joke_asks_for_json(runner, recorded):
     out = runner.run_intent("tell me a joke")
     assert out.status == "done" and out.say == "I am so good at sleeping I can do it with my eyes closed!"
     assert runner.registry.get("dad-joke").nodes["fetch"].get("http")["headers"] == {"Accept": "application/json"}
+
+
+def test_exchange_rate_reads_one_rate_by_its_shape(runner):
+    out = runner.run_intent("convert 100 usd to eur")
+    assert out.say == "100 USD is 89.69 EUR at the ECB rate of 2026-10-27."
+    assert out.output == {"amount": 100.0, "from": "USD", "to": "EUR", "value": 89.69, "date": "2026-10-27"}
+    out = runner.run_intent("convert 1,000 EUR into JPY")  # the comma is the number's, not a pause
+    assert out.inputs["amount"] == "1000" and out.say == "1000 EUR is 175970 JPY at the ECB rate of 2026-10-27."
+    assert runner.run_intent("usd to xyz rate").reason == "unknown-currency"
+    assert runner.run_intent("exchange rate from usd to usd").reason == "same-currency"
+    assert runner.run_intent("convert -5 usd to eur").reason == "bad-input"
+
+
+def test_synonyms_join_into_a_sentence(runner):
+    out = runner.run_intent("synonyms for happy")
+    assert out.say == "Synonyms for happy: halcyon, content, bright, felicitous, riant, expansive, elysian, joyful."
+    assert out.output["synonyms"][:2] == ["halcyon", "content"]
+    assert runner.run_intent("another word for qqqzzz").reason == "no-synonyms"
+
+
+# ---------------------------------------------------------------- a second batch for the browser
+
+
+def test_forecast_reads_tomorrow_not_today(runner):
+    out = runner.run_intent("weather in Oslo tomorrow")
+    assert out.tree == "forecast" and out.say == "Oslo, Norway, tomorrow (2026-10-29): rain, 5.9 to 9.4°C, 80% chance of rain."
+    assert runner.run_intent("weather in Oslo").tree == "weather"  # today stays the weather tree's
+
+
+def test_uv_index_band(runner):
+    out = runner.run_intent("uv index in Sydney")
+    assert out.output["band"] == "extreme" and out.say.endswith("stay out of the midday sun.")
+
+
+def test_local_time_and_elevation_from_the_geocoder(runner):
+    assert runner.run_intent("what time is it in La Paz").say == "It is 17:50 on Tuesday 2026-10-27 in La Paz, Mexico (America/Mazatlan)."
+    assert runner.run_intent("how high is La Paz").say == "La Paz, Mexico is 33 m above sea level."
+    assert runner.run_intent("how high is Oslo").reason == "no-height"  # this geocode carries no elevation
+
+
+def test_postal_codes(runner):
+    out = runner.run_intent("where is zip 90210")
+    assert out.inputs == {"code": "90210", "country": "us"} and out.say == "90210 is Beverly Hills, California, United States."
+    assert out.output["latitude"] == 34.0901
+    assert runner.run_intent("postcode SW1A in GB").say == "SW1A is Westminster Abbey, England, Great Britain."
+    assert runner.run_intent("where is zip 00000").reason == "unknown-code"
+
+
+def test_wayback(runner):
+    assert runner.run_intent("is example.com archived").output["url"].startswith("http://web.archive.org/web/")
+    out = runner.run_intent("is nothing-here-qqzz.example archived")
+    assert out.status == "done" and out.say == "The Wayback Machine has no copy of nothing-here-qqzz.example."
+
+
+def test_rhymes_join(runner):
+    assert runner.run_intent("what rhymes with cat").say == "Rhymes with cat: flat, caveat, brat, pat, combat, slat, that, rat, diplomat, fat."
+    assert runner.run_intent("what rhymes with qqzzx").reason == "no-rhymes"
+
+
+def test_github_repo(runner):
+    out = runner.run_intent("how many stars does astral-sh/uv have")
+    assert out.output["stars"] == 71234 and out.output["language"] == "Rust"
+    assert runner.run_intent("github repo b-i-t-8/nothing-here").reason == "no-repo"
+    assert runner.run_intent("github repo b-i-t-8/busy").reason == "rate-limited"
+
+
+def test_package_managers(runner):
+    assert runner.run_intent("latest version of github.com/gorilla/mux on go").say == "github.com/gorilla/mux v1.8.1, published 2023-10-18. https://pkg.go.dev/github.com/gorilla/mux"
+    assert runner.run_intent("go module github.com/nope/nope-qq").reason == "no-module"
+    out = runner.run_intent("brew formula wget")
+    assert out.output["version"] == "1.25.0" and out.output["install"] == "brew install wget"
+    assert runner.run_intent("brew formula nope-qqzz").reason == "no-formula"
+
+
+def test_pokemon_types_join(runner):
+    assert runner.run_intent("pokemon pikachu").say == "#25 Pikachu, electric type."
+    out = runner.run_intent("what type is charizard")
+    assert out.output["types"] == ["fire", "flying"] and out.output["height_dm"] == 17
+    assert runner.run_intent("pokemon notapokemonqq").reason == "no-pokemon"
+
+
+def test_small_apis(runner):
+    assert runner.run_intent("what is my ip").output == {"ip": "203.0.113.7"}
+    assert runner.run_intent("give me some advice").say.startswith("Take time once in a while")
+    assert runner.run_intent("tell me a cat fact").say.startswith("A cat has more bones than a human")
+
+
+def test_space(runner):
+    out = runner.run_intent("when is the next launch")
+    assert out.output == {"name": "Falcon 9 Block 5 | Starlink Group 15-18", "net_utc": "2026-10-30T04:02:00Z", "status": "Go for Launch", "upcoming": 474}
+    out = runner.run_intent("space news")
+    assert len(out.output["stories"]) == 3 and out.output["stories"][0]["site"] == "SpaceNews"
+    out = runner.run_intent("astronomy picture of the day")
+    assert out.output["title"] == "Day and Night over the Clouds" and out.output["media_type"] == "image"

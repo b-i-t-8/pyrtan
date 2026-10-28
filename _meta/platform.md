@@ -154,7 +154,7 @@ browser is the hub, for as long as the page is open: `pyrtan.js`'s
 `/resume`, `/gaps`, `/unanswered` and `/watches` inside the page, with the
 shapes a service answers them with, and the console calls it through the
 same function it calls a hub through. It holds trees it needs no network
-for: every console carries the default trees (v0.17; the examples and the
+for: every console carries the default trees (v0.20; the examples and the
 catalog, shipped inside the package, `pyrtan.defaults`), embedded in the
 page in `trees.json`'s shape, or what `pyrtan console --trees DIR` gave
 it. A fresher catalog is taken first when it is no further than the

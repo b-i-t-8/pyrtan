@@ -124,6 +124,32 @@ While a seat is asking other hubs it is *busy*, and nobody can pair it
 meanwhile; two seats that ask each other's hubs at once both get
 `met: false` and try again on their next round.
 
+**Chat links (v0.17).** A hub follows few hubs, because following routes
+sentences to their trees; so the strangers a lobby could reach were
+few. A *chat link* is the relationship chat needs and nothing more. A
+hub started `--chat-reach N` (`$PYRTAN_CHAT_REACH`) keeps up to N of
+them: on every poll it tries a hub or two it heard of on the LAN
+(`--lan`) or in its directory (public networks only), that it neither
+follows nor is followed by, with a `ChatLink` carrying a fresh pair
+secret and signed with it, as an open `Follow` is. The other hub checks
+the signature and that the inbox is the one the sender's `/actor`
+names, and takes the link only when its operator also gave
+`--chat-reach` and its lobby is open to strangers anyway (`--chat-public`,
+or no token); a closed federation (`--closed`, a federation secret)
+takes none, and a hub takes at most twice its own reach. Then either
+end sends `Meet`, `Say`, `Typing` and `Part` over it, exactly as over a
+follow, and the two lobbies share their strangers.
+
+A link is kept apart from following on purpose: it lives in the lobby,
+not in `following` or `followers`, so nothing is routed over it, no
+trees or directory are announced on it, and no blob is kept; the inbox
+looks a link up only for the four chat activities. It lives in memory
+and is made again after a restart. A hub that refused is not asked again
+for a day (`GET /peers` shows the links and each refusal's reason), and
+a link whose hub fails three `Meet`s in a row is dropped and replaced.
+With `--lan`, two open lobbies in one house link with each other and
+nothing else needed.
+
 ## 4. Typing (v0.12)
 
 While a person types, the client says so (`POST /chat/typing {seat,
@@ -206,5 +232,7 @@ for that conversation.
 - **v0.12, built:** the typing indicator, per person and per hub (§4).
 - **v0.13, built:** public lobbies: `--chat-public`, guests meet people
   only (§1).
+- **v0.17, built:** chat links, `--chat-reach N`: open lobbies share
+  their strangers without following each other (§3).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.
