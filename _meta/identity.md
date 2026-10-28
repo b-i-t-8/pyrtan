@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.14, in three steps** (§10): identifiers, the three documents and `pyrtan id`; names (§6), resolved, pinned and served, with pyrtan.com's by pull request; and the wire (§7): signed requests, grants on hubs, members as identities, and the console's device key. What is left is in §10, *Later*. |
+| **Status** | **Built, v0.14 and v0.15, in four steps** (§10): identifiers, the three documents and `pyrtan id`; names (§6), resolved, pinned and served, with pyrtan.com's by pull request; the wire (§7): signed requests, grants on hubs, members as identities, and the console's device key; and, in v0.15, all of it from the console with no shell, a root's encrypted backup (§5a), and names any network runs in any git repository (§6a). What is left is in §10, *Later*. |
 | **Date** | 2026-10-27 |
 | **Decision** | A person (or a hub, or a device) is a public key. The identifier is that key, written so that anyone can check a signature from it without asking anybody. Domains, hubs and onion services are where an identity can be *reached* and what it can be *called*, never what it *is*: `pyr:<key>` is the identity, `pyr:<key>@host` says where to find it, and `alice@pyrtan.com` is a name a domain vouches for. pyrtan.com hands out names by pull request, as one name provider among any number. An identity grants nothing by itself: each hub keeps its own list of who may do what. |
-| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. `src/pyrtan/grants.py` (who may do what on a hub), `src/pyrtan/hub.py`, `federation.py` and `service.py` (signed requests, `/allow`, `/identity`, members as identities), `src/pyrtan/js/identity.js` and `page.py` (the console's key), `tests/test_grants.py`, `tests/conformance/identity.json` and `identity.cjs`, `tests/browser/console_identity.cjs`. |
+| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. `src/pyrtan/grants.py` (who may do what on a hub), `src/pyrtan/hub.py`, `federation.py` and `service.py` (signed requests, `/allow`, `/identity`, members as identities), `src/pyrtan/js/identity.js` and `page.py` (the console's key), `tests/test_grants.py`, `tests/conformance/identity.json` and `identity.cjs`, `tests/browser/console_identity.cjs`; since v0.15, the console's Identity and Access tabs, `pyrtan id backup|restore|release`, `pyrtan names init|gate`, `pyrtan hub --names`, `tests/test_console_identity.py` and `tests/browser/console_gui.cjs`. |
 
 ## 0. The brief
 
@@ -190,13 +190,69 @@ phone's console) gets its own key, and the root signs a note for it:
   one machine; devices are for everything else.
 
 The console's device key is a non-extractable `CryptoKey` in IndexedDB.
-Pairing a phone: the console's Identity tab makes its key and shows the
-device identifier and the command to run; `pyrtan id device add pyr:…
---may chat,run --label phone` on the machine with the root prints the
-note; the console takes it pasted. An unpaired key signs as itself, so a
-hub can also grant the key directly. A QR code of the identifier, and
-picking the note up from the root's hub instead of pasting it, are
-later (§10).
+Pairing a phone: on the phone, the console's Identity tab (*Use this
+browser as a device*) makes its key and shows its code; on the browser
+that holds the root (§5a), *Devices* takes the code, the abilities and a
+label, and shows the signed note, which the phone takes pasted. `pyrtan
+id device add pyr:… --may chat,run --label phone` does the same from a
+shell. An unpaired key signs as itself, so a hub can also grant the key
+directly. A QR code of the code and of the note, and picking the note up
+from the root's hub instead of pasting it, are later (§10).
+
+## 5a. A root in a browser, and its backup (v0.15)
+
+The root was meant to live somewhere quiet: a file on one machine, or
+offline. That asks for a shell, and a shell turns people away. So the
+console can hold a root too, and everything `pyrtan id` does is a button.
+
+**Making one.** WebCrypto makes the Ed25519 key *extractable once*: its
+seed is read out, sealed into a backup with the person's passphrase, and
+the key is imported again non-extractable; the seed is wiped and the
+page never holds an extractable key again. The tab says *save your
+backup now* until it is downloaded or committed. Restoring is the
+reverse: the backup file and its passphrase, opened by WebCrypto, the key
+imported non-extractable.
+
+**The backup** is one JSON file, the same from the console
+(`identity.js`) and the shell (`pyrtan id backup`), each opening the
+other's:
+
+```json
+{"pyrtan-key-backup": 1, "id": "pyr:…", "made": 1761580800,
+ "kdf": {"name": "PBKDF2-SHA256", "iterations": 600000, "salt": "…"},
+ "cipher": {"name": "AES-256-GCM", "iv": "…"}, "data": "…",
+ "document": { the identity document, signed, in the clear }}
+```
+
+`data` is the 32-byte seed under AES-256-GCM, with
+`pyrtan-key-backup-v1\n` and the identifier as associated data, so a
+ciphertext cannot be passed off as another identity's. 600,000 rounds of
+PBKDF2-SHA256 is what OWASP asks of it; a backup claiming fewer than
+100,000 is refused, so a doctored file cannot make a passphrase cheap to
+guess. PBKDF2 and not Argon2, because WebCrypto has PBKDF2 and nothing
+memory-hard, and the console writes nothing cryptographic of its own.
+
+**Where it may live.** Somewhere only its owner can read: a file on their
+disk, or their own *private* repository (the console opens GitHub's page
+to make one, and its new-file page to commit the backup; git keeps every
+version, which here is a feature). Never anywhere public, and never as a
+hub's blob (`members.md` §4: nothing secret is ever a blob): an encrypted
+key that anyone can copy can be guessed at offline, forever, and git
+history means it is never really gone. The tab says so beside both
+buttons.
+
+**What this trades.** A root in a browser is a key that script on the
+console's origin could *use*, though never read out: an injected script
+on that page could sign as you while the page is open. The console is
+static, carries no third-party script and is served by your own hub or by
+pyrtan.com's Pages; that is the bargain, and the shell's root, a file
+that never meets a browser, remains for whoever wants it quiet.
+
+**Later:** passkeys. WebAuthn's PRF extension can give the console a
+secret from a passkey (Face ID, a fingerprint, a security key), synced by
+the platform's own keychain, to seal the backup instead of a passphrase.
+Support is uneven across browsers today; the passphrase stays, and a
+passkey would be a second way to open the same backup.
 
 ## 6. Names
 
@@ -269,6 +325,57 @@ the build's cadence. The Pages upload stays on
 wellknown DIR --domain D --out SITE` builds them from a directory of
 claims; nothing about them is pyrtan.com's business. An operator can serve names from their own
 hub. An onion service can serve names to anyone who fetches over Tor.
+
+## 6a. Any network's names, in any git repository (v0.15)
+
+pyrtan.com is one name provider. A network can be another: its names are
+a git repository on any host, served by any static host or by its own
+hubs, judged by a rule that needs nothing from the host.
+
+**Names owned by their keys** (`names.gate_key`, `pyrtan names gate`). The
+gate compares two trees, the change and its merge base, and reads only
+signatures, so it runs in any CI, or on a patch that arrived by mail:
+
+- a new name is open to whoever signs a claim to it, while nobody holds it;
+- a name moves to a new key only with a **handover**: the old key signs the
+  new claim's body first (`pyrtan id name … --handover-from OLD-KEY`), and
+  the new key signs the claim with the handover in it;
+- a name is given up only by a **release** its key signs, put in place of
+  the claim (`pyrtan id release`); a released name is free, and is not
+  served;
+- a name's identity document is replaced only by a newer one, and not
+  deleted while the name stands with the same key: an older document, or
+  none, could bring back a device its owner revoked.
+
+pyrtan.com keeps its own rule (§6): a name is your GitHub login, owned by
+your numeric GitHub id.
+
+**A repository** (`pyrtan names init DIR --domain D --host github|gitlab|plain`)
+is `pyrtan-names.json` (the domain), a README, `names/`, and for its host:
+
+- *GitHub*: a gate on `pull_request_target`, so the workflow and pyrtan
+  come from the default branch and a pinned ref, never from the pull
+  request, comparing the pull request with its merge base; and Pages,
+  building `/.well-known/pyrtan/` with `pyrtan id wellknown`.
+- *GitLab*: a `.gitlab-ci.yml` with the gate (against the merge base) and
+  Pages. A merge request's pipeline runs the merge request's own copy of
+  the file, so a reviewer reads any change to it; the generated file says
+  so.
+- *plain*: the files, and the README's commands for whatever runs CI.
+
+The gate installs pyrtan from a ref the repository pins (`--pyrtan-ref`,
+`main` by default, with a comment to pin a commit). Nothing in such a
+repository is secret: no invite, no token, no backup.
+
+**Served by hubs.** `pyrtan hub --names DIR --names-domain D` answers
+`/.well-known/pyrtan/name/<name>.json`, `names.json` and the identity
+documents from a checkout of the repository, reread when a file changes,
+so a network with no static host needs none: its hubs are its name
+providers, reachable at `https://D`.
+
+**From the console**, *Claim a name* takes the network's name and its
+repository; for one on GitHub it opens the new-file page filled in, and
+for another host it gives the file to add.
 
 ## 7. On the wire
 
@@ -449,7 +556,16 @@ hub that checks Alice with a shared secret can also forge Alice.
   the console in Chromium end to end (a key, a note, a reload, an answer
   with no token, a trusted member). This is the step that replaces
   handing out the token.
-- **Later:** a QR code for pairing, and the note picked up from the
+- **Fourth, built (v0.15): no shell, backups, any network's names.**
+  `identity.py` seals and opens backups, and signs releases and
+  handovers; `names.py` judges names owned by their keys, writes a names
+  repository for GitHub, GitLab or anything, and a hub serves one;
+  `identity.js` signs every document a root signs and writes and opens the
+  same backups, agreeing with Python byte for byte; the console's Identity
+  tab makes, backs up and restores a root, claims names and pairs devices,
+  and its Access tab keeps a hub's grants. `tests/browser/console_gui.cjs`
+  drives all of it in three Chromium contexts, checked by Python's code.
+- **Later:** passkeys to open a backup (§5a); a QR code for pairing, and the note picked up from the
   root's hub; device keys for the CLI; hub keys in `/actor` and moves; a chat seat that opts in to
   showing a verified name (chat stays anonymous by default, and still
   keeps nothing); reaching `.onion` locators, which needs a SOCKS proxy
@@ -482,6 +598,18 @@ hub that checks Alice with a shared secret can also forge Alice.
   is off is refused with `signature too old`, as a hub is today.
 - **A console on plain `http://`** cannot hold a key (§8) and joins as an
   anonymous member.
+- **A forgotten passphrase** leaves the backup a locked box: nothing in
+  this design opens it. The identity lives on in any browser or machine
+  that still holds the key; from there, a new backup with a new
+  passphrase (`pyrtan id backup`, or a restore and a download).
+- **A browser's data cleared before its backup was saved** loses a root
+  made there. The tab says *save your backup now* until it is saved, and
+  that is all it can do.
+- **Script injected into the console's page** could sign as the root held
+  there while the page is open (§5a); it cannot carry the key away.
+- **A network's repository on GitLab** runs a merge request's own CI
+  file; a reviewer who merges a change to it unread lets the change judge
+  itself (§6a).
 
 ## 12. What this design does not claim
 

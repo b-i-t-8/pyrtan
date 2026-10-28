@@ -178,6 +178,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. |
 | `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
 | `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
+| `pyrtan names init DIR --domain D` | Writes a names repository for a network: a README, `names/`, and for GitHub (or GitLab) the gate and Pages. `names gate` judges a change to names owned by their keys; `hub --names DIR` serves them. `id backup` / `restore` keep your key encrypted with a passphrase; `id release` gives a name up. |
 | `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
 
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
@@ -328,8 +329,18 @@ signature against without asking anybody. `pyr:<key>@host` (a hub, an
 domain vouches for. No domain owns an identity, and none grants
 anything by it: each hub keeps its own list of who may do what.
 
+**No shell needed.** The console's **Identity** tab makes your identity
+in the browser and hands you its backup at once, encrypted with your
+passphrase, to download or keep in your own private GitHub repository;
+restores it in another browser; claims a name, at pyrtan.com (GitHub's
+own page opens the pull request from your account) or at any network's
+names repository; and pairs your other devices by a code each shows and
+a note it gets back. The **Access** tab keeps a hub's grants. The same,
+from a shell:
+
 ```
 pyrtan id new                                       # your root key, ~/.config/pyrtan/identity/
+pyrtan id backup --out backup.json                  # encrypted with a passphrase; restore with pyrtan id restore
 pyrtan id device add pyr:… --may chat,run --label phone
 pyrtan id name alice@pyrtan.com --github <your numeric GitHub id>
 pyrtan id check pyr:…@hub.example
@@ -344,6 +355,17 @@ wellknown DIR --domain D` builds the files). pyrtan.com hands out
 <login>@pyrtan.com --into <checkout>`, then a pull request from that
 account, and the gate checks the account's numeric id
 ([`site/names/README.md`](site/names/README.md)).
+
+**Any network can run its own names**, in any git repository, owned by
+their keys: a new name is open to whoever signs it, it moves only with a
+handover its old key signs, and is given up only by a release it signs.
+The gate reads nothing but signatures, so it runs on any git host.
+
+```
+pyrtan names init names-repo --domain names.example.org --host github   # or gitlab, or plain
+pyrtan id name alice@names.example.org --into names-repo               # the first name
+pyrtan hub --names names-repo/names --names-domain names.example.org   # hubs can serve them too
+```
 
 **Grants** replace handing out the token. A hub grants identities
 abilities: `ask` (the routed paths), `chat` (the lobby), `run` (be a
@@ -660,7 +682,9 @@ hubs it follows, bots made of trees, a typing indicator, and lobbies open to the
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
 name claims, names at pyrtan.com and pins, grants on hubs, the console's
-key, `pyrtan id` and `pyrtan allow`) are built. Not yet built: hosting.
+key, `pyrtan id` and `pyrtan allow`) are built, and all of it works from
+the console with no shell; encrypted key backups, and names any network
+runs in its own git repository, too. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 
