@@ -3,12 +3,13 @@
  "drafts": [
   {
    "expect": {
-    "branch": "{ when = { between = [4, 44] }, then = \"sky-4\" },",
+    "branch": "{ between = [4, 44], value = 4 },",
+    "list": "table",
     "node": "sky",
     "observed": 4,
     "on": "code",
     "reason": "the value falls in the hole between 3 and 45, which the ranges around it leave open",
-    "then": "sky-4",
+    "then": "",
     "tree": "weather",
     "when": {
      "between": [
@@ -26,12 +27,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { eq = 100 }, then = \"sky-100\" },",
+    "branch": "{ eq = 100, value = 100 },",
+    "list": "table",
     "node": "sky",
     "observed": 100,
     "on": "code",
     "reason": "the value itself",
-    "then": "sky-100",
+    "then": "",
     "tree": "weather",
     "when": {
      "eq": 100
@@ -55,12 +57,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { exists = false }, then = \"sky-missing\" },",
+    "branch": "{ exists = false, value = \"\" },",
+    "list": "table",
     "node": "sky",
     "observed": null,
     "on": "code",
     "reason": "the value was missing",
-    "then": "sky-missing",
+    "then": "",
     "tree": "weather",
     "when": {
      "exists": false
@@ -75,12 +78,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { type = \"dict\" }, then = \"sky-dict\" },",
+    "branch": "{ type = \"dict\", value = \"<dict>\" },",
+    "list": "table",
     "node": "sky",
     "observed": "<dict>",
     "on": "code",
     "reason": "a report carries a long or structured value as its type",
-    "then": "sky-dict",
+    "then": "",
     "tree": "weather",
     "when": {
      "type": "dict"
@@ -95,12 +99,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { eq = \"Sunny Spells\" }, then = \"sky-sunny-spells\" },",
+    "branch": "{ eq = \"Sunny Spells\", value = \"Sunny Spells\" },",
+    "list": "table",
     "node": "sky",
     "observed": "Sunny Spells",
     "on": "code",
     "reason": "the value itself",
-    "then": "sky-sunny-spells",
+    "then": "",
     "tree": "weather",
     "when": {
      "eq": "Sunny Spells"
@@ -133,6 +138,7 @@
   {
    "expect": {
     "branch": "{ when = { eq = true }, then = \"status-true\" },",
+    "list": "branches",
     "node": "status",
     "observed": true,
     "on": "resp.status",
@@ -148,6 +154,78 @@
     "observed": true
    },
    "tree": "site-status"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = 20, value = 20 },",
+    "list": "table",
+    "node": "word",
+    "observed": 20,
+    "on": "inputs.score",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": 20
+    }
+   },
+   "gap": {
+    "node": "word",
+    "observed": 20,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = 120, value = 120 },",
+    "list": "table",
+    "node": "word",
+    "observed": 120,
+    "on": "inputs.score",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": 120
+    }
+   },
+   "gap": {
+    "node": "word",
+    "observed": 120,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": null,
+   "gap": {
+    "node": "word",
+    "observed": 95,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = false, value = false },",
+    "list": "table",
+    "node": "mark",
+    "observed": false,
+    "on": "inputs.strict",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": false
+    }
+   },
+   "gap": {
+    "node": "mark",
+    "observed": false,
+    "on": "inputs.strict"
+   },
+   "tree": "grade"
   }
  ],
  "fixture": "tests/fixtures/examples.json",
@@ -639,6 +717,27 @@
       "triggers": [
        "[what's the] latest version of {module:word} on go",
        "go (module|version) {module:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "a score, looked up",
+      "hosts": [],
+      "inputs": {
+       "score": {
+        "type": "int"
+       },
+       "strict": {
+        "type": "bool"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "grade",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "grade {score:int}"
       ],
       "version": 1
      },
@@ -1825,7 +1924,7 @@
        "[what's the] weather for {place}",
        "how [hot|cold|warm] is it in {place}"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "description": "The summary of a Wikipedia article.",
@@ -3310,6 +3409,248 @@
   },
   {
    "body": {
+    "text": "grade 95"
+   },
+   "expect": {
+    "inputs": {
+     "score": 95,
+     "strict": false
+    },
+    "output": {
+     "mark": "~",
+     "word": "excellent"
+    },
+    "say": "~",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "word",
+       "node": "intent",
+       "observed": {
+        "cleaned": "grade 95",
+        "inputs": {
+         "score": 95
+        },
+        "steps": [],
+        "trigger": "grade {score:int}"
+       },
+       "summary": "'grade 95'; grade via 'grade {score:int}' (5 literal chars)"
+      },
+      {
+       "chosen": "between [90, 100]",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "observed": 95,
+       "summary": "inputs.score = 95; word=excellent"
+      },
+      {
+       "chosen": "default",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": false,
+       "summary": "inputs.strict = False; mark=~"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "~"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "score": 60,
+     "strict": true
+    },
+    "tree": "grade"
+   },
+   "expect": {
+    "inputs": {
+     "score": 60,
+     "strict": true
+    },
+    "output": {
+     "mark": "strict",
+     "word": "a pass, 60"
+    },
+    "say": "strict",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "between [50, 89]",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "observed": 60,
+       "summary": "inputs.score = 60; word=a pass, 60"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": true,
+       "summary": "inputs.strict = True; mark=strict"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "strict"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "strict": true
+    },
+    "tree": "grade"
+   },
+   "expect": {
+    "inputs": {
+     "score": null,
+     "strict": true
+    },
+    "output": {
+     "mark": "strict",
+     "word": {
+      "points": 0,
+      "word": "absent"
+     }
+    },
+    "say": "strict",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "exists False",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "summary": "inputs.score = None; word={'word': 'absent', 'points': 0}"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": true,
+       "summary": "inputs.strict = True; mark=strict"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "strict"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "grade 10"
+   },
+   "expect": {
+    "inputs": {
+     "score": 10,
+     "strict": false
+    },
+    "output": {
+     "gap": {
+      "node": "word",
+      "observed": 10,
+      "on": "inputs.score",
+      "tree": "grade"
+     }
+    },
+    "reason": "gap",
+    "say": "word: no row for inputs.score = 10.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "node": "word",
+       "observed": 10,
+       "on": "inputs.score",
+       "tree": "grade"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "word",
+       "node": "intent",
+       "observed": {
+        "cleaned": "grade 10",
+        "inputs": {
+         "score": 10
+        },
+        "steps": [],
+        "trigger": "grade {score:int}"
+       },
+       "summary": "'grade 10'; grade via 'grade {score:int}' (5 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "lookup",
+       "next": null,
+       "node": "word",
+       "observed": 10,
+       "summary": "inputs.score = 10: no row"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "temperature in the hall"
    },
    "expect": {
@@ -3472,6 +3813,13 @@
       "observed": null,
       "on": "state.q.json.temperature",
       "tree": "room-temperature"
+     },
+     {
+      "count": 1,
+      "node": "word",
+      "observed": 10,
+      "on": "inputs.score",
+      "tree": "grade"
      }
     ]
    },
@@ -3671,9 +4019,9 @@
    "body": null,
    "expect": {
     "errors": {},
-    "gaps": 1,
+    "gaps": 2,
     "name": "this browser",
-    "runs": 19,
+    "runs": 23,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -3694,6 +4042,7 @@
      "github-release",
      "github-repo",
      "go-module",
+     "grade",
      "hacker-news",
      "hacker-news-item",
      "hn-search",
@@ -4035,6 +4384,79 @@
    "start": "size",
    "triggers": [
     "order a {drink:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "a score, looked up",
+   "hosts": [],
+   "inputs": {
+    "score": {
+     "required": false,
+     "type": "int"
+    },
+    "strict": {
+     "default": false,
+     "type": "bool"
+    }
+   },
+   "name": "grade",
+   "nodes": {
+    "mark": {
+     "default": "~",
+     "into": "mark",
+     "kind": "lookup",
+     "next": "reply",
+     "on": "inputs.strict",
+     "table": [
+      {
+       "eq": true,
+       "value": "strict"
+      }
+     ]
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "mark": "{{ state.mark }}",
+      "word": "{{ state.word }}"
+     },
+     "say": "{{ state.mark }}"
+    },
+    "word": {
+     "into": "word",
+     "kind": "lookup",
+     "next": "mark",
+     "on": "inputs.score",
+     "table": [
+      {
+       "between": [
+        90,
+        100
+       ],
+       "value": "excellent"
+      },
+      {
+       "between": [
+        50,
+        89
+       ],
+       "value": "a pass, {{ inputs.score }}"
+      },
+      {
+       "exists": false,
+       "note": "a table value",
+       "value": {
+        "points": 0,
+        "word": "absent"
+       }
+      }
+     ]
+    }
+   },
+   "start": "word",
+   "triggers": [
+    "grade {score:int}"
    ],
    "version": 1
   }
@@ -7544,21 +7966,11 @@
       {
        "chosen": "between [51, 67]",
        "depth": 0,
-       "kind": "decide",
-       "next": "rain",
+       "kind": "lookup",
+       "next": "reply",
        "node": "sky",
        "observed": 61,
-       "summary": "state.code = 61"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "reply",
-       "node": "rain",
-       "observed": {
-        "sky": "raining"
-       },
-       "summary": "sky=raining"
+       "summary": "state.code = 61; sky=raining"
       },
       {
        "depth": 0,
@@ -7657,21 +8069,11 @@
       {
        "chosen": "eq 0",
        "depth": 0,
-       "kind": "decide",
-       "next": "clear",
+       "kind": "lookup",
+       "next": "reply",
        "node": "sky",
        "observed": 0,
-       "summary": "state.code = 0"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "reply",
-       "node": "clear",
-       "observed": {
-        "sky": "clear"
-       },
-       "summary": "sky=clear"
+       "summary": "state.code = 0; sky=clear"
       },
       {
        "depth": 0,
@@ -23793,27 +24195,6 @@
    "name": "weather",
    "namespace": "pyrtan",
    "nodes": {
-    "clear": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "clear"
-     }
-    },
-    "cloudy": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "cloudy"
-     }
-    },
-    "fog": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "foggy"
-     }
-    },
     "forecast": {
      "extract": [
       {
@@ -23911,13 +24292,6 @@
      "reason": "no-forecast",
      "say": "Open-Meteo found {{ state.name }} but returned no current temperature (status {{ state.fc.status }})."
     },
-    "rain": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "raining"
-     }
-    },
     "reply": {
      "kind": "done",
      "output": {
@@ -23932,108 +24306,71 @@
      "say": "{{ state.name }}, {{ state.country }}: {{ state.temp }}{{ state.unit }}, {{ state.sky }}, humidity {{ state.humidity }}%, wind {{ state.wind }} km/h."
     },
     "sky": {
-     "branches": [
+     "default": "weather code {{ state.code }}",
+     "into": "sky",
+     "kind": "lookup",
+     "next": "reply",
+     "on": "code",
+     "table": [
       {
-       "then": "clear",
-       "when": {
-        "eq": 0
-       }
+       "eq": 0,
+       "value": "clear"
       },
       {
-       "then": "cloudy",
-       "when": {
-        "between": [
-         1,
-         3
-        ]
-       }
+       "between": [
+        1,
+        3
+       ],
+       "value": "cloudy"
       },
       {
-       "then": "fog",
-       "when": {
-        "between": [
-         45,
-         48
-        ]
-       }
+       "between": [
+        45,
+        48
+       ],
+       "value": "foggy"
       },
       {
-       "then": "rain",
-       "when": {
-        "between": [
-         51,
-         67
-        ]
-       }
+       "between": [
+        51,
+        67
+       ],
+       "value": "raining"
       },
       {
-       "then": "snow",
-       "when": {
-        "between": [
-         71,
-         77
-        ]
-       }
+       "between": [
+        71,
+        77
+       ],
+       "value": "snowing"
       },
       {
-       "then": "rain",
-       "when": {
-        "between": [
-         80,
-         82
-        ]
-       }
+       "between": [
+        80,
+        82
+       ],
+       "value": "raining"
       },
       {
-       "then": "snow",
-       "when": {
-        "between": [
-         85,
-         86
-        ]
-       }
+       "between": [
+        85,
+        86
+       ],
+       "value": "snowing"
       },
       {
-       "then": "storm",
-       "when": {
-        "between": [
-         95,
-         99
-        ]
-       }
-      },
-      {
-       "else": "unknown-sky"
+       "between": [
+        95,
+        99
+       ],
+       "value": "stormy"
       }
-     ],
-     "kind": "decide",
-     "on": "code"
-    },
-    "snow": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "snowing"
-     }
-    },
-    "storm": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "stormy"
-     }
+     ]
     },
     "unknown-place": {
      "kind": "fail",
      "reason": "unknown-place",
      "say": "I could not find a place called {{ inputs.place }}."
-    },
-    "unknown-sky": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "weather code {{ state.code }}"
-     }
     }
    },
    "start": "geocode",
@@ -24052,7 +24389,7 @@
      "pattern": "how [hot|cold|warm] is it in {place}"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "wikipedia": {
    "description": "The summary of a Wikipedia article.",

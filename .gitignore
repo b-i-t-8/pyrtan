@@ -8,3 +8,5 @@ build/
 .env
 .env.*
 tmp/
+# A compose file copied to the root of a checkout holds a real token (deploy/README.md).
+/docker-compose.yml

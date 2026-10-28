@@ -15,8 +15,8 @@ An outcome's ``status`` is one of:
     ``snapshot`` what :meth:`Runner.resume` needs to continue.
 ``error``
     The run could not proceed: a transport failure, an unhandled observation
-    (a ``decide`` with no matching branch, recorded as a gap), a host outside
-    the allow-list, a missing template value, or a limit reached. A
+    (a ``decide`` with no matching branch or a ``lookup`` with no matching
+    row, recorded as a gap), a host outside the allow-list, a missing template value, or a limit reached. A
     ``no-match`` error carries, in ``output.proposal``, the tree that would
     answer the sentence, so a dead end always points at the next tree.
 
@@ -39,7 +39,7 @@ from .registry import Ambiguous, NoMatch, Registry
 from .template import MISSING, TemplateError, render, resolve
 from .trace import Step, Trace
 from .transport import EgressRefused, Transport, TransportError, UrllibTransport
-from .tree import Node, Tree, TreeError
+from .tree import Node, Tree, TreeError, row_condition
 
 MAX_STEPS = 500
 MAX_DEPTH = 8
@@ -316,6 +316,26 @@ class Runner:
             _put(state, key, value)
             values[key] = value
         return Step(node.id, "set", ", ".join(f"{k}={_brief(v)}" for k, v in values.items()), observed=values), node.next
+
+    def _do_lookup(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
+        on = _state_path(node.get("on"))
+        value = resolve(on, scope)
+        into = node.get("into")
+        found, chosen = MISSING, None
+        for row in node.get("table"):
+            cond = row_condition(row)
+            if conditions.holds(cond, value):
+                found, chosen = row["value"], _cond_text(cond)
+                break
+        if found is MISSING:
+            if "default" not in node.spec:
+                trace.gap(node.id, on, _plain(value))
+                trace.add(Step(node.id, "lookup", f"{on} = {_brief(value)}: no row", observed=_plain(value), depth=depth))
+                return Outcome("error", tree.name, reason="gap", say=f"{node.id}: no row for {on} = {_brief(value)}.", output={"gap": trace.gaps[-1]})
+            found, chosen = node.get("default"), "default"
+        result = render(found, scope)
+        _put(scope["state"], into, result)
+        return Step(node.id, "lookup", f"{on} = {_brief(value)}; {into}={_brief(result)}", observed=_plain(value), chosen=chosen), node.next
 
     def _do_each(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         state = scope["state"]

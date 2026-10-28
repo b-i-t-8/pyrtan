@@ -453,3 +453,54 @@ def test_grow_command(tmp_path, capsys):
     finally:
         srv.stop()
     assert main(["grow", "--trees", str(tmp_path / "t")]) == 2
+
+
+LOOKUPISH = '''
+name = "sky"
+description = "a code into a word"
+start = "pick"
+
+[inputs.code]
+type = "int"
+
+[nodes.pick]
+kind = "lookup"
+on = "inputs.code"
+into = "sky"
+table = [
+  { eq = 0, value = "clear" },
+  { between = [1, 3], value = "cloudy" },
+  { between = [51, 67], value = "raining" },
+  { between = [95, 99], value = "stormy" },
+]
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.sky }}"
+'''
+
+
+def test_a_lookup_gap_asks_for_a_row(tmp_path, capsys):
+    tree = load_tree_text(LOOKUPISH)
+    d = draft_branch(tree, {"tree": "sky", "node": "pick", "on": "inputs.code", "observed": 71})
+    assert d is not None and d.list_key == "table" and d.when == {"between": [68, 94]} and "hole between 67 and 95" in d.reason
+    assert d.branch == "{ between = [68, 94], value = 71 }," and d.node_text == "" and d.then == ""
+    assert d.render() == "# sky: in [nodes.pick], add to table:\n  { between = [68, 94], value = 71 },"
+    assert draft_branch(tree, {"node": "pick", "on": "inputs.code", "observed": 2}) is None
+    assert draft_branch(tree, {"node": "pick", "on": "inputs.code", "observed": None}).branch == '{ exists = false, value = "" },'
+    # Applied, the row goes at the end of the table and nothing else changes.
+    (tmp_path / "t").mkdir()
+    path = tmp_path / "t" / "sky.toml"
+    path.write_text(LOOKUPISH)
+    text = apply_draft(path, d)
+    grown = load_tree(path)
+    assert "  { between = [68, 94], value = 71 },\n]" in text and set(grown.nodes) == {"pick", "reply"}
+    assert [r["value"] for r in grown.nodes["pick"].get("table")] == ["clear", "cloudy", "raining", "stormy", 71]
+    # And through the command, which says where to write the meaning.
+    gaps = tmp_path / "gaps.jsonl"
+    gaps.write_text(json.dumps({"tree": "sky", "node": "pick", "on": "inputs.code", "observed": 120}) + "\n")
+    assert main(["grow", "--from", str(gaps), "--trees", str(tmp_path / "t"), "--apply"]) == 0
+    out = capsys.readouterr().out
+    assert "add to table" in out and "now edit the new row's value in [nodes.pick]" in out
+    assert load_tree(path).nodes["pick"].get("table")[-1] == {"eq": 120, "value": 120}

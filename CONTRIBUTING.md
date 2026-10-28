@@ -64,8 +64,8 @@ bump the version.
 
 The runtime is small on purpose, and every node kind is paid for by every
 tree author who has to learn it. A new kind needs a case that `observe`,
-`decide`, `set`, `each` and `delegate` cannot express together, written down
-in the pull request. The same goes for a new filter or condition.
+`decide`, `set`, `lookup`, `each` and `delegate` cannot express together,
+written down in the pull request. The same goes for a new filter or condition.
 
 No run may call a model, nothing may execute code from a tree, and nothing
 may reach a host outside a tree's `hosts`. Those are the three rules the

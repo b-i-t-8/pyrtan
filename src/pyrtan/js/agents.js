@@ -454,6 +454,7 @@
       const raw = this.raw(gap.tree);
       const draft = raw ? Pyrtan.grow.draftBranch(raw, gap) : null;
       if (raw && !draft) return null;  // a branch covers it now
+      if (draft && draft.list === "table") return null;  // a lookup's gap asks for a row, which has no node for a meaning to go in
       let context = "";
       if (raw && raw.nodes && raw.nodes[gap.node]) {
         const lines = (raw.nodes[gap.node].branches || []).map((b) => {

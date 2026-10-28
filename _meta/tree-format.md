@@ -255,6 +255,38 @@ set = { url = "https://news.ycombinator.com/item?id={{ inputs.id }}", n = "{{ st
 next = "reply"
 ```
 
+### `lookup`: read a table
+
+```toml
+[nodes.sky]
+kind = "lookup"
+on = "code"               # a state path, as in decide
+into = "sky"              # where the row's value goes
+table = [
+  { eq = 0, value = "clear" },
+  { between = [1, 3], value = "cloudy" },
+  { between = [51, 67], value = "raining" },
+  { between = [95, 99], value = "stormy", note = "thunder, with or without hail" },
+]
+default = "weather code {{ state.code }}"   # optional
+next = "reply"
+```
+
+A row is a condition (the same tests as a `decide` branch's `when`, all of
+which must hold) and a `value`; `note` is free text for the reader. The
+first row whose condition holds is read; its value may be any TOML value
+(a table such as `{ word = "stormy", warn = true }` included), and strings in it are templates, rendered when the row is read, so a
+placeholder that resolves to nothing fails the node. `default` is the value
+when no row holds; without one, such a value is recorded as a **gap**,
+exactly as a `decide` without `else` records one, and `pyrtan grow` drafts
+the row it asks for. The trace names the row's condition (or `default`) as
+the step's `chosen`, and the value read.
+
+A lookup does not branch. It is for the decision whose every outcome is a
+value rather than a different next step: a code into a word, a status into
+a severity, a unit into its symbol. Where outcomes lead to different
+nodes, use `decide`.
+
 ### `each`: walk a list
 
 ```toml
