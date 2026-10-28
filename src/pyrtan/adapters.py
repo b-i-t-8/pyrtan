@@ -1,4 +1,4 @@
-"""The other forms of I/O: a browser, a file, a shell, a serial line, a queue.
+"""The other forms of I/O: a browser, a file, a shell, a serial line, a queue, memory.
 
 HTTP is the form the core spoke first (``transport.py``). Every other form
 arrives here by the same rule: a node names a *source* and what it wants
@@ -13,12 +13,14 @@ the same whichever source a node used.
     [nodes.sensor]  observe   queue  = { url = "mqtt://broker.local", topic = "home/kitchen/temperature" }
     [nodes.switch]  act       queue  = { url = "mqtt://broker.local", topic = "home/kitchen/light", publish = "on" }
     [nodes.page]    observe   browser = { url = "https://example.com/app", wait_for = "h1", actions = [{ click = "#more" }] }
+    [nodes.last]    observe   memory = { key = "disk-space/root" }
+    [nodes.keep]    act       memory = { key = "disk-space/root", write = "{{ state.percent }}", ttl = "1 day" }
 
 and at the top of the tree the allow-list of the same kind: ``hosts`` for
 ``http``, ``browser`` and a queue's broker; ``paths`` for ``file``;
 ``commands`` for ``shell``; ``devices`` for ``serial``; ``topics`` for
-``queue``. A tree without the list cannot use the source; ``pyrtan check``
-says so.
+``queue``; ``keys`` for ``memory``. A tree without the list cannot use the
+source; ``pyrtan check`` says so.
 
 What each source leaves in state (the node's ``into``):
 
@@ -32,8 +34,11 @@ What each source leaves in state (the node's ``into``):
             ``body``, ``json``; after a publish, ``published``.
 ``browser`` ``url`` (where the page ended up), ``status``, ``ok``, ``title``,
             ``body`` (the rendered document), ``elapsed_ms``.
+``memory``  ``key``, ``exists``, ``value``, ``json``, ``body``, ``written``, ``expires``;
+            after a ``write``, ``add`` or ``delete``, ``previous`` and ``existed``
+            as well (``memory.py``).
 
-Files, shells and serial lines are on the box the service runs on. A
+Files, shells, serial lines and memory are on the box the service runs on. A
 service started with ``--egress public`` refuses them outright, the way it
 refuses private addresses: an operator hosting other people's trees does
 not lend them the box. A queue's broker and a browser's page go through the
@@ -69,10 +74,10 @@ from typing import Any, Callable
 
 from .transport import EgressRefused, TransportError, check_egress
 
-SOURCES = ("http", "browser", "file", "shell", "serial", "queue")
-LOCAL_SOURCES = ("file", "shell", "serial")           # on the box itself
-ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics")}
-LIST_NAMES = ("hosts", "paths", "commands", "devices", "topics")
+SOURCES = ("http", "browser", "file", "shell", "serial", "queue", "memory")
+LOCAL_SOURCES = ("file", "shell", "serial", "memory")  # on the box itself
+ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics"), "memory": ("keys",)}
+LIST_NAMES = ("hosts", "paths", "commands", "devices", "topics", "keys")
 MAX_READ = 8 * 1024 * 1024                              # a file or a command's output larger than this is refused
 TAIL_WINDOW = 1024 * 1024                               # how far back a tail looks
 MQTT_PORTS = {"mqtt": 1883, "mqtts": 8883}
@@ -147,6 +152,12 @@ def topic_allowed(topics: list[str], topic: str) -> bool:
     return False
 
 
+def key_allowed(keys: list[str], key: str) -> bool:
+    """``keys`` entries are memory keys or globs (``disk-space/*``); ``*`` is every key."""
+    key = str(key)
+    return any(k == "*" or fnmatch.fnmatchcase(key, k) for k in keys)
+
+
 def broker(url: str) -> tuple[str, str, int]:
     """``(scheme, host, port)`` of a queue URL, or a :class:`ValueError`."""
     parsed = urllib.parse.urlsplit(str(url))
@@ -174,6 +185,9 @@ def adapter_key(source: str, spec: dict[str, Any]) -> str:
         return f"queue {mode}{spec.get('url')} {spec.get('topic')}"
     if source == "browser":
         return f"browser {spec.get('url')}"
+    if source == "memory":
+        what = next((m for m in ("write", "add", "delete") if m in spec), None)
+        return f"memory {what + ' ' if what else ''}{spec.get('key')}"
     raise ValueError(source)
 
 
@@ -191,6 +205,8 @@ def what(source: str, spec: dict[str, Any]) -> str:
         return str(spec.get("device"))
     if source == "queue":
         return f"{spec.get('topic')} at {spec.get('url')}"
+    if source == "memory":
+        return str(spec.get("key"))
     return str(spec.get("url"))
 
 
@@ -210,16 +226,20 @@ def brief_result(source: str, observed: dict[str, Any]) -> str:
         if "published" in observed:
             return f"published {observed['published']} B"
         return "1 message" if observed.get("received") else "no message"
+    if source == "memory":
+        if "previous" in observed:
+            return f"now {json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}, was {json.dumps(observed.get('previous'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "forgotten"
+        return f"{json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "nothing kept"
     return "ok"
 
 
-GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete"}
+GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists"}
 
 
 def good(source: str | None, observed: dict[str, Any]) -> bool:
     """Whether an observation is a good answer, the one a node's ``expect``
     describes: a 2xx page, a program that exited 0, a file that is there, a
-    message that came, a line that ended. A bad answer is a decide's business;
+    message that came, a line that ended, a key that is kept. A bad answer is a decide's business;
     what it says is not drift. An observation from state is always checked."""
     key = GOOD.get(source or "")
     return True if key is None else observed.get(key) is True
@@ -244,17 +264,22 @@ def _iso(ts: float) -> str:
 class LocalAdapters:
     """The sources as this box reaches them. ``egress`` is the service's
     policy; ``browser`` an executable for Playwright's Chromium, if not the
-    one Playwright installed."""
+    one Playwright installed; ``memory`` the store ``memory`` nodes keep in
+    (a :class:`pyrtan.memory.Memory`, or a file to keep one in; one in this
+    process otherwise)."""
 
-    def __init__(self, egress: str = "any", browser: str | None = None) -> None:
+    def __init__(self, egress: str = "any", browser: str | None = None, memory: Any = None) -> None:
+        from .memory import Memory
+
         self.egress = egress
+        self.memory = memory if isinstance(memory, Memory) else Memory(memory)
         self._browser: Browser | None = None
         self._browser_path = browser or os.environ.get("PYRTAN_BROWSER") or None
         self._lock = threading.Lock()
 
     def perform(self, source: str, spec: dict[str, Any], timeout: float, allowed: Allowed | None = None) -> dict[str, Any]:
         if source in LOCAL_SOURCES and self.egress != "any":
-            raise EgressRefused(f"{source}: this service reaches only public addresses (--egress {self.egress}); files, shells and serial lines are its own box, and stay closed")
+            raise EgressRefused(f"{source}: this service reaches only public addresses (--egress {self.egress}); files, shells, serial lines and memory are its own box, and stay closed")
         if source == "file":
             return read_or_write_file(spec)
         if source == "shell":
@@ -263,6 +288,8 @@ class LocalAdapters:
             return serial_exchange(spec, timeout)
         if source == "queue":
             return mqtt(spec, timeout, self.egress)
+        if source == "memory":
+            return self.memory.perform(spec)
         if source == "browser":
             with self._lock:
                 if self._browser is None:

@@ -154,3 +154,26 @@ def test_a_tree_can_test_for_its_own_drift(tmp_path):
     tree = load_tree(tmp_path / "release.toml")
     case = cases(tree)[0]
     assert failures(case, run_case(case, tree, with_tree([], tree))) == []
+
+
+def test_a_kept_key_is_a_good_answer_and_a_missing_one_is_not():
+    tree = '''
+name = "last"
+description = "x"
+keys = ["last/*"]
+start = "read"
+[nodes.read]
+kind = "observe"
+memory = { key = "last/reading" }
+into = "m"
+expect = { "value" = { type = "number" } }
+next = "ok"
+[nodes.ok]
+kind = "done"
+say = "ok"
+'''
+    missing = {"memory last/reading": {"key": "last/reading", "exists": False, "value": None, "json": None, "body": "", "written": None, "expires": None}}
+    assert run(tree, {}, missing).status == "done"  # nothing kept yet is the tree's to decide on
+    words = {"memory last/reading": {"key": "last/reading", "exists": True, "value": "high", "json": "high", "body": "high", "written": "2026-10-28T00:00:00Z", "expires": None}}
+    out = run(tree, {}, words)
+    assert out.reason == "drift" and out.trace.gaps[0]["on"] == "state.m.value"

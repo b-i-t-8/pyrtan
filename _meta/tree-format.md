@@ -14,6 +14,7 @@ A tree is one TOML file. This is the whole of it.
 | `commands` | if any node runs a program | Program names (`df`) or full paths (`/usr/bin/df`); `*` is everything. |
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
+| `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -185,8 +186,8 @@ expect = { "json.tag_name" = { type = "str" }, "json.html_url" = { startswith = 
 ```
 
 It is checked on a good answer only: a 2xx page, a program that exited
-0, a file that is there, a message that came, a line that ended (an
-observation `from` state is always checked). A bad answer is the tree's
+0, a file that is there, a message that came, a line that ended, a
+memory key that is kept (an observation `from` state is always checked). A bad answer is the tree's
 to `decide` on. A good answer that misses its `expect` means the source
 changed under the tree, and the run stops with reason `drift` before
 anything is extracted from it. The trace names each field and what was
@@ -218,6 +219,8 @@ serial = { device = "/dev/ttyUSB0", baud = 9600, write = "AT\r\n", read_until = 
 queue  = { url = "mqtt://broker.local", topic = "home/kitchen/temperature" }               # observe: received, message { topic, body, json }, body, json
 queue  = { url = "mqtt://broker.local", topic = "home/kitchen/light", publish = "on" }     # act: … plus published
 browser = { url = "https://app.example/", wait_for = "h1", actions = [{ click = "#more" }, { fill = { selector = "#q", value = "x" } }] }  # url, status, ok, title, body (rendered), elapsed_ms
+memory = { key = "disk-space/root" }                                        # observe: key, exists, value, json, body, written, expires
+memory = { key = "disk-space/root", write = "{{ state.percent }}", ttl = "1 day" }   # act: … plus previous, existed  (or add = 1, or delete = true)
 ```
 
 `shell` runs one program with its arguments as a list; no shell reads the
@@ -226,8 +229,19 @@ line. `serial` reads until `read_until`, `read` bytes or `timeout`.
 `password` if the broker wants them. `browser` needs Playwright
 (`pip install 'pyrtan[browser]'`); its actions are `click`, `fill`,
 `press`, `select`, `wait_for` and `wait` (ms), and a navigation to a host
-outside `hosts` fails the node. A service started with `--egress public`
-refuses `file`, `shell` and `serial` altogether.
+outside `hosts` fails the node. `memory` is what a tree keeps across
+runs on the box it runs on: an observe reads a key; an act `write`s any
+value, `add`s to a number (a missing key counts from 0) or forgets it
+(`delete = true`), and `ttl` lets a written value lapse on its own. What
+an act leaves says what was there before (`previous`, `existed`), so one
+node can remember a value and tell whether it changed. A service keeps
+memory in the file `--memory` names (in the process without one), and
+`pyrtan memory FILE` shows and forgets what it keeps. A key is up to 200
+letters, digits and `. _ : @ / -`; a value is at most 64 KB. A recording
+keeps memory reads like any other observation, so a fixture answers
+them and a run stays deterministic given its observations. A service
+started with `--egress public` refuses `file`, `shell`, `serial` and
+`memory` altogether.
 
 ### `act`: change
 

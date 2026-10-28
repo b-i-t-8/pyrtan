@@ -2232,6 +2232,33 @@
       "version": 1
      },
      {
+      "description": "counts, and reads what it counted",
+      "hosts": [],
+      "inputs": {
+       "name": {
+        "type": "str"
+       },
+       "where": {
+        "type": "str"
+       }
+      },
+      "keys": [
+       "tally/*"
+      ],
+      "language": {},
+      "license": "",
+      "name": "tally",
+      "sources": [
+       "memory"
+      ],
+      "tags": [],
+      "triggers": [
+       "tally {name:word}",
+       "peek {where:word}"
+      ],
+      "version": 1
+     },
+     {
       "description": "echo for tie-a",
       "hosts": [],
       "inputs": {
@@ -3907,6 +3934,239 @@
   },
   {
    "body": {
+    "text": "tally ada"
+   },
+   "expect": {
+    "inputs": {
+     "name": "ada",
+     "where": ""
+    },
+    "output": {
+     "count": 3,
+     "was": 2
+    },
+    "say": "ada: 3",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "which",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tally ada",
+        "inputs": {
+         "name": "ada"
+        },
+        "steps": [],
+        "trigger": "tally {name:word}"
+       },
+       "summary": "'tally ada'; tally via 'tally {name:word}' (5 literal chars)"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "bump",
+       "node": "which",
+       "observed": "",
+       "summary": "inputs.where = "
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "reply",
+       "node": "bump",
+       "summary": "memory tally/ada -> now 3, was 2"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "ada: 3"
+      }
+     ],
+     "tree": "tally"
+    },
+    "tree": "tally"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "peek tally"
+   },
+   "expect": {
+    "inputs": {
+     "name": "",
+     "where": "tally"
+    },
+    "output": {
+     "exists": false,
+     "value": null
+    },
+    "say": "kept",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "which",
+       "node": "intent",
+       "observed": {
+        "cleaned": "peek tally",
+        "inputs": {
+         "where": "tally"
+        },
+        "steps": [],
+        "trigger": "peek {where:word}"
+       },
+       "summary": "'peek tally'; tally via 'peek {where:word}' (4 literal chars)"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "peek",
+       "node": "which",
+       "observed": "tally",
+       "summary": "inputs.where = tally"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "peek",
+       "summary": "memory tally/count -> nothing kept"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "kept"
+      }
+     ],
+     "tree": "tally"
+    },
+    "tree": "tally"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "peek other"
+   },
+   "expect": {
+    "inputs": {
+     "name": "",
+     "where": "other"
+    },
+    "reason": "key-not-allowed",
+    "say": "peek: 'other/count' is outside this tree's keys ['tally/*'].",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "which",
+       "node": "intent",
+       "observed": {
+        "cleaned": "peek other",
+        "inputs": {
+         "where": "other"
+        },
+        "steps": [],
+        "trigger": "peek {where:word}"
+       },
+       "summary": "'peek other'; tally via 'peek {where:word}' (4 literal chars)"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "peek",
+       "node": "which",
+       "observed": "other",
+       "summary": "inputs.where = other"
+      }
+     ],
+     "tree": "tally"
+    },
+    "tree": "tally"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "tally bob"
+   },
+   "expect": {
+    "inputs": {
+     "name": "bob",
+     "where": ""
+    },
+    "reason": "transport",
+    "say": "bump: no recorded result for memory add tally/bob",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "which",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tally bob",
+        "inputs": {
+         "name": "bob"
+        },
+        "steps": [],
+        "trigger": "tally {name:word}"
+       },
+       "summary": "'tally bob'; tally via 'tally {name:word}' (5 literal chars)"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "bump",
+       "node": "which",
+       "observed": "",
+       "summary": "inputs.where = "
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "bump",
+       "summary": "memory tally/bob failed: no recorded result for memory add tally/bob"
+      }
+     ],
+     "tree": "tally"
+    },
+    "tree": "tally"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "grade 95"
    },
    "expect": {
@@ -4519,7 +4779,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 23,
+    "runs": 27,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -4590,6 +4850,7 @@
      "space-news",
      "sun",
      "synonyms",
+     "tally",
      "tie-a",
      "tie-b",
      "uv-index",
@@ -4899,6 +5160,81 @@
    "start": "size",
    "triggers": [
     "order a {drink:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "counts, and reads what it counted",
+   "hosts": [],
+   "inputs": {
+    "name": {
+     "default": "",
+     "type": "str"
+    },
+    "where": {
+     "default": "",
+     "type": "str"
+    }
+   },
+   "keys": [
+    "tally/*"
+   ],
+   "name": "tally",
+   "nodes": {
+    "bump": {
+     "into": "n",
+     "kind": "act",
+     "memory": {
+      "add": 1,
+      "key": "tally/{{ inputs.name }}",
+      "ttl": "1 day"
+     },
+     "next": "reply"
+    },
+    "peek": {
+     "into": "seen",
+     "kind": "observe",
+     "memory": {
+      "key": "{{ inputs.where }}/count"
+     },
+     "next": "said"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "count": "{{ state.n.value }}",
+      "was": "{{ state.n.previous }}"
+     },
+     "say": "{{ inputs.name }}: {{ state.n.value }}"
+    },
+    "said": {
+     "kind": "done",
+     "output": {
+      "exists": "{{ state.seen.exists }}",
+      "value": "{{ state.seen.value }}"
+     },
+     "say": "kept"
+    },
+    "which": {
+     "branches": [
+      {
+       "then": "bump",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "peek"
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.where"
+    }
+   },
+   "start": "which",
+   "triggers": [
+    "tally {name:word}",
+    "peek {where:word}"
    ],
    "version": 1
   },

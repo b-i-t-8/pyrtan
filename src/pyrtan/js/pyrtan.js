@@ -443,11 +443,12 @@
   }
 
   // ------------------------------------------------------------ sources and their allow-lists
-  // The other forms of I/O (file, shell, serial, queue, browser) live on a
-  // service; a member refuses them unless a recorded fixture answers for
-  // them. The allow-list checks and the fixture keys are the Python ones.
-  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue"];
-  const LIST_NAMES = ["paths", "commands", "devices", "topics"];
+  // The other forms of I/O (file, shell, serial, queue, browser, memory)
+  // live on a service; a member refuses them unless a recorded fixture
+  // answers for them. The allow-list checks and the fixture keys are the
+  // Python ones.
+  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue", "memory"];
+  const LIST_NAMES = ["paths", "commands", "devices", "topics", "keys"];
   const MQTT_PORTS = { mqtt: 1883, mqtts: 8883 };
   function absolutePath(path) {
     path = String(path);
@@ -496,6 +497,7 @@
     }
     return false;
   }
+  const keyAllowed = (keys, key) => keys.some((k) => k === "*" || globMatch(k, String(key)));
   function broker(url) {
     const m = /^(mqtts?):\/\/([^/:?#]+)(?::(\d+))?/.exec(String(url));
     if (!m) throw new Error(`${pyrepr(String(url))} is not mqtt://host[:port] or mqtts://host[:port]`);
@@ -508,6 +510,7 @@
     if (source === "serial") { const w = spec.write; return `serial ${spec.device}` + (w === undefined || w === null || w === "" ? "" : ` ${JSON.stringify(String(w))}`); }
     if (source === "queue") return `queue ${"publish" in spec ? "publish " : ""}${spec.url} ${spec.topic}`;
     if (source === "browser") return `browser ${spec.url}`;
+    if (source === "memory") { const m = ["write", "add", "delete"].find((k) => k in spec); return `memory ${m ? m + " " : ""}${spec.key}`; }
     throw new Error(source);
   }
   function what(source, spec) {
@@ -515,10 +518,11 @@
     if (source === "shell") return [String(spec.command)].concat((spec.args || []).map(arg)).join(" ");
     if (source === "serial") return String(spec.device);
     if (source === "queue") return `${spec.topic} at ${spec.url}`;
+    if (source === "memory") return String(spec.key);
     return String(spec.url);
   }
   // A good answer is the one a node's expect describes (adapters.good).
-  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete" };
+  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists" };
   const good = (source, observed) => { const key = GOOD[source || ""]; return key === undefined ? true : observed[key] === true; };
   function briefResult(source, observed) {
     if (source === "http" || source === "browser") return pyStr(observed.status === undefined ? null : observed.status);
@@ -526,6 +530,11 @@
     if (source === "shell") return `exit ${observed.status}`;
     if (source === "serial") return `${observed.bytes} B`;
     if (source === "queue") return "published" in observed ? `published ${observed.published} B` : observed.received ? "1 message" : "no message";
+    if (source === "memory") {
+      const j = (v) => pyJson(v === undefined ? null : v).slice(0, 60);
+      if ("previous" in observed) return observed.exists ? `now ${j(observed.value)}, was ${j(observed.previous)}` : "forgotten";
+      return observed.exists ? j(observed.value) : "nothing kept";
+    }
     return "ok";
   }
 
@@ -1175,6 +1184,7 @@
         const topic = String(spec.topic === undefined ? "" : spec.topic);
         return topicAllowed(this.topics, topic) ? null : ["topic-not-allowed", `${pyrepr(topic)} is outside this tree's topics ${pyrepr(this.topics)}.`];
       }
+      if (source === "memory") { const key = String(spec.key === undefined ? "" : spec.key); return keyAllowed(this.keys, key) ? null : ["key-not-allowed", `${pyrepr(key)} is outside this tree's keys ${pyrepr(this.keys)}.`]; }
       return null;
     }
     sources() {
@@ -1437,7 +1447,7 @@
           call = async () => (await this.transport.request(method, url, headers, body === undefined ? null : body, timeout)).toState();
         } else {
           label = `${sourceName} ${what(sourceName, spec)}`;
-          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : "devices")}.` });
+          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : sourceName === "memory" ? "memory" : "devices")}.` });
           call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
         }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
