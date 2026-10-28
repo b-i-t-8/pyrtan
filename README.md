@@ -377,8 +377,10 @@ in the browser and hands you its backup at once, encrypted with your
 passphrase, to download or keep in your own private GitHub repository;
 restores it in another browser; claims a name, at pyrtan.com (GitHub's
 own page opens the pull request from your account) or at any network's
-names repository; and pairs your other devices by a code each shows and
-a note it gets back. The **Access** tab keeps a hub's grants. The same,
+names repository; and pairs your other devices, by a QR code the new
+device's camera opens and six digits both screens show (a link straight
+between the two browsers, `_meta/identity.md` §5b), or by a code each
+shows and a note it gets back. The **Access** tab keeps a hub's grants. The same,
 from a shell:
 
 ```

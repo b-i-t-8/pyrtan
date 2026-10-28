@@ -26,6 +26,14 @@
  * - A **file** is the bundles a device holds, for devices that are never
  *   on at the same time or on the same network. It is checked as a link's
  *   bundles are.
+ * - **Pairing** a new device rides the same link: the root offers (a QR
+ *   the phone's camera opens), the new browser makes its key and answers,
+ *   and sends a request signed by that key for this link. The root shows
+ *   the device and six digits drawn from the link, which the new device
+ *   shows too; when the person says they match, the root signs the note
+ *   and sends it back with its newest document, and the link goes on to
+ *   share gaps. Nothing is signed that the person did not confirm, and a
+ *   link someone sat in the middle of shows other digits on each screen.
  *
  * Runs in a browser as `PyrtanSync` (with PyrtanIdentity beside it) and in
  * node, given the identity module, for the parts that need no WebRTC.
@@ -118,7 +126,13 @@
       const mine = await makeBundle(this.key, this.own());
       this.send({ t: "bundles", items: all ? [mine].concat(this.held().filter((b) => b.device !== this.peer)) : [mine] });
     }
-    async receive(m) {
+    // One message at a time, in order: bundles that come right behind a hello wait for it to be checked.
+    receive(m) {
+      const next = (this.queue || Promise.resolve()).then(() => this.handle(m));
+      this.queue = next.catch(() => {});
+      return next;
+    }
+    async handle(m) {
       if (isObj(m) && m[HELLO] === 1) {
         const bad = await checkHello(m, this.root, this.link, this.revoked());
         if (bad) { this.note("refused", bad); this.send({ t: "bye", why: bad }); return; }
@@ -143,6 +157,75 @@
     return out;
   }
 
+  // ------------------------------------------------------------ pairing a new device over a link
+
+  const PAIR = "pyrtan-pair-request";
+  /** Six digits from a link, shown on both screens: the same digits mean the same link, with nobody between. */
+  function pairWords(link) {
+    const h = I.sha256(new TextEncoder().encode("pyrtan-pair-v1\n" + String(link)));
+    const n = (((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0) % 1000000;
+    const d = String(n).padStart(6, "0");
+    return `${d.slice(0, 3)} ${d.slice(3)}`;
+  }
+  const makePairRequest = (key, link, label) => I.signDocument(key, { [PAIR]: 1, device: key.id, link, label: String(label || "").slice(0, 40), issued: Date.now() });
+  async function checkPairRequest(r, link) {
+    if (!isObj(r) || r[PAIR] !== 1) return "not a request to pair";
+    if (!link || r.link !== link) return "it is for another link";
+    if (typeof r.device !== "string" || !I.valid(r.device)) return "it names no device";
+    if (!(await I.verifyDocument(r, r.device))) return "its signature does not hold";
+    return null;
+  }
+  /** What is wrong with the note (and document) a root sent this device, or null. */
+  async function checkPairNote(note, document, deviceId, now) {
+    const bad = I.noteProblem(note, deviceId, now);
+    if (bad) return bad;
+    if (!(await I.verifyDocument(note, note.root))) return "the note is not signed by the identity it names";
+    if (document !== undefined && document !== null) {
+      if (!isObj(document) || document.id !== note.root || !(await I.verifyDocument(document, note.root))) return "the identity document is not that identity's";
+      if (!(document.devices || []).some((n) => n.device === deviceId)) return "the identity document does not list this device";
+    }
+    return null;
+  }
+  /**
+   * One pairing, on an open link. opts: key (this browser's), role ("root"
+   * or "device"), label (a device's suggested name), send(message),
+   * note(event, detail), and for a root sign(device, may, label) ->
+   * {note, document}. Events: on a root "request" ({device, label, words}),
+   * then the page calls approve(may, label) or refuse(why); on a device
+   * "waiting" (words), then "paired" ({note, document}) or "refused" (why).
+   */
+  class Pairing {
+    constructor(opts) { Object.assign(this, opts); this.link = null; this.words = null; this.request = null; this.done = false; }
+    handles(m) { return isObj(m) && (m[PAIR] === 1 || m.t === "pair-note" || m.t === "pair-refused"); }
+    async start(link) {
+      this.link = link; this.words = pairWords(link);
+      if (this.role === "device") { this.send(await makePairRequest(this.key, link, this.label)); this.note("waiting", this.words); }
+    }
+    async receive(m) {
+      if (this.done) return;
+      if (this.role === "root" && isObj(m) && m[PAIR] === 1) {
+        const bad = await checkPairRequest(m, this.link);
+        if (bad) return this.refuse(bad);
+        if (m.device === this.key.id) return this.refuse("that is this identity's own key");
+        this.request = m;
+        this.note("request", { device: m.device, label: m.label, words: this.words });
+      } else if (this.role === "device" && isObj(m) && m.t === "pair-note") {
+        const bad = await checkPairNote(m.note, m.document, this.key.id);
+        if (bad) { this.done = true; this.note("refused", bad); return; }
+        this.done = true;
+        this.note("paired", { note: m.note, document: m.document || null });
+      } else if (isObj(m) && m.t === "pair-refused") { this.done = true; this.note("refused", String(m.why || "the other device said no")); }
+    }
+    async approve(may, label) {
+      if (this.role !== "root" || !this.request || this.done) throw new Error("nothing to approve");
+      const signed = await this.sign(this.request.device, may, label);
+      this.done = true;
+      this.send({ t: "pair-note", note: signed.note, document: signed.document });
+      return signed;
+    }
+    refuse(why) { this.done = true; this.send({ t: "pair-refused", why }); this.note("refused", why); }
+  }
+
   // ------------------------------------------------------------ files
 
   async function makeFile(key, own, held) {
@@ -165,11 +248,11 @@
     const raw = new TextEncoder().encode(JSON.stringify({ k: kind, s: sdp }));
     return zips() ? `${CODE}.z.${b64url(await pipe(raw, new CompressionStream("deflate-raw")))}` : `${CODE}.j.${b64url(raw)}`;
   }
-  /** {kind, sdp} from a code, or from an address with #sync=CODE in it; throws when it is neither. */
+  /** {kind, sdp} from a code, or from an address with #sync=CODE or #pair=CODE in it; throws when it is neither. */
   async function decodeCode(text) {
     let t = String(text || "").trim();
-    const at = t.indexOf("#sync=");
-    if (at >= 0) t = decodeURIComponent(t.slice(at + 6));
+    const at = t.search(/#(sync|pair)=/);
+    if (at >= 0) t = decodeURIComponent(t.slice(t.indexOf("=", at) + 1));
     const m = new RegExp(`^${CODE}\\.([zj])\\.([A-Za-z0-9_-]+)$`).exec(t.replace(/\s+/g, ""));
     if (!m) throw new Error("that is not a link code from a Pyrtan console");
     let raw = unb64url(m[2]);
@@ -205,7 +288,7 @@
     pc.addEventListener("icegatheringstatechange", done);
     setTimeout(res, ms || 4000);
   });
-  /** One link: offer() then accept(answerCode) on one side, answer(offerCode) on the other. onopen(link), onmessage(obj), onclose(). */
+  /** One link: offer() then accept(answerCode) on one side, answer(offerCode) on the other. onopen(link), onmessage(obj), onclose(); `on` may be swapped while it is open, to hand it on. */
   class Link {
     constructor(on) { this.on = on || {}; this.pc = null; this.channel = null; this.parts = new Parts(); }
     make() {
@@ -216,7 +299,7 @@
     }
     wire(ch) {
       this.channel = ch;
-      ch.onopen = () => this.on.onopen && this.on.onopen(linkOf(this.pc.localDescription.sdp, this.pc.remoteDescription.sdp));
+      ch.onopen = () => { this.id = linkOf(this.pc.localDescription.sdp, this.pc.remoteDescription.sdp); if (this.on.onopen) this.on.onopen(this.id); };
       ch.onmessage = (e) => { const m = this.parts.join(e.data); if (m !== undefined && this.on.onmessage) this.on.onmessage(m); };
       ch.onclose = () => this.ended();
     }
@@ -378,5 +461,5 @@
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="QR code"><rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
   }
 
-  return { rootOf, speaksFor, makeBundle, checkBundle, makeHello, checkHello, linkOf, Session, makeFile, readFile, encodeCode, decodeCode, Parts, Link, qr, qrSvg };
+  return { pairWords, makePairRequest, checkPairRequest, checkPairNote, Pairing, rootOf, speaksFor, makeBundle, checkBundle, makeHello, checkHello, linkOf, Session, makeFile, readFile, encodeCode, decodeCode, Parts, Link, qr, qrSvg };
 });

@@ -196,8 +196,10 @@ that holds the root (§5a), *Devices* takes the code, the abilities and a
 label, and shows the signed note, which the phone takes pasted. `pyrtan
 id device add pyr:… --may chat,run --label phone` does the same from a
 shell. An unpaired key signs as itself, so a hub can also grant the key
-directly. A QR code of the code and of the note, and picking the note up
-from the root's hub instead of pasting it, are later (§10).
+directly. Quicker, with no pasting of keys or notes: *Pair a device with
+a QR code* on the root's browser, which the phone's camera opens (§5b,
+*Pairing*). Picking the note up from the root's hub instead is later
+(§10).
 
 ## 5a. A root in a browser, and its backup (v0.19)
 
@@ -298,6 +300,24 @@ link and passes the bundle rules, so a code that reached a stranger
 opens a link that carries nothing, and a hello cannot be replayed onto
 another link. Then each sends its bundles, and its own again whenever it
 meets a new gap, while both pages are open.
+
+**Pairing** a new device rides the same kind of link. The root's browser
+(*Pair a device with a QR code*) makes an offer, shown as a QR whose
+address is the console with `#pair=` and the offer, so a phone's camera
+opens it; the new browser makes its key (if it has none), answers, and the
+answer comes back pasted or scanned. Over the link the new device sends a
+request signed by its new key and naming this link
+(`{"pyrtan-pair-request": 1, "device", "link", "label", "issued"}`), which
+proves it holds the key. Both screens then show six digits drawn from
+the link (SHA-256 of `pyrtan-pair-v1\n` and the link); the root signs
+nothing until its person confirms they match, then signs the note with the
+abilities and label they chose and sends it with its newer identity
+document (`{"t": "pair-note", "note", "document"}`). The device takes it
+only when the note is for its key and signed by the root it names, and
+the document is that root's and lists it; then the same link goes on to
+share gaps. Someone who intercepted the codes and sat in the middle holds
+two links, whose digits differ on the two screens; a request not naming
+this link is refused unsigned.
 
 **A file** (`{"pyrtan-gaps-file": 1, "root", "made", "bundles": [ … ]}`)
 carries the same bundles for devices that are never on at the same time
@@ -625,7 +645,7 @@ hub that checks Alice with a shared secret can also forge Alice.
   tab makes, backs up and restores a root, claims names and pairs devices,
   and its Access tab keeps a hub's grants. `tests/browser/console_gui.cjs`
   drives all of it in three Chromium contexts, checked by Python's code.
-- **Later:** passkeys to open a backup (§5a); a QR code for pairing, and the note picked up from the
+- **Later:** passkeys to open a backup (§5a); the note picked up from the
   root's hub; device keys for the CLI; hub keys in `/actor` and moves; a chat seat that opts in to
   showing a verified name (chat stays anonymous by default, and still
   keeps nothing); reaching `.onion` locators, which needs a SOCKS proxy

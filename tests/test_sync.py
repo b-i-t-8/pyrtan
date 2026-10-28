@@ -75,6 +75,16 @@ const side = (key, hub, events) => ({ key, revoked: () => [], own: () => hub.own
   await link(side(stranger, hubs.stranger, events.stranger), side(me, hubs.me, events.me), "fp-e,fp-f");
   out.stranger = [events.stranger, (await rows(hubs.stranger)).length, hubs.me.others.size];
 
+  // Delivered as fast as they come, not one awaited after another: bundles right behind a hello still count.
+  const eager = { a: new Pyrtan.LocalHub({ device: me.id }), b: new Pyrtan.LocalHub({ device: tablet.id }) };
+  eager.b.noteGaps([{ tree: "t", node: "n", on: "x", observed: 5 }]);
+  const pendingE = [];
+  const ea = new S.Session(Object.assign({ send: (m) => pendingE.push(eb.receive(JSON.parse(JSON.stringify(m)))) }, side(me, eager.a, [])));
+  const eb = new S.Session(Object.assign({ send: (m) => pendingE.push(ea.receive(JSON.parse(JSON.stringify(m)))) }, side(tablet, eager.b, [])));
+  ea.start("fp-g,fp-h"); eb.start("fp-g,fp-h");
+  for (let i = 0; i < 100 && (pendingE.length || i < 3); i++) { const batch = pendingE.splice(0); await Promise.all(batch); await new Promise((r) => setTimeout(r, 5)); }
+  out.eager = [eager.a.others.size, eager.b.others.size];
+
   // A file carries the same bundles, checked the same way.
   const file = await S.makeFile(phone, hubs.phone.own(), [...hubs.phone.others.values()]);
   const fresh = new Pyrtan.LocalHub({ device: tablet.id });
@@ -131,10 +141,75 @@ def test_only_devices_of_one_identity_share_their_gaps(tmp_path):
     assert got["parts"] == [3, True]
     assert got["qr"] == QR_SHA256
     assert got["qr_size"] == 4 * 19 + 17  # 600 bytes: version 19 at level M
+    assert got["eager"] == [1, 1]
 
 
 # The modules of S.qr("https://pyrtan.com/console/#sync=pyrgaps1.z.Q"), version 4-M; read back by OpenCV (QRCodeDetectorAruco) when recorded, as were 30 more from 5 to 2,300 bytes.
 QR_SHA256 = "17accba5b3c5230bcb4cd4ed240233f8e05e07604622c726ae46a9c18f2604a2"
+
+
+PAIRING = r"""
+const [js] = process.argv.slice(2);
+const I = require(js + "/identity.js"), S = require(js + "/sync.js")(I);
+async function root() { const r = await I.createRoot(); const k = await I.rootFromSeed(r.seed, r.id); return { role: "root", id: k.id, privateKey: k.privateKey, document: await I.makeIdentity(k) }; }
+async function fresh() { const k = await I.generate(); return { role: "device", id: k.id, privateKey: k.privateKey, note: null }; }
+// A root and a new device on one link; decide(request) says what the root's person does.
+async function pairUp(me, phone, decide, opts) {
+  const o = opts || {}, events = { root: [], device: [] }, queue = [];
+  const sign = async (device, may, label) => { const note = await I.makeDevice(me, device, may, { label }); me.document = await I.withDevice(me.document, me, note); return { note, document: o.document || me.document }; };
+  const r = new S.Pairing({ key: me, role: "root", sign, send: (m) => queue.push([d, o.tamper ? o.tamper(m) : m]), note: (e, x) => { events.root.push([e, x]); if (e === "request") queue.push(["decide", x]); } });
+  const d = new S.Pairing({ key: phone, role: "device", label: "phone", send: (m) => queue.push([r, m]), note: (e, x) => events.device.push([e, x]) });
+  await r.start(o.rootLink || "fp-a,fp-b"); await d.start("fp-a,fp-b");
+  while (queue.length) {
+    const [to, m] = queue.shift();
+    if (to === "decide") { const yes = decide(m); if (yes) await r.approve(yes, m.label); else r.refuse("the digits did not match"); continue; }
+    await to.receive(JSON.parse(JSON.stringify(m)));
+  }
+  return events;
+}
+(async () => {
+  const out = {};
+  const me = await root(), phone = await fresh();
+  const ev = await pairUp(me, phone, () => ["ask", "chat"]);
+  const request = ev.root.find((e) => e[0] === "request")[1], waiting = ev.device.find((e) => e[0] === "waiting")[1];
+  const paired = ev.device.find((e) => e[0] === "paired");
+  out.words = [request.words === waiting, /^\d{3} \d{3}$/.test(waiting), request.device === phone.id, request.label];
+  out.paired = paired ? [paired[1].note.root === me.id, paired[1].note.device === phone.id, paired[1].note.may, paired[1].note.label, paired[1].document.devices.length] : null;
+  // The paired device now speaks for the root: its bundles pass.
+  phone.note = paired[1].note;
+  out.speaks = await S.checkBundle(await S.makeBundle(phone, { gaps: [], unanswered: [] }), me.id, []);
+  // Refused by the person: nothing signed.
+  const before = me.document.devices.length, other = await fresh();
+  const no = await pairUp(me, other, () => null);
+  out.refused = [no.device.map((e) => e[0]), me.document.devices.length === before];
+  // A root on another link (someone in the middle): the request is refused, unsigned.
+  const mid = await pairUp(me, await fresh(), () => ["ask"], { rootLink: "fp-x,fp-y" });
+  out.middle = [mid.root.map((e) => e[0]), mid.device.map((e) => e[0])];
+  // What the device takes: a note its root really signed, for it, with a document that lists it.
+  const stranger = await root(), third = await fresh();
+  const forged = await pairUp(me, third, () => ["ask"], { tamper: (m) => (m.t === "pair-note" ? Object.assign({}, m, { note: Object.assign({}, m.note, { label: "evil" }) }) : m) });
+  out.forged = forged.device.filter((e) => e[0] !== "waiting");
+  const elsewhere = await pairUp(me, await fresh(), () => ["ask"], { document: stranger.document });
+  out.other_document = elsewhere.device.filter((e) => e[0] !== "waiting");
+  console.log(JSON.stringify(out));
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_a_root_pairs_a_device_over_a_link_only_when_the_person_says_so(tmp_path):
+    script = tmp_path / "pairing.cjs"
+    script.write_text(PAIRING, encoding="utf-8")
+    run = subprocess.run(["node", str(script), str(JS)], capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr
+    got = json.loads(run.stdout)
+    assert got["words"] == [True, True, True, "phone"]
+    assert got["paired"] == [True, True, ["ask", "chat"], "phone", 1]
+    assert got["speaks"] is None
+    assert got["refused"] == [["waiting", "refused"], True]
+    assert got["middle"] == [["refused"], ["waiting", "refused"]]
+    assert got["forged"] == [["refused", "the note is not signed by the identity it names"]]
+    assert got["other_document"] == [["refused", "the identity document is not that identity's"]]
 
 
 LINK = r"""
@@ -241,4 +316,87 @@ def test_two_browsers_of_one_identity_link_and_share_their_gaps(tmp_path):
     assert seen(got["reloaded"]) == seen(got["live"])
     assert got["stranger"][0].startswith("Not linked:") and "another identity" in got["stranger"][0] and got["stranger"][1] == [["No gaps: every decision so far had a branch."]]
     assert seen(got["file"]) == [("inputs.n = 3", "2", "other"), ("inputs.n = 9", "1", "other")]
+    assert got["errors"] == []
+
+
+PAIR_LINK = r"""
+const { chromium } = require("playwright");
+const [file] = process.argv.slice(2);
+const PASS = "a long sentence nobody else would guess";
+(async () => {
+  const browser = await chromium.launch();
+  const out = { errors: [] };
+  const open = async () => {
+    const page = await (await browser.newContext()).newPage();
+    page.on("pageerror", (e) => out.errors.push(String(e)));
+    await page.route(/^https?:\/\//, (r) => r.abort());
+    await page.goto("file://" + file);
+    await page.waitForFunction(() => document.querySelectorAll("#caps tbody tr").length > 0);
+    return page;
+  };
+  const ask = async (page, q) => {
+    await page.click('#tabs a[data-tab="ask"]');
+    const n = (await page.$$("#out .card")).length;
+    await page.fill("#text", q); await page.click("#go");
+    await page.waitForFunction((n) => document.querySelectorAll("#out .card").length > n, n);
+  };
+  const laptop = await open(), phone = await open();
+  await laptop.click("#identity-tab"); await laptop.click("#ident-new");
+  await laptop.fill("#ident-pass", PASS); await laptop.fill("#ident-pass2", PASS); await laptop.click("#ident-new-form button");
+  await laptop.waitForSelector("#ident-root:not([hidden])", { timeout: 60000 });
+  await ask(laptop, "pick 2"); await ask(phone, "pick 7");
+
+  // The laptop offers; the phone, with no key yet, answers; the answer goes back.
+  await laptop.click("#identity-tab"); await laptop.click("#pair-offer"); await laptop.waitForSelector("#pair-step textarea[data-code]");
+  out.qr = await laptop.$$eval("#pair-step .qr svg", (s) => s.length);
+  const offer = await laptop.inputValue("#pair-step textarea[data-code]");
+  await phone.click("#identity-tab"); await phone.click("#pair-have");
+  await phone.fill("#pair-offer-code", offer); await phone.click("#pair-answer-form button");
+  await phone.waitForSelector("#pair-step textarea[data-code]");
+  out.phone_key = (await phone.textContent("#ident-id")).trim();
+  await laptop.fill("#pair-answer", await phone.inputValue("#pair-step textarea[data-code]")); await laptop.click("#pair-accept button[type=submit]");
+
+  // Both screens show the same digits; the person says so on the laptop.
+  await laptop.waitForSelector("#pair-confirm", { timeout: 30000 });
+  await phone.waitForSelector("#pair-step .pair-words");
+  out.words = [await laptop.textContent("#pair-confirm .pair-words"), await phone.textContent("#pair-step .pair-words")];
+  out.asked = await laptop.textContent("#pair-confirm p");
+  await laptop.fill("#pair-label", "my phone");
+  await laptop.click("#pair-confirm button[type=submit]");
+  await phone.waitForFunction(() => document.querySelector("#pair-state").textContent.includes("Paired"), null, { timeout: 15000 });
+  out.phone_state = await phone.textContent("#pair-state");
+  out.phone_paired = await phone.textContent("#ident-paired");
+  out.devices = await laptop.$$eval("#dev-table tbody tr", (t) => t.map((x) => x.innerText));
+
+  // The same link goes on to share gaps.
+  await laptop.click('#tabs a[data-tab="gaps"]');
+  await laptop.waitForFunction(() => document.querySelector("#gaps").innerText.includes("= 7"), null, { timeout: 15000 });
+  out.gaps = await laptop.$$eval("#gaps tbody tr", (t) => t.map((x) => x.innerText.split("\t")));
+  console.log(JSON.stringify(out));
+  await browser.close();
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="node with playwright is not installed")
+def test_a_new_browser_pairs_by_code_and_goes_on_to_share_gaps(tmp_path):
+    trees = tmp_path / "trees"
+    trees.mkdir()
+    (trees / "gappy.toml").write_text(GAPPY, encoding="utf-8")
+    out = tmp_path / "console" / "index.html"
+    assert main(["console", "--out", str(out), "--trees", str(trees)]) == 0
+    script = tmp_path / "pair.cjs"
+    script.write_text(PAIR_LINK, encoding="utf-8")
+    run = subprocess.run(["node", str(script), str(out)], capture_output=True, text=True, timeout=240)
+    assert run.returncode == 0, run.stderr
+    got = json.loads(run.stdout)
+    assert got["qr"] == 1
+    words = got["words"]
+    assert words[0] == words[1] and len(words[0]) == 7
+    key = got["phone_key"]
+    assert f"{key[:8]}…{key[-4:]}" in got["asked"]  # the device asking is the phone's new key
+    assert got["phone_state"].startswith("Paired: this browser now speaks for pyr:") and "my phone" in got["phone_state"]
+    assert "speaks for" in got["phone_paired"]
+    assert len(got["devices"]) == 1 and got["devices"][0].startswith("my phone") and "ask, chat" in got["devices"][0]
+    assert sorted((r[1], r[3]) for r in got["gaps"]) == [("inputs.n = 2", "this device"), ("inputs.n = 7", f"{key[:8]}…{key[-4:]}")]
     assert got["errors"] == []
