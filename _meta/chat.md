@@ -170,7 +170,10 @@ when the box empties, loses focus or the line is sent. `pyrtan chat`
 does the same at a terminal (v0.29): it reads keys one by one
 (`pyrtan.term`, cbreak mode through `termios`, the terminal restored on
 the way out), sends typing from a thread of its own so no key waits on
-the network, and draws lines that arrive above the one being typed; from
+the network, and draws lines that arrive above the one being typed. Up
+and Down go through the lines sent (v0.30): the last hundred, kept in
+the process for this one chat and never written down, as the hub keeps
+no transcript either; a recalled line shows as typing like any other. From
 a pipe, or where there is no `termios`, it reads whole lines and shows
 no typing. The partner's poll answers with `partner_typing: true` and
 the console shows
@@ -253,5 +256,7 @@ for that conversation.
 - **v0.17, built:** chat links, `--chat-reach N`: open lobbies share
   their strangers without following each other (§3).
 - **v0.29, built:** `pyrtan chat` at a terminal shows your typing (§4).
+- **v0.30, built:** Up and Down at the terminal bring back the lines
+  sent (§4).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.
