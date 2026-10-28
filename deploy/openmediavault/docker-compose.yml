@@ -83,6 +83,11 @@ services:
       # them back (they follow it when they join):
       #   pyrtan follow http://<their hub>:8700 --network family --at http://<nas-ip>:8700 --token <token>
       PYRTAN_CHAT: "true"
+      # Closed: follows only within its networks (the family's hubs), and
+      # members (phones, browsers) only with the token. A stranger's phone or
+      # hub on the LAN or the tailnet is refused, and so never handed the
+      # hub's blobs.
+      PYRTAN_CLOSED: "true"
     ports:
       - "8700:8700"
     volumes:

@@ -108,6 +108,11 @@ it. The operator paths are behind the token; the keeper paths
 
 ## 5. Failure modes, honestly
 
+- On an open hub anyone who can reach it may join as a keeper and be
+  handed its blobs (its directory, gaps and unanswered sentences). A hub
+  that wants members from its own people only is started `--closed`
+  (`$PYRTAN_CLOSED`): it takes a member only with its token or a key it
+  grants `run`, and follows only within its networks.
 - A lost phone that joined as a trusted member keeps its own pair
   secret, so a new token does not shut it out. The operator lets it go:
   `pyrtan drop <its id>` (or *drop* in the console's Peers tab), `POST
