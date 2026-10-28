@@ -167,6 +167,7 @@ extract = [
   { into = "heading", css = "h1" },
   { into = "links", css = "a.story", attr = "href", all = true },
   { into = "rows", css = "table tr", all = true, fields = { name = "td:nth-child(1)", href = { css = "a", attr = "href" } } },
+  { into = "temp", pattern = "temperature: {t:number}°C" },
 ]
 timeout = 10              # seconds
 retries = 1               # on transport failure only; never on a status code
@@ -176,6 +177,22 @@ next = "status"
 `method` must be GET, HEAD or OPTIONS. Instead of `http`, `from = "resp"`
 extracts from state already held. An extraction that finds nothing sets
 nothing; decide on absence with `{ exists = false }`.
+
+`pattern` reads text with a trigger's pattern rather than a regex: the
+same slots and kinds, `[optional]` words and `(a|b)` choices, case
+ignored, a word matching its plural or singular. It is searched for in
+the text (`body`, or `from`), not matched whole, and each slot is read
+by its kind's parser, so `{t:number}` gives a number, `{d:date}` an ISO
+date and `{w:duration}` seconds. One slot gives its value; several give
+a table (`pattern = "wind {speed:number} km/h from the {dir:word}"` →
+`{ speed = 12, dir = "NW" }`); `all = true` gives a list of every
+occurrence. Literal words match whole words (`temperature` is not found
+in `maxtemperature`). A slot of a lazy kind (`{name}`, `text`, `date`,
+`duration`) that ends the pattern reads to the end of its line, and an
+occurrence whose slots do not read (a `date` that is not one) is passed
+over for the next. The text is folded as a sentence is (curly quotes,
+dashes, runs of spaces), line by line. A pattern needs a literal word
+and a slot; `pyrtan check` refuses it otherwise.
 
 Selectors support tag, `#id`, `.class`, `[attr]`, `[attr=v]`, `[attr^=v]`,
 `[attr$=v]`, `[attr*=v]`, `:first-child`, `:last-child`, `:nth-child(n)`,

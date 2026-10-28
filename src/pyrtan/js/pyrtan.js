@@ -408,6 +408,11 @@
       const m = re.exec(text);
       return m ? (m[group] === undefined ? null : m[group]) : MISSING;
     }
+    if ("pattern" in entry) {
+      const text = textSource(entry, source);
+      if (isMissing(text)) return MISSING;
+      return searchPattern(entry.pattern, text, !!entry.all);
+    }
     if ("css" in entry) {
       const text = textSource(entry, source);
       if (isMissing(text)) return MISSING;
@@ -419,6 +424,35 @@
       return elementValue(entry, found[0]);
     }
     throw new Error(`extract entry ${pyrepr(entry.into)} has no way`);
+  }
+  const searched = new Map();
+  function searchPattern(pattern, text, every) {
+    let c = searched.get(pattern);
+    if (!c) { c = compilePattern(fold(pattern), null, true); searched.set(pattern, c); }
+    // Folded as a sentence is, line by line, so a slot ending the pattern still ends with its line.
+    text = text.split(/\r\n|[\n\v\f\r\x1c-\x1e\x85\u2028\u2029]/).map(fold).join("\n");
+    const names = Object.keys(c.slots), found = [];
+    c.regex.lastIndex = 0;
+    for (const m of text.matchAll(c.regex)) {
+      const values = {};
+      try {
+        for (const name of names) {
+          const raw = m.groups[name];
+          if (raw !== undefined) values[name] = readSlot(c.slots[name], raw.trim(), undefined).value;
+        }
+      } catch (e) {
+        if (e instanceof ParseError) continue; // not this occurrence: perhaps the next
+        throw e;
+      }
+      let value;
+      if (names.length === 1) {
+        if (!(names[0] in values)) continue;
+        value = values[names[0]];
+      } else value = values;
+      if (!every) return value;
+      found.push(value);
+    }
+    return every ? found : MISSING;
   }
   function textSource(entry, source) {
     const frm = entry.from !== undefined ? entry.from : "body";
@@ -928,16 +962,26 @@
     const sorted = [...spellings].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
     return "(?:" + sorted.map(reEscape).concat(phrases).join("|") + ")";
   }
-  function compilePattern(pattern, lang) {
+  // A lazy slot ending a searched pattern reads to the end of its line; a
+  // word in one starts and ends at a word's edge (see intent.py).
+  const LAZY = new Set([null, "text", "date", "duration"]);
+  function compilePattern(pattern, lang, search) {
     lang = lang || { synonyms: {}, typos: false };
-    if (!pattern || !pattern.trim()) throw new TriggerError("a trigger pattern cannot be empty");
+    const what = search ? "pattern" : "trigger";
+    if (!pattern || !pattern.trim()) throw new TriggerError(`a ${what} pattern cannot be empty`);
     const slots = {}, out = [], vocabulary = new Set(), ordered = [];
     let literal = 0, pos = 0, depth = 0, word = [];
     const text = Array.from(pattern.trim().toLowerCase());
     const flush = () => {
       if (!word.length) return;
       const w = word.join("");
-      out.push(wordRegex(w, lang)); vocabulary.add(w); ordered.push(w);
+      if (search) {
+        const start = pos - word.length, end = pos;
+        const before = start === 0 || text[start - 1] !== "}" ? "(?<![\\p{L}\\p{N}])" : "";
+        const after = end >= text.length || text[end] !== "{" ? "(?![\\p{L}\\p{N}])" : "";
+        out.push(before + wordRegex(w, lang) + after);
+      } else out.push(wordRegex(w, lang));
+      vocabulary.add(w); ordered.push(w);
       for (const syn of lang.synonyms[w] || []) for (const s of syn.split(/\s+/)) if (s) vocabulary.add(s);
       word = [];
     };
@@ -947,7 +991,7 @@
       flush();
       if (ch === "{") {
         const m = /^\{([A-Za-z_][A-Za-z0-9_]*)(?::([a-z]+))?\}/.exec(text.slice(pos).join(""));
-        if (!m) throw new TriggerError(`bad slot in trigger ${pyrepr(pattern)} at ${pos}`);
+        if (!m) throw new TriggerError(`bad slot in ${what} ${pyrepr(pattern)} at ${pos}`);
         const name = m[1], kind = m[2] === undefined ? null : m[2];
         if (kind !== null && !KINDS.includes(kind)) throw new TriggerError(`slot {${name}:${kind}} in ${pyrepr(pattern)}: kind must be one of ${KINDS.join(", ")}`);
         if (has(slots, name)) throw new TriggerError(`slot ${pyrepr(name)} appears twice in ${pyrepr(pattern)}`);
@@ -955,9 +999,9 @@
         out.push(`(?<${name}>${SLOT_RE[kind === null ? "" : kind]})`);
         pos += m[0].length;
       } else if (ch === "[") { depth++; out.push("(?:\\s*"); pos++; }
-      else if (ch === "]") { if (depth === 0) throw new TriggerError(`unbalanced ] in trigger ${pyrepr(pattern)}`); depth--; out.push(")?"); pos++; }
+      else if (ch === "]") { if (depth === 0) throw new TriggerError(`unbalanced ] in ${what} ${pyrepr(pattern)}`); depth--; out.push(")?"); pos++; }
       else if (ch === "(") { depth++; out.push("(?:"); pos++; }
-      else if (ch === ")") { if (depth === 0) throw new TriggerError(`unbalanced ) in trigger ${pyrepr(pattern)}`); depth--; out.push(")"); pos++; }
+      else if (ch === ")") { if (depth === 0) throw new TriggerError(`unbalanced ) in ${what} ${pyrepr(pattern)}`); depth--; out.push(")"); pos++; }
       else if (ch === "|" && depth > 0) { out.push("|"); pos++; }
       else if (/^\s$/u.test(ch)) {
         while (pos < text.length && /^\s$/u.test(text[pos])) pos++;
@@ -968,10 +1012,12 @@
       } else { out.push(reEscape(ch)); literal++; pos++; }
     }
     flush();
-    if (depth !== 0) throw new TriggerError(`unbalanced [ in trigger ${pyrepr(pattern)}`);
-    if (literal === 0) throw new TriggerError(`trigger ${pyrepr(pattern)} has no literal words; it would match anything`);
+    if (depth !== 0) throw new TriggerError(`unbalanced [ in ${what} ${pyrepr(pattern)}`);
+    if (literal === 0) throw new TriggerError(`${what} ${pyrepr(pattern)} has no literal words; it would match anything`);
+    const names = Object.keys(slots);
+    if (search && names.length && out[out.length - 1].startsWith("(?<") && LAZY.has(slots[names[names.length - 1]])) out.push("(?=[^\\S\\n]*$)");
     let regex;
-    try { regex = new RegExp("^(?:" + out.join("") + ")$", "iu"); } catch (e) { throw new TriggerError(`trigger ${pyrepr(pattern)} does not compile: ${e.message}`); }
+    try { regex = search ? new RegExp(out.join(""), "gimu") : new RegExp("^(?:" + out.join("") + ")$", "iu"); } catch (e) { throw new TriggerError(`${what} ${pyrepr(pattern)} does not compile: ${e.message}`); }
     return { regex, slots, specificity: literal, vocabulary, edges: ordered.length ? [ordered[0], ordered[ordered.length - 1]] : ["", ""] };
   }
   function correctTypos(sentence, vocabulary) {

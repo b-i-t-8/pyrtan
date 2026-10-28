@@ -159,6 +159,12 @@ outright: a hosted box is not lent out. Memory lives in the file a
 service's `--memory` names, and nowhere else: it is not served, not
 gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md).
 
+Text that is not JSON can be read with the same patterns triggers use,
+instead of a regex: `{ into = "load", pattern = "load average: {l:number}" }`
+finds the words in what was observed and reads the slot with its kind's
+parser (`number`, `date`, `duration`, `host`…); a pattern with several
+slots gives a table of them.
+
 ## The command
 
 | Command | What it does |
@@ -835,7 +841,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.30.0. The core, the service, the hub, the command, the console (which
+0.33.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

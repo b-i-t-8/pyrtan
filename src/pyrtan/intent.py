@@ -210,10 +210,23 @@ def _word_regex(word: str, language: Language) -> str:
     return "(?:" + "|".join(alternatives) + ")"
 
 
-def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.Pattern[str], dict[str, str | None], int, set[str], tuple[str, str]]:
+# A slot kind whose regex is lazy reads as little as it can: at the end of
+# a pattern that is searched for (not matched whole), it reads to the end
+# of its line instead of one character.
+LAZY = {None, "text", "date", "duration"}
+EDGE = r"(?![^\W_])"  # a word in a searched pattern starts and ends at a word's edge
+EDGE_BEFORE = r"(?<![^\W_])"
+
+
+def compile_pattern(pattern: str, language: Language | None = None, *, search: bool = False) -> tuple[re.Pattern[str], dict[str, str | None], int, set[str], tuple[str, str]]:
+    """``search`` compiles the pattern to be found in a text (extraction's
+    ``pattern``) rather than to match a whole sentence: a literal word must
+    start and end at a word's edge (where it does not touch a slot), and a
+    lazy slot that ends the pattern reads to the end of its line."""
     language = language or Language()
+    what = "pattern" if search else "trigger"
     if not pattern or not pattern.strip():
-        raise TriggerError("a trigger pattern cannot be empty")
+        raise TriggerError(f"a {what} pattern cannot be empty")
     slots: dict[str, str | None] = {}
     out: list[str] = []
     vocabulary: set[str] = set()
@@ -227,7 +240,13 @@ def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.
     def flush_word() -> None:
         if word:
             w = "".join(word)
-            out.append(_word_regex(w, language))
+            if search:
+                start, end = pos - len(w), pos
+                before = EDGE_BEFORE if start == 0 or text[start - 1] != "}" else ""
+                after = EDGE if end >= len(text) or text[end] != "{" else ""
+                out.append(before + _word_regex(w, language) + after)
+            else:
+                out.append(_word_regex(w, language))
             vocabulary.add(w)
             ordered.append(w)
             for syn in language.synonyms.get(w, []):
@@ -245,7 +264,7 @@ def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.
         if ch == "{":
             m = SLOT.match(text, pos)
             if not m:
-                raise TriggerError(f"bad slot in trigger {pattern!r} at {pos}")
+                raise TriggerError(f"bad slot in {what} {pattern!r} at {pos}")
             name, kind = m.group(1), m.group(2)
             if kind is not None and kind not in KINDS:
                 raise TriggerError(f"slot {{{name}:{kind}}} in {pattern!r}: kind must be one of {', '.join(KINDS)}")
@@ -260,7 +279,7 @@ def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.
             pos += 1
         elif ch == "]":
             if depth == 0:
-                raise TriggerError(f"unbalanced ] in trigger {pattern!r}")
+                raise TriggerError(f"unbalanced ] in {what} {pattern!r}")
             depth -= 1
             out.append(r")?")
             pos += 1
@@ -270,7 +289,7 @@ def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.
             pos += 1
         elif ch == ")":
             if depth == 0:
-                raise TriggerError(f"unbalanced ) in trigger {pattern!r}")
+                raise TriggerError(f"unbalanced ) in {what} {pattern!r}")
             depth -= 1
             out.append(r")")
             pos += 1
@@ -294,13 +313,15 @@ def compile_pattern(pattern: str, language: Language | None = None) -> tuple[re.
             pos += 1
     flush_word()
     if depth != 0:
-        raise TriggerError(f"unbalanced [ in trigger {pattern!r}")
+        raise TriggerError(f"unbalanced [ in {what} {pattern!r}")
     if literal_chars == 0:
-        raise TriggerError(f"trigger {pattern!r} has no literal words; it would match anything")
+        raise TriggerError(f"{what} {pattern!r} has no literal words; it would match anything")
+    if search and slots and out[-1].startswith("(?P<") and list(slots.values())[-1] in LAZY:
+        out.append(r"(?=[^\S\n]*$)")
     try:
-        regex = re.compile("".join(out), re.IGNORECASE)
+        regex = re.compile("".join(out), re.IGNORECASE | (re.MULTILINE if search else 0))
     except re.error as e:
-        raise TriggerError(f"trigger {pattern!r} does not compile: {e}") from e
+        raise TriggerError(f"{what} {pattern!r} does not compile: {e}") from e
     return regex, slots, literal_chars, vocabulary, (ordered[0], ordered[-1]) if ordered else ("", "")
 
 

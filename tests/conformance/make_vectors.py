@@ -218,6 +218,20 @@ LANGUAGE_TREES: list[dict] = [
                                   {"exists": False, "value": {"word": "absent", "points": 0}, "note": "a table value"}]},
                "mark": {"kind": "lookup", "on": "inputs.strict", "into": "mark", "next": "reply", "table": [{"eq": True, "value": "strict"}], "default": "~"},
                "reply": {"kind": "done", "say": "{{ state.mark }}", "output": {"word": "{{ state.word }}", "mark": "{{ state.mark }}"}}}},
+    {"name": "panel", "version": 1, "description": "reads a status panel with patterns", "hosts": [], "start": "read",
+     "inputs": {"text": {"type": "str", "required": True}},
+     "nodes": {"read": {"kind": "observe", "from": "inputs.text", "next": "temp", "extract": [
+                   {"into": "temp", "pattern": "temperature: {t:number}°C"},
+                   {"into": "wind", "pattern": "wind {speed:number} km/h [from the] {dir:word}"},
+                   {"into": "status", "pattern": "status: {s}"},
+                   {"into": "updated", "pattern": "(updated|checked) {d:date}"},
+                   {"into": "used", "pattern": "used {n:number} of {of:number} MB", "all": True},
+                   {"into": "edge", "pattern": "ature {n:int}"}]},
+               "temp": {"kind": "decide", "on": "state.temp", "branches": [{"when": {"exists": False}, "then": "none"}, {"when": {"gt": 30}, "then": "hot"}, {"else": "reply"}]},
+               "hot": {"kind": "done", "say": "hot: {{ state.temp }}"},
+               "none": {"kind": "fail", "reason": "no-temperature", "say": "no temperature on the panel"},
+               "reply": {"kind": "done", "say": "{{ state.temp }}, {{ state.status }}",
+                         "output": {"wind": "{{ state.wind.speed }} {{ state.wind.dir }}", "updated": "{{ state.updated }}", "used": "{{ state.used }}", "edge": "{{ state.edge }}"}}}},
 ]
 
 READINGS = [
@@ -313,6 +327,9 @@ HUB = [
     ("POST", "/run", {"tree": "grade", "inputs": {"score": 60, "strict": True}}),
     ("POST", "/run", {"tree": "grade", "inputs": {"strict": True}}),
     ("POST", "/intent", {"text": "grade 10"}),
+    ("POST", "/run", {"tree": "panel", "inputs": {"text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"}}),
+    ("POST", "/run", {"tree": "panel", "inputs": {"text": "TEMPERATURE: 35°C"}}),
+    ("POST", "/run", {"tree": "panel", "inputs": {"text": "nothing here"}}),
     ("POST", "/intent", {"text": "temperature in the hall"}),
     ("POST", "/intent", {"text": "what's the temperature in the hall"}),
     ("GET", "/gaps", None),

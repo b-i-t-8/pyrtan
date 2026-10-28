@@ -31,7 +31,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .grow import Proposal, _toml_str, propose
-from .intent import Trigger, TriggerError
+from . import extract as extractmod
+from .intent import SLOT, Trigger, TriggerError
 from .template import placeholders
 from .tree import Tree, TreeError, check, load_tree_text
 
@@ -167,17 +168,17 @@ def _resolve(text: str, given: dict[str, Any], name: str | None) -> tuple[list[Q
             fmt = "html"
         else:
             fmt = ask("format", "What comes back", _guess_format(url), lambda v: _read_choice("format", v, FORMATS), FORMATS)
-        pick = ask("pick", "What to pull out of it", _default_pick(fmt), lambda v: _read_pick(v, fmt), help="A JSON path (json.title), a CSS selector (h1, .price) or /a regex/ with one group.")
+        pick = ask("pick", "What to pull out of it", _default_pick(fmt), lambda v: _read_pick(v, fmt), help="A JSON path (json.title), a CSS selector (h1, .price), a pattern (price: {p:number}) or /a regex/ with one group.")
         value = _value_name(pick)
     elif source == "file":
         ask("path", "The file's path", "/var/log/syslog", _read_path)
         ask("tail", "How many lines from the end (0 for the whole file)", 200, _read_int)
-        pick = ask("pick", "What to pull out of it", "/(.+)/", lambda v: _read_pick(v, "text"), help="/a regex/ with one group; the first match is taken.")
+        pick = ask("pick", "What to pull out of it", "/(.+)/", lambda v: _read_pick(v, "text"), help="A pattern (load average: {load:number}) or /a regex/ with one group; the first match is taken.")
         value = _value_name(pick)
     elif source == "shell":
         ask("command", "The program to run", "df", _read_command, help="One program, by name or full path; it is run without a shell.")
         ask("args", "Its arguments", "-h", _read_args, help="As you would type them; quotes group words.")
-        pick = ask("pick", "What to pull out of its output", "/(.+)/", lambda v: _read_pick(v, "text"), help="/a regex/ with one group over what it printed; the first match is taken.")
+        pick = ask("pick", "What to pull out of its output", "/(.+)/", lambda v: _read_pick(v, "text"), help="A pattern (used {pct:int}%) or /a regex/ with one group over what it printed; the first match is taken.")
         value = _value_name(pick)
     elif source == "delegate":
         intent = ask("intent", "The sentence to hand the swarm", _plain(text), _read_nonempty, help="Another tree answers it; its say and output land in state.w.")
@@ -289,12 +290,19 @@ def _read_args(v: Any) -> list[str]:
 
 
 def _read_pick(v: Any, fmt: str) -> dict[str, Any]:
-    """A JSON path, a CSS selector or a regex, told apart by shape: a path
-    starts with ``json``, a regex is between slashes, the rest is a selector
-    (or, for plain text, a regex as written)."""
+    """A JSON path, a CSS selector, a regex or a pattern, told apart by
+    shape: a path starts with ``json``, a regex is between slashes, a
+    pattern has a ``{slot}``, the rest is a selector (or, for plain text, a
+    regex as written)."""
     s = str(v).strip()
     if not s:
         raise BuildError("pick", "say what to pull out")
+    if not s.startswith(("/", "json")) and SLOT.search(s):
+        try:
+            extractmod.validate({"into": "x", "pattern": s})
+        except extractmod.ExtractError as e:
+            raise BuildError("pick", str(e).replace(" in extract 'x'", "")) from e
+        return {"pattern": s}
     if len(s) > 2 and s.startswith("/") and s.endswith("/"):
         body = s[1:-1]
         try:
@@ -323,6 +331,9 @@ def _value_name(pick: dict[str, Any]) -> str:
         last = re.split(r"[\s>,]+", pick["css"].strip())[-1]
         words = re.findall(r"[a-z0-9]+", last.lower())
         return "_".join(words) if words and words[0][0].isalpha() else "value"
+    if "pattern" in pick:
+        slots = list(SLOT.findall(pick["pattern"]))
+        return slots[0][0] if len(slots) == 1 else "hit"
     return "hit"
 
 
@@ -581,6 +592,8 @@ def _pick_words(pick: dict[str, Any]) -> str:
         return f"the path {pick['json']}"
     if "css" in pick:
         return f"the selector {pick['css']}"
+    if "pattern" in pick:
+        return f"the pattern {pick['pattern']}"
     return "the regex"
 
 
