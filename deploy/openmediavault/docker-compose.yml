@@ -35,7 +35,7 @@ x-pyrtan: &pyrtan
     PYRTAN_EGRESS: any
     # Federation: once the hub is reachable from outside (a tunnel or a
     # port-forward with TLS), give it its public URL and it joins the
-    # default network pyrtan.com publishes, follows a hub in it, and lists
+    # default network (built into pyrtan), follows a hub in it, and lists
     # itself in the directory. Needs the token, and PYRTAN_EGRESS: public
     # above: hubs that follow this one may ask it to run trees.
     # PYRTAN_JOIN may also hold invites to networks of your own

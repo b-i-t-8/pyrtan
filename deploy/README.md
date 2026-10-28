@@ -70,8 +70,9 @@ file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_JOIN:
 default` and `PYRTAN_LISTED: "true"`, with `PYRTAN_TOKEN` set and
 `PYRTAN_EGRESS: public` (hubs that follow yours may ask it to run trees,
 and `any` would let them point a tree at your LAN). The hub then joins
-the default network pyrtan.com publishes, follows the first hub in it
-that answers (from pyrtan.com's hub list, then its snapshot),
+the default network (built in), follows the first hub in it that
+accepts (one it already knows, else from pyrtan.com's hub list, then
+its snapshot),
 routes to it, and is listed in the directory every hub gossips; `pyrtan
 follow URL --at <your hub> --token …` follows any other. For a network
 of your own, `pyrtan network new home --at <your hub> --token …` prints

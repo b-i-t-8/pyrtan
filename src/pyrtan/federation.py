@@ -60,8 +60,18 @@ it is in that network. The directory heard over a link is kept with the
 link's network and passed on only over links in the same one, so a
 private network's hubs never reach the public directory, and ``GET
 /directory`` shows them only to the operator. The default network
-(``default_network``, published at pyrtan.com) has a public secret: it
-names the network, it does not guard it, and nothing here needs it to.
+(``default_network``) has a public secret: it names the network, it does
+not guard it, and nothing here needs it to. Its name and secret are
+built in, so joining it asks nobody for them; pyrtan.com publishes the
+same two values as a mirror, not as the authority.
+
+**Joining** the default network tries what the hub already knows before
+anything else: the hubs it follows in it, then the hubs its directory
+has heard in it, most recent first. Only when none of those accepts does
+it read the hub list and then the snapshot, and only as far as it needs.
+So a hub that has been in the network once never needs pyrtan.com again,
+and any hub's public ``/directory`` or any mirror of the list will do as
+a starting point (``$PYRTAN_HUB_LIST``).
 A follow outside any network (and every member's) works as before.
 
 **Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
@@ -90,7 +100,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from . import __version__
 from .service import http_json
@@ -98,7 +108,10 @@ from .store import BlobStore, StoreError, check_key, digest as blob_digest
 
 DEFAULT_HUB_LIST = "https://pyrtan.com/rendezvous/hubs.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
-DEFAULT_NETWORK = "https://pyrtan.com/rendezvous/network.json"
+# The default network, built in: public on purpose, so it names the network
+# and guards nothing. site/rendezvous/network.json publishes the same values.
+DEFAULT_NETWORK_NAME = "pyrtan"
+DEFAULT_NETWORK_SECRET = "public-default-network-of-pyrtan-com"
 NETWORK_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 INVITE = re.compile(r"^([a-z0-9][a-z0-9-]{0,39}):([A-Za-z0-9_-]{16,128})(?:@(https?://\S+))?$")
 SIGNATURE_WINDOW = 300.0   # seconds a signed message stays valid
@@ -127,47 +140,51 @@ SIGNED_PATHS = ("/inbox", "/run", "/intent", "/resume", "/capabilities")
 # ---------------------------------------------------------------- the hub list
 
 
-def rendezvous_hubs() -> list[str]:
-    """Hubs to try first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
-    ``$PYRTAN_HUB_LIST`` (a URL or file holding ``{"hubs": [...]}``), or
-    the hub list at pyrtan.com. Never raises: no list is an empty list."""
-    single = os.environ.get("PYRTAN_RENDEZVOUS")
-    if single:
-        return [single.rstrip("/")]
-    source = os.environ.get("PYRTAN_HUB_LIST") or DEFAULT_HUB_LIST
+def _read_json(source: str) -> Any:
+    """A URL or a file, as JSON; None when it cannot be had."""
     try:
         if source.startswith(("http://", "https://")):
             status, body = http_json("GET", source, timeout=10.0)
-            if status != 200:
-                return []
-        else:
-            body = json.loads(Path(source).read_text(encoding="utf-8"))
+            return body if status == 200 else None
+        return json.loads(Path(source).read_text(encoding="utf-8"))
     except Exception:
-        return []
+        return None
+
+
+def hub_urls(body: Any) -> list[str]:
+    """The hubs a list names: ``{"hubs": ["https://…", …]}`` (a hub list)
+    or ``{"hubs": [{"id": "https://…", "seen": …}, …]}`` (a hub's
+    ``/directory``, or a snapshot), the latter most recently heard first."""
     if not isinstance(body, dict) or not isinstance(body.get("hubs"), list):
         return []
-    return [h.rstrip("/") for h in body["hubs"] if isinstance(h, str) and h.startswith(("http://", "https://"))]
+    rows = body["hubs"]
+    if all(isinstance(h, dict) for h in rows):
+        rows = sorted(rows, key=lambda h: -float(h.get("seen", 0) or 0))
+    urls = [h if isinstance(h, str) else h.get("id") if isinstance(h, dict) else None for h in rows]
+    return list(dict.fromkeys(u.rstrip("/") for u in urls if isinstance(u, str) and u.startswith(("http://", "https://"))))
+
+
+def rendezvous_hubs() -> list[str]:
+    """Hubs to try first, from ``$PYRTAN_RENDEZVOUS`` (one hub),
+    ``$PYRTAN_HUB_LIST`` (any number of URLs or files, separated by spaces
+    or commas: hub lists, a hub's ``/directory``, a snapshot or a mirror of
+    one, in order), or the hub list at pyrtan.com. Never raises: nothing
+    readable is an empty list."""
+    single = os.environ.get("PYRTAN_RENDEZVOUS")
+    if single:
+        return [single.rstrip("/")]
+    sources = os.environ.get("PYRTAN_HUB_LIST", "").replace(",", " ").split() or [DEFAULT_HUB_LIST]
+    out: list[str] = []
+    for source in sources:
+        out.extend(u for u in hub_urls(_read_json(source)) if u not in out)
+    return out
 
 
 def snapshot_hubs() -> list[str]:
     """Hubs from the directory snapshot pyrtan.com bakes hourly
     (``$PYRTAN_SNAPSHOT`` overrides the URL or names a file), most recently
     heard first. What a new hub can try when no listed hub answers."""
-    source = os.environ.get("PYRTAN_SNAPSHOT") or DEFAULT_SNAPSHOT
-    try:
-        if source.startswith(("http://", "https://")):
-            status, body = http_json("GET", source, timeout=10.0)
-            if status != 200:
-                return []
-        else:
-            body = json.loads(Path(source).read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if not isinstance(body, dict) or not isinstance(body.get("hubs"), list):
-        return []
-    hubs = [h for h in body["hubs"] if isinstance(h, dict) and isinstance(h.get("id"), str) and h["id"].startswith(("http://", "https://"))]
-    hubs.sort(key=lambda h: -float(h.get("seen", 0) or 0))
-    return [h["id"].rstrip("/") for h in hubs]
+    return hub_urls(_read_json(os.environ.get("PYRTAN_SNAPSHOT") or DEFAULT_SNAPSHOT))
 
 
 # ---------------------------------------------------------------- networks
@@ -220,20 +237,14 @@ def parse_invite(text: str) -> tuple[Network, str | None]:
 
 
 def default_network() -> Network | None:
-    """The public network pyrtan.com publishes (``$PYRTAN_NETWORK``
-    overrides the URL or names a file). Its secret is public on purpose:
-    it names the network rather than guarding it. None when unreadable."""
-    source = os.environ.get("PYRTAN_NETWORK") or DEFAULT_NETWORK
-    try:
-        if source.startswith(("http://", "https://")):
-            status, body = http_json("GET", source, timeout=10.0)
-            if status != 200:
-                return None
-        else:
-            body = json.loads(Path(source).read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    net = Network.from_state(body)
+    """The default network: built in, so finding it asks nobody. Its secret
+    is public on purpose: it names the network rather than guarding it.
+    ``$PYRTAN_NETWORK`` (a URL or a file shaped like pyrtan.com's
+    ``network.json``) names another; None when that cannot be read."""
+    source = os.environ.get("PYRTAN_NETWORK")
+    if not source:
+        return Network(DEFAULT_NETWORK_NAME, DEFAULT_NETWORK_SECRET, public=True)
+    net = Network.from_state(_read_json(source))
     if net is not None:
         net.public = True
     return net
@@ -506,9 +517,20 @@ class Federation:
             raise ValueError(f"this hub is already in a network named {name!r}")
         return self.add_network(Network(name, _secrets.token_urlsafe(24), public))
 
-    def join(self, net: Network, hubs: list[str]) -> Remote | None:
+    def known_hubs(self, network: str) -> list[str]:
+        """The hubs this one already knows in a network (by id), to try
+        before asking anyone: the ones it follows in it, then the ones its
+        directory heard in it, most recently heard first."""
+        now = time.time()
+        with self._lock:
+            followed = [r.url for r in self.following.values() if r.kind == "hub" and r.network == network and r.state == "accepted"]
+            heard = sorted((e for e in self.directory_entries.values() if e.get("network") == network and e.get("kind", "hub") == "hub" and now - e["seen"] < DIRECTORY_TTL), key=lambda e: -e["seen"])
+        return [u for u in dict.fromkeys(followed + [e["id"].rstrip("/") for e in heard]) if u != self.id]
+
+    def join(self, net: Network, hubs: Iterable[str]) -> Remote | None:
         """Be in ``net`` and follow the first of ``hubs`` that accepts a
-        follow in it. None when none does: the hub is then a network of
+        follow in it (an iterable, so a caller can fetch more only when the
+        first ones fail). None when none does: the hub is then a network of
         one, which others can join by following it."""
         net = self.add_network(net)
         for url in hubs:

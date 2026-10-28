@@ -215,11 +215,16 @@ the visitor's browser.
 request, the role of a torrent's bootstrap nodes, and it is the only way
 pyrtan.com learns that a hub exists. `pyrtan join` (and `pyrtan follow`
 with no URL) puts a hub in the default network (§7a) and follows the
-first listed hub whose `/actor` answers; `pyrtan hub --join default`
-does the same on start. A listed hub is an ordinary federated hub in
-the default network, up when its operator's box is; nothing needs it to
-be up always (below). `$PYRTAN_HUB_LIST` points at another list (a URL
-or a file), `$PYRTAN_RENDEZVOUS` at one hub. (Until v0.13 this was
+first hub that accepts, in this order, each fetched only if the ones
+before it did not do: the hubs it already follows in the network, the
+hubs its own directory heard in it (most recent first), the hub list,
+the snapshot. `pyrtan hub --join default` does the same on start, so a
+restart asks nobody. A listed hub is an ordinary federated hub in the
+default network, up when its operator's box is; nothing needs it to be
+up always (below). `$PYRTAN_HUB_LIST` names any number of sources,
+separated by spaces or commas, each a URL or a file: a hub list, any
+hub's `/directory`, a snapshot, or a mirror of one; `$PYRTAN_RENDEZVOUS`
+names one hub. pyrtan.com is one starting point, not the only one. (Until v0.13 this was
 `seeds.json`, and pyrtan.com briefly ran a hub of its own on Fly.io; both
 are gone.)
 
@@ -286,8 +291,12 @@ naming its networks. The `directory` blob a hub's keepers hold is the
 public part only. `pyrtan network leave` unfollows the hubs followed in
 the network, drops those that followed in it and forgets its entries.
 
-**The default network.** pyrtan.com publishes `rendezvous/network.json`:
-the name `pyrtan` and a secret that is public on purpose. A secret on a
+**The default network** is built in (v0.14): the name `pyrtan` and a
+secret that is public on purpose, so joining it reads nothing from
+anyone. pyrtan.com publishes the same two in `rendezvous/network.json`
+as a mirror, which a test holds equal to the built-in pair;
+`$PYRTAN_NETWORK` names another (a URL or a file of that shape), which
+is how the tests keep away from it. A secret on a
 public page guards nothing, and is not meant to: it names the network,
 so the public directory is one network among others and a private one
 never mixes into it. What makes a stranger's hub harmless is what always

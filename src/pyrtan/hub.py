@@ -46,11 +46,11 @@ import threading
 from pathlib import Path
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 from . import __version__
 from .chat import Lobby, is_chat_path
-from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_hub, parse_invite, sign
+from .federation import MAX_HOPS, Federation, Remote, default_network, first_live_hub, parse_invite, rendezvous_hubs, sign, snapshot_hubs
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
@@ -631,13 +631,26 @@ def _rank(peer: Local | Peer | Remote) -> int:
 
 def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
     """Join a network from an invite (``name:secret[@hub]``), or the default
-    network pyrtan.com publishes when ``invite`` is empty or ``default``,
-    and follow a hub in it. When the default network cannot be read, the
-    first listed hub that answers is followed outside any network, as
-    before networks."""
+    network (built in) when ``invite`` is empty or ``default``, and follow a
+    hub in it: for the default network, the hubs this one already knows in
+    it first, then the hub list, then the snapshot, each fetched only when
+    the ones before it did not do. When ``$PYRTAN_NETWORK`` names a default
+    network that cannot be read, the first listed hub that answers is
+    followed outside any network, as before networks."""
+    tried: list[str] = []
     if invite in (None, "", "default"):
         net = default_network()
-        hubs = bootstrap_candidates()
+        if net is not None:
+            known = net.id
+
+            def candidates() -> Iterator[str]:
+                for source in (lambda: fed.known_hubs(known), rendezvous_hubs, snapshot_hubs):
+                    for url in source():
+                        if url not in tried and url != fed.id:
+                            tried.append(url)
+                            yield url
+
+            hubs: Iterable[str] = candidates()
         if net is None:
             url = first_live_hub()
             if url is None:
@@ -653,12 +666,13 @@ def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
         except ValueError as e:
             return 400, {"status": "error", "reason": "bad-invite", "say": str(e)}
         hubs = [url] if url else []
+        tried.extend(h for h in hubs if h.rstrip("/") != fed.id)
     try:
         remote = fed.join(net, hubs)
     except ValueError as e:
         return 400, {"status": "error", "reason": "bad-network", "say": str(e)}
     net = fed.networks[net.name]
-    hubs = [h for h in hubs if h.rstrip("/") != fed.id]
+    hubs = tried
     if remote is not None:
         say = f"in {net.name}, following {remote.url}"
     elif hubs:

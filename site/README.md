@@ -10,7 +10,7 @@ static directory and publishes it.
 | `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it). Until it joins a hub the browser is one: it holds the catalog's trees (`/catalog/trees.json`) and runs them in the page. To join any hub started with `--cors https://pyrtan.com`, give its URL and token; its Member tab then joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
 | `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, `index.json` the command reads, and `trees.json`, the same trees as JSON for the console | `pyrtan index examples catalog --copy`, through `site/gate.py` |
 | `/theme.js` | the wordmark's colour picker the landing page and the catalog load (the console carries its own copy inline) | `src/pyrtan/js/theme.js` |
-| `/rendezvous/network.json` | the default network: its name, and a secret that is public on purpose | `site/rendezvous/network.json` |
+| `/rendezvous/network.json` | the default network: its name, and a secret that is public on purpose; built into pyrtan, published here as a mirror (and for the snapshot) | `site/rendezvous/network.json` |
 | `/rendezvous/hubs.json` | the hub list: hubs operators added by pull request, which the snapshot asks first and `pyrtan join` tries first | `site/rendezvous/hubs.json` |
 | `/rendezvous/directory.json` | a snapshot of the default network's directory, from every hub the build can reach, refreshed hourly | `site/snapshot.py` |
 | `/rendezvous/reports.json` | the gap reports the hubs carry for catalog trees, refreshed hourly | `site/snapshot.py --reports` |
@@ -62,9 +62,11 @@ reports` reads when given no hub.
 
 `site/rendezvous/network.json` is the default network: the name
 `pyrtan` and a secret that is public on purpose (it names the network,
-it guards nothing; see `_meta/federation.md` §7a). `pyrtan join` with
+it guards nothing; see `_meta/federation.md` §7a). pyrtan has the same
+two values built in, and a test holds them equal; this file is a mirror,
+and what the snapshot keeps the network's part by. `pyrtan join` with
 no invite, `pyrtan hub --join default` and `$PYRTAN_JOIN=default` put a
-hub in it.
+hub in it without reading it.
 
 pyrtan.com runs no hub of its own; it is these static files, and the
 hub list is how it learns that a hub exists. `site/rendezvous/hubs.json`
