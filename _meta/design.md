@@ -374,8 +374,8 @@ Five trees, all against real public APIs, all tested offline:
     carries `[[tests]]`: a sentence or inputs, a recording beside the
     file, and the status, answer, output and path the run must come to.
     Invariant 1 makes the path a result worth asserting. `pyrtan test`
-    runs them (and the catalog tests job does, for every pull request
-    that touches a tree); `pyrtan diff` runs every test both versions of
+    runs them (and the catalog tests job does, for every pull
+    request); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
 14. **v0.27, built: memory across runs.** A seventh source, `memory`, with

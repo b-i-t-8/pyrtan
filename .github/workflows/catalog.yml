@@ -1,21 +1,15 @@
-# The catalog tests: every pull request that touches a tree, a name or the
-# gate runs the test suite and `pyrtan check` on its own code. The gate
-# itself, which decides whether the pull request may change what it
-# changes, runs from main in the catalog-gate workflow, so a pull request
-# cannot change the gate that judges it.
+# The tests: every pull request, whatever it touches, runs the test suite,
+# `pyrtan check` and the trees' own tests on its own code, so a change to
+# the runtime is tested as surely as a change to a tree (and "catalog /
+# tests" can be a required check without leaving any pull request waiting
+# on it). The gate, which decides whether the pull request may change what
+# it changes, runs from main in the catalog-gate workflow, so a pull
+# request cannot change the gate that judges it.
 
 name: catalog
 
 on:
   pull_request:
-    paths:
-      - "catalog/**"
-      - "examples/**"
-      - "site/gate.py"
-      - "src/pyrtan/catalog.py"
-      - "site/names/**"
-      - "src/pyrtan/names.py"
-      - "src/pyrtan/identity.py"
 
 permissions:
   contents: read
