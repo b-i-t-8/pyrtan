@@ -8,36 +8,65 @@
     "name": "this browser",
     "trees": [
      {
-      "description": "echo for books",
-      "hosts": [],
+      "description": "Current air quality for a place: the European AQI, its band, and PM2.5 and PM10, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "air-quality-api.open-meteo.com"
+      ],
       "inputs": {
-       "author": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
         "type": "str"
-       },
-       "count": {
-        "default": 3,
-        "type": "int"
        }
       },
-      "language": {
-       "synonyms": {
-        "books": [
-         "novels",
-         "paperback books"
-        ],
-        "find": [
-         "look up"
-        ]
-       },
-       "typos": true
-      },
-      "license": "",
-      "name": "books",
-      "sources": [],
-      "tags": [],
+      "language": {},
+      "license": "MIT",
+      "name": "air-quality",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "health",
+       "read-only"
+      ],
       "triggers": [
-       "(find|search) books by {author}",
-       "top story on book club"
+       "[what's the] air quality (in|for) {place}",
+       "how is the air in {place}",
+       "(aqi|pollution) in {place}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out.",
+      "hosts": [
+       "openlibrary.org"
+      ],
+      "inputs": {
+       "title": {
+        "description": "A title or an author, as in: The Left Hand of Darkness",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "books",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "reference",
+       "books",
+       "read-only"
+      ],
+      "triggers": [
+       "who wrote {title}",
+       "find the book {title}",
+       "books by {title}"
       ],
       "version": 1
      },
@@ -63,6 +92,61 @@
       "triggers": [
        "count to {n:number}",
        "add {x:float} and {y:int}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "A random dad joke, from icanhazdadjoke.com.",
+      "hosts": [
+       "icanhazdadjoke.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "dad-joke",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "fun",
+       "read-only"
+      ],
+      "triggers": [
+       "tell me a [dad] joke",
+       "[a] dad joke",
+       "make me laugh"
+      ],
+      "version": 1
+     },
+     {
+      "description": "What an English word means: its first definition, part of speech and pronunciation.",
+      "hosts": [
+       "api.dictionaryapi.dev"
+      ],
+      "inputs": {
+       "word": {
+        "description": "One English word",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "define",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "reference",
+       "language",
+       "read-only"
+      ],
+      "triggers": [
+       "define {word:word}",
+       "what does {word:word} mean",
+       "[the] (meaning|definition) of {word:word}"
       ],
       "version": 1
      },
@@ -97,6 +181,30 @@
        "disk space on {mount:word}"
       ],
       "version": 2
+     },
+     {
+      "description": "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest.",
+      "hosts": [
+       "earthquake.usgs.gov"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "earthquakes",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "science",
+       "read-only"
+      ],
+      "triggers": [
+       "[any] [recent] earthquakes [today]",
+       "[was there an] earthquake today",
+       "latest earthquake"
+      ],
+      "version": 1
      },
      {
       "description": "echo for fixed",
@@ -214,6 +322,124 @@
       "version": 2
      },
      {
+      "description": "Hacker News stories about something, through HN Search: the top three matches.",
+      "hosts": [
+       "hn.algolia.com"
+      ],
+      "inputs": {
+       "query": {
+        "description": "Words to search story titles and text for",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "hn-search",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "news",
+       "tech",
+       "read-only"
+      ],
+      "triggers": [
+       "search hacker news for {query}",
+       "hacker news stories about {query}",
+       "what does hacker news say about {query}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The next public holiday in a country (by its two-letter code), from Nager.Date.",
+      "hosts": [
+       "date.nager.at"
+      ],
+      "inputs": {
+       "country": {
+        "description": "A two-letter country code, as in: NO, US, DE",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "holidays",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "calendar",
+       "read-only"
+      ],
+      "triggers": [
+       "[when is the] next [public|bank] holiday in {country:word}",
+       "[public|bank] holidays in {country:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Where the International Space Station is right now: latitude, longitude, altitude and speed.",
+      "hosts": [
+       "api.wheretheiss.at"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "MIT",
+      "name": "iss",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "science",
+       "space",
+       "read-only"
+      ],
+      "triggers": [
+       "where is the (iss|space station) [now]",
+       "(iss|space station) (position|location)"
+      ],
+      "version": 1
+     },
+     {
+      "description": "echo for library",
+      "hosts": [],
+      "inputs": {
+       "author": {
+        "type": "str"
+       },
+       "count": {
+        "default": 3,
+        "type": "int"
+       }
+      },
+      "language": {
+       "synonyms": {
+        "books": [
+         "novels",
+         "paperback books"
+        ],
+        "find": [
+         "look up"
+        ]
+       },
+       "typos": true
+      },
+      "license": "",
+      "name": "library",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "(find|search) books by {author}",
+       "top story on book club"
+      ],
+      "version": 1
+     },
+     {
       "description": "Error lines in the tail of a log file on this box.",
       "hosts": [],
       "inputs": {
@@ -279,6 +505,37 @@
       "version": 2
      },
      {
+      "description": "The latest version of an npm package, and what it says it is.",
+      "hosts": [
+       "registry.npmjs.org"
+      ],
+      "inputs": {
+       "package": {
+        "description": "A package name, as in: react or @types/node",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "npm-package",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "javascript",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest version of {package:word} on npm",
+       "latest {package:word} on npm",
+       "npm (package|version) {package:word}"
+      ],
+      "version": 1
+     },
+     {
       "description": "asks, then answers",
       "hosts": [],
       "inputs": {
@@ -324,6 +581,37 @@
        "ping {host:host}",
        "fetch {url:url}",
        "mail {to:email}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "The latest version of a Python package on PyPI, and what it says it is.",
+      "hosts": [
+       "pypi.org"
+      ],
+      "inputs": {
+       "package": {
+        "description": "A project name, as in: requests",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "pypi-package",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "software",
+       "python",
+       "read-only"
+      ],
+      "triggers": [
+       "[what's the] latest version of {package:word} on pypi",
+       "latest {package:word} on pypi",
+       "(pypi|pip) (package|version) {package:word}"
       ],
       "version": 1
      },
@@ -499,6 +787,37 @@
       "version": 1
      },
      {
+      "description": "Today's sunrise and sunset for a place, in its local time, from Open-Meteo.",
+      "hosts": [
+       "geocoding-api.open-meteo.com",
+       "api.open-meteo.com"
+      ],
+      "inputs": {
+       "place": {
+        "description": "A town or city name",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "sun",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "weather",
+       "read-only"
+      ],
+      "triggers": [
+       "[when is] (sunrise|sunset) in {place}",
+       "when does the sun (rise|set) in {place}",
+       "(sunrise|sun) times (in|for) {place}"
+      ],
+      "version": 1
+     },
+     {
       "description": "echo for tie-a",
       "hosts": [],
       "inputs": {
@@ -575,6 +894,36 @@
        "how [hot|cold|warm] is it in {place}"
       ],
       "version": 2
+     },
+     {
+      "description": "The summary of a Wikipedia article.",
+      "hosts": [
+       "en.wikipedia.org"
+      ],
+      "inputs": {
+       "topic": {
+        "description": "An article title, as in: Ursula K. Le Guin",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "wikipedia",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "reference",
+       "read-only"
+      ],
+      "triggers": [
+       "tell me about {topic}",
+       "who (is|was) {topic}",
+       "(wikipedia|wiki) {topic}"
+      ],
+      "version": 1
      }
     ]
    },
@@ -2353,7 +2702,7 @@
    "version": 1
   },
   {
-   "description": "echo for books",
+   "description": "echo for library",
    "hosts": [],
    "inputs": {
     "author": {
@@ -2375,7 +2724,7 @@
     },
     "typos": true
    },
-   "name": "books",
+   "name": "library",
    "nodes": {
     "reply": {
      "kind": "done",
@@ -4997,7 +5346,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5009,7 +5358,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5025,7 +5374,7 @@
       "steps": [],
       "trigger": "(find|search) books by {author}"
      },
-     "summary": "'find books by Ursula Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+     "summary": "'find books by Ursula Le Guin'; library via '(find|search) books by {author}' (17 literal chars)"
     },
     "steps": [],
     "text": "find books by Ursula Le Guin"
@@ -5043,7 +5392,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5055,7 +5404,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5071,7 +5420,7 @@
       "steps": [],
       "trigger": "(find|search) books by {author}"
      },
-     "summary": "'search novels by Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+     "summary": "'search novels by Le Guin'; library via '(find|search) books by {author}' (17 literal chars)"
     },
     "steps": [],
     "text": "search novels by Le Guin"
@@ -5089,7 +5438,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5101,7 +5450,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5117,7 +5466,7 @@
       "steps": [],
       "trigger": "(find|search) books by {author}"
      },
-     "summary": "'look up paperback books by Le Guin'; books via '(find|search) books by {author}' (17 literal chars)"
+     "summary": "'look up paperback books by Le Guin'; library via '(find|search) books by {author}' (17 literal chars)"
     },
     "steps": [],
     "text": "look up paperback books by Le Guin"
@@ -5157,7 +5506,7 @@
       ],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5171,7 +5520,7 @@
       ],
       "rejected": false,
       "specificity": 17,
-      "tree": "books",
+      "tree": "library",
       "trigger": "(find|search) books by {author}"
      }
     ],
@@ -5190,7 +5539,7 @@
       "steps": [],
       "trigger": "(find|search) books by {author}"
      },
-     "summary": "'serch books by Le Guin'; books via '(find|search) books by {author}' (17 literal chars); typo: serch->search"
+     "summary": "'serch books by Le Guin'; library via '(find|search) books by {author}' (17 literal chars); typo: serch->search"
     },
     "steps": [],
     "text": "serch books by Le Guin"
@@ -5206,7 +5555,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 18,
-      "tree": "books",
+      "tree": "library",
       "trigger": "top story on book club"
      }
     ],
@@ -5216,7 +5565,7 @@
       "notes": [],
       "rejected": false,
       "specificity": 18,
-      "tree": "books",
+      "tree": "library",
       "trigger": "top story on book club"
      }
     ],
@@ -5230,7 +5579,7 @@
       "steps": [],
       "trigger": "top story on book club"
      },
-     "summary": "'top stories on book club'; books via 'top story on book club' (18 literal chars)"
+     "summary": "'top stories on book club'; library via 'top story on book club' (18 literal chars)"
     },
     "steps": [],
     "text": "top stories on book club"
@@ -8311,9 +8660,2496 @@
    },
    "intent": "goodbye",
    "tree": "small-talk"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "Ursula K Le Guin"
+    },
+    "output": {
+     "summary": "Ursula Kroeber Le Guin was an American author. She is best known for her works of speculative fiction.",
+     "title": "Ursula K. Le Guin",
+     "url": "https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+    },
+    "say": "Ursula K. Le Guin: Ursula Kroeber Le Guin was an American author. She is best known for her works of speculative fiction. https://en.wikipedia.org/wiki/Ursula_K._Le_Guin",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tell me about Ursula K Le Guin",
+        "inputs": {
+         "topic": "Ursula K Le Guin"
+        },
+        "steps": [],
+        "trigger": "tell me about {topic}"
+       },
+       "summary": "'tell me about Ursula K. Le Guin' -> 'tell me about Ursula K Le Guin'; wikipedia via 'tell me about {topic}' (11 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "kind": "standard",
+        "summary": "Ursula Kroeber Le Guin was an American author. She is best known for her works of speculative fiction.",
+        "title": "Ursula K. Le Guin",
+        "url": "https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+       },
+       "summary": "GET https://en.wikipedia.org/api/rest_v1/page/summary/Ursula%20K%20Le%20Guin -> 200; kind=standard, title=Ursula K. Le Guin, summary=Ursula Kroeber Le Guin was an American author. She is best known for her works …, url=https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "kind",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "kind",
+       "observed": "standard",
+       "summary": "state.kind = standard"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Ursula K. Le Guin: Ursula Kroeber Le Guin was an American author. She is best known for her works of speculative fiction. https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+      }
+     ],
+     "tree": "wikipedia"
+    },
+    "tree": "wikipedia"
+   },
+   "inputs": {
+    "topic": "Ursula K Le Guin"
+   },
+   "intent": "tell me about Ursula K. Le Guin",
+   "tree": "wikipedia"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "Mercury"
+    },
+    "reason": "ambiguous",
+    "say": "Mercury could mean several things on Wikipedia; say which: https://en.wikipedia.org/wiki/Mercury",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "wiki Mercury",
+        "inputs": {
+         "topic": "Mercury"
+        },
+        "steps": [],
+        "trigger": "(wikipedia|wiki) {topic}"
+       },
+       "summary": "'wiki Mercury'; wikipedia via '(wikipedia|wiki) {topic}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "kind": "disambiguation",
+        "summary": "Mercury most commonly refers to:Mercury (planet), the closest planet to the Sun\n",
+        "title": "Mercury",
+        "url": "https://en.wikipedia.org/wiki/Mercury"
+       },
+       "summary": "GET https://en.wikipedia.org/api/rest_v1/page/summary/Mercury -> 200; kind=disambiguation, title=Mercury, summary=Mercury most commonly refers to:Mercury (planet), the closest planet to the Sun\n, url=https://en.wikipedia.org/wiki/Mercury"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "kind",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "eq 'disambiguation'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "ambiguous",
+       "node": "kind",
+       "observed": "disambiguation",
+       "summary": "state.kind = disambiguation"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "ambiguous",
+       "summary": "ambiguous: Mercury could mean several things on Wikipedia; say which: https://en.wikipedia.org/wiki/Mercury"
+      }
+     ],
+     "tree": "wikipedia"
+    },
+    "tree": "wikipedia"
+   },
+   "inputs": {
+    "topic": "Mercury"
+   },
+   "intent": "wiki Mercury",
+   "tree": "wikipedia"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "Xyzzyplugh Notaperson"
+    },
+    "reason": "no-article",
+    "say": "Wikipedia has no article called Xyzzyplugh Notaperson.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "who is Xyzzyplugh Notaperson",
+        "inputs": {
+         "topic": "Xyzzyplugh Notaperson"
+        },
+        "steps": [],
+        "trigger": "who (is|was) {topic}"
+       },
+       "summary": "'who is Xyzzyplugh Notaperson'; wikipedia via 'who (is|was) {topic}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "kind": "Internal error",
+        "summary": null,
+        "title": null,
+        "url": null
+       },
+       "summary": "GET https://en.wikipedia.org/api/rest_v1/page/summary/Xyzzyplugh%20Notaperson -> 404; kind=Internal error, title=None, summary=None, url=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-article",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-article",
+       "summary": "no-article: Wikipedia has no article called Xyzzyplugh Notaperson."
+      }
+     ],
+     "tree": "wikipedia"
+    },
+    "tree": "wikipedia"
+   },
+   "inputs": {
+    "topic": "Xyzzyplugh Notaperson"
+   },
+   "intent": "who is Xyzzyplugh Notaperson",
+   "tree": "wikipedia"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "topic": "Alan Turing"
+    },
+    "reason": "rate-limited",
+    "say": "Wikipedia is asking for fewer requests (429); try again in a minute.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "who was Alan Turing",
+        "inputs": {
+         "topic": "Alan Turing"
+        },
+        "steps": [],
+        "trigger": "who (is|was) {topic}"
+       },
+       "summary": "'who was Alan Turing'; wikipedia via 'who (is|was) {topic}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "kind": null,
+        "summary": null,
+        "title": null,
+        "url": null
+       },
+       "summary": "GET https://en.wikipedia.org/api/rest_v1/page/summary/Alan%20Turing -> 429; kind=None, title=None, summary=None, url=None"
+      },
+      {
+       "chosen": "eq 429",
+       "depth": 0,
+       "kind": "decide",
+       "next": "rate-limited",
+       "node": "status",
+       "observed": 429,
+       "summary": "state.resp.status = 429"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "rate-limited",
+       "summary": "rate-limited: Wikipedia is asking for fewer requests (429); try again in a minute."
+      }
+     ],
+     "tree": "wikipedia"
+    },
+    "tree": "wikipedia"
+   },
+   "inputs": {
+    "topic": "Alan Turing"
+   },
+   "intent": "who was Alan Turing",
+   "tree": "wikipedia"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "serendipity"
+    },
+    "output": {
+     "definition": "A combination of events which have come together by chance to make a surprisingly good or wonderful outcome.",
+     "part_of_speech": "noun",
+     "phonetic": "/ˌsɛ.ɹən.ˈdɪ.pɪ.ti/",
+     "word": "serendipity"
+    },
+    "say": "serendipity (noun): A combination of events which have come together by chance to make a surprisingly good or wonderful outcome.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what does serendipity mean",
+        "inputs": {
+         "word": "serendipity"
+        },
+        "steps": [],
+        "trigger": "what does {word:word} mean"
+       },
+       "summary": "'what does serendipity mean'; define via 'what does {word:word} mean' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "definition": "A combination of events which have come together by chance to make a surprisingly good or wonderful outcome.",
+        "part": "noun",
+        "phonetic": "/ˌsɛ.ɹən.ˈdɪ.pɪ.ti/",
+        "word": "serendipity"
+       },
+       "summary": "GET https://api.dictionaryapi.dev/api/v2/entries/en/serendipity -> 200; word=serendipity, phonetic=/ˌsɛ.ɹən.ˈdɪ.pɪ.ti/, part=noun, definition=A combination of events which have come together by chance to make a surprising…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-definition",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-definition",
+       "observed": "A combination of events which have come together by chance to make a surprisingly good or wonderful outcome.",
+       "summary": "state.definition = A combination of events which have come together by chance to make a surprising…"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "serendipity (noun): A combination of events which have come together by chance to make a surprisingly good or wonderful outcome."
+      }
+     ],
+     "tree": "define"
+    },
+    "tree": "define"
+   },
+   "inputs": {
+    "word": "serendipity"
+   },
+   "intent": "what does serendipity mean",
+   "tree": "define"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "zzzqx"
+    },
+    "reason": "unknown-word",
+    "say": "The dictionary has no entry for zzzqx.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "define zzzqx",
+        "inputs": {
+         "word": "zzzqx"
+        },
+        "steps": [],
+        "trigger": "define {word:word}"
+       },
+       "summary": "'define zzzqx'; define via 'define {word:word}' (6 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "definition": null,
+        "part": null,
+        "phonetic": null,
+        "word": null
+       },
+       "summary": "GET https://api.dictionaryapi.dev/api/v2/entries/en/zzzqx -> 404; word=None, phonetic=None, part=None, definition=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-word",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-word",
+       "summary": "unknown-word: The dictionary has no entry for zzzqx."
+      }
+     ],
+     "tree": "define"
+    },
+    "tree": "define"
+   },
+   "inputs": {
+    "word": "zzzqx"
+   },
+   "intent": "define zzzqx",
+   "tree": "define"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo"
+    },
+    "output": {
+     "country": "Norway",
+     "date": "2026-10-28",
+     "place": "Oslo",
+     "sunrise": "07:28",
+     "sunset": "16:32",
+     "timezone": "Europe/Oslo"
+    },
+    "say": "Oslo, Norway, 2026-10-28: sunrise 07:28, sunset 16:32 (Europe/Oslo).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "when is sunset in Oslo",
+        "inputs": {
+         "place": "Oslo"
+        },
+        "steps": [],
+        "trigger": "[when is] (sunrise|sunset) in {place}"
+       },
+       "summary": "'when is sunset in Oslo'; sun via '[when is] (sunrise|sunset) in {place}' (21 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "times",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "have-times",
+       "node": "times",
+       "observed": {
+        "day": "2026-10-28",
+        "rise": "07:28",
+        "set": "16:32",
+        "zone": "Europe/Oslo"
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&daily=sunrise,sunset&timezone=auto&forecast_days=1 -> 200; day=2026-10-28, rise=07:28, set=16:32, zone=Europe/Oslo"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "have-times",
+       "observed": "07:28",
+       "summary": "state.rise = 07:28"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Oslo, Norway, 2026-10-28: sunrise 07:28, sunset 16:32 (Europe/Oslo)."
+      }
+     ],
+     "tree": "sun"
+    },
+    "tree": "sun"
+   },
+   "inputs": {
+    "place": "Oslo"
+   },
+   "intent": "when is sunset in Oslo",
+   "tree": "sun"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Longyearbyen"
+    },
+    "reason": "no-times",
+    "say": "Open-Meteo gave no sunrise for Longyearbyen today (status 200); near the poles the sun may not rise or set at all.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "sunrise in Longyearbyen",
+        "inputs": {
+         "place": "Longyearbyen"
+        },
+        "steps": [],
+        "trigger": "[when is] (sunrise|sunset) in {place}"
+       },
+       "summary": "'sunrise in Longyearbyen'; sun via '[when is] (sunrise|sunset) in {place}' (21 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Svalbard and Jan Mayen",
+        "hit": {
+         "country": "Svalbard and Jan Mayen",
+         "latitude": 78.22,
+         "longitude": 15.65,
+         "name": "Longyearbyen"
+        },
+        "lat": 78.22,
+        "lon": 15.65,
+        "name": "Longyearbyen"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Longyearbyen&count=1&language=en&format=json -> 200; hit={'name': 'Longyearbyen', 'country': 'Svalbard and Jan Mayen', 'latitude': 78.22…, lat=78.22, lon=15.65, name=Longyearbyen, country=Svalbard and Jan Mayen"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "times",
+       "node": "found",
+       "observed": {
+        "country": "Svalbard and Jan Mayen",
+        "latitude": 78.22,
+        "longitude": 15.65,
+        "name": "Longyearbyen"
+       },
+       "summary": "state.hit = {'name': 'Longyearbyen', 'country': 'Svalbard and Jan Mayen', 'latitude': 78.22…"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "have-times",
+       "node": "times",
+       "observed": {
+        "day": "2026-12-21",
+        "rise": null,
+        "set": null,
+        "zone": "Arctic/Longyearbyen"
+       },
+       "summary": "GET https://api.open-meteo.com/v1/forecast?latitude=78.22&longitude=15.65&daily=sunrise,sunset&timezone=auto&forecast_days=1 -> 200; day=2026-12-21, rise=None, set=None, zone=Arctic/Longyearbyen"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-times",
+       "node": "have-times",
+       "summary": "state.rise = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-times",
+       "summary": "no-times: Open-Meteo gave no sunrise for Longyearbyen today (status 200); near the poles the sun may not rise or set at all."
+      }
+     ],
+     "tree": "sun"
+    },
+    "tree": "sun"
+   },
+   "inputs": {
+    "place": "Longyearbyen"
+   },
+   "intent": "sunrise in Longyearbyen",
+   "tree": "sun"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Oslo"
+    },
+    "output": {
+     "aqi": 21,
+     "band": "fair",
+     "country": "Norway",
+     "place": "Oslo",
+     "pm10": 10.2,
+     "pm2_5": 3.8
+    },
+    "say": "Oslo, Norway: air quality fair (European AQI 21), PM2.5 3.8 µg/m³, PM10 10.2 µg/m³.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "air quality in Oslo",
+        "inputs": {
+         "place": "Oslo"
+        },
+        "steps": [],
+        "trigger": "[what's the] air quality (in|for) {place}"
+       },
+       "summary": "'air quality in Oslo'; air-quality via \"[what's the] air quality (in|for) {place}\" (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "Norway",
+        "hit": {
+         "country": "Norway",
+         "latitude": 59.91,
+         "longitude": 10.75,
+         "name": "Oslo"
+        },
+        "lat": 59.91,
+        "lon": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json -> 200; hit={'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}, lat=59.91, lon=10.75, name=Oslo, country=Norway"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "air",
+       "node": "found",
+       "observed": {
+        "country": "Norway",
+        "latitude": 59.91,
+        "longitude": 10.75,
+        "name": "Oslo"
+       },
+       "summary": "state.hit = {'name': 'Oslo', 'country': 'Norway', 'latitude': 59.91, 'longitude': 10.75}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "band",
+       "node": "air",
+       "observed": {
+        "aqi": 21,
+        "pm10": 10.2,
+        "pm25": 3.8
+       },
+       "summary": "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=59.91&longitude=10.75&current=european_aqi,pm2_5,pm10 -> 200; aqi=21, pm25=3.8, pm10=10.2"
+      },
+      {
+       "chosen": "lte 40",
+       "depth": 0,
+       "kind": "decide",
+       "next": "fair",
+       "node": "band",
+       "observed": 21,
+       "summary": "state.aqi = 21"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "fair",
+       "observed": {
+        "band": "fair"
+       },
+       "summary": "band=fair"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Oslo, Norway: air quality fair (European AQI 21), PM2.5 3.8 µg/m³, PM10 10.2 µg/m³."
+      }
+     ],
+     "tree": "air-quality"
+    },
+    "tree": "air-quality"
+   },
+   "inputs": {
+    "place": "Oslo"
+   },
+   "intent": "air quality in Oslo",
+   "tree": "air-quality"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "place": "Delhi"
+    },
+    "output": {
+     "aqi": 87,
+     "band": "very poor",
+     "country": "India",
+     "place": "Delhi",
+     "pm10": 118.3,
+     "pm2_5": 61.4
+    },
+    "say": "Delhi, India: air quality very poor (European AQI 87), PM2.5 61.4 µg/m³, PM10 118.3 µg/m³.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "geocode",
+       "node": "intent",
+       "observed": {
+        "cleaned": "how is the air in Delhi",
+        "inputs": {
+         "place": "Delhi"
+        },
+        "steps": [],
+        "trigger": "how is the air in {place}"
+       },
+       "summary": "'how is the air in Delhi'; air-quality via 'how is the air in {place}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "found",
+       "node": "geocode",
+       "observed": {
+        "country": "India",
+        "hit": {
+         "country": "India",
+         "latitude": 28.65,
+         "longitude": 77.23,
+         "name": "Delhi"
+        },
+        "lat": 28.65,
+        "lon": 77.23,
+        "name": "Delhi"
+       },
+       "summary": "GET https://geocoding-api.open-meteo.com/v1/search?name=Delhi&count=1&language=en&format=json -> 200; hit={'name': 'Delhi', 'country': 'India', 'latitude': 28.65, 'longitude': 77.23}, lat=28.65, lon=77.23, name=Delhi, country=India"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "air",
+       "node": "found",
+       "observed": {
+        "country": "India",
+        "latitude": 28.65,
+        "longitude": 77.23,
+        "name": "Delhi"
+       },
+       "summary": "state.hit = {'name': 'Delhi', 'country': 'India', 'latitude': 28.65, 'longitude': 77.23}"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "band",
+       "node": "air",
+       "observed": {
+        "aqi": 87,
+        "pm10": 118.3,
+        "pm25": 61.4
+       },
+       "summary": "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=28.65&longitude=77.23&current=european_aqi,pm2_5,pm10 -> 200; aqi=87, pm25=61.4, pm10=118.3"
+      },
+      {
+       "chosen": "lte 100",
+       "depth": 0,
+       "kind": "decide",
+       "next": "very-poor",
+       "node": "band",
+       "observed": 87,
+       "summary": "state.aqi = 87"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "very-poor",
+       "observed": {
+        "band": "very poor"
+       },
+       "summary": "band=very poor"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Delhi, India: air quality very poor (European AQI 87), PM2.5 61.4 µg/m³, PM10 118.3 µg/m³."
+      }
+     ],
+     "tree": "air-quality"
+    },
+    "tree": "air-quality"
+   },
+   "inputs": {
+    "place": "Delhi"
+   },
+   "intent": "how is the air in Delhi",
+   "tree": "air-quality"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "@types/node"
+    },
+    "output": {
+     "description": "TypeScript definitions for node",
+     "package": "@types/node",
+     "url": "https://www.npmjs.com/package/@types/node",
+     "version": "26.6.5"
+    },
+    "say": "@types/node 26.6.5 on npm: TypeScript definitions for node https://www.npmjs.com/package/@types/node",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest version of @types/node on npm",
+        "inputs": {
+         "package": "@types/node"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest version of {package:word} on npm"
+       },
+       "summary": "'latest version of @types/node on npm'; npm-package via \"[what's the] latest version of {package:word} on npm\" (29 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": "TypeScript definitions for node",
+        "version": "26.6.5"
+       },
+       "summary": "GET https://registry.npmjs.org/%40types%2Fnode/latest -> 200; version=26.6.5, about=TypeScript definitions for node"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "@types/node 26.6.5 on npm: TypeScript definitions for node https://www.npmjs.com/package/@types/node"
+      }
+     ],
+     "tree": "npm-package"
+    },
+    "tree": "npm-package"
+   },
+   "inputs": {
+    "package": "@types/node"
+   },
+   "intent": "latest version of @types/node on npm",
+   "tree": "npm-package"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "nope-not-a-pkg-zz"
+    },
+    "reason": "no-package",
+    "say": "npm has no package called nope-not-a-pkg-zz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "npm package nope-not-a-pkg-zz",
+        "inputs": {
+         "package": "nope-not-a-pkg-zz"
+        },
+        "steps": [],
+        "trigger": "npm (package|version) {package:word}"
+       },
+       "summary": "'npm package nope-not-a-pkg-zz'; npm-package via 'npm (package|version) {package:word}' (17 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": null,
+        "version": null
+       },
+       "summary": "GET https://registry.npmjs.org/nope-not-a-pkg-zz/latest -> 404; version=None, about=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-package",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-package",
+       "summary": "no-package: npm has no package called nope-not-a-pkg-zz."
+      }
+     ],
+     "tree": "npm-package"
+    },
+    "tree": "npm-package"
+   },
+   "inputs": {
+    "package": "nope-not-a-pkg-zz"
+   },
+   "intent": "npm package nope-not-a-pkg-zz",
+   "tree": "npm-package"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "requests"
+    },
+    "output": {
+     "package": "requests",
+     "summary": "Python HTTP for Humans.",
+     "url": "https://pypi.org/project/requests/",
+     "version": "2.34.2"
+    },
+    "say": "requests 2.34.2 on PyPI: Python HTTP for Humans. https://pypi.org/project/requests/",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest requests on pypi",
+        "inputs": {
+         "package": "requests"
+        },
+        "steps": [],
+        "trigger": "latest {package:word} on pypi"
+       },
+       "summary": "'latest requests on pypi'; pypi-package via 'latest {package:word} on pypi' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": "Python HTTP for Humans.",
+        "name": "requests",
+        "url": "https://pypi.org/project/requests/",
+        "version": "2.34.2"
+       },
+       "summary": "GET https://pypi.org/pypi/requests/json -> 200; name=requests, version=2.34.2, about=Python HTTP for Humans., url=https://pypi.org/project/requests/"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "requests 2.34.2 on PyPI: Python HTTP for Humans. https://pypi.org/project/requests/"
+      }
+     ],
+     "tree": "pypi-package"
+    },
+    "tree": "pypi-package"
+   },
+   "inputs": {
+    "package": "requests"
+   },
+   "intent": "latest requests on pypi",
+   "tree": "pypi-package"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "package": "nope-not-a-pkg-zz"
+    },
+    "reason": "no-package",
+    "say": "PyPI has no project called nope-not-a-pkg-zz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "pip version nope-not-a-pkg-zz",
+        "inputs": {
+         "package": "nope-not-a-pkg-zz"
+        },
+        "steps": [],
+        "trigger": "(pypi|pip) (package|version) {package:word}"
+       },
+       "summary": "'pip version nope-not-a-pkg-zz'; pypi-package via '(pypi|pip) (package|version) {package:word}' (21 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "about": null,
+        "name": null,
+        "url": null,
+        "version": null
+       },
+       "summary": "GET https://pypi.org/pypi/nope-not-a-pkg-zz/json -> 404; name=None, version=None, about=None, url=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-package",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-package",
+       "summary": "no-package: PyPI has no project called nope-not-a-pkg-zz."
+      }
+     ],
+     "tree": "pypi-package"
+    },
+    "tree": "pypi-package"
+   },
+   "inputs": {
+    "package": "nope-not-a-pkg-zz"
+   },
+   "intent": "pip version nope-not-a-pkg-zz",
+   "tree": "pypi-package"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "count": 19,
+     "latest": {
+      "magnitude": 5.1,
+      "place": "7 km ENE of Pangyan, Philippines",
+      "tsunami": 0,
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+     }
+    },
+    "say": "19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "any earthquakes today",
+        "inputs": {},
+        "steps": [],
+        "trigger": "[any] [recent] earthquakes [today]"
+       },
+       "summary": "'any earthquakes today'; earthquakes via '[any] [recent] earthquakes [today]' (25 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "count": 19,
+        "mag": 5.1,
+        "place": "7 km ENE of Pangyan, Philippines",
+        "tsunami": 0,
+        "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+       },
+       "summary": "GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson -> 200; count=19, mag=5.1, place=7 km ENE of Pangyan, Philippines, tsunami=0, url=https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "gt 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": 19,
+       "summary": "state.count = 19"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+      }
+     ],
+     "tree": "earthquakes"
+    },
+    "tree": "earthquakes"
+   },
+   "inputs": {},
+   "intent": "any earthquakes today",
+   "tree": "earthquakes"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "altitude_km": 422.43868994227,
+     "latitude": -26.625662371377,
+     "longitude": -60.102704384113,
+     "map": "https://www.openstreetmap.org/?mlat=-26.625662371377&mlon=-60.102704384113&zoom=3",
+     "speed_kmh": 27577.69858816,
+     "visibility": "eclipsed"
+    },
+    "say": "The ISS is over -26.62, -60.10, 422 km up, moving at 27577 km/h, in the Earth's shadow.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "where is the iss",
+        "inputs": {},
+        "steps": [],
+        "trigger": "where is the (iss|space station) [now]"
+       },
+       "summary": "'where is the iss'; iss via 'where is the (iss|space station) [now]' (28 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "alt": 422.43868994227,
+        "lat": -26.625662371377,
+        "lat2": "-26.62",
+        "light": "eclipsed",
+        "lon": -60.102704384113,
+        "lon2": "-60.10",
+        "speed": 27577.69858816
+       },
+       "summary": "GET https://api.wheretheiss.at/v1/satellites/25544 -> 200; lat=-26.625662371377, lon=-60.102704384113, alt=422.43868994227, speed=27577.69858816, light=eclipsed, lat2=-26.62, lon2=-60.10"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "have-position",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "type 'number'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "light",
+       "node": "have-position",
+       "observed": -26.625662371377,
+       "summary": "state.lat = -26.625662371377"
+      },
+      {
+       "chosen": "eq 'eclipsed'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "in-shadow",
+       "node": "light",
+       "observed": "eclipsed",
+       "summary": "state.light = eclipsed"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply",
+       "node": "in-shadow",
+       "observed": {
+        "where": "in the Earth's shadow"
+       },
+       "summary": "where=in the Earth's shadow"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The ISS is over -26.62, -60.10, 422 km up, moving at 27577 km/h, in the Earth's shadow."
+      }
+     ],
+     "tree": "iss"
+    },
+    "tree": "iss"
+   },
+   "inputs": {},
+   "intent": "where is the iss",
+   "tree": "iss"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "query": "sqlite"
+    },
+    "output": {
+     "query": "sqlite",
+     "stories": [
+      {
+       "by": "phiresky",
+       "discussion": "https://news.ycombinator.com/item?id=27016630",
+       "points": 1812,
+       "title": "Hosting SQLite databases on GitHub Pages or any static file hoster",
+       "url": "https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/"
+      },
+      {
+       "by": "dpeck",
+       "discussion": "https://news.ycombinator.com/item?id=31318708",
+       "points": 1353,
+       "title": "I'm all-in on server-side SQLite",
+       "url": "https://fly.io/blog/all-in-on-sqlite-litestream/"
+      },
+      {
+       "by": "ropbear",
+       "discussion": "https://news.ycombinator.com/item?id=49272832",
+       "points": 1223,
+       "title": "Tracking down the 16-year-old WAL-reset SQLite bug",
+       "url": "https://tailscale.com/blog/sqlite-wal-reset-bug"
+      }
+     ],
+     "total": 4632
+    },
+    "say": "4632 Hacker News stories match sqlite. Top: Hosting SQLite databases on GitHub Pages or any static file hoster https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "search hacker news for sqlite",
+        "inputs": {
+         "query": "sqlite"
+        },
+        "steps": [],
+        "trigger": "search hacker news for {query}"
+       },
+       "summary": "'search hacker news for sqlite'; hn-search via 'search hacker news for {query}' (19 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "search",
+       "observed": {
+        "first": "Hosting SQLite databases on GitHub Pages or any static file hoster",
+        "first_url": "https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/",
+        "hits": [
+         {
+          "author": "phiresky",
+          "objectID": "27016630",
+          "points": 1812,
+          "title": "Hosting SQLite databases on GitHub Pages or any static file hoster",
+          "url": "https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/"
+         },
+         {
+          "author": "dpeck",
+          "objectID": "31318708",
+          "points": 1353,
+          "title": "I'm all-in on server-side SQLite",
+          "url": "https://fly.io/blog/all-in-on-sqlite-litestream/"
+         },
+         {
+          "author": "ropbear",
+          "objectID": "49272832",
+          "points": 1223,
+          "title": "Tracking down the 16-year-old WAL-reset SQLite bug",
+          "url": "https://tailscale.com/blog/sqlite-wal-reset-bug"
+         }
+        ],
+        "total": 4632
+       },
+       "summary": "GET https://hn.algolia.com/api/v1/search?query=sqlite&tags=story&hitsPerPage=3 -> 200; total=4632, first=Hosting SQLite databases on GitHub Pages or any static file hoster, first_url=https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/, hits=[{'title': 'Hosting SQLite databases on GitHub Pages or any static file hoster'…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "each",
+       "node": "any",
+       "observed": [
+        {
+         "author": "phiresky",
+         "objectID": "27016630",
+         "points": 1812,
+         "title": "Hosting SQLite databases on GitHub Pages or any static file hoster",
+         "url": "https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/"
+        },
+        {
+         "author": "dpeck",
+         "objectID": "31318708",
+         "points": 1353,
+         "title": "I'm all-in on server-side SQLite",
+         "url": "https://fly.io/blog/all-in-on-sqlite-litestream/"
+        },
+        {
+         "author": "ropbear",
+         "objectID": "49272832",
+         "points": 1223,
+         "title": "Tracking down the 16-year-old WAL-reset SQLite bug",
+         "url": "https://tailscale.com/blog/sqlite-wal-reset-bug"
+        }
+       ],
+       "summary": "state.hits = [{'title': 'Hosting SQLite databases on GitHub Pages or any static file hoster'…"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "one",
+       "summary": "done"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "3 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "4632 Hacker News stories match sqlite. Top: Hosting SQLite databases on GitHub Pages or any static file hoster https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/"
+      }
+     ],
+     "tree": "hn-search"
+    },
+    "tree": "hn-search"
+   },
+   "inputs": {
+    "query": "sqlite"
+   },
+   "intent": "search hacker news for sqlite",
+   "tree": "hn-search"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "query": "qqqzzzxxyyy"
+    },
+    "output": {
+     "query": "qqqzzzxxyyy",
+     "stories": [],
+     "total": 0
+    },
+    "say": "No Hacker News stories match qqqzzzxxyyy.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "search hacker news for qqqzzzxxyyy",
+        "inputs": {
+         "query": "qqqzzzxxyyy"
+        },
+        "steps": [],
+        "trigger": "search hacker news for {query}"
+       },
+       "summary": "'search hacker news for qqqzzzxxyyy'; hn-search via 'search hacker news for {query}' (19 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "search",
+       "observed": {
+        "first": null,
+        "first_url": null,
+        "hits": [],
+        "total": 0
+       },
+       "summary": "GET https://hn.algolia.com/api/v1/search?query=qqqzzzxxyyy&tags=story&hitsPerPage=3 -> 200; total=0, first=None, first_url=None, hits=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "nothing",
+       "node": "any",
+       "observed": [],
+       "summary": "state.hits = []"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "nothing",
+       "summary": "No Hacker News stories match qqqzzzxxyyy."
+      }
+     ],
+     "tree": "hn-search"
+    },
+    "tree": "hn-search"
+   },
+   "inputs": {
+    "query": "qqqzzzxxyyy"
+   },
+   "intent": "search hacker news for qqqzzzxxyyy",
+   "tree": "hn-search"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "title": "The Left Hand of Darkness"
+    },
+    "output": {
+     "author": "Ursula K. Le Guin",
+     "first_published": 1969,
+     "matches": 112,
+     "title": "The Left Hand of Darkness",
+     "url": "https://openlibrary.org/works/OL59800W"
+    },
+    "say": "The Left Hand of Darkness, by Ursula K. Le Guin (1969). https://openlibrary.org/works/OL59800W",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "who wrote The Left Hand of Darkness",
+        "inputs": {
+         "title": "The Left Hand of Darkness"
+        },
+        "steps": [],
+        "trigger": "who wrote {title}"
+       },
+       "summary": "'who wrote The Left Hand of Darkness'; books via 'who wrote {title}' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "search",
+       "observed": {
+        "author": "Ursula K. Le Guin",
+        "book": "The Left Hand of Darkness",
+        "found": 112,
+        "key": "/works/OL59800W",
+        "year": 1969
+       },
+       "summary": "GET https://openlibrary.org/search.json?q=The%20Left%20Hand%20of%20Darkness&limit=1&fields=title,author_name,first_publish_year,key -> 200; found=112, book=The Left Hand of Darkness, author=Ursula K. Le Guin, year=1969, key=/works/OL59800W"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": "The Left Hand of Darkness",
+       "summary": "state.book = The Left Hand of Darkness"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The Left Hand of Darkness, by Ursula K. Le Guin (1969). https://openlibrary.org/works/OL59800W"
+      }
+     ],
+     "tree": "books"
+    },
+    "tree": "books"
+   },
+   "inputs": {
+    "title": "The Left Hand of Darkness"
+   },
+   "intent": "who wrote The Left Hand of Darkness",
+   "tree": "books"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "title": "qqqzzzxxyyy"
+    },
+    "reason": "no-book",
+    "say": "Open Library has nothing matching qqqzzzxxyyy.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "search",
+       "node": "intent",
+       "observed": {
+        "cleaned": "find the book qqqzzzxxyyy",
+        "inputs": {
+         "title": "qqqzzzxxyyy"
+        },
+        "steps": [],
+        "trigger": "find the book {title}"
+       },
+       "summary": "'find the book qqqzzzxxyyy'; books via 'find the book {title}' (11 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "search",
+       "observed": {
+        "author": null,
+        "book": null,
+        "found": 0,
+        "key": null,
+        "year": null
+       },
+       "summary": "GET https://openlibrary.org/search.json?q=qqqzzzxxyyy&limit=1&fields=title,author_name,first_publish_year,key -> 200; found=0, book=None, author=None, year=None, key=None"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "no-book",
+       "node": "any",
+       "summary": "state.book = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "no-book",
+       "summary": "no-book: Open Library has nothing matching qqqzzzxxyyy."
+      }
+     ],
+     "tree": "books"
+    },
+    "tree": "books"
+   },
+   "inputs": {
+    "title": "qqqzzzxxyyy"
+   },
+   "intent": "find the book qqqzzzxxyyy",
+   "tree": "books"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "country": "no"
+    },
+    "output": {
+     "after": {
+      "date": "2026-12-26",
+      "name": "St. Stephen's Day"
+     },
+     "country": "NO",
+     "date": "2026-12-25",
+     "local_name": "Første juledag",
+     "name": "Christmas Day"
+    },
+    "say": "The next public holiday in NO is Christmas Day (Første juledag) on 2026-12-25.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "next holiday in no",
+        "inputs": {
+         "country": "no"
+        },
+        "steps": [],
+        "trigger": "[when is the] next [public|bank] holiday in {country:word}"
+       },
+       "summary": "'next holiday in no'; holidays via '[when is the] next [public|bank] holiday in {country:word}' (32 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "date": "2026-12-25",
+        "local": "Første juledag",
+        "name": "Christmas Day",
+        "then": "St. Stephen's Day",
+        "then_date": "2026-12-26"
+       },
+       "summary": "GET https://date.nager.at/api/v3/NextPublicHolidays/NO -> 200; date=2026-12-25, name=Christmas Day, local=Første juledag, then=St. Stephen's Day, then_date=2026-12-26"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": "2026-12-25",
+       "summary": "state.date = 2026-12-25"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "The next public holiday in NO is Christmas Day (Første juledag) on 2026-12-25."
+      }
+     ],
+     "tree": "holidays"
+    },
+    "tree": "holidays"
+   },
+   "inputs": {
+    "country": "no"
+   },
+   "intent": "next holiday in no",
+   "tree": "holidays"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "country": "XX"
+    },
+    "reason": "unknown-country",
+    "say": "Nager.Date knows no country XX (it answered 500); use a two-letter code such as NO, US or DE.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "next holiday in XX",
+        "inputs": {
+         "country": "XX"
+        },
+        "steps": [],
+        "trigger": "[when is the] next [public|bank] holiday in {country:word}"
+       },
+       "summary": "'next holiday in XX'; holidays via '[when is the] next [public|bank] holiday in {country:word}' (32 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "date": null,
+        "local": null,
+        "name": null,
+        "then": null,
+        "then_date": null
+       },
+       "summary": "GET https://date.nager.at/api/v3/NextPublicHolidays/XX -> 500; date=None, name=None, local=None, then=None, then_date=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-country",
+       "node": "status",
+       "observed": 500,
+       "summary": "state.resp.status = 500"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-country",
+       "summary": "unknown-country: Nager.Date knows no country XX (it answered 500); use a two-letter code such as NO, US or DE."
+      }
+     ],
+     "tree": "holidays"
+    },
+    "tree": "holidays"
+   },
+   "inputs": {
+    "country": "XX"
+   },
+   "intent": "next holiday in XX",
+   "tree": "holidays"
+  },
+  {
+   "expect": {
+    "inputs": {},
+    "output": {
+     "joke": "I am so good at sleeping I can do it with my eyes closed!",
+     "url": "https://icanhazdadjoke.com/j/oOKBsPZ0wc"
+    },
+    "say": "I am so good at sleeping I can do it with my eyes closed!",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "tell me a joke",
+        "inputs": {},
+        "steps": [],
+        "trigger": "tell me a [dad] joke"
+       },
+       "summary": "'tell me a joke'; dad-joke via 'tell me a [dad] joke' (14 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "id": "oOKBsPZ0wc",
+        "joke": "I am so good at sleeping I can do it with my eyes closed!"
+       },
+       "summary": "GET https://icanhazdadjoke.com/ -> 200; joke=I am so good at sleeping I can do it with my eyes closed!, id=oOKBsPZ0wc"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-joke",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-joke",
+       "observed": "I am so good at sleeping I can do it with my eyes closed!",
+       "summary": "state.joke = I am so good at sleeping I can do it with my eyes closed!"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "I am so good at sleeping I can do it with my eyes closed!"
+      }
+     ],
+     "tree": "dad-joke"
+    },
+    "tree": "dad-joke"
+   },
+   "inputs": {},
+   "intent": "tell me a joke",
+   "tree": "dad-joke"
   }
  ],
  "trees": {
+  "air-quality": {
+   "description": "Current air quality for a place: the European AQI, its band, and PM2.5 and PM10, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "air-quality-api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "air-quality",
+   "namespace": "pyrtan",
+   "nodes": {
+    "air": {
+     "extract": [
+      {
+       "into": "aqi",
+       "json": "json.current.european_aqi"
+      },
+      {
+       "into": "pm25",
+       "json": "json.current.pm2_5"
+      },
+      {
+       "into": "pm10",
+       "json": "json.current.pm10"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ state.lat }}&longitude={{ state.lon }}&current=european_aqi,pm2_5,pm10"
+     },
+     "into": "aq",
+     "kind": "observe",
+     "next": "band"
+    },
+    "band": {
+     "branches": [
+      {
+       "then": "good",
+       "when": {
+        "lte": 20,
+        "type": "number"
+       }
+      },
+      {
+       "then": "fair",
+       "when": {
+        "lte": 40
+       }
+      },
+      {
+       "then": "moderate",
+       "when": {
+        "lte": 60
+       }
+      },
+      {
+       "then": "poor",
+       "when": {
+        "lte": 80
+       }
+      },
+      {
+       "then": "very-poor",
+       "when": {
+        "lte": 100
+       }
+      },
+      {
+       "then": "extremely-poor",
+       "when": {
+        "gt": 100
+       }
+      },
+      {
+       "else": "no-reading"
+      }
+     ],
+     "kind": "decide",
+     "on": "aqi"
+    },
+    "extremely-poor": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "extremely poor"
+     }
+    },
+    "fair": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "fair"
+     }
+    },
+    "found": {
+     "branches": [
+      {
+       "then": "air",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "good": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "good"
+     }
+    },
+    "moderate": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "moderate"
+     }
+    },
+    "no-reading": {
+     "kind": "fail",
+     "reason": "no-reading",
+     "say": "Open-Meteo found {{ state.name }} but gave no air quality reading (status {{ state.aq.status }})."
+    },
+    "poor": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "poor"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "aqi": "{{ state.aqi }}",
+      "band": "{{ state.band }}",
+      "country": "{{ state.country }}",
+      "place": "{{ state.name }}",
+      "pm10": "{{ state.pm10 }}",
+      "pm2_5": "{{ state.pm25 }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }}: air quality {{ state.band }} (European AQI {{ state.aqi }}), PM2.5 {{ state.pm25 }} µg/m³, PM10 {{ state.pm10 }} µg/m³."
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    },
+    "very-poor": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "band": "very poor"
+     }
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "health",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] air quality (in|for) {place}"
+    },
+    {
+     "pattern": "how is the air in {place}"
+    },
+    {
+     "pattern": "(aqi|pollution) in {place}"
+    }
+   ],
+   "version": 1
+  },
+  "books": {
+   "description": "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out.",
+   "hosts": [
+    "openlibrary.org"
+   ],
+   "inputs": {
+    "title": {
+     "description": "A title or an author, as in: The Left Hand of Darkness",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "books",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-book"
+      }
+     ],
+     "kind": "decide",
+     "on": "book"
+    },
+    "no-book": {
+     "kind": "fail",
+     "reason": "no-book",
+     "say": "Open Library has nothing matching {{ inputs.title }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "author": "{{ state.author }}",
+      "first_published": "{{ state.year }}",
+      "matches": "{{ state.found }}",
+      "title": "{{ state.book }}",
+      "url": "https://openlibrary.org{{ state.key }}"
+     },
+     "say": "{{ state.book }}, by {{ state.author }} ({{ state.year }}). https://openlibrary.org{{ state.key }}"
+    },
+    "search": {
+     "extract": [
+      {
+       "into": "found",
+       "json": "json.numFound"
+      },
+      {
+       "into": "book",
+       "json": "json.docs[0].title"
+      },
+      {
+       "into": "author",
+       "json": "json.docs[0].author_name[0]"
+      },
+      {
+       "into": "year",
+       "json": "json.docs[0].first_publish_year"
+      },
+      {
+       "into": "key",
+       "json": "json.docs[0].key"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://openlibrary.org/search.json?q={{ inputs.title | url }}&limit=1&fields=title,author_name,first_publish_year,key"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Open Library answered {{ state.resp.status }}."
+    }
+   },
+   "start": "search",
+   "tags": [
+    "reference",
+    "books",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "who wrote {title}"
+    },
+    {
+     "pattern": "find the book {title}"
+    },
+    {
+     "pattern": "books by {title}"
+    }
+   ],
+   "version": 1
+  },
+  "dad-joke": {
+   "description": "A random dad joke, from icanhazdadjoke.com.",
+   "hosts": [
+    "icanhazdadjoke.com"
+   ],
+   "license": "MIT",
+   "name": "dad-joke",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "joke",
+       "json": "json.joke"
+      },
+      {
+       "into": "id",
+       "json": "json.id"
+      }
+     ],
+     "http": {
+      "headers": {
+       "Accept": "application/json"
+      },
+      "method": "GET",
+      "url": "https://icanhazdadjoke.com/"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-joke": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "joke"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "joke": "{{ state.joke }}",
+      "url": "https://icanhazdadjoke.com/j/{{ state.id }}"
+     },
+     "say": "{{ state.joke }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-joke",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "icanhazdadjoke.com answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "fun",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "tell me a [dad] joke"
+    },
+    {
+     "pattern": "[a] dad joke"
+    },
+    {
+     "pattern": "make me laugh"
+    }
+   ],
+   "version": 1
+  },
+  "define": {
+   "description": "What an English word means: its first definition, part of speech and pronunciation.",
+   "hosts": [
+    "api.dictionaryapi.dev"
+   ],
+   "inputs": {
+    "word": {
+     "description": "One English word",
+     "pattern": "^[A-Za-z][A-Za-z'\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "define",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "word",
+       "json": "json[0].word"
+      },
+      {
+       "into": "phonetic",
+       "json": "json[0].phonetic"
+      },
+      {
+       "into": "part",
+       "json": "json[0].meanings[0].partOfSpeech"
+      },
+      {
+       "into": "definition",
+       "json": "json[0].meanings[0].definitions[0].definition"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.dictionaryapi.dev/api/v2/entries/en/{{ inputs.word | lower | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-definition": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-word"
+      }
+     ],
+     "kind": "decide",
+     "on": "definition"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "definition": "{{ state.definition }}",
+      "part_of_speech": "{{ state.part }}",
+      "phonetic": "{{ state.phonetic }}",
+      "word": "{{ state.word }}"
+     },
+     "say": "{{ state.word }} ({{ state.part }}): {{ state.definition }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-definition",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "unknown-word",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The dictionary answered {{ state.resp.status }}."
+    },
+    "unknown-word": {
+     "kind": "fail",
+     "reason": "unknown-word",
+     "say": "The dictionary has no entry for {{ inputs.word }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "reference",
+    "language",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "define {word:word}"
+    },
+    {
+     "pattern": "what does {word:word} mean"
+    },
+    {
+     "pattern": "[the] (meaning|definition) of {word:word}"
+    }
+   ],
+   "version": 1
+  },
   "disk-space": {
    "commands": [
     "df"
@@ -8442,6 +11278,126 @@
     }
    ],
    "version": 2
+  },
+  "earthquakes": {
+   "description": "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest.",
+   "hosts": [
+    "earthquake.usgs.gov"
+   ],
+   "license": "MIT",
+   "name": "earthquakes",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "then": "reply",
+       "when": {
+        "gt": 0
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "count"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "count",
+       "json": "json.metadata.count"
+      },
+      {
+       "into": "mag",
+       "json": "json.features[0].properties.mag"
+      },
+      {
+       "into": "place",
+       "json": "json.features[0].properties.place"
+      },
+      {
+       "into": "tsunami",
+       "json": "json.features[0].properties.tsunami"
+      },
+      {
+       "into": "url",
+       "json": "json.features[0].properties.url"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "count": 0
+     },
+     "say": "No earthquakes of magnitude 4.5+ anywhere in the past day."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "count": "{{ state.count }}",
+      "latest": {
+       "magnitude": "{{ state.mag }}",
+       "place": "{{ state.place }}",
+       "tsunami": "{{ state.tsunami }}",
+       "url": "{{ state.url }}"
+      }
+     },
+     "say": "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The USGS feed answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "science",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[any] [recent] earthquakes [today]"
+    },
+    {
+     "pattern": "[was there an] earthquake today"
+    },
+    {
+     "pattern": "latest earthquake"
+    }
+   ],
+   "version": 1
   },
   "github-release": {
    "description": "The latest release of a GitHub repository.",
@@ -8823,6 +11779,414 @@
    ],
    "version": 2
   },
+  "hn-search": {
+   "description": "Hacker News stories about something, through HN Search: the top three matches.",
+   "hosts": [
+    "hn.algolia.com"
+   ],
+   "inputs": {
+    "query": {
+     "description": "Words to search story titles and text for",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "hn-search",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "nothing",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "each"
+      }
+     ],
+     "kind": "decide",
+     "on": "hits"
+    },
+    "each": {
+     "into": "stories",
+     "kind": "each",
+     "limit": 3,
+     "next": "reply",
+     "over": "hits",
+     "start": "one"
+    },
+    "nothing": {
+     "kind": "done",
+     "output": {
+      "query": "{{ inputs.query }}",
+      "stories": [],
+      "total": 0
+     },
+     "say": "No Hacker News stories match {{ inputs.query }}."
+    },
+    "one": {
+     "kind": "done",
+     "output": {
+      "by": "{{ item.author }}",
+      "discussion": "https://news.ycombinator.com/item?id={{ item.objectID }}",
+      "points": "{{ item.points }}",
+      "title": "{{ item.title }}",
+      "url": "{{ item.url }}"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "query": "{{ inputs.query }}",
+      "stories": "{{ state.stories }}",
+      "total": "{{ state.total }}"
+     },
+     "say": "{{ state.total }} Hacker News stories match {{ inputs.query }}. Top: {{ state.first }} {{ state.first_url }}"
+    },
+    "search": {
+     "extract": [
+      {
+       "into": "total",
+       "json": "json.nbHits"
+      },
+      {
+       "into": "first",
+       "json": "json.hits[0].title"
+      },
+      {
+       "into": "first_url",
+       "json": "json.hits[0].url"
+      },
+      {
+       "into": "hits",
+       "json": "json.hits"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://hn.algolia.com/api/v1/search?query={{ inputs.query | url }}&tags=story&hitsPerPage=3"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "HN Search answered {{ state.resp.status }}."
+    }
+   },
+   "start": "search",
+   "tags": [
+    "news",
+    "tech",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "search hacker news for {query}"
+    },
+    {
+     "pattern": "hacker news stories about {query}"
+    },
+    {
+     "pattern": "what does hacker news say about {query}"
+    }
+   ],
+   "version": 1
+  },
+  "holidays": {
+   "description": "The next public holiday in a country (by its two-letter code), from Nager.Date.",
+   "hosts": [
+    "date.nager.at"
+   ],
+   "inputs": {
+    "country": {
+     "description": "A two-letter country code, as in: NO, US, DE",
+     "pattern": "^[A-Za-z]{2}$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "holidays",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "none-listed"
+      }
+     ],
+     "kind": "decide",
+     "on": "date"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "date",
+       "json": "json[0].date"
+      },
+      {
+       "into": "name",
+       "json": "json[0].name"
+      },
+      {
+       "into": "local",
+       "json": "json[0].localName"
+      },
+      {
+       "into": "then",
+       "json": "json[1].name"
+      },
+      {
+       "into": "then_date",
+       "json": "json[1].date"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://date.nager.at/api/v3/NextPublicHolidays/{{ inputs.country | upper }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none-listed": {
+     "kind": "fail",
+     "reason": "none-listed",
+     "say": "Nager.Date lists no coming public holidays for {{ inputs.country | upper }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "after": {
+       "date": "{{ state.then_date }}",
+       "name": "{{ state.then }}"
+      },
+      "country": "{{ inputs.country | upper }}",
+      "date": "{{ state.date }}",
+      "local_name": "{{ state.local }}",
+      "name": "{{ state.name }}"
+     },
+     "say": "The next public holiday in {{ inputs.country | upper }} is {{ state.name }} ({{ state.local }}) on {{ state.date }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unknown-country"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unknown-country": {
+     "kind": "fail",
+     "reason": "unknown-country",
+     "say": "Nager.Date knows no country {{ inputs.country | upper }} (it answered {{ state.resp.status }}); use a two-letter code such as NO, US or DE."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "calendar",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[when is the] next [public|bank] holiday in {country:word}"
+    },
+    {
+     "pattern": "[public|bank] holidays in {country:word}"
+    }
+   ],
+   "version": 1
+  },
+  "iss": {
+   "description": "Where the International Space Station is right now: latitude, longitude, altitude and speed.",
+   "hosts": [
+    "api.wheretheiss.at"
+   ],
+   "license": "MIT",
+   "name": "iss",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "lat",
+       "json": "json.latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.longitude"
+      },
+      {
+       "into": "alt",
+       "json": "json.altitude"
+      },
+      {
+       "into": "speed",
+       "json": "json.velocity"
+      },
+      {
+       "into": "light",
+       "json": "json.visibility"
+      },
+      {
+       "into": "lat2",
+       "regex": "\"latitude\":\\s*(-?\\d+(?:\\.\\d{1,2})?)"
+      },
+      {
+       "into": "lon2",
+       "regex": "\"longitude\":\\s*(-?\\d+(?:\\.\\d{1,2})?)"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.wheretheiss.at/v1/satellites/25544"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "have-position": {
+     "branches": [
+      {
+       "then": "light",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "lat"
+    },
+    "in-shadow": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "where": "in the Earth's shadow"
+     }
+    },
+    "in-sun": {
+     "kind": "set",
+     "next": "reply",
+     "set": {
+      "where": "in sunlight"
+     }
+    },
+    "light": {
+     "branches": [
+      {
+       "then": "in-sun",
+       "when": {
+        "eq": "daylight"
+       }
+      },
+      {
+       "then": "in-shadow",
+       "when": {
+        "eq": "eclipsed"
+       }
+      },
+      {
+       "else": "in-sun"
+      }
+     ],
+     "kind": "decide",
+     "on": "light"
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "wheretheiss.at is asking for fewer requests (429); try again in a moment."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "altitude_km": "{{ state.alt }}",
+      "latitude": "{{ state.lat }}",
+      "longitude": "{{ state.lon }}",
+      "map": "https://www.openstreetmap.org/?mlat={{ state.lat }}&mlon={{ state.lon }}&zoom=3",
+      "speed_kmh": "{{ state.speed }}",
+      "visibility": "{{ state.light }}"
+     },
+     "say": "The ISS is over {{ state.lat2 }}, {{ state.lon2 }}, {{ state.alt | int }} km up, moving at {{ state.speed | int }} km/h, {{ state.where }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "have-position",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "wheretheiss.at answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "science",
+    "space",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "where is the (iss|space station) [now]"
+    },
+    {
+     "pattern": "(iss|space station) (position|location)"
+    }
+   ],
+   "version": 1
+  },
   "log-errors": {
    "description": "Error lines in the tail of a log file on this box.",
    "inputs": {
@@ -9026,6 +12390,206 @@
     }
    ],
    "version": 2
+  },
+  "npm-package": {
+   "description": "The latest version of an npm package, and what it says it is.",
+   "hosts": [
+    "registry.npmjs.org"
+   ],
+   "inputs": {
+    "package": {
+     "description": "A package name, as in: react or @types/node",
+     "pattern": "^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "npm-package",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "version",
+       "json": "json.version"
+      },
+      {
+       "into": "about",
+       "json": "json.description"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://registry.npmjs.org/{{ inputs.package | url }}/latest"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-package": {
+     "kind": "fail",
+     "reason": "no-package",
+     "say": "npm has no package called {{ inputs.package }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "description": "{{ state.about }}",
+      "package": "{{ inputs.package }}",
+      "url": "https://www.npmjs.com/package/{{ inputs.package }}",
+      "version": "{{ state.version }}"
+     },
+     "say": "{{ inputs.package }} {{ state.version }} on npm: {{ state.about }} https://www.npmjs.com/package/{{ inputs.package }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-package",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "The npm registry answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "javascript",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest version of {package:word} on npm"
+    },
+    {
+     "pattern": "latest {package:word} on npm"
+    },
+    {
+     "pattern": "npm (package|version) {package:word}"
+    }
+   ],
+   "version": 1
+  },
+  "pypi-package": {
+   "description": "The latest version of a Python package on PyPI, and what it says it is.",
+   "hosts": [
+    "pypi.org"
+   ],
+   "inputs": {
+    "package": {
+     "description": "A project name, as in: requests",
+     "pattern": "^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "pypi-package",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "name",
+       "json": "json.info.name"
+      },
+      {
+       "into": "version",
+       "json": "json.info.version"
+      },
+      {
+       "into": "about",
+       "json": "json.info.summary"
+      },
+      {
+       "into": "url",
+       "json": "json.info.package_url"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://pypi.org/pypi/{{ inputs.package | url }}/json"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "no-package": {
+     "kind": "fail",
+     "reason": "no-package",
+     "say": "PyPI has no project called {{ inputs.package }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "package": "{{ state.name }}",
+      "summary": "{{ state.about }}",
+      "url": "{{ state.url }}",
+      "version": "{{ state.version }}"
+     },
+     "say": "{{ state.name }} {{ state.version }} on PyPI: {{ state.about }} {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-package",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "PyPI answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "software",
+    "python",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[what's the] latest version of {package:word} on pypi"
+    },
+    {
+     "pattern": "latest {package:word} on pypi"
+    },
+    {
+     "pattern": "(pypi|pip) (package|version) {package:word}"
+    }
+   ],
+   "version": 1
   },
   "rendered-headline": {
    "description": "The main heading of a page that needs a script to render, through a real browser.",
@@ -9491,6 +13055,153 @@
    ],
    "version": 1
   },
+  "sun": {
+   "description": "Today's sunrise and sunset for a place, in its local time, from Open-Meteo.",
+   "hosts": [
+    "geocoding-api.open-meteo.com",
+    "api.open-meteo.com"
+   ],
+   "inputs": {
+    "place": {
+     "description": "A town or city name",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "sun",
+   "namespace": "pyrtan",
+   "nodes": {
+    "found": {
+     "branches": [
+      {
+       "then": "times",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unknown-place"
+      }
+     ],
+     "kind": "decide",
+     "on": "hit"
+    },
+    "geocode": {
+     "extract": [
+      {
+       "into": "hit",
+       "json": "json.results[0]"
+      },
+      {
+       "into": "lat",
+       "json": "json.results[0].latitude"
+      },
+      {
+       "into": "lon",
+       "json": "json.results[0].longitude"
+      },
+      {
+       "into": "name",
+       "json": "json.results[0].name"
+      },
+      {
+       "into": "country",
+       "json": "json.results[0].country"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json"
+     },
+     "into": "geo",
+     "kind": "observe",
+     "next": "found"
+    },
+    "have-times": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "no-times"
+      }
+     ],
+     "kind": "decide",
+     "on": "rise"
+    },
+    "no-times": {
+     "kind": "fail",
+     "reason": "no-times",
+     "say": "Open-Meteo gave no sunrise for {{ state.name }} today (status {{ state.fc.status }}); near the poles the sun may not rise or set at all."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "country": "{{ state.country }}",
+      "date": "{{ state.day }}",
+      "place": "{{ state.name }}",
+      "sunrise": "{{ state.rise }}",
+      "sunset": "{{ state.set }}",
+      "timezone": "{{ state.zone }}"
+     },
+     "say": "{{ state.name }}, {{ state.country }}, {{ state.day }}: sunrise {{ state.rise }}, sunset {{ state.set }} ({{ state.zone }})."
+    },
+    "times": {
+     "extract": [
+      {
+       "into": "day",
+       "json": "json.daily.time[0]"
+      },
+      {
+       "from": "json.daily.sunrise[0]",
+       "into": "rise",
+       "regex": "T(\\d\\d:\\d\\d)"
+      },
+      {
+       "from": "json.daily.sunset[0]",
+       "into": "set",
+       "regex": "T(\\d\\d:\\d\\d)"
+      },
+      {
+       "into": "zone",
+       "json": "json.timezone"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&daily=sunrise,sunset&timezone=auto&forecast_days=1"
+     },
+     "into": "fc",
+     "kind": "observe",
+     "next": "have-times"
+    },
+    "unknown-place": {
+     "kind": "fail",
+     "reason": "unknown-place",
+     "say": "I could not find a place called {{ inputs.place }}."
+    }
+   },
+   "start": "geocode",
+   "tags": [
+    "weather",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "[when is] (sunrise|sunset) in {place}"
+    },
+    {
+     "pattern": "when does the sun (rise|set) in {place}"
+    },
+    {
+     "pattern": "(sunrise|sun) times (in|for) {place}"
+    }
+   ],
+   "version": 1
+  },
   "weather": {
    "description": "Current weather for a place, from Open-Meteo.",
    "hosts": [
@@ -9783,6 +13494,144 @@
     }
    ],
    "version": 2
+  },
+  "wikipedia": {
+   "description": "The summary of a Wikipedia article.",
+   "hosts": [
+    "en.wikipedia.org"
+   ],
+   "inputs": {
+    "topic": {
+     "description": "An article title, as in: Ursula K. Le Guin",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "wikipedia",
+   "namespace": "pyrtan",
+   "nodes": {
+    "ambiguous": {
+     "kind": "fail",
+     "reason": "ambiguous",
+     "say": "{{ state.title }} could mean several things on Wikipedia; say which: {{ state.url }}"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "into": "kind",
+       "json": "json.type"
+      },
+      {
+       "into": "title",
+       "json": "json.title"
+      },
+      {
+       "into": "summary",
+       "json": "json.extract"
+      },
+      {
+       "into": "url",
+       "json": "json.content_urls.desktop.page"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://en.wikipedia.org/api/rest_v1/page/summary/{{ inputs.topic | url }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "kind": {
+     "branches": [
+      {
+       "then": "ambiguous",
+       "when": {
+        "eq": "disambiguation"
+       }
+      },
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "kind"
+    },
+    "no-article": {
+     "kind": "fail",
+     "reason": "no-article",
+     "say": "Wikipedia has no article called {{ inputs.topic }}."
+    },
+    "rate-limited": {
+     "kind": "fail",
+     "reason": "rate-limited",
+     "say": "Wikipedia is asking for fewer requests (429); try again in a minute."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "summary": "{{ state.summary }}",
+      "title": "{{ state.title }}",
+      "url": "{{ state.url }}"
+     },
+     "say": "{{ state.title }}: {{ state.summary }} {{ state.url }}"
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "kind",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "no-article",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "then": "rate-limited",
+       "when": {
+        "eq": 429
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Wikipedia answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "reference",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "tell me about {topic}"
+    },
+    {
+     "pattern": "who (is|was) {topic}"
+    },
+    {
+     "pattern": "(wikipedia|wiki) {topic}"
+    }
+   ],
+   "version": 1
   }
  }
 }

@@ -1,0 +1,66 @@
+# A book by its title or its author, from Open Library's search: the best
+# match, who wrote it and when it first came out.
+
+name = "books"
+version = 1
+namespace = "pyrtan"
+description = "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out."
+tags = ["reference", "books", "read-only"]
+license = "MIT"
+hosts = ["openlibrary.org"]
+start = "search"
+
+[[triggers]]
+pattern = "who wrote {title}"
+[[triggers]]
+pattern = "find the book {title}"
+[[triggers]]
+pattern = "books by {title}"
+
+[inputs.title]
+type = "str"
+description = "A title or an author, as in: The Left Hand of Darkness"
+
+[nodes.search]
+kind = "observe"
+http = { method = "GET", url = "https://openlibrary.org/search.json?q={{ inputs.title | url }}&limit=1&fields=title,author_name,first_publish_year,key" }
+into = "resp"
+extract = [
+  { into = "found", json = "json.numFound" },
+  { into = "book", json = "json.docs[0].title" },
+  { into = "author", json = "json.docs[0].author_name[0]" },
+  { into = "year", json = "json.docs[0].first_publish_year" },
+  { into = "key", json = "json.docs[0].key" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "book"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "no-book" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.book }}, by {{ state.author }} ({{ state.year }}). https://openlibrary.org{{ state.key }}"
+output = { title = "{{ state.book }}", author = "{{ state.author }}", first_published = "{{ state.year }}", url = "https://openlibrary.org{{ state.key }}", matches = "{{ state.found }}" }
+
+[nodes.no-book]
+kind = "fail"
+reason = "no-book"
+say = "Open Library has nothing matching {{ inputs.title }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Open Library answered {{ state.resp.status }}."

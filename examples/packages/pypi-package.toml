@@ -1,0 +1,58 @@
+# The latest released version of a Python package, from PyPI's JSON API.
+
+name = "pypi-package"
+version = 1
+namespace = "pyrtan"
+description = "The latest version of a Python package on PyPI, and what it says it is."
+tags = ["software", "python", "read-only"]
+license = "MIT"
+hosts = ["pypi.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest version of {package:word} on pypi"
+[[triggers]]
+pattern = "latest {package:word} on pypi"
+[[triggers]]
+pattern = "(pypi|pip) (package|version) {package:word}"
+
+[inputs.package]
+type = "str"
+pattern = "^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$"
+description = "A project name, as in: requests"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://pypi.org/pypi/{{ inputs.package | url }}/json" }
+into = "resp"
+extract = [
+  { into = "name", json = "json.info.name" },
+  { into = "version", json = "json.info.version" },
+  { into = "about", json = "json.info.summary" },
+  { into = "url", json = "json.info.package_url" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-package" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }} {{ state.version }} on PyPI: {{ state.about }} {{ state.url }}"
+output = { package = "{{ state.name }}", version = "{{ state.version }}", summary = "{{ state.about }}", url = "{{ state.url }}" }
+
+[nodes.no-package]
+kind = "fail"
+reason = "no-package"
+say = "PyPI has no project called {{ inputs.package }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "PyPI answered {{ state.resp.status }}."

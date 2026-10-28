@@ -1,0 +1,63 @@
+# Earthquakes of magnitude 4.5 and up in the past day, from the USGS feed:
+# how many, and the most recent one. The feed lists the newest first.
+
+name = "earthquakes"
+version = 1
+namespace = "pyrtan"
+description = "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest."
+tags = ["science", "read-only"]
+license = "MIT"
+hosts = ["earthquake.usgs.gov"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[any] [recent] earthquakes [today]"
+[[triggers]]
+pattern = "[was there an] earthquake today"
+[[triggers]]
+pattern = "latest earthquake"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson" }
+into = "resp"
+extract = [
+  { into = "count", json = "json.metadata.count" },
+  { into = "mag", json = "json.features[0].properties.mag" },
+  { into = "place", json = "json.features[0].properties.place" },
+  { into = "tsunami", json = "json.features[0].properties.tsunami" },
+  { into = "url", json = "json.features[0].properties.url" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "count"
+branches = [
+  { when = { eq = 0 }, then = "none" },
+  { when = { gt = 0 }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
+output = { count = "{{ state.count }}", latest = { magnitude = "{{ state.mag }}", place = "{{ state.place }}", tsunami = "{{ state.tsunami }}", url = "{{ state.url }}" } }
+
+[nodes.none]
+kind = "done"
+say = "No earthquakes of magnitude 4.5+ anywhere in the past day."
+output = { count = 0 }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The USGS feed answered {{ state.resp.status }}."

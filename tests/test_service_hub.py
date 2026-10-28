@@ -156,10 +156,10 @@ def test_swarm_of_two_behind_a_hub(tmp_path):
         assert status == 200 and reg["peer"]["link"] == "up"
 
         _, health = http_json("GET", f"{hub_srv.url}/health")
-        assert health["peers"] == 2 and health["up"] == 2 and health["trees"] == 12
+        assert health["peers"] == 2 and health["up"] == 2 and health["trees"] == len(reg_a) + 1  # the examples, and picnic
 
         _, caps = http_json("GET", f"{hub_srv.url}/capabilities")
-        assert {t["name"] for t in caps["trees"]} == {"weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "picnic", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk"}
+        assert {t["name"] for t in caps["trees"]} == set(reg_a.names()) | {"picnic"}
 
         # Routed by the hub to B, which delegates back through the hub to A.
         _, out = http_json("POST", f"{hub_srv.url}/intent", {"text": "picnic in Oslo"})

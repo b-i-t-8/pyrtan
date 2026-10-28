@@ -1,0 +1,80 @@
+# Today's sunrise and sunset for a place, in the place's own time, from
+# Open-Meteo: geocode the name, then ask for the day's sun times with the
+# place's time zone.
+
+name = "sun"
+version = 1
+namespace = "pyrtan"
+description = "Today's sunrise and sunset for a place, in its local time, from Open-Meteo."
+tags = ["weather", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[when is] (sunrise|sunset) in {place}"
+[[triggers]]
+pattern = "when does the sun (rise|set) in {place}"
+[[triggers]]
+pattern = "(sunrise|sun) times (in|for) {place}"
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "times" },
+  { else = "unknown-place" },
+]
+
+[nodes.times]
+kind = "observe"
+http = { method = "GET", url = "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&daily=sunrise,sunset&timezone=auto&forecast_days=1" }
+into = "fc"
+extract = [
+  { into = "day", json = "json.daily.time[0]" },
+  { into = "rise", regex = "T(\\d\\d:\\d\\d)", from = "json.daily.sunrise[0]" },
+  { into = "set", regex = "T(\\d\\d:\\d\\d)", from = "json.daily.sunset[0]" },
+  { into = "zone", json = "json.timezone" },
+]
+next = "have-times"
+
+# Above the polar circles the sun may not rise or set at all that day.
+[nodes.have-times]
+kind = "decide"
+on = "rise"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "no-times" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, {{ state.country }}, {{ state.day }}: sunrise {{ state.rise }}, sunset {{ state.set }} ({{ state.zone }})."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", date = "{{ state.day }}", sunrise = "{{ state.rise }}", sunset = "{{ state.set }}", timezone = "{{ state.zone }}" }
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[nodes.no-times]
+kind = "fail"
+reason = "no-times"
+say = "Open-Meteo gave no sunrise for {{ state.name }} today (status {{ state.fc.status }}); near the poles the sun may not rise or set at all."
