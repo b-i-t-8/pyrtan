@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file across restarts (default $PYRTAN_UNANSWERED)")
     p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the hub's own trees' [[watches]] (default $PYRTAN_WATCH)")
-    p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees: 'public' refuses private addresses")
+    p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees, and for its requests to hosts it did not choose (followed hubs and their followers, the hub list, identity documents; never --peer or a service registered with the token): 'public' refuses private addresses")
     p.add_argument("--peer", action="append", default=[], help="a service URL to start with (repeatable; services may also register themselves)")
     p.add_argument("--poll", type=float, default=10.0, help="seconds between health polls")
     _access_args(p)
@@ -409,8 +409,6 @@ def _token_arg(p: argparse.ArgumentParser, help_text: str, *, sign: bool = True)
                        help="sign requests with your identity's key (pyrtan id new), for a hub that grants it (default $PYRTAN_SIGN)")
 
 
-_AUDIENCES: dict[str, str] = {}
-
 
 def _call(args: argparse.Namespace, method: str, url: str, payload: Any = None, **kw: Any) -> tuple[int, Any]:
     """``http_json`` with the command's token, and with its key's signature under --sign."""
@@ -420,21 +418,17 @@ def _call(args: argparse.Namespace, method: str, url: str, payload: Any = None, 
 
 def _key_headers(args: argparse.Namespace, method: str, url: str, payload: Any) -> dict[str, str]:
     """Sign as the root key in $PYRTAN_IDENTITY (or ~/.config/pyrtan/identity), for the
-    audience the hub names at /api."""
+    audience that is the URL being called. Never for one the hub names: a hub that
+    said "sign for that other hub" would collect signatures good there."""
     from urllib.parse import urlsplit
     from . import identity
-    parts = urlsplit(url)
-    base = f"{parts.scheme}://{parts.netloc}"
-    if base not in _AUDIENCES:
-        status, api = http_json("GET", f"{base}/api", timeout=10.0)
-        audience = api.get("audience") if status == 200 and isinstance(api, dict) else None
-        if not isinstance(audience, str):
-            raise SystemExit(f"pyrtan: {base} names no audience to sign for; is it a hub of pyrtan 0.14 or later?")
-        _AUDIENCES[base] = audience
+    audience = identity.audience_of(url)
+    if audience is None:
+        raise SystemExit(f"pyrtan: {url} is not an http(s) URL to sign for")
     key = identity.Key.load(identity.home() / "root.key")
     if method == "POST" and payload is None:
         payload = {}
-    return identity.sign_request(key, _AUDIENCES[base], method, parts.path or "/", payload)
+    return identity.sign_request(key, audience, method, urlsplit(url).path or "/", payload)
 
 
 def _access_args(p: argparse.ArgumentParser) -> None:

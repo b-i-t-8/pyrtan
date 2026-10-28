@@ -73,9 +73,27 @@ from .trace import Trace
 from .tree import Tree
 from .watch import Watcher
 from .adapters import LocalAdapters
-from .transport import Transport, UrllibTransport
+from .transport import Transport, UrllibTransport, _EgressRedirectHandler, check_egress
 
 MAX_BODY = 1 << 20
+# The most a hub reads of another's answer: a directory, a blob or an actor,
+# never a stream.
+MAX_RESPONSE = 4 << 20
+# The egress policy for the hub's own requests to hosts it did not choose:
+# followed hubs and their followers, the hub list, identity documents.
+# ``serve`` and ``serve_hub`` set it from --egress, the same policy their
+# trees get, so a hub told to stay public makes no request into its LAN on
+# anyone's behalf (a Follow names the actor to ask). The operator's own
+# swarm (``--hub``, ``--peer``, a service that registered with the token)
+# is called under ``any``: it usually is the LAN. Every redirect is checked.
+_EGRESS = "any"
+
+
+def set_egress(policy: str) -> None:
+    """The egress policy ``http_json`` applies when its caller names none."""
+    global _EGRESS
+    check_egress("http://example.com/", policy)  # a bad policy name is refused here, not at the first request
+    _EGRESS = policy
 
 # What answers without a token: the console, its index, liveness, and a pushed
 # identity document (which proves itself by its signature).
@@ -94,12 +112,17 @@ def signed_path(path: str) -> bool:
     """Whether a signed (federated) request may reach this path at all."""
     return path in SIGNED_PATHS or path.startswith("/kept/")
 # Headers a browser at another origin may send: federation's HMAC and an identity's key.
-SIGNATURE_HEADERS = ("X-Pyrtan-Actor", "X-Pyrtan-Date", "X-Pyrtan-Signature", "X-Pyrtan-Key", "X-Pyrtan-Key-Signature", "X-Pyrtan-Device")
+SIGNATURE_HEADERS = ("X-Pyrtan-Actor", "X-Pyrtan-Date", "X-Pyrtan-Signature", "X-Pyrtan-Key", "X-Pyrtan-Key-Signature", "X-Pyrtan-Device", "X-Pyrtan-Audience")
 # What /health says to a caller without a token, when one is required.
 PUBLIC_HEALTH_KEYS = ("status", "name", "peers", "up", "stale", "down", "uptime_s")
 
 
-def http_json(method: str, url: str, payload: Any = None, timeout: float = 15.0, token: str | None = None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
+def http_json(method: str, url: str, payload: Any = None, timeout: float = 15.0, token: str | None = None, headers: dict[str, str] | None = None, *, egress: str | None = None) -> tuple[int, Any]:
+    """A JSON request on the hub's own behalf, under the egress policy
+    (``egress``, else the one ``set_egress`` chose), on the first URL and on
+    every redirect; an answer over ``MAX_RESPONSE`` bytes is an error."""
+    policy = egress or _EGRESS
+    check_egress(url, policy)  # EgressRefused, before any connection
     # Canonical JSON on the wire, so a signature over the body (federation)
     # can be checked from the parsed body on the other side.
     data = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8") if payload is not None else None
@@ -108,14 +131,22 @@ def http_json(method: str, url: str, payload: Any = None, timeout: float = 15.0,
         hdrs["Authorization"] = f"Bearer {token}"
     hdrs.update(headers or {})
     req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+    opener = urllib.request.build_opener(_EgressRedirectHandler(policy))
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, json.loads(resp.read().decode("utf-8") or "null")
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.status, json.loads(_bounded(resp, url).decode("utf-8") or "null")
     except urllib.error.HTTPError as e:
         try:
-            return e.code, json.loads(e.read().decode("utf-8") or "null")
+            return e.code, json.loads(_bounded(e, url).decode("utf-8") or "null")
         except Exception:
             return e.code, None
+
+
+def _bounded(resp: Any, url: str) -> bytes:
+    raw = resp.read(MAX_RESPONSE + 1)
+    if len(raw) > MAX_RESPONSE:
+        raise urllib.error.URLError(f"{url} answered with more than {MAX_RESPONSE} bytes")
+    return raw
 
 
 class RemoteResolver:
@@ -126,11 +157,11 @@ class RemoteResolver:
         self.token = token
 
     def run_tree(self, name: str, inputs: dict[str, Any], depth: int) -> Outcome:
-        status, body = http_json("POST", f"{self.base_url}/run", {"tree": name, "inputs": inputs, "depth": depth}, token=self.token)
+        status, body = http_json("POST", f"{self.base_url}/run", {"tree": name, "inputs": inputs, "depth": depth}, token=self.token, egress="any")
         return outcome_from_dict(body, name) if isinstance(body, dict) else Outcome("error", name, reason="remote", say=f"{self.base_url} answered {status}")
 
     def run_intent(self, text: str, depth: int) -> Outcome:
-        status, body = http_json("POST", f"{self.base_url}/intent", {"text": text, "depth": depth}, token=self.token)
+        status, body = http_json("POST", f"{self.base_url}/intent", {"text": text, "depth": depth}, token=self.token, egress="any")
         return outcome_from_dict(body, "") if isinstance(body, dict) else Outcome("error", "", reason="remote", say=f"{self.base_url} answered {status}")
 
 
@@ -254,7 +285,7 @@ class Service:
         if not self.hub:
             return False
         try:
-            status, _ = http_json("POST", f"{self.hub}/register", {"url": my_url, "name": self.name}, token=self.token)
+            status, _ = http_json("POST", f"{self.hub}/register", {"url": my_url, "name": self.name}, token=self.token, egress="any")  # the operator named the hub
             return status == 200
         except Exception:
             return False
@@ -300,8 +331,9 @@ Route = Callable[..., tuple[int, Any]]  # (method, path, body, headers) -> (stat
 
 
 def bearer_ok(header: str | None, token: str) -> bool:
-    """Whether an ``Authorization`` header carries ``token`` (compared in constant time)."""
-    if not header:
+    """Whether an ``Authorization`` header carries ``token`` (compared in constant time).
+    No token means nothing matches: an empty ``Bearer`` is not the operator of an open hub."""
+    if not header or not token:
         return False
     scheme, _, value = header.strip().partition(" ")
     return scheme.lower() == "bearer" and hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
@@ -498,6 +530,7 @@ def serve(
     suggestions: str | Path | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
+    set_egress(egress)  # the service's own requests (its hub) under the same policy as its trees
     service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions)
     server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
     # The server is already answering when it registers: the hub checks a new

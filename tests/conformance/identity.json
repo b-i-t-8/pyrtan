@@ -321,6 +321,7 @@
    },
    "date": 1793000000,
    "headers": {
+    "X-Pyrtan-Audience": "https://hub.example",
     "X-Pyrtan-Date": "1793000000",
     "X-Pyrtan-Key": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
     "X-Pyrtan-Key-Signature": "FVcGwg8YxUaItpxD3ALJuZL1Uamf9adrUlOkQDUAFLr4_tvHKEgvza_0JcY8XOXdZN0JQK9OH2rcr9Xvd8zTDg"
@@ -337,6 +338,7 @@
    "body": null,
    "date": 1793000000,
    "headers": {
+    "X-Pyrtan-Audience": "https://hub.example",
     "X-Pyrtan-Date": "1793000000",
     "X-Pyrtan-Key": "pyr:25njqamcweflpvkl73j4szahhihoc4xt3ktcgjnpaingr5yhkenaooab",
     "X-Pyrtan-Key-Signature": "9vtzBA9xhTlCJOKS_60_BRyX3BA38S_v42pOgSi09SnnB74kaKjDcAv1QMBR0kWKyKaLhkBvFfD_ufWUzC4WBQ"
@@ -358,6 +360,7 @@
    },
    "date": 1793000000,
    "headers": {
+    "X-Pyrtan-Audience": "https://hub.example",
     "X-Pyrtan-Date": "1793000000",
     "X-Pyrtan-Device": "eyJkZXZpY2UiOiJweXI6aHZhYnBxN2lpb2V2dmV2eGJrdHUyZzM2eHNvanFsZ3BmM2NqbmRnYXp2azdja3h1bXlnZjJsYWIiLCJleHBpcmVzIjoxNzkzMDg2NDAwLCJpc3N1ZWQiOjE3OTI5OTk5MDAsImxhYmVsIjoiYnJvd3NlciIsIm1heSI6WyJhc2siLCJjaGF0Il0sInB5cnRhbi1kZXZpY2UiOjEsInJvb3QiOiJweXI6MjVuanFhbWN3ZWZscHZrbDczajRzemFoaGlob2M0eHQza3RjZ2pucGFpbmdyNXloa2VuYW9vYWIiLCJzaWciOiJhcnhxVEFtSk1PTFhlNW4zUTZNWE1TWnNXSV95bV9rN2ZnRXBBQVIxUmUweG1waVBYNUZBUmtXODJ0R2lwVmtSRGhCMTVaTkNZVWxITlNINmkwYlVDZyJ9",
     "X-Pyrtan-Key": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",
@@ -393,6 +396,7 @@
    },
    "date": 1793000000,
    "headers": {
+    "X-Pyrtan-Audience": "https://hub.example",
     "X-Pyrtan-Date": "1793000000",
     "X-Pyrtan-Device": "eyJkZXZpY2UiOiJweXI6aHZhYnBxN2lpb2V2dmV2eGJrdHUyZzM2eHNvanFsZ3BmM2NqbmRnYXp2azdja3h1bXlnZjJsYWIiLCJleHBpcmVzIjoxNzkzMDg2NDAwLCJpc3N1ZWQiOjE3OTI5OTk5MDAsImxhYmVsIjoiYnJvd3NlciIsIm1heSI6WyJhc2siLCJjaGF0Il0sInB5cnRhbi1kZXZpY2UiOjEsInJvb3QiOiJweXI6MjVuanFhbWN3ZWZscHZrbDczajRzemFoaGlob2M0eHQza3RjZ2pucGFpbmdyNXloa2VuYW9vYWIiLCJzaWciOiJhcnhxVEFtSk1PTFhlNW4zUTZNWE1TWnNXSV95bV9rN2ZnRXBBQVIxUmUweG1waVBYNUZBUmtXODJ0R2lwVmtSRGhCMTVaTkNZVWxITlNINmkwYlVDZyJ9",
     "X-Pyrtan-Key": "pyr:hvabpq7iioevvevxbktu2g36xsojqlgpf3cjndgazvk7ckxumygf2lab",

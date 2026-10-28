@@ -41,7 +41,11 @@ included, so a stranger cannot join the swarm) and presents it to peers.
 
 **Identities.** A request signed with a key (``X-Pyrtan-Key`` and its
 signature, ``_meta/identity.md`` §7) is checked against the hub's
-*audience*, its own id, which ``GET /api`` names. On a hub with a token,
+*audience*: the URL the client called, which it signs for and names in
+``X-Pyrtan-Audience``, accepted when it is this hub's own id or, on a hub
+nobody named with ``--advertise``, the host the request reached. A hub
+cannot have a client sign for another hub by naming that hub's audience
+at ``GET /api``: the client signs for the URL it has. On a hub with a token,
 it may do what the hub's grants say its root may (``ask``, ``chat``,
 ``run``, ``operate``; see :mod:`pyrtan.grants`) and nothing else; on a hub
 without one it only says who is asking. A member that follows with a key
@@ -81,11 +85,13 @@ from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .registry import Registry
 from .runtime import Outcome
 from .tree import Tree
-from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, signed_path, build_answer
+from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, set_egress, signed_path, build_answer
 from .store import StoreError, check_key
+from .transport import EgressRefused, check_egress
 
 STALE_AFTER = 30.0
 DOWN_AFTER = 90.0
+MAX_PEERS = 200   # services a hub polls; /register past this is refused, not queued
 
 
 @dataclass
@@ -159,6 +165,8 @@ class Hub:
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
         self._audience = audience
+        self.advertised = False   # named with --advertise: then only that name is an audience here
+        self.egress = "any"       # the policy for hosts this hub did not choose; on an open hub, what /register may name
         self.lobby = Lobby(self, typing=chat_typing, reach=chat_reach) if chat or chat_public else None
         self.chat_public = chat_public  # callers without the token may chat, with people only
         self.lan: Lan | None = None     # hubs heard on the local network (--lan)
@@ -229,8 +237,12 @@ class Hub:
             return None, set(), None
         if self.audience is None:
             return None, set(), (401, {"status": "error", "reason": "unsigned", "say": "This hub has no id to check a key signature against; start it with --advertise."})
+        audience = self._audience_for(headers)
+        if audience is None:
+            asked = next((v for k, v in headers.items() if k.lower() == identity.AUDIENCE_HEADER.lower()), "?")
+            return None, set(), (401, {"status": "error", "reason": "unsigned", "say": f"The request is signed for {asked}, which is not this hub ({self.audience})."})
         try:
-            signer = identity.verify_request(self.audience, method, path, body if method == "POST" else None, headers)
+            signer = identity.verify_request(audience, method, path, body if method == "POST" else None, headers)
         except IdentityError as e:
             return None, set(), (401, {"status": "error", "reason": "unsigned", "say": f"The key signature does not hold: {e}."})
         may = self.grants.may(signer)
@@ -241,6 +253,26 @@ class Hub:
             granted = f"it may {', '.join(sorted(may))}" if may else "this hub grants it nothing"
             return signer, may, (403, {"status": "error", "reason": "not-granted", "say": f"{identity.short(signer.root)} may not {needed} here: {granted}."})
         return signer, may, None
+
+    def _audience_for(self, headers: dict[str, str]) -> str | None:
+        """The audience to check a key signature against. A client signs for the URL it
+        called and names it in ``X-Pyrtan-Audience``; that is taken when it is this hub's
+        own id or, on a hub nobody named with ``--advertise``, the host this request
+        reached (``Host``). A request naming no audience is checked against the hub's id,
+        as older clients sign. None when the request is signed for some other hub."""
+        h = {k.lower(): v for k, v in headers.items()}
+        asked = h.get(identity.AUDIENCE_HEADER.lower())
+        own = self.audience or ""
+        if asked is None:
+            return own
+        normal = identity.audience_of(asked)
+        if normal is None:
+            return None
+        if normal == identity.audience_of(own):
+            return asked
+        if not self.advertised and h.get("host") and normal in {identity.audience_of(f"{scheme}://{h['host']}") for scheme in ("http", "https")}:
+            return asked
+        return None
 
     def _grant_changed(self, root: str) -> None:
         """Drop the members that followed as ``root`` and may no longer be what they are."""
@@ -305,6 +337,8 @@ class Hub:
         with self._lock:
             peer = self.peers.get(url)
             if peer is None:
+                if len(self.peers) >= MAX_PEERS:
+                    raise ValueError(f"this hub polls at most {MAX_PEERS} peers")
                 peer = Peer(url, name)
                 self.peers[url] = peer
             elif name:
@@ -314,7 +348,7 @@ class Hub:
 
     def refresh(self, peer: Peer) -> None:
         try:
-            status, caps = http_json("GET", f"{peer.url}/capabilities", timeout=5.0, token=self.token)
+            status, caps = http_json("GET", f"{peer.url}/capabilities", timeout=5.0, token=self.token, egress="any")  # a peer is the operator's, or passed /register's check
         except Exception as e:  # urllib raises URLError subclasses of OSError
             status, caps = 0, None
             peer.last_error = str(e)
@@ -369,7 +403,7 @@ class Hub:
             if peer.link == "down":
                 continue
             try:
-                status, body = http_json("GET", f"{peer.url}/watches", timeout=5.0, token=self.token)
+                status, body = http_json("GET", f"{peer.url}/watches", timeout=5.0, token=self.token, egress="any")
             except Exception:
                 continue
             if status == 200 and isinstance(body, dict):
@@ -520,7 +554,7 @@ class Hub:
             body = {k: v for k, v in body.items() if k != "hops"}
             headers = None
         try:
-            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0, token=None if headers else self.token, headers=headers)
+            status, answer = http_json("POST", f"{peer.url}{path}", body, timeout=120.0, token=None if headers else self.token, headers=headers, egress="any")
         except Exception as e:
             peer.last_error = str(e)
             return 200, {"status": "error", "reason": "peer-unreachable", "say": f"{peer.name or peer.url} did not answer: {e}", "output": {"peer": peer.url}}
@@ -538,7 +572,7 @@ class Hub:
             out.extend({**g, "peer": "local"} for g in self.local.service.gaps.all())
         for peer in list(self.peers.values()):
             try:
-                status, body = http_json("GET", f"{peer.url}/gaps", timeout=5.0, token=self.token)
+                status, body = http_json("GET", f"{peer.url}/gaps", timeout=5.0, token=self.token, egress="any")
             except Exception:
                 continue
             if status == 200 and isinstance(body, dict):
@@ -578,7 +612,7 @@ class Hub:
             if peer.link == "down":
                 continue
             try:
-                status, body = http_json("GET", f"{peer.url}/unanswered", timeout=5.0, token=self.token)
+                status, body = http_json("GET", f"{peer.url}/unanswered", timeout=5.0, token=self.token, egress="any")
             except Exception:
                 continue
             if status == 200 and isinstance(body, dict):
@@ -597,7 +631,7 @@ class Hub:
         if refused:
             return refused
         # The operator: the token, or a key whose root this hub grants operate.
-        operator = bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token or "") or "operate" in may
+        operator = (bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)) or "operate" in may
         signed = any(k.lower() == "x-pyrtan-signature" for k in headers)
         if signed and not operator:
             # A hub we federate with is asking. It may ask the routed paths
@@ -769,7 +803,16 @@ class Hub:
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                 return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"http://host:port\"}."}
-            peer = self.add_peer(url, str(body.get("name", "")))
+            if not self.token:
+                # Anyone may register here: the egress policy says where this hub may be sent polling.
+                try:
+                    check_egress(url, self.egress)
+                except EgressRefused as e:
+                    return 403, {"status": "error", "reason": "egress", "say": f"{e}."}
+            try:
+                peer = self.add_peer(url, str(body.get("name", "")))
+            except ValueError as e:
+                return 503, {"status": "error", "reason": "full", "say": f"{e}."}
             return 200, {"status": "ok", "peer": peer.to_dict()}
         if method == "POST" and path == "/intent":
             return self.intent(body)
@@ -889,10 +932,13 @@ def serve_hub(
     granted = Grants(keep)
     for who, may in specs:
         granted.allow(who, may)
+    set_egress(egress)  # the hub's own requests to hosts it did not choose (followed hubs, the hub list, identity documents) under the same policy as its trees
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
+    hub.advertised = bool(advertise)
+    hub.egress = egress
     if federate or advertise or join or lan or chat_reach:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:

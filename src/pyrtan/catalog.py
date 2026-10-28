@@ -314,21 +314,24 @@ OWNERS = "OWNERS"
 EXAMPLES_NAMESPACE = "pyrtan"
 
 
-def owners(namespace_dir: str | Path) -> list[str]:
-    """The GitHub logins in ``catalog/<namespace>/OWNERS``: one per line,
-    ``#`` starts a comment."""
-    path = Path(namespace_dir) / OWNERS
-    if not path.is_file():
-        return []
+def parse_owners(text: str) -> list[str]:
+    """The GitHub logins in an ``OWNERS`` file: one per line, ``#`` starts a comment."""
     out = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         line = line.split("#", 1)[0].strip()
         if line:
             out.append(line.lstrip("@").lower())
     return out
 
 
-def gate(root: str | Path, *, changed: list[str] | None = None, author: str | None = None, base: dict[str, tuple[int, bytes]] | None = None) -> list[Problem]:
+def owners(namespace_dir: str | Path) -> list[str]:
+    """The GitHub logins in ``catalog/<namespace>/OWNERS``."""
+    path = Path(namespace_dir) / OWNERS
+    return parse_owners(path.read_text(encoding="utf-8")) if path.is_file() else []
+
+
+def gate(root: str | Path, *, changed: list[str] | None = None, author: str | None = None, base: dict[str, tuple[int, bytes]] | None = None,
+         base_owners: dict[str, list[str]] | None = None) -> list[Problem]:
     """The checks a pull request to the catalog repository must pass. The
     repository is ``root``: its ``examples/`` are the ``pyrtan`` namespace,
     its ``catalog/<namespace>/<name>.toml`` files everyone else's, each
@@ -338,10 +341,15 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
     the directory its namespace names under the file its name names, and
     ids must be unique across both places. Given ``changed`` (paths the
     pull request touches) and ``author`` (its GitHub login), a change under
-    ``catalog/<namespace>/`` must come from one of that namespace's owners.
-    Given ``base`` (``path -> (version, bytes)`` on the base branch), a tree
-    whose file changed must have bumped its version. Returns the problems;
-    none means the gate is open.
+    ``catalog/<namespace>/`` must come from one of that namespace's owners:
+    the owners on the base branch (``base_owners``, ``namespace -> logins``,
+    for every namespace that existed there), since the change may itself
+    rewrite or remove OWNERS; a namespace absent from ``base_owners`` is
+    new, and its OWNERS in the checkout says whose it is. Without
+    ``base_owners`` the checkout's OWNERS is all there is. Given ``base``
+    (``path -> (version, bytes)`` on the base branch), a tree whose file
+    changed must have bumped its version. Returns the problems; none means
+    the gate is open.
     """
     import tempfile
 
@@ -396,9 +404,12 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
         for c in changed:
             parts = Path(c).as_posix().split("/")
             if len(parts) >= 3 and parts[0] == "catalog":
-                own = owners(catalog / parts[1])
+                if base_owners is not None and parts[1] in base_owners:
+                    own, where = base_owners[parts[1]], f"catalog/{parts[1]}/{OWNERS} on the base branch"
+                else:
+                    own, where = owners(catalog / parts[1]), f"catalog/{parts[1]}/{OWNERS}"
                 if own and login not in own:
-                    problems.append(Problem(c, f"{author} is not in catalog/{parts[1]}/{OWNERS}; only a namespace's owners change it"))
+                    problems.append(Problem(c, f"{author} is not in {where}; only a namespace's owners change it"))
     for c, (base_version, base_bytes) in (base or {}).items():
         path = root / c
         if not path.is_file():
