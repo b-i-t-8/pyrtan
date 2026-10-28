@@ -282,3 +282,56 @@ def test_hub_reads_sentences_with_the_tree_language_and_puts_the_reading_in_the_
         hub.stop()
         hub_srv.stop()
         srv.stop()
+
+
+def test_the_hubs_own_requests_keep_to_the_egress_policy(monkeypatch):
+    """http_json, which every request a hub makes for itself goes through (peers,
+    followed hubs, the hub list, identity documents), refuses what the egress
+    policy refuses, before any connection; and a hub polls only so many peers."""
+    import io
+    import urllib.error
+    from pyrtan import service
+    from pyrtan.transport import EgressRefused
+    monkeypatch.setattr(service, "_EGRESS", "any")
+    with pytest.raises(EgressRefused):
+        http_json("GET", "http://127.0.0.1:9/actor", egress="public")
+    with pytest.raises(EgressRefused):
+        http_json("GET", "http://169.254.169.254/latest/meta-data/", egress="public")
+    with pytest.raises(EgressRefused):
+        http_json("GET", "ftp://example.com/", egress="any")
+    service.set_egress("public")
+    with pytest.raises(EgressRefused):
+        http_json("GET", "http://localhost:9/actor")
+    with pytest.raises(ValueError):
+        service.set_egress("everything")
+    assert service._EGRESS == "public"
+    service.set_egress("any")
+    # An answer past MAX_RESPONSE is an error, not a read of all of it.
+    class Big:
+        def __init__(self, n): self.f = io.BytesIO(b"x" * n)
+        def read(self, n=-1): return self.f.read(n)
+    assert service._bounded(Big(10), "u") == b"x" * 10
+    with pytest.raises(urllib.error.URLError):
+        service._bounded(Big(service.MAX_RESPONSE + 1), "u")
+    hub = Hub(name="h", poll_every=60)
+    monkeypatch.setattr(hub, "refresh", lambda peer: None)
+    from pyrtan.hub import MAX_PEERS
+    for i in range(MAX_PEERS):
+        hub.add_peer(f"http://10.0.0.{i // 250}.{i % 250}:1")
+    with pytest.raises(ValueError, match="at most"):
+        hub.add_peer("http://10.9.9.9:1")
+    status, body = hub.route("POST", "/register", {"url": "http://10.9.9.9:1"}, {})
+    assert status == 503 and body["reason"] == "full"
+    hub.stop()
+    # An open hub (no token) takes a registration from anyone, so the policy says where it may be sent polling; the operator's own swarm is never refused.
+    hub = Hub(name="open", poll_every=60)
+    monkeypatch.setattr(hub, "refresh", lambda peer: None)
+    hub.egress = "public"
+    status, body = hub.route("POST", "/register", {"url": "http://127.0.0.1:1"}, {})
+    assert status == 403 and body["reason"] == "egress" and not hub.peers
+    hub.stop()
+    hub = Hub(name="closed", poll_every=60, token="t")
+    monkeypatch.setattr(hub, "refresh", lambda peer: None)
+    hub.egress = "public"
+    assert hub.route("POST", "/register", {"url": "http://127.0.0.1:1"}, {"Authorization": "Bearer t"})[0] == 200
+    hub.stop()
