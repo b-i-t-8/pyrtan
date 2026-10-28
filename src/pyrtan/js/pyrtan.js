@@ -1788,7 +1788,7 @@
       method = String(method || "GET").toUpperCase();
       path = "/" + String(path || "").split("?")[0].replace(/^\/+/, "");
       body = isObj(body) ? body : {};
-      if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/suggestions", "/watches"] }];
+      if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"] }];
       if (method === "GET" && path === "/health") return [200, this.health()];
       if (method === "GET" && path === "/capabilities") return [200, this.capabilities()];
       if (method === "GET" && path === "/gaps") return [200, { gaps: [...this.gaps.values()].map((g) => Object.assign({}, g)).sort((a, b) => b.count - a.count || a.last_seen - b.last_seen) }];
@@ -1804,6 +1804,8 @@
       if (method === "POST" && path === "/intent") return [200, await this.intent(body)];
       if (method === "POST" && path === "/run") return [200, await this.run(body)];
       if (method === "POST" && path === "/resume") return [200, await this.resume(body)];
+      // The builder writes TOML and runs the checker, which live in Python only: a box does that.
+      if (method === "POST" && path === "/build") return [200, { status: "error", reason: "needs-a-hub", say: `A page cannot build a tree; a box can: pyrtan build --from ${pyrepr(String(body.text || ""))}, or join a hub and build here.` }];
       return [404, { status: "error", reason: "not-found", say: `No ${method} ${path} here.` }];
     }
   }

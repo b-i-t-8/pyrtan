@@ -22,8 +22,9 @@
     pyrtan kept   --at HUB                   what your hub keeps, who holds it, and what it keeps for others
     pyrtan fetch  KEY --at HUB               get a blob back, from your hub or from whoever holds it
     pyrtan gaps   --at URL                   branches waiting to be written
-    pyrtan unanswered --at URL [--scaffold DIR]  trees waiting to be written
+    pyrtan unanswered --at URL [--scaffold DIR | --build DIR]  trees waiting to be written
     pyrtan new    [NAME] [--from TEXT] [--dir PATH]  scaffold a tree file
+    pyrtan build  [NAME] --from TEXT [--dir PATH] [--answer k=v ...]  be asked what the tree reads, decides and says, and get the file
     pyrtan search [WORDS] [--catalog URL]    find trees in a catalog
     pyrtan pull   NAME[@VERSION] [--dir]     fetch a tree from a catalog, verified
     pyrtan index  DIR [--out FILE]           build a catalog index from a directory
@@ -53,7 +54,8 @@ from typing import Any
 from . import __version__
 from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_url
 from .federation import bootstrap_candidates
-from .grow import Proposal, propose
+from .build import BuildError, build
+from .grow import Proposal, _quote as shell_quote, propose
 from .identity import ABILITIES, KINDS, IdentityError
 from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, page
 from .registry import Registry, default_paths
@@ -260,6 +262,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--at", help="a running service or hub")
     p.add_argument("--json", action="store_true")
     p.add_argument("--scaffold", metavar="DIR", help="write a tree file for each sentence into DIR (existing files are kept)")
+    p.add_argument("--build", metavar="DIR", help="be walked through each sentence's tree (what it reads, decides and says) and write the files into DIR")
+    p.add_argument("--yes", action="store_true", help="with --build: take every default, asking nothing")
     _token_arg(p, "the token the service or hub requires, if any")
 
     p = sub.add_parser("suggestions", help="what agents beside the swarm suggested: a branch's meaning, a trigger, a tree")
@@ -271,6 +275,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("name", nargs="?", help="the tree's name (derived from --from when omitted)")
     p.add_argument("--from", dest="sentence", metavar="TEXT", help="the sentence the tree should answer; numbers and hosts in it become slots")
     p.add_argument("--dir", default=".")
+
+    p = sub.add_parser("build", help="build the tree a sentence asks for, one question at a time")
+    p.add_argument("name", nargs="?", help="the tree's name (derived from --from when omitted)")
+    p.add_argument("--from", dest="sentence", metavar="TEXT", help="the sentence the tree should answer")
+    p.add_argument("--dir", default=".")
+    p.add_argument("--answer", action="append", default=[], metavar="KEY=VALUE", help="answer a question ahead of being asked (source=shell, url=https://…, branches=\"200=reply, 404=none\"); repeatable")
+    p.add_argument("--yes", action="store_true", help="take the default for every question not answered; nothing is asked")
+    p.add_argument("--show", action="store_true", help="print the file instead of writing it")
 
     p = sub.add_parser("search", help="find trees in a catalog")
     p.add_argument("words", nargs="*", help="words that must all appear in the name, description, tags, hosts or triggers")
@@ -380,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -729,6 +741,8 @@ def _report(outcome: Outcome, as_json: bool, with_trace: bool) -> int:
             print(f"asked: {outcome.question}")
         else:
             print(f"{outcome.status} ({outcome.reason}): {outcome.say or ''}".rstrip(": "))
+            if outcome.reason == "no-match" and isinstance(outcome.output, dict) and isinstance(outcome.output.get("unanswered"), str):
+                print(f"Or be asked what it reads, decides and says: pyrtan build --from {shell_quote(outcome.output['unanswered'])}")
     return {"done": 0, "failed": 1, "asked": 4}.get(outcome.status, 3)
 
 
@@ -1525,6 +1539,19 @@ def cmd_unanswered(args: argparse.Namespace) -> int:
     if not entries:
         print("nothing unanswered: every sentence so far found a tree")
         return 0
+    if args.build:
+        if args.scaffold:
+            print("pyrtan unanswered: --scaffold writes skeletons and --build asks; give one", file=sys.stderr)
+            return 2
+        worst = 0
+        for e in entries:
+            peer = f" ({e['peer']})" if e.get("peer") else ""
+            print(f"{e['text']!r}  x{e.get('count', 1)}{peer}")
+            code = _build_one(e["text"], None, Path(args.build), {}, ask=not args.yes, show=False)
+            worst = max(worst, code)
+            print()
+        print(f"now: pyrtan check {args.build}")
+        return worst
     for e in entries:
         prop = e.get("proposal") or propose(e["text"]).to_dict()
         peer = f" ({e['peer']})" if e.get("peer") else ""
@@ -1537,6 +1564,8 @@ def cmd_unanswered(args: argparse.Namespace) -> int:
             print(f"    {prop['scaffold']}")
     if args.scaffold:
         print(f"now: pyrtan check {args.scaffold}")
+    else:
+        print("to be asked what one reads, decides and says, and get its file: pyrtan build --from \"…\"; for all of them: --build DIR")
     return 0
 
 
@@ -1562,6 +1591,68 @@ def cmd_new(args: argparse.Namespace) -> int:
     _write_scaffold(proposal, Path(args.dir))
     print(f"wrote {path}: {proposal.name!r} answering {proposal.trigger!r}; edit it, then: pyrtan check {path}")
     return 0
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    if not args.name and not args.sentence:
+        print("pyrtan build: give --from \"the sentence it should answer\" (and a NAME, if the one drawn from the words will not do)", file=sys.stderr)
+        return 2
+    answers: dict[str, Any] = {}
+    for item in args.answer:
+        if "=" not in item:
+            print(f"pyrtan build: --answer takes KEY=VALUE, got {item!r}", file=sys.stderr)
+            return 2
+        key, value = item.split("=", 1)
+        answers[key.strip()] = value
+    text = args.sentence or args.name.replace("-", " ")
+    return _build_one(text, args.name, Path(args.dir), answers, ask=not args.yes, show=args.show)
+
+
+def _build_one(text: str, name: str | None, directory: Path, answers: dict[str, Any], *, ask: bool, show: bool) -> int:
+    """Walk the builder's questions for one sentence on the terminal, then
+    write the file (or print it). With no terminal, or ``ask`` off, every
+    question not answered takes its default."""
+    interactive = ask and sys.stdin.isatty()
+    while True:
+        try:
+            built = build(text, answers, name)
+        except BuildError as e:
+            if not interactive or e.key not in answers:
+                print(f"pyrtan build: {e.key}: {e}", file=sys.stderr)
+                return 2
+            print(f"    that will not do: {e}")
+            del answers[e.key]
+            continue
+        pending = [q for q in built.questions if q.key not in answers]
+        if not pending or not interactive:
+            break
+        q = pending[0]
+        if q.help:
+            print(f"  {q.help}")
+        if q.choices:
+            for value, label in q.choices.items():
+                print(f"    {value:<10} {label}")
+        try:
+            raw = input(f"  {q.prompt} [{q.default}]: ")
+        except EOFError:
+            print()
+            interactive = False
+            continue
+        answers[q.key] = raw.strip() or q.default
+    for prob in built.problems:
+        print(f"  {prob['level']}: {prob['where']}: {prob['message']}")
+    if show:
+        print(built.toml, end="")
+        return 0 if built.ok else 1
+    path = directory / f"{built.name}.toml"
+    if path.exists():
+        print(f"pyrtan: {path} exists; nothing written", file=sys.stderr)
+        return 1
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(built.toml, encoding="utf-8")
+    print(f"wrote {path}: {built.name!r} answering {built.answers['trigger']!r}" + ("" if built.ok else " (it does not pass check yet; see above)"))
+    print(f"now: pyrtan check {path}, then: pyrtan run {shell_quote(text)} --trees {shell_quote(str(directory))}")
+    return 0 if built.ok else 1
 
 
 # ---------------------------------------------------------------- pyrtan id

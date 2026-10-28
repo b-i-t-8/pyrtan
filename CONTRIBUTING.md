@@ -5,10 +5,15 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 
 ## Adding or fixing a tree
 
-1. `pyrtan new --from "the sentence it answers" --dir examples/my-tree`
-   (or `pyrtan new my-tree`) and edit the file. If a running swarm has
-   already been asked the sentence, `pyrtan unanswered --at URL --scaffold
-   DIR` writes the same file. Keep the `hosts` list to exactly the hosts it
+1. `pyrtan build --from "the sentence it answers" --dir examples/my-tree`
+   and answer its questions: what the tree reads, what to pull out, what it
+   decides on and which branches, what it says. Every answer has a default,
+   so pressing return all the way through gives the same skeleton `pyrtan
+   new --from "…"` writes in one go. If a running swarm has already been
+   asked the sentence, `pyrtan unanswered --at URL --build DIR` (or
+   `--scaffold DIR` for the skeletons) does the same for every sentence,
+   and the console's Unanswered tab asks the same questions in a form.
+   Then edit the file. Keep the `hosts` list to exactly the hosts it
    needs.
 2. `pyrtan check examples/my-tree` until it is clean. Warnings are worth
    reading; an `info` about a `decide` without `else` is a choice, not a

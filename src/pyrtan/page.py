@@ -146,6 +146,12 @@ TEMPLATE = r"""<!doctype html>
   .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
   #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
   select { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  .build-q { margin:0 0 12px } .build-q label { display:block; font-size:14px; font-weight:600; margin-bottom:2px }
+  .build-q .help { color:var(--mute); font-size:13px; margin-bottom:4px }
+  .build-q input[type=text], .build-q select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  .build-q.bad input, .build-q.bad select { border-color:var(--bad) } .build-q .bad-say { color:var(--bad); font-size:13px; margin-top:2px }
+  ul.problems { margin:8px 0 0; padding-left:20px; font-size:14px } ul.problems .error { color:var(--bad) } ul.problems .warn { color:var(--ask) } ul.problems .info { color:var(--mute) }
+  .build-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px }
   @media (max-width:560px) { table thead { display:none } table td { display:block; border-top:0 } table tr { display:block; border-top:1px solid var(--line); padding:6px 0 } }
 </style>
 </head>
@@ -238,6 +244,15 @@ TEMPLATE = r"""<!doctype html>
     <h2>Waiting to be written</h2>
     <p class="mute" style="font-size:14px;margin-top:0" id="unanswered-lede">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
     <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody></tbody></table></div>
+    <div class="card" id="builder" hidden>
+      <h2 style="margin-top:0" id="builder-title">Build</h2>
+      <p class="mute" style="font-size:14px;margin-top:0">A tree, one question at a time: what it reads, what it pulls out, what it decides on and which branches, what it says. Every answer has a default drawn from the sentence by rules, and the file below is checked as you go. Nothing here is a model; the questions are the same ones <code>pyrtan build --from "…"</code> asks on a box.</p>
+      <form id="builder-form"></form>
+      <div id="builder-problems"></div>
+      <pre id="builder-toml"></pre>
+      <div class="build-actions"><button type="button" id="builder-download">Download the file</button><button type="button" class="quiet" id="builder-copy">Copy</button><button type="button" class="quiet" id="builder-close">Close</button></div>
+      <div class="mute" style="font-size:14px;margin-top:8px">Put the file in a folder a service serves (<code>pyrtan serve DIR</code>, or a hub's <code>--trees DIR</code>): the service loads it the moment it lands, and the sentence is answered from then on. <code>pyrtan check DIR</code> and <code>pyrtan run "…" --trees DIR</code> show it working first.</div>
+    </div>
   </section>
 
   <section id="tab-agents" hidden>
@@ -465,6 +480,7 @@ GET  /capabilities
 GET  /health
 GET  /gaps
 GET  /unanswered
+POST /build    {"text": "…", "answers": {…}}   the builder's questions and the checked file
 GET  /peers    (hub only)
 POST /chat/start {"want": "anyone"|"people"|"bot", "typing_indicator": true}   (hub with --chat)
 POST /chat/typing {"seat": "…", "typing": true}</pre>
@@ -1020,11 +1036,78 @@ async function loadUnanswered() {
   for (const e of u.unanswered || []) {
     const p = e.proposal || {};
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code></td>`;
+    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code>${local ? "" : `<div style="margin-top:6px"><button type="button" class="quiet build" data-text="${esc(e.text)}" data-name="${esc(p.name||"")}">Build it here</button></div>`}</td>`;
     body.appendChild(tr);
   }
   if (!(u.unanswered || []).length) body.innerHTML = `<tr><td colspan="3" class="mute">Nothing yet: every sentence so far found a tree.</td></tr>`;
 }
+$("#unanswered tbody").addEventListener("click", (e) => { const b = e.target.closest("button.build"); if (b) builder.open(b.dataset.text, b.dataset.name); });
+
+// ---------------------------------------------------------------- the builder
+// POST /build answers with the questions that apply so far (each with its
+// default and the answer taken) and the file those answers describe,
+// checked. The form is rebuilt only when the set of questions changes
+// (the source changed); otherwise the preview is refreshed in place.
+const builder = {
+  text: "", name: "", answers: {}, keys: "", built: null,
+  open(text, name) {
+    this.text = text; this.name = name || ""; this.answers = {}; this.keys = ""; this.built = null;
+    $("#builder-form").innerHTML = ""; $("#builder-toml").textContent = ""; $("#builder-problems").innerHTML = "";
+    $("#builder").hidden = false;
+    showTab("unanswered");
+    this.refresh().then(() => $("#builder").scrollIntoView({behavior: "smooth", block: "start"}));
+  },
+  close() { $("#builder").hidden = true; },
+  async refresh() {
+    let r;
+    try { r = await json("build", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text: this.text, name: this.name || undefined, answers: this.answers})}); }
+    catch (e) { problem(e.message, true); return; }
+    for (const q of document.querySelectorAll("#builder-form .build-q")) { q.classList.remove("bad"); const m = q.querySelector(".bad-say"); if (m) m.remove(); }
+    if (r.status === "error" && r.reason === "bad-answer") {
+      const q = document.querySelector(`#builder-form .build-q[data-key="${CSS.escape(r.key)}"]`);
+      if (q) { q.classList.add("bad"); const m = document.createElement("div"); m.className = "bad-say"; m.textContent = r.say; q.appendChild(m); q.querySelector("input,select").focus(); }
+      else problem(r.say, true);
+      return;
+    }
+    if (r.status !== "ok") { problem(r.say || r.reason || "The builder did not answer.", true); return; }
+    this.built = r;
+    $("#builder-title").textContent = `Build ${r.name}`;
+    const keys = r.questions.map((q) => q.key).join(",");
+    if (keys !== this.keys) { this.keys = keys; this.renderForm(r.questions); }
+    else for (const q of r.questions) { const el = document.querySelector(`#builder-form [name="${CSS.escape(q.key)}"]`); if (el && !(q.key in this.answers)) el.value = q.default; }
+    const probs = r.problems || [];
+    $("#builder-problems").innerHTML = probs.length ? `<ul class="problems">${probs.map((p) => `<li class="${esc(p.level)}"><b>${esc(p.level)}</b> ${esc(p.where)}: ${esc(p.message)}</li>`).join("")}</ul>` : `<div class="mute" style="font-size:14px">Passes <code>pyrtan check</code>.</div>`;
+    $("#builder-toml").textContent = r.toml;
+    $("#builder-download").textContent = `Download ${r.name}.toml`;
+  },
+  renderForm(questions) {
+    const form = $("#builder-form"); form.innerHTML = "";
+    for (const q of questions) {
+      const div = document.createElement("div"); div.className = "build-q"; div.dataset.key = q.key;
+      const value = q.key in this.answers ? this.answers[q.key] : q.default;
+      let field;
+      if (q.choices) field = `<select name="${esc(q.key)}">${q.choices.map((c) => `<option value="${esc(c.value)}"${c.value === value ? " selected" : ""}>${esc(c.value)}: ${esc(c.label)}</option>`).join("")}</select>`;
+      else field = `<input type="text" name="${esc(q.key)}" value="${esc(value)}" placeholder="${esc(q.default)}" autocomplete="off" spellcheck="false">`;
+      div.innerHTML = `<label>${esc(q.prompt)}</label>${q.help ? `<div class="help">${esc(q.help)}</div>` : ""}${field}`;
+      form.appendChild(div);
+    }
+  },
+  download() {
+    if (!this.built) return;
+    const blob = new Blob([this.built.toml], {type: "application/toml"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${this.built.name}.toml`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
+};
+$("#builder-form").addEventListener("change", (e) => {
+  const el = e.target; if (!el.name) return;
+  if (el.value === "" || (el.tagName === "INPUT" && el.value === el.placeholder)) delete builder.answers[el.name]; else builder.answers[el.name] = el.value;
+  builder.refresh();
+});
+$("#builder-form").addEventListener("submit", (e) => e.preventDefault());
+$("#builder-download").addEventListener("click", () => builder.download());
+$("#builder-copy").addEventListener("click", async () => { if (!builder.built) return; try { await navigator.clipboard.writeText(builder.built.toml); $("#builder-copy").textContent = "Copied"; setTimeout(() => { $("#builder-copy").textContent = "Copy"; }, 1500); } catch (e) { problem("Could not copy: " + e.message, true); } });
+$("#builder-close").addEventListener("click", () => builder.close());
 
 function renderTrace(tr) {
   if (!tr || !tr.steps) return "";
@@ -1053,6 +1136,8 @@ async function ask(snapshot, answer) {
   if (r.reason === "no-match" && r.output && r.output.proposal) {
     const p = r.output.proposal;
     html += `<div class="gap">No tree answers this yet. The one that would: <code>${esc(p.name)}</code>, answering <code>${esc(p.trigger)}</code>. It is listed under <a href="#unanswered">Unanswered</a>.</div><pre>${esc(p.scaffold)}</pre>`;
+    html += local ? `<div class="mute" style="font-size:14px;margin-top:8px">To be asked what it reads, decides and says, and get the file: <code>pyrtan build --from ${esc(JSON.stringify(r.output.unanswered || text))}</code> on a box, or join a hub above and build it here.</div>`
+                  : `<div style="margin-top:8px"><button type="button" class="quiet build-here">Build it here</button> <span class="mute" style="font-size:14px">a few questions: what it reads, decides and says; the file comes out checked.</span></div>`;
   }
   if (r.status === "asked") html += `<form class="row resume"><input type="text" placeholder="${esc(r.question||"")}" autofocus><button>Answer</button></form>`;
   if (r.output != null) html += `<details open><summary>output</summary><pre>${esc(JSON.stringify(r.output, null, 2))}</pre></details>`;
@@ -1063,6 +1148,8 @@ async function ask(snapshot, answer) {
   out.prepend(card);
   const rf = card.querySelector("form.resume");
   if (rf) rf.addEventListener("submit", (e) => { e.preventDefault(); ask(r.snapshot, rf.querySelector("input").value); });
+  const bh = card.querySelector("button.build-here");
+  if (bh) bh.addEventListener("click", () => builder.open(r.output.unanswered || text, r.output.proposal.name));
   if (r.reason === "no-match") loadUnanswered();
   $("#go").disabled = false;
 }

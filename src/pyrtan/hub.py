@@ -18,6 +18,7 @@ Endpoints:
 ``GET  /gaps``       every peer's gaps, with the peer that saw them
 ``GET  /unanswered`` sentences no peer answered, each with a proposed tree
 ``GET  /suggestions`` what agents beside the swarm sent this hub (``POST`` to send)
+``POST /build``      the builder: questions and the tree file for a sentence (:mod:`pyrtan.build`)
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
 With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
@@ -80,7 +81,7 @@ from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .registry import Registry
 from .runtime import Outcome
 from .tree import Tree
-from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, signed_path
+from .service import Server, Service, bearer_ok, http_json, outcome_from_dict, signed_path, build_answer
 from .store import StoreError, check_key
 
 STALE_AFTER = 30.0
@@ -741,6 +742,8 @@ class Hub:
             return 200, self.unanswered_all()
         if method in ("GET", "POST") and path == "/suggestions":
             return self.suggestions.route(method, body)
+        if method == "POST" and path == "/build":
+            return build_answer(body)
         if method == "GET" and path == "/watches":
             return 200, self.watches()
         if is_chat_path(path):
@@ -756,7 +759,7 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
