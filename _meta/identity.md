@@ -396,9 +396,15 @@ message = "pyrtan-req-v1\n" + audience + "\n" + METHOD + "\n" + path + "\n" + da
 which is the HMAC message (`federation.py`, `sign()`) with a domain
 string and the **audience**, the receiving hub's own `id`, in front. A
 request signed for one hub cannot be replayed at another; within one hub
-the five-minute window is the same as HMAC's. The hub checks the
-signature, the device note (signed by its root, unexpired, not revoked),
-and then its grants.
+the five-minute window is the same as HMAC's, and a POST is taken once:
+the hub remembers the signatures it took while they could still be sent,
+and refuses one seen again (`replayed`). Signing is deterministic, so two
+POSTs alike in every byte within one second are one request; a client
+that means it twice sends it a second later. A refused request (not
+granted) is not remembered, so it may be sent again once it would be
+taken. Reads (GET) change nothing and are not remembered. The hub checks
+the signature, the device note (signed by its root, unexpired, not
+revoked), and then its grants.
 
 The audience is the URL the client calls, `scheme://host[:port]`, and
 the client names it in `X-Pyrtan-Audience`. The hub takes it when it is

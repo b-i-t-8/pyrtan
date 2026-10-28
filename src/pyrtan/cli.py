@@ -55,6 +55,7 @@ from typing import Any
 
 from . import __version__
 from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_url
+from .chat import clean as clean_line
 from .federation import bootstrap_candidates
 from .build import BuildError, build
 from .grow import Proposal, _quote as shell_quote, propose
@@ -744,15 +745,16 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 if e["n"] <= state["after"]:
                     continue
                 state["after"] = e["n"]
+                text = clean_line(str(e.get("text", "")))  # whatever a hub sends, no line steers this terminal
                 if e["kind"] == "system":
-                    print(f"  {e['text']}", flush=True)
+                    print(f"  {text}", flush=True)
                 elif e["kind"] == "bot":
-                    print(f"Bot: {e['text']}", flush=True)
+                    print(f"Bot: {text}", flush=True)
                     if args.trace and isinstance(e.get("trace"), dict):
                         print(outcome_from_dict({**e, "say": e["text"]}).trace.render(), flush=True)
                     state["owed"] = max(0, state["owed"] - 1)
                 elif e["kind"] == "stranger":
-                    print(f"Stranger: {e['text']}", flush=True)
+                    print(f"Stranger: {text}", flush=True)
             state["partner"] = answer.get("partner")
             typing = bool(answer.get("partner_typing"))
             if typing and not state["typing"]:

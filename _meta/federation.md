@@ -94,7 +94,9 @@ follower ends the relationship on both sides.
 five minutes), `X-Pyrtan-Signature` (HMAC-SHA256 over
 `METHOD\npath\ndate\nsha256(canonical body)`). The body on the wire *is*
 the canonical JSON (sorted keys, no spaces), so the receiver verifies from
-what it parsed. A signed request may reach only `/inbox`, `/run`,
+what it parsed. A signed POST is taken once: one seen again within the
+window is a replay, refused (`replayed`); every activity carries its own
+`id`, so no two are alike. A signed request may reach only `/inbox`, `/run`,
 `/intent`, `/resume` and `/capabilities`; the operator's paths still need
 the bearer token.
 
@@ -217,8 +219,10 @@ pyrtan.com learns that a hub exists. `pyrtan join` (and `pyrtan follow`
 with no URL) puts a hub in the default network (§7a) and follows the
 first hub that accepts, in this order, each fetched only if the ones
 before it did not do: the hubs it already follows in the network, the
-hubs its own directory heard in it (most recent first), the hub list,
-the snapshot. `pyrtan hub --join default` does the same on start, so a
+hub list, the snapshot. The hubs its directory heard in the network are
+not among them: a directory entry is gossip any member can write, and a
+join that followed one would route its sentences wherever that member
+pointed. `pyrtan hub --join default` does the same on start, so a
 restart asks nobody. A listed hub is an ordinary federated hub in the
 default network, up when its operator's box is; nothing needs it to be
 up always (below). `$PYRTAN_HUB_LIST` names any number of sources,
@@ -253,8 +257,8 @@ networks it is in. It says so on start, with a question every other hub
 on the LAN answers at once, and every thirty seconds after; what it
 hears it keeps for three minutes (`GET /lan`, operator). `pyrtan join`
 then tries the hubs heard on the LAN in that network right after the
-ones it already follows, before the directory, the hub list and the
-snapshot (`known_hubs`), so a hub started `--lan --join default` on a
+ones it already follows, before the hub list and the snapshot
+(`known_hubs`), so a hub started `--lan --join default` on a
 LAN with another such hub is in the network with it, with nothing on
 the internet asked. A beacon is a hint like a directory entry: anyone on
 the LAN can send one, nothing is routed because of it, and the follow it

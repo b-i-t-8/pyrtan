@@ -8,9 +8,11 @@ one): every tree under
 sits where its namespace and name say, ids are unique, each namespace has
 owners. With ``--base`` it asks git which catalog files the pull request
 changed and what version each had before, so a change must come from an
-owner (``--author``, the pull request's login) and must bump the version.
-Who owns a namespace is what its OWNERS says on the base branch, not in
-the pull request, which may rewrite or remove that file.
+owner (``--author``, the pull request's login, and ``--author-id``, its
+numeric id, which is what an OWNERS line with an id is matched by) and
+must bump the version. Who owns a namespace, or ``examples/``, is what
+its OWNERS says on the base branch, not in the pull request, which may
+rewrite or remove that file.
 
 Then :func:`pyrtan.names.gate` on ``site/names/``: every name claim and
 identity document holds, a name is a GitHub login, one per account. With
@@ -36,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from pyrtan.catalog import OWNERS, gate, parse_owners  # noqa: E402
+from pyrtan.catalog import OWNERS, gate, parse_owner_entries  # noqa: E402
 from pyrtan.names import NAMES_DIR, gate as names_gate  # noqa: E402
 
 
@@ -58,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     changed = args.changed
     base: dict[str, tuple[int, bytes]] = {}
-    base_owners: dict[str, list[str]] | None = None
+    base_owners: dict[str, list] | None = None
+    base_examples: list | None = None
     names_base: dict[str, bytes] = {}
     if args.base:
         # --no-renames: a rename is a removal and an addition, and both are judged.
@@ -74,7 +77,12 @@ def main(argv: list[str] | None = None) -> int:
                     # The namespace's owners as the base branch has them: the pull request's own OWNERS is part of what is judged.
                     prior = subprocess.run(["git", "show", f"{args.base}:catalog/{parts[1]}/{OWNERS}"], cwd=root, capture_output=True)
                     if prior.returncode == 0:
-                        base_owners[parts[1]] = parse_owners(prior.stdout.decode("utf-8", "replace"))
+                        base_owners[parts[1]] = parse_owner_entries(prior.stdout.decode("utf-8", "replace"))
+                if parts[0] == "examples" and base_examples is None:
+                    # Likewise for examples/: the trees every console carries are its owners' to change.
+                    prior = subprocess.run(["git", "show", f"{args.base}:examples/{OWNERS}"], cwd=root, capture_output=True)
+                    if prior.returncode == 0:
+                        base_examples = parse_owner_entries(prior.stdout.decode("utf-8", "replace"))
                 if path.startswith(f"{NAMES_DIR}/"):
                     # A name's claim on the base branch says whose it is, for its .id.json too.
                     claim = path[: -len(".id.json")] + ".json" if path.endswith(".id.json") else path
@@ -92,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception:
                     version = 1
                 base[path] = (version, prior.stdout)
-    problems = gate(root, changed=changed, author=args.author, base=base, base_owners=base_owners)
+    problems = gate(root, changed=changed, author=args.author, base=base, base_owners=base_owners, author_id=args.author_id, base_examples=base_examples)
     problems += names_gate(root, changed=changed, author=args.author, author_id=args.author_id, base=names_base)
     for p in problems:
         print(f"gate: {p}")

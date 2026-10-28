@@ -340,3 +340,43 @@ def test_site_gate_judges_owners_by_the_base_branch(tmp_path):
     git("commit", "-q", "-m", "new")
     run = gate("--author", "mallory", "--author-id", "9")
     assert run.returncode == 0, run.stdout
+
+
+def test_gate_knows_owners_by_id_and_guards_the_examples(tmp_path):
+    from pyrtan.catalog import gate, parse_owner_entries
+
+    repo = tmp_path / "repo"
+    shutil.copytree(EXAMPLES, repo / "examples")
+    (repo / "catalog" / "barry").mkdir(parents=True)
+    (repo / "catalog" / "barry" / "OWNERS").write_text("barry 1  # login, then the numeric id\n")
+    (repo / "catalog" / "barry" / "lan-printer.toml").write_text(OTHER.replace('name = "weather"', 'name = "lan-printer"'))
+    assert parse_owner_entries((repo / "catalog" / "barry" / "OWNERS").read_text()) == [("barry", 1)]
+    assert gate(repo) == []
+    tree = ["catalog/barry/lan-printer.toml"]
+    base = {"barry": parse_owner_entries("barry 1\n")}
+    # The id is who owns it: a login given up and taken by someone else does not come with the namespace.
+    assert gate(repo, changed=tree, author="barry", author_id=1, base_owners=base) == []
+    assert gate(repo, changed=tree, author="barry-renamed", author_id=1, base_owners=base) == []
+    assert gate(repo, changed=tree, author="barry", author_id=666, base_owners=base) != []
+    # A line with no id is matched by login, as before.
+    assert gate(repo, changed=tree, author="barry", author_id=666, base_owners={"barry": ["barry"]}) == []
+    # The examples are every console's trees: only their owners change them, as main's OWNERS says.
+    weather = ["examples/weather/weather.toml"]
+    owners = parse_owner_entries((EXAMPLES / "OWNERS").read_text())
+    assert [str(p) for p in gate(repo, changed=weather, author="mallory", author_id=9, base_examples=owners)] == [
+        "examples/weather/weather.toml: mallory is not in examples/OWNERS on the base branch; only its owners change the trees every console carries"]
+    login, ident = owners[0]
+    assert gate(repo, changed=weather, author=login, author_id=ident, base_examples=owners) == []
+    (repo / "examples" / "OWNERS").unlink()
+    assert any("examples/ needs an OWNERS file" in str(p) for p in gate(repo))
+    shutil.copy(EXAMPLES / "OWNERS", repo / "examples" / "OWNERS")
+    # A new namespace that a name at pyrtan.com claims is that name's account's.
+    (repo / "site" / "names").mkdir(parents=True)
+    (repo / "site" / "names" / "alice.json").write_text(json.dumps({"github": 5}))
+    new = ["catalog/alice/OWNERS"]
+    (repo / "catalog" / "alice").mkdir()
+    (repo / "catalog" / "alice" / "OWNERS").write_text("mallory 9\n")
+    assert [str(p) for p in gate(repo, changed=new, author="mallory", author_id=9, base_owners={})] == [
+        "catalog/alice/OWNERS: the name 'alice' is claimed at pyrtan.com by GitHub account 5; only it may start that namespace"]
+    (repo / "catalog" / "alice" / "OWNERS").write_text("alice 5\n")
+    assert gate(repo, changed=new, author="alice", author_id=5, base_owners={}) == []

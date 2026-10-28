@@ -30,6 +30,7 @@ from typing import Any, Callable
 
 from . import identity, names
 from .identity import ABILITIES, IdentityError, Signer
+from .store import write_private
 
 REFRESH_EVERY = 3600.0      # seconds between reads of a grant's identity document
 DEVICE_UNSEEN = 86400.0     # a device not seen for this long makes its root's document be re-read
@@ -229,10 +230,7 @@ class Grants:
             return
         with self._lock:
             data = {"pyrtan-grants": 1, "grants": [g.to_state() for g in self.grants.values()]}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.path.with_suffix(self.path.suffix + ".tmp")
-        temp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        temp.replace(self.path)
+        write_private(self.path, json.dumps(data, indent=2) + "\n")  # who may do what here: the owner's only
 
     def _load(self) -> None:
         assert self.path
