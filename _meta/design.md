@@ -117,6 +117,7 @@ sentence ──► nlp.py ──► intent.py ──► registry.py ──► ru
                                              └─ transport.py  urllib | recorded | recording
 
 grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
+analysis.py what a decision's order gives away: dead branches, empty conditions, holes
 cases.py    a tree's own [[tests]] against recordings; two versions diffed over them
 service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
             unanswered
@@ -377,7 +378,14 @@ Five trees, all against real public APIs, all tested offline:
     that touches a tree); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
-14. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+14. **v0.26, built: a check that reads a decision's order.** `pyrtan check`
+    warns about a branch (or a lookup row) whose every value an earlier
+    one takes, and a condition no value meets, and, with no `else`, names
+    the numbers no branch takes. The conditions with a plain meaning are
+    modelled exactly as `conditions.py` runs them, as intervals and
+    points; anything else is left alone, so it can miss a dead branch but
+    never reports a live one (`analysis.py`).
+15. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
