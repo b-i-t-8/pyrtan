@@ -5,6 +5,8 @@
     pyrtan run    TEXT [--trees PATH]        answer a sentence, in this process
     pyrtan run    --tree NAME --input k=v    run a named tree
     pyrtan match  TEXT [--trees PATH]        how a sentence reads: the rewrites and every trigger's verdict
+    pyrtan test   [PATH ...]                 run each tree's [[tests]] against their recordings
+    pyrtan diff   FILE [--against REF]       what an edit changes: every test's run, before and after
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
     pyrtan chat   [--at HUB] [--bot|--people]  talk to a random stranger or a bot, through a hub started --chat
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
@@ -93,6 +95,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
     _token_arg(p, "the token the hub (--hub) requires, if any", sign=False)
+
+    p = sub.add_parser("test", help="run each tree's [[tests]] against their recordings; exit 1 if any fails")
+    p.add_argument("paths", nargs="*")
+    p.add_argument("--tree", action="append", default=[], help="only this tree's tests (repeatable)")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("diff", help="what an edit to a tree changes: every test either version carries, run on both; exit 1 if any run changed")
+    p.add_argument("file", help="the tree file as it is now")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--against", default="HEAD", help="the git revision to compare with (default HEAD)")
+    g.add_argument("--old", help="compare with this file instead of a git revision")
+    p.add_argument("--trees", action="append", default=[], help="the other trees it delegates to or walks (repeatable; default the file's directory)")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("match", help="how a sentence reads against the trees: the rewrites, every trigger's verdict, the winner")
     p.add_argument("text")
@@ -392,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -530,6 +545,92 @@ def cmd_run(args: argparse.Namespace) -> int:
     if recorder is not None:
         recorder.save(args.record)
     return _report(outcome, args.json, not args.no_trace)
+
+
+def cmd_test(args: argparse.Namespace) -> int:
+    """Run every tree's own tests. Each answers from its recording, with its
+    clock, so a pass means the same path as when it was written."""
+    from .cases import cases, failures, run_case
+
+    reg = Registry.from_paths(_paths(args.paths))
+    for path, err in reg.errors.items():
+        print(f"pyrtan: {path}: {err}", file=sys.stderr)
+    trees = [t for t in reg.trees() if t.tests and (not args.tree or t.name in args.tree)]
+    if not trees:
+        print("pyrtan test: no tree here carries [[tests]]", file=sys.stderr)
+        return 2
+    report, failed, total = [], 0, 0
+    for tree in trees:
+        if not args.json:
+            print(f"{tree.name}: {len(tree.tests)} test(s)")
+        for case in cases(tree):
+            total += 1
+            outcome = run_case(case, tree, reg)
+            missed = failures(case, outcome)
+            failed += bool(missed)
+            report.append({"tree": tree.name, "test": case.name, "ok": not missed, "failures": missed, "outcome": outcome.to_dict(with_trace=False)})
+            if not args.json:
+                print(f"  {'ok  ' if not missed else 'FAIL'}  {case.name}")
+                for m in missed:
+                    print(f"        {m}")
+    if args.json:
+        print(json.dumps({"passed": total - failed, "failed": failed, "tests": report}, indent=2, ensure_ascii=False, default=str))
+    else:
+        print(f"{total - failed}/{total} passed")
+    return 1 if failed or reg.errors else 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Run every test the file and its other version carry on both, against
+    the same recordings, and say which runs changed. Expectations do not
+    matter here; behaviour does."""
+    import subprocess
+
+    from .cases import diff
+    from .tree import load_tree_text
+
+    path = Path(args.file)
+    try:
+        new = load_tree(path)
+    except TreeError as e:
+        print(f"pyrtan: {e}", file=sys.stderr)
+        return 2
+    if args.old:
+        label = args.old
+        try:
+            old = load_tree(args.old)
+        except TreeError as e:
+            print(f"pyrtan: {e}", file=sys.stderr)
+            return 2
+    else:
+        label = f"{args.against}:{path}"
+        where = path.resolve().parent
+        try:
+            top = subprocess.run(["git", "-C", str(where), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+            rel = path.resolve().relative_to(Path(top).resolve()).as_posix()
+            text = subprocess.run(["git", "-C", top, "show", f"{args.against}:{rel}"], capture_output=True, text=True, check=True).stdout
+        except (OSError, ValueError, subprocess.CalledProcessError) as e:
+            detail = getattr(e, "stderr", "") or str(e)
+            print(f"pyrtan diff: cannot read {label} from git: {detail.strip()}", file=sys.stderr)
+            return 2
+        try:
+            old = load_tree_text(text, source=str(path))
+        except TreeError as e:
+            print(f"pyrtan diff: {label}: {e}", file=sys.stderr)
+            return 2
+    others = Registry.from_paths(_paths(args.trees) if args.trees else [path.parent])
+    result = diff(old, new, others.trees())
+    if args.json:
+        print(json.dumps({"against": label, **result.to_dict()}, indent=2, ensure_ascii=False, default=str))
+        return 1 if result.changed else 0
+    total = len(result.same) + len(result.changed)
+    if not total:
+        print(f"{new.name}: neither version carries [[tests]], so there is nothing to compare")
+        return 0
+    for c in result.changed:
+        print(c.render())
+    print(f"{new.name}: {len(result.changed)} of {total} test run(s) changed against {label}")
+    return 1 if result.changed else 0
 
 
 def cmd_match(args: argparse.Namespace) -> int:

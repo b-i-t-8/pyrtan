@@ -1,0 +1,49 @@
+{
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Oslo",
+          "country": "Norway",
+          "latitude": 59.91,
+          "longitude": 10.75
+        }
+      ]
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "generationtime_ms": 0.5
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius": {
+    "status": 200,
+    "body": {
+      "current_units": {
+        "temperature_2m": "°C"
+      },
+      "current": {
+        "temperature_2m": 4.2,
+        "relative_humidity_2m": 80,
+        "wind_speed_10m": 12.3,
+        "weather_code": 61
+      }
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=fahrenheit": {
+    "status": 200,
+    "body": {
+      "current_units": {
+        "temperature_2m": "°F"
+      },
+      "current": {
+        "temperature_2m": 39.6,
+        "relative_humidity_2m": 80,
+        "wind_speed_10m": 12.3,
+        "weather_code": 0
+      }
+    }
+  }
+}

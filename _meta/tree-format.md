@@ -21,6 +21,7 @@ A tree is one TOML file. This is the whole of it.
 | `triggers` | no | Sentences the tree answers to (below). |
 | `watches` | no | When the tree runs on its own: a clock, a file, a topic or a serial line (below). |
 | `inputs` | no | What the tree needs (below). |
+| `tests` | no | The tree's own tests: a sentence or inputs, a recording, what the run must come to (below). |
 | `nodes` | yes | The nodes (below). |
 
 TOML puts top-level keys before the first `[table]`; `start` after
@@ -392,3 +393,48 @@ command that writes it. The sentence is recorded at `/unanswered`, and
 `pyrtan build --from "…"` (or `POST /build`, which the console's
 Unanswered tab uses) asks what the proposal cannot know, what the tree
 reads, decides and says, and writes the file those answers describe.
+
+## Tests
+
+```toml
+[[tests]]
+name = "rain in Oslo"                    # optional; the sentence or the inputs otherwise
+sentence = "weather in Oslo"             # read it, then run what it reads to ...
+fixture = "weather.fixture.json"         # ... answering from this recording, beside the tree file
+expect = { status = "done", path = ["geocode", "found", "forecast", "have-temp", "sky", "reply"], output = { sky = "raining" } }
+
+[[tests]]
+inputs = { place = "Oslo", units = "fahrenheit" }   # or run this tree with these inputs
+fixture = "weather.fixture.json"
+now = "2026-10-25T12:00:00Z"             # the clock dates and {{ now }} read; the real one otherwise
+env = { TOKEN = "test" }                 # what {{ env.NAME }} reads
+answers = ["large"]                      # what each ask is answered, in order
+expect = { status = "done", say_contains = "°F" }
+```
+
+A test is exactly one of `sentence` or `inputs`, and an `expect`. A
+sentence test also requires the sentence to read to this tree. The
+fixture is what `pyrtan run … --record FILE` writes, and answers for
+every source (HTTP, files, programs, serial lines, queues). Without one,
+the run reaches nothing, and a request the fixture did not foresee fails
+the run with a `transport` error that names it.
+
+`expect` holds any of:
+
+| Key | Holds when |
+| :-- | :-- |
+| `status` | the outcome's status is this |
+| `reason` | the outcome's reason is this |
+| `say` | the outcome says exactly this |
+| `say_contains` | what it says contains this |
+| `output` | the output is this; a table needs at least its keys, each as given |
+| `path` | the run walked exactly these nodes, in order, at its top level: not the reading, and not the steps of an `each` sub-flow or of a tree it delegated to or walked |
+
+Because a run is deterministic given its observations, the path is as
+much a result as the answer. `pyrtan test [PATH …]` runs every tree's
+tests and exits 1 if any misses. `pyrtan diff FILE` runs every test the
+file and its last committed version carry (`--against REF` for another
+revision, `--old FILE` for a file) on both, against the same recordings,
+and names each run whose outcome, answer or path changed, whatever
+either expected. It exits 1 if any did.
+

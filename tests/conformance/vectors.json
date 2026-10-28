@@ -2399,7 +2399,7 @@
        "[what's the] weather for {place}",
        "how [hot|cold|warm] is it in {place}"
       ],
-      "version": 3
+      "version": 4
      },
      {
       "description": "Roughly where you are, by your public IP address: city, region, country and network, from ipinfo.io.",
@@ -29523,6 +29523,59 @@
     "weather",
     "read-only"
    ],
+   "tests": [
+    {
+     "expect": {
+      "output": {
+       "sky": "raining",
+       "unit": "°C"
+      },
+      "path": [
+       "geocode",
+       "found",
+       "forecast",
+       "have-temp",
+       "sky",
+       "reply"
+      ],
+      "say": "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.",
+      "status": "done"
+     },
+     "fixture": "weather.fixture.json",
+     "name": "rain in Oslo",
+     "sentence": "weather in Oslo"
+    },
+    {
+     "expect": {
+      "output": {
+       "sky": "clear",
+       "temperature": 39.6,
+       "unit": "°F"
+      },
+      "status": "done"
+     },
+     "fixture": "weather.fixture.json",
+     "inputs": {
+      "place": "Oslo",
+      "units": "fahrenheit"
+     },
+     "name": "clear, in fahrenheit"
+    },
+    {
+     "expect": {
+      "path": [
+       "geocode",
+       "found",
+       "unknown-place"
+      ],
+      "reason": "unknown-place",
+      "status": "failed"
+     },
+     "fixture": "weather.fixture.json",
+     "name": "a place that is not there",
+     "sentence": "how cold is it in Nowhereville"
+    }
+   ],
    "triggers": [
     {
      "pattern": "[what's the] weather in {place}"
@@ -29534,7 +29587,7 @@
      "pattern": "how [hot|cold|warm] is it in {place}"
     }
    ],
-   "version": 3
+   "version": 4
   },
   "where-am-i": {
    "description": "Roughly where you are, by your public IP address: city, region, country and network, from ipinfo.io.",
