@@ -1,0 +1,67 @@
+# A cocktail, from TheCocktailDB: search for it, then read the first match
+# by its id, so the ingredients listed are that one drink's.
+
+name = "cocktail"
+version = 1
+namespace = "pyrtan"
+description = "How to make a cocktail: its glass, ingredients and method, from TheCocktailDB."
+tags = ["food", "drinks", "read-only"]
+license = "MIT"
+hosts = ["www.thecocktaildb.com"]
+start = "search"
+
+[[triggers]]
+pattern = "cocktail {drink}"
+[[triggers]]
+pattern = "how do i (mix|make) a {drink} cocktail"
+[[triggers]]
+pattern = "what is in a {drink} cocktail"
+
+[inputs.drink]
+type = "str"
+description = "A cocktail, as in: margarita"
+
+[nodes.search]
+kind = "observe"
+http = { method = "GET", url = "https://www.thecocktaildb.com/api/json/v1/1/search.php?s={{ inputs.drink | url }}" }
+into = "found"
+extract = [{ into = "id", json = "json.drinks[0].idDrink" }]
+next = "any"
+
+[nodes.any]
+kind = "decide"
+on = "id"
+branches = [
+  { when = { exists = true }, then = "drink" },
+  { else = "no-drink" },
+]
+
+[nodes.drink]
+kind = "observe"
+http = { method = "GET", url = "https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i={{ state.id }}" }
+into = "resp"
+extract = [
+  { into = "name", json = "json.drinks[0].strDrink" },
+  { into = "glass", json = "json.drinks[0].strGlass" },
+  { into = "how", json = "json.drinks[0].strInstructions" },
+  { into = "ingredients", regex = "\"strIngredient\\d+\":\\s*\"([^\"]+)\"", all = true },
+]
+next = "has-drink"
+
+[nodes.has-drink]
+kind = "decide"
+on = "name"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "no-drink" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, in a {{ state.glass | lower }}: {{ state.ingredients | join }}. {{ state.how }}"
+output = { drink = "{{ state.name }}", glass = "{{ state.glass }}", ingredients = "{{ state.ingredients }}", instructions = "{{ state.how }}" }
+
+[nodes.no-drink]
+kind = "fail"
+reason = "no-drink"
+say = "TheCocktailDB has no cocktail called {{ inputs.drink }}."

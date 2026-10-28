@@ -522,6 +522,16 @@ const examples = {
   "go-module": "latest version of github.com/gorilla/mux on go",
   "homebrew": "brew formula wget",
   "pokemon": "pokemon pikachu",
+  "antonyms": "opposite of happy",
+  "capital": "what is the capital of Norway",
+  "pollen": "pollen in Paris",
+  "waves": "waves in Lisbon",
+  "npm-downloads": "how many downloads does react have",
+  "nuget": "latest version of Newtonsoft.Json on nuget",
+  "dns": "mx record for gmail.com",
+  "food-barcode": "what is barcode 3017624010701",
+  "recipe": "recipe for lasagna",
+  "cocktail": "cocktail margarita",
 };
 // Served by a Pyrtan, only its token is kept, under its own origin; served elsewhere, the hub URL and token.
 const KEY = "pyrtan.console:" + location.origin;

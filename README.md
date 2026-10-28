@@ -214,10 +214,13 @@ sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
 while the page is open. Every example runs there but six: weather
 today and tomorrow, sunrise, UV and air quality, local time, elevation,
-postcodes, Wikipedia, words (definitions, synonyms, rhymes), exchange
-rates, Hacker News, GitHub, packages (npm, PyPI, Go, Homebrew), books,
-earthquakes, the ISS, launches, space news, NASA's picture of the day,
-holidays, the Wayback Machine, Pokémon, your IP, jokes, advice and cat
+postcodes, capitals, pollen, waves, Wikipedia, words (definitions,
+synonyms, antonyms, rhymes), exchange rates and crypto prices, Hacker
+News, GitHub, packages (npm versions and downloads, PyPI, Go, Homebrew,
+NuGet), DNS, books, recipes and cocktails, food barcodes, earthquakes,
+NASA's natural events, the ISS and who is in space, launches, space
+news, NASA's picture of the day, Formula 1, holidays, the Wayback
+Machine, Pokémon, your IP and where it is, quotes, jokes, advice and cat
 facts. The six that need a hub reach a box or any site at all:
 `disk-space`, `log-errors`, `modem-check`, `room-temperature`,
 `rendered-headline` and `site-status`. Trees that need a box (files, programs, serial

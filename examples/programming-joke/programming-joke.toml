@@ -1,0 +1,49 @@
+# A programming joke, from JokeAPI, in its safe mode (nothing flagged
+# offensive) and only one-liners.
+
+name = "programming-joke"
+version = 1
+namespace = "pyrtan"
+description = "A one-line programming joke, from JokeAPI's safe mode."
+tags = ["fun", "software", "read-only"]
+license = "MIT"
+hosts = ["v2.jokeapi.dev"]
+start = "fetch"
+
+[[triggers]]
+pattern = "tell me a (programming|coding|nerd) joke"
+[[triggers]]
+pattern = "[a] (programming|coding|nerd) joke"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://v2.jokeapi.dev/joke/Programming?safe-mode&type=single" }
+into = "resp"
+extract = [{ into = "joke", json = "json.joke" }, { into = "id", json = "json.id" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-joke" },
+  { else = "unexpected" },
+]
+
+[nodes.has-joke]
+kind = "decide"
+on = "joke"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.joke }}"
+output = { joke = "{{ state.joke }}", id = "{{ state.id }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "JokeAPI answered {{ state.resp.status }}."
