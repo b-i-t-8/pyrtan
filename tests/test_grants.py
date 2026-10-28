@@ -300,6 +300,9 @@ def test_a_hub_with_no_token_only_asks_who(tmp_path, root):
         # But nobody grants themselves anything there: that would make a trusted member, which an open hub never had.
         assert http_json("POST", f"{srv.url}/allow", {"who": root.id, "may": ["run"]})[0] == 403
         assert as_root("POST", "/allow", {"who": root.id, "may": ["run"]})[0] == 403
+        # Nor with an empty bearer: no token is not a token of "".
+        for empty in ("Bearer", "Bearer ", "bearer  "):
+            assert http_json("POST", f"{srv.url}/allow", {"who": root.id, "may": ["run", "operate"]}, headers={"Authorization": empty})[0] == 403, empty
         h.grants.allow(root.id, ["operate"])
         assert as_root("POST", "/allow", {"who": root.id, "may": ["operate", "run"]})[0] == 200
         bad = identity.sign_request(root, "https://elsewhere.example", "GET", "/peers", None)
@@ -307,6 +310,60 @@ def test_a_hub_with_no_token_only_asks_who(tmp_path, root):
     finally:
         h.stop()
         srv.stop()
+
+
+def test_the_audience_is_the_url_the_client_called(tmp_path, root):
+    """A client signs for the URL it has and names it in X-Pyrtan-Audience; a hub takes
+    its own id, or (unnamed by --advertise) the host the request reached, and nothing
+    else. So a hub naming another hub's audience at /api collects nothing good there."""
+    from pyrtan.service import bearer_ok
+    assert not bearer_ok("Bearer", "") and not bearer_ok("Bearer x", "") and bearer_ok("Bearer x", "x")
+    assert identity.audience_of("https://Hub.Example:443/peers?x=1") == "https://hub.example"
+    assert identity.audience_of("http://127.0.0.1:8700/") == "http://127.0.0.1:8700"
+    assert identity.audience_of("ftp://x") is None and identity.audience_of("hub.example") is None
+    h, srv = serve_hub(port=0, quiet=True, name="open", poll_every=60)
+    try:
+        own = srv.url.rstrip("/")
+        headers = identity.sign_request(root, own, "GET", "/peers", None)
+        assert headers["X-Pyrtan-Audience"] == own
+        assert http_json("GET", f"{srv.url}/peers", headers=headers)[0] == 200
+        # The host the request reached, on a hub nobody named: a LAN hub called by its address.
+        reached = identity.sign_request(root, "http://hub.test:8700", "GET", "/peers", None)
+        assert http_json("GET", f"{srv.url}/peers", headers={**reached, "Host": "hub.test:8700"})[0] == 200
+        status, body = http_json("GET", f"{srv.url}/peers", headers=reached)
+        assert status == 401 and "signed for http://hub.test:8700, which is not this hub" in body["say"]
+        # A signature for another hub, however the audience header reads.
+        other = identity.sign_request(root, "https://victim.example", "GET", "/peers", None)
+        assert http_json("GET", f"{srv.url}/peers", headers={**other, "X-Pyrtan-Audience": own})[0] == 401
+        assert http_json("GET", f"{srv.url}/peers", headers={**other, "X-Pyrtan-Audience": "nonsense"})[0] == 401
+        # No audience header: an older client, which signed for the hub's own id.
+        assert http_json("GET", f"{srv.url}/peers", headers={k: v for k, v in headers.items() if k != "X-Pyrtan-Audience"})[0] == 200
+    finally:
+        h.stop()
+        srv.stop()
+    # A hub named with --advertise answers to that name only: a forwarded Host header is not it.
+    h, srv = serve_hub(port=0, quiet=True, name="named", poll_every=60, advertise="https://hub.example", state=str(tmp_path / "state.json"))
+    try:
+        assert http_json("GET", f"{srv.url}/api")[1]["audience"] == "https://hub.example"
+        assert http_json("GET", f"{srv.url}/peers", headers=identity.sign_request(root, "https://hub.example/", "GET", "/peers", None))[0] == 200
+        reached = identity.sign_request(root, "http://hub.test:8700", "GET", "/peers", None)
+        assert http_json("GET", f"{srv.url}/peers", headers={**reached, "Host": "hub.test:8700"})[0] == 401
+    finally:
+        h.stop()
+        srv.stop()
+
+
+def test_the_cli_signs_for_the_url_it_calls(tmp_path, root, monkeypatch):
+    from pyrtan.cli import _key_headers
+    me = tmp_path / "me"
+    monkeypatch.setenv("PYRTAN_IDENTITY", str(me))
+    me.mkdir()
+    root.save(me / "root.key")
+    headers = _key_headers(None, "GET", "http://127.0.0.1:9/peers", None)
+    assert headers["X-Pyrtan-Audience"] == "http://127.0.0.1:9"
+    assert identity.verify_request("http://127.0.0.1:9", "GET", "/peers", None, headers).root == root.id
+    with pytest.raises(SystemExit, match="not an http"):
+        _key_headers(None, "GET", "hub.example/peers", None)
 
 
 def test_hub_flags(tmp_path, root, capsys):

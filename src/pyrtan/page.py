@@ -361,7 +361,8 @@ function problem(msg, bad) { $("#problem").innerHTML = msg ? `<div class="notice
 // ---------------------------------------------------------------- identity
 // This browser's key: made and held by crypto.subtle (non-extractable, in
 // IndexedDB), paired with a root by a device note, used to sign requests
-// for the hub's audience (named at /api). See identity.js.
+// for the hub's audience: the URL this page calls, never one the hub names
+// (a hub naming another's audience would collect signatures good there). See identity.js.
 const ident = {
   ok: null, key: null, audience: null, sign: true,
   async init() {
@@ -473,7 +474,10 @@ async function detect() {
   remote = true;
   const saved = store.get();
   const asked = new URLSearchParams(location.search).get("hub");
-  base = asked || saved.url || ""; token = saved.token || "";
+  base = asked || saved.url || "";
+  // The saved token is the saved hub's: a link to another hub (?hub=) gets no token until the person enters one.
+  const same = (a, b) => (a || "").replace(/\/+$/, "").toLowerCase() === (b || "").replace(/\/+$/, "").toLowerCase();
+  token = (!asked || same(asked, saved.url)) ? (saved.token || "") : "";
   $("#connect").hidden = false;
   $("#origin").textContent = location.origin;
   $("#hub-url").value = base; $("#hub-token").value = token;
@@ -540,7 +544,7 @@ async function load() {
   $("#peers-tab").hidden = !isHub;
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
-  ident.audience = a.audience || null;
+  ident.audience = a.audience ? (base ? base.replace(/\/+$/, "") : location.origin) : null;  // the URL this page calls, not what the hub says
   $("#identity-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   if (a.chat && a.chat_bots === false && token) {
