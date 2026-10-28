@@ -28,6 +28,31 @@ const model = (replies) => new A.ScriptedEngine((messages) => {
   assert.deepStrictEqual(A.parseJSON("<think>{\"no\": 1}</think> {\"yes\": 2}"), { yes: 2 });
   assert.strictEqual(A.parseJSON("no json here"), null);
 
+  // The CPU engine: wllama (here a stand-in module), the model's GGUF from Hugging Face, no GPU layers.
+  {
+    assert.strictEqual(A.WllamaEngine.available(), true);
+    assert.ok(A.CPU_MODELS.some((m) => m.id === A.DEFAULT_CPU_MODEL));
+    const fake = `export class Wllama {
+      constructor(paths, config) { globalThis.wllamaSeen = { paths, config, calls: [] }; }
+      async loadModelFromHF(hf, params) { globalThis.wllamaSeen.hf = hf; globalThis.wllamaSeen.params = params; params.progressCallback({ loaded: 1, total: 2 }); }
+      async createChatCompletion(req) { globalThis.wllamaSeen.calls.push(req); return { choices: [{ message: { content: "ok" } }] }; }
+      async exit() { globalThis.wllamaSeen.exited = true; }
+    }`;
+    const said = [];
+    const engine = new A.WllamaEngine({ url: "data:text/javascript," + encodeURIComponent(fake), onProgress: (text, p) => said.push([text, p]) });
+    assert.strictEqual(await engine.complete([{ role: "user", content: "hi" }], { json: true, maxTokens: 9 }), "ok");
+    const seen = globalThis.wllamaSeen;
+    assert.deepStrictEqual(seen.paths, { default: A.WLLAMA_WASM });
+    assert.deepStrictEqual(seen.hf, { repo: A.CPU_MODELS[0].repo, file: A.CPU_MODELS[0].file });
+    assert.strictEqual(seen.params.n_gpu_layers, 0);
+    assert.deepStrictEqual(seen.calls[0].response_format, { type: "json_object" });
+    assert.strictEqual(seen.calls[0].max_tokens, 9);
+    assert.strictEqual(said[0][1], 0.5);
+    await engine.unload();
+    assert.ok(seen.exited);
+    await assert.rejects(new A.WllamaEngine({ model: "no-such" }).load(), /no such model/);
+  }
+
   // Probing: sentences read here, the ones that reach the tree run, misses become a checked pattern.
   {
     const { hub, call } = swarm();

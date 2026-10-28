@@ -109,6 +109,16 @@
     if (version !== VERSION_ED25519 || key.length !== 32) throw new Error(`a version ${version} key is 32 bytes, not ${key.length}`);
     return PREFIX + b32(concat(key, checksum(key, version), new Uint8Array([version])));
   }
+  // Ed25519 points of small order, sign bit cleared (libsodium's list), as identity.py has them.
+  const SMALL_ORDER = new Set([
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+    "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  ]);
   function decode(text) {
     if (typeof text !== "string" || !text.toLowerCase().startsWith(PREFIX)) throw new Error(`${JSON.stringify(text)} is not an identity: it starts ${PREFIX}`);
     const body = text.slice(PREFIX.length).toLowerCase();
@@ -119,6 +129,7 @@
     if (version !== VERSION_ED25519) throw new Error(`version ${version}, which this console does not know`);
     const sum = checksum(key, version);
     if (sum[0] !== raw[32] || sum[1] !== raw[33]) throw new Error("not an identity: the checksum does not match (a typo?)");
+    if (SMALL_ORDER.has(hex(key.slice(0, 31)) + (key[31] & 0x7f).toString(16).padStart(2, "0"))) throw new Error("not an identity: a point of small order, which no key is");
     return key;
   }
   const valid = (text) => { try { decode(text); return true; } catch (e) { return false; } };
@@ -168,6 +179,7 @@
     if (!note || typeof note !== "object" || note["pyrtan-device"] !== 1) return "not a device note";
     if (note.device !== deviceId) return `the note is for ${note.device}, not this browser's key`;
     if (!valid(note.root)) return "the note names no root";
+    if (String(note.root).toLowerCase() === String(note.device).toLowerCase()) return "a note's device is not its root";
     if (typeof note.sig !== "string") return "the note is not signed";
     if (!(note.expires > (now !== undefined ? now : Date.now() / 1000))) return "the note has expired";
     return null;

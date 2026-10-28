@@ -53,8 +53,9 @@ tab keeps the hub's grants. A page served over plain ``http://`` to
 anything but localhost has no WebCrypto, holds no key, and says so.
 
 Its Agents tab starts an agent beside the swarm (``agents.js``, inlined;
-see _meta/agents.md): an open-weights model in this browser (WebLLM,
-imported only when a person presses Start) or on a server of theirs. It
+see _meta/agents.md): an open-weights model in this browser (WebLLM on
+its GPU, or wllama on its CPU where there is no WebGPU; either imported
+only when a person presses Start) or on a server of theirs. It
 calls the same endpoints this page does, its suggestions are checked by
 rules before they are shown, and accepting one grows the tree here when
 the browser is its own hub, and keeps it at the hub's ``/suggestions``.
@@ -87,6 +88,7 @@ TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'">
 <title>Pyrtan</title>
 <meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, find the gaps, and join a hub as a member that keeps its blobs.">
 <link rel="manifest" href="manifest.webmanifest">
@@ -293,14 +295,14 @@ TEMPLATE = r"""<!doctype html>
     <div class="card" id="agent-setup">
       <form class="row" id="agent-start" style="margin:0 0 8px">
         <input type="text" id="agent-name" placeholder="a name, e.g. scout" autocomplete="off" style="flex:0 1 140px">
-        <select id="agent-engine" aria-label="where the model runs"><option value="webllm">in this browser (WebGPU)</option><option value="openai">on a server of mine (OpenAI API)</option></select>
+        <select id="agent-engine" aria-label="where the model runs"><option value="webllm">in this browser, on its GPU (WebGPU)</option><option value="wllama">in this browser, on its CPU (any browser, slower)</option><option value="openai">on a server of mine (OpenAI API)</option></select>
         <select id="agent-model" aria-label="model"></select>
         <input type="url" id="agent-url" placeholder="http://localhost:11434/v1" autocomplete="off" hidden>
         <input type="text" id="agent-server-model" placeholder="model, e.g. qwen2.5:3b" autocomplete="off" hidden>
         <button type="submit" id="agent-go">Start</button>
       </form>
-      <div class="mute" style="font-size:14px" id="agent-help">In this browser: the weights download once (from Hugging Face, through WebLLM) and stay in the browser's cache. On a server of yours, it must let this page's origin call it (Ollama: <code>OLLAMA_ORIGINS=<span class="origin-here"></span></code>).</div>
-      <div class="notice" id="agent-gpu" hidden style="margin:8px 0 0">This browser has no WebGPU, so a model cannot run in it. Point it at a server of yours instead, or use a browser that has WebGPU.</div>
+      <div class="mute" style="font-size:14px" id="agent-help">In this browser: the weights download once (from Hugging Face, through WebLLM on the GPU or wllama on the CPU) and stay in the browser's cache. On the CPU a reply takes seconds to a minute; pick a small model. On a server of yours, it must let this page's origin call it (Ollama: <code>OLLAMA_ORIGINS=<span class="origin-here"></span></code>).</div>
+      <div class="notice" id="agent-gpu" hidden style="margin:8px 0 0">This browser has no WebGPU, so a model cannot run on its GPU. Run it on the CPU instead (it works in any browser, Firefox included, only slower), point it at a server of yours, or open this page in a browser with WebGPU: Chrome or Edge 113 or later (Windows, macOS, ChromeOS, Android), Safari 26 or later, or Firefox 141 or later on Windows or 147 or later on a Mac with Apple silicon. Firefox on Linux and Android has WebGPU only in Nightly so far.</div>
       <div class="mute" style="font-size:14px;margin-top:6px" id="agent-progress"></div>
     </div>
     <div id="agent-on" hidden>
@@ -1948,34 +1950,39 @@ const agentsUI = {
   agent: null, config: {}, skills: null, busy: false,
   init() {
     try { this.config = JSON.parse(localStorage.getItem("pyrtan.agents.config") || "{}"); } catch (e) { this.config = {}; }
-    $("#agent-model").innerHTML = PyrtanAgents.MODELS.map(m => `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.licence)} · ${esc(m.size)}</option>`).join("");
     $("#agent-name").value = this.config.name || "scout";
-    $("#agent-engine").value = this.config.engine || (PyrtanAgents.WebLLMEngine.available() ? "webllm" : "openai");
-    $("#agent-model").value = this.config.model || PyrtanAgents.DEFAULT_MODEL;
+    $("#agent-engine").value = this.config.engine || (PyrtanAgents.WebLLMEngine.available() ? "webllm" : PyrtanAgents.WllamaEngine.available() ? "wllama" : "openai");
     $("#agent-url").value = this.config.url || "http://localhost:11434/v1";
     $("#agent-server-model").value = this.config.serverModel || "qwen2.5:3b";
     for (const el of document.querySelectorAll(".origin-here")) el.textContent = location.origin;
     this.skills = new PyrtanAgents.Skills(PyrtanAgents.browserStorage("pyrtan.agents:"));
     this.engineChanged();
   },
+  models(kind) { return kind === "wllama" ? PyrtanAgents.CPU_MODELS : PyrtanAgents.MODELS; },
   engineChanged() {
-    const web = $("#agent-engine").value === "webllm";
+    const kind = $("#agent-engine").value, web = kind !== "openai";
+    if (web && $("#agent-model").dataset.kind !== kind) {
+      $("#agent-model").innerHTML = this.models(kind).map(m => `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.licence)} · ${esc(m.size)}</option>`).join("");
+      $("#agent-model").dataset.kind = kind;
+      $("#agent-model").value = (kind === "wllama" ? this.config.cpuModel : this.config.model) || (kind === "wllama" ? PyrtanAgents.DEFAULT_CPU_MODEL : PyrtanAgents.DEFAULT_MODEL);
+    }
     $("#agent-model").hidden = !web; $("#agent-url").hidden = web; $("#agent-server-model").hidden = web;
-    $("#agent-gpu").hidden = !web || PyrtanAgents.WebLLMEngine.available();
+    $("#agent-gpu").hidden = kind !== "webllm" || PyrtanAgents.WebLLMEngine.available();
   },
   where() { return local ? "this browser" : (base || location.origin); },
   hub(method, path, body) { return json(path, method === "GET" ? undefined : {method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})}); },
   raw(name) { const t = local && local.runner.get(name); return t ? t.raw : null; },
   async start() {
     const engineKind = $("#agent-engine").value;
-    this.config = {name: $("#agent-name").value.trim() || "scout", engine: engineKind, model: $("#agent-model").value, url: $("#agent-url").value.trim(), serverModel: $("#agent-server-model").value.trim()};
+    const picked = $("#agent-model").value;
+    this.config = {name: $("#agent-name").value.trim() || "scout", engine: engineKind, model: engineKind === "webllm" ? picked : this.config.model, cpuModel: engineKind === "wllama" ? picked : this.config.cpuModel, url: $("#agent-url").value.trim(), serverModel: $("#agent-server-model").value.trim()};
     try { localStorage.setItem("pyrtan.agents.config", JSON.stringify(this.config)); } catch (e) {}
     const progress = (text) => { $("#agent-progress").textContent = text; };
-    const engine = engineKind === "webllm"
-      ? new PyrtanAgents.WebLLMEngine({model: this.config.model, onProgress: (text) => progress(text)})
+    const engine = engineKind === "webllm" ? new PyrtanAgents.WebLLMEngine({model: picked, onProgress: (text) => progress(text)})
+      : engineKind === "wllama" ? new PyrtanAgents.WllamaEngine({model: picked, onProgress: (text) => progress(text)})
       : new PyrtanAgents.OpenAIEngine({url: this.config.url, model: this.config.serverModel});
     $("#agent-go").disabled = true;
-    progress(engineKind === "webllm" ? "Loading WebLLM and the model; the first time, this is a download…" : `Asking ${this.config.url}…`);
+    progress(engineKind === "webllm" ? "Loading WebLLM and the model; the first time, this is a download…" : engineKind === "wllama" ? "Loading llama.cpp (WebAssembly) and the model; the first time, this is a download…" : `Asking ${this.config.url}…`);
     try {
       await engine.load();
       if (engineKind === "openai") await engine.complete([{role: "user", content: "Say ok."}], {maxTokens: 4});
@@ -1986,8 +1993,8 @@ const agentsUI = {
     $("#agent-go").disabled = false;
     $("#agent-setup").hidden = true; $("#agent-on").hidden = false;
     $("#agent-who").textContent = this.agent.name;
-    const m = PyrtanAgents.MODELS.find(x => x.id === engine.model);
-    $("#agent-what").textContent = `${m ? m.label : engine.model} · ${engineKind === "webllm" ? "in this browser" : "on " + this.config.url} · beside ${this.where()}`;
+    const m = this.models(engineKind).find(x => x.id === engine.model);
+    $("#agent-what").textContent = `${m ? m.label : engine.model} · ${engineKind === "webllm" ? "in this browser" : engineKind === "wllama" ? "in this browser, on its CPU" : "on " + this.config.url} · beside ${this.where()}`;
     $("#agent-log").innerHTML = "";
     for (const msg of this.agent.memory.chat.slice(-10)) this.line(msg.role === "you" ? "you" : "bot", msg.role === "you" ? "You" : this.agent.name, esc(msg.content));
     this.sys(`${this.agent.name} is a model, not a tree: what it says is its own, and what a tree says comes with the tree's name and path. /help lists what it can do.`);

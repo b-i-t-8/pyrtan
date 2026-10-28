@@ -309,6 +309,8 @@ def test_the_console_runs_an_agent_beside_a_hub(trees, model_server):
         assert "no branch for inputs.n = 5" in said["LEVEL"]  # a hub's trees grow by pyrtan grow, not in the page
         assert "the level is out of ten" in said["KEPT"] and "dismissed the pattern" in said["KEPT"] and "too vague" in said["KEPT"]
         assert "terse" in said["SKILL"].split(",") and said["TERSE"].endswith("Zero to ten, it says.")
+        assert said["NOGPU"].startswith("wllama qwen2.5-0.5b-instruct-q4_k_m,")
+        assert "Run it on the CPU instead" in said["NOTICE"] and "Chrome or Edge" in said["NOTICE"] and "Firefox" in said["NOTICE"]
         kept = h.suggestions.to_list()
         assert [(s["kind"], s["meaning"]["say"]) for s in kept] == [("branch", "Level {{ inputs.n }} is in the middle.")]
         assert kept[0]["by"] == {"agent": "scout", "model": "scripted", "engine": "openai"}

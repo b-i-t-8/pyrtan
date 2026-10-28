@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.7; memory in v0.26.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
+| **Status** | **Built, v0.7; memory in v0.27.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
 | **Date** | 2026-10-25 |
 | **Decision** | A node names a *source* and what it wants from it; the tree lists what that source may reach; the runtime refuses anything outside the list before the adapter is asked; the adapter moves the bytes and leaves a plain table in state. Files, shells and serial lines are the box itself, and a hosted service keeps them closed. |
 | **Where** | `src/pyrtan/adapters.py` (the adapters, the allow-list matchers, the fixture keys), `src/pyrtan/tree.py` (the lists, `Tree.allowed`, the per-source checks), `src/pyrtan/runtime.py` (one path for every source), `src/pyrtan/transport.py` (fixtures answer for every source), `src/pyrtan/js/pyrtan.js` (the same on a member). |
@@ -152,7 +152,7 @@ of them being present.
   or a serial line speaks, or on a clock (`watch.py`; the file is
   polled, the queue and the serial line are held open as streams,
   `adapters.mqtt_stream` and `adapters.serial_lines`).
-- **v0.26, built:** `memory`, what a tree keeps across runs, with `keys`
+- **v0.27, built:** `memory`, what a tree keeps across runs, with `keys`
   (`memory.py`): the last reading, a count of checks in a row, whether
   it already said so. With `[[watches]]`, that is debouncing and
   alerting once, decided by nodes a reader can follow.

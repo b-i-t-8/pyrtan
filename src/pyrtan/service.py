@@ -102,8 +102,17 @@ PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/a
 
 
 def public_path(path: str) -> bool:
-    """What answers without a token: the paths above, and ``/.well-known/`` (identity documents, signed)."""
-    return path in PUBLIC_PATHS or path.startswith("/.well-known/")
+    """What answers without a token: the paths above, and the documents under
+    ``/.well-known/pyrtan/`` (identities, name claims and the names list: signed,
+    and public by design). Exactly those: a route added under ``/.well-known/``
+    later needs the token until it is named here."""
+    if path in PUBLIC_PATHS or path == "/.well-known/pyrtan/names.json":
+        return True
+    for prefix in ("/.well-known/pyrtan/id/", "/.well-known/pyrtan/name/"):
+        rest = path[len(prefix):]
+        if path.startswith(prefix) and rest.endswith(".json") and "/" not in rest:
+            return True
+    return False
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
 SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities", "/mailbox"})
@@ -424,6 +433,9 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             elif isinstance(payload, str):
                 data = payload.encode("utf-8")
                 ctype = "text/html; charset=utf-8"
+                # The console: never in another site's frame (its buttons act with the token), no plugins, no <base>.
+                # Its scripts are inline and it calls hubs and model servers the person names, so no script-src or connect-src.
+                extra = {"Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'none'", "X-Frame-Options": "DENY", **(extra or {})}
             else:
                 data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 ctype = "application/json; charset=utf-8"
