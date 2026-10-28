@@ -183,6 +183,21 @@ first draft for an author, not an answer for a caller. A service without a
 hub keeps its own unanswered log; one with a hub leaves the record to the
 hub, which also collects its peers' at `/unanswered`.
 
+**The builder** (`build.py`) is the next step after the proposal: the
+questions the skeleton cannot answer by itself. What does the tree read
+(an API or page, a file, a program, a browser, another tree, or nothing),
+where, what does it pull out, what does it decide on and which branches,
+what does it say. The questions are a decision tree of their own: which
+apply depends on the answers before them, every one has a default drawn
+from the sentence by rules (a host in the sentence becomes the URL, an
+`api.` host means JSON, a program's exit code is decided on), and a build
+with no answers at all passes `check`. An answer that will not do names
+its question, so `pyrtan build` asks again and the console's form points
+at the field. `POST /build` on a service or hub answers the questions and
+the checked file for a form; nothing is written over the network, the
+author saves the file. No model: a builder that guessed what the tree
+should observe would be the model fallback of §4 wearing a form.
+
 **The service** (`service.py`) wraps a registry in the standard library's
 threading HTTP server. It reloads trees from disk on every request that
 needs them (a stat per file; cheap), keeps the gaps it has seen, and, when
@@ -323,7 +338,11 @@ Five trees, all against real public APIs, all tested offline:
    (`grow.py`: a missing value, the hole between ranges, else the value),
    `--apply` writes it into the file, and a person says what it means.
    Unanswered sentences persist with `--unanswered FILE`.
-10. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+10. **v0.18, built: the builder.** An unanswered sentence is answered
+    with questions as well as a proposal: `pyrtan build --from "…"`, the
+    same questions as `POST /build` and the console's Unanswered tab, each
+    with a default by rules, and a file that passes `check` (`build.py`).
+11. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

@@ -81,6 +81,27 @@ def example_service():
     server.stop()
 
 
+def test_build_endpoint(example_service):
+    svc, server = example_service
+    status, out = http_json("POST", f"{server.url}/build", {"text": "how full is the disk", "answers": {"source": "shell", "pick": "/(\\d+)%/"}})
+    assert status == 200 and out["status"] == "ok" and out["ok"] is True and out["name"] == "full-disk"
+    assert [q["key"] for q in out["questions"]] == ["name", "description", "trigger", "source", "command", "args", "pick", "branches", "say"]
+    assert 'commands = ["df"]' in out["toml"] and load_tree_text(out["toml"]).name == "full-disk"
+    status, out = http_json("POST", f"{server.url}/build", {"text": "how full is the disk", "answers": {"source": "magic"}})
+    assert status == 200 and out["status"] == "error" and out["reason"] == "bad-answer" and out["key"] == "source"
+    status, out = http_json("POST", f"{server.url}/build", {"answers": {}})
+    assert status == 400 and out["reason"] == "bad-request"
+    assert "/build" in http_json("GET", f"{server.url}/api")[1]["endpoints"]
+    hub = Hub()
+    hub_srv = Server(hub.route, quiet=True).start()
+    try:
+        status, out = http_json("POST", f"{hub_srv.url}/build", {"text": "tell me a joke", "answers": {"source": "none", "say": "No."}})
+        assert status == 200 and out["ok"] is True and 'say = "No."' in out["toml"]
+        assert "/build" in http_json("GET", f"{hub_srv.url}/api")[1]["endpoints"]
+    finally:
+        hub_srv.stop()
+
+
 def test_service_endpoints(example_service):
     svc, server = example_service
     status, health = http_json("GET", f"{server.url}/health")

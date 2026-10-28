@@ -78,6 +78,39 @@ def test_run_no_match_proposes_a_tree(capsys):
     assert code == 3
     data = json.loads(out)
     assert data["reason"] == "no-match" and data["output"]["proposal"]["name"] == "riddle"
+    code, out, _ = run(capsys, "run", "tell me a riddle", "--trees", str(EXAMPLES), "--replay", str(FIXTURES / "examples.json"), "--no-trace")
+    assert code == 3 and 'pyrtan new riddle --from "tell me a riddle"' in out and 'pyrtan build --from "tell me a riddle"' in out
+
+
+def test_build_writes_a_tree_from_answers(tmp_path, capsys):
+    code, out, err = run(capsys, "build", "--from", "how full is the disk", "--dir", str(tmp_path), "--yes", "--answer", "source=shell", "--answer", "pick=/(\\d+)%/", "--answer", "say={{ state.hit }}% full")
+    assert code == 0, err
+    path = tmp_path / "full-disk.toml"
+    assert path.exists() and f"wrote {path}" in out and "now: pyrtan check" in out
+    text = path.read_text()
+    assert 'commands = ["df"]' in text and 'say = "{{ state.hit }}% full"' in text and "[nodes.have-hit]" in text
+    assert run(capsys, "check", str(path))[0] == 0
+    assert run(capsys, "build", "--from", "how full is the disk", "--dir", str(tmp_path), "--yes")[0] == 1  # exists
+    code, out, _ = run(capsys, "build", "--from", "tell me a joke", "--yes", "--show")
+    assert code == 0 and out.startswith("# joke: built by pyrtan build") and "[nodes.reply]" in out
+    code, _, err = run(capsys, "build", "--from", "tell me a joke", "--yes", "--show", "--answer", "source=magic")
+    assert code == 2 and "source: 'magic' is not one of" in err
+    assert run(capsys, "build", "--from", "x", "--answer", "nonsense")[0] == 2
+    assert run(capsys, "build")[0] == 2
+
+
+def test_build_asks_on_a_terminal(tmp_path, capsys, monkeypatch):
+    import sys
+    import types
+
+    answers = iter(["", "", "", "magic", "none", "Not today."])
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    code, out, _ = run(capsys, "build", "--from", "tell me a joke", "--dir", str(tmp_path))
+    assert code == 0, out
+    assert "that will not do: 'magic' is not one of" in out
+    assert (tmp_path / "joke.toml").read_text().count('say = "Not today."') == 1
+    assert run(capsys, "check", str(tmp_path / "joke.toml"))[0] == 0
 
 
 def test_gaps_needs_a_target(capsys):
@@ -106,6 +139,11 @@ def test_unanswered_lists_and_scaffolds(tmp_path, capsys):
         assert run(capsys, "check", str(tmp_path))[0] == 0
         code, out, _ = run(capsys, "unanswered", "--at", server.url, "--scaffold", str(tmp_path))
         assert "kept" in out and "wrote" not in out
+        built = tmp_path / "built"
+        code, out, _ = run(capsys, "unanswered", "--at", server.url, "--build", str(built), "--yes")
+        assert code == 0 and (built / "host-ping.toml").exists() and (built / "riddle.toml").exists() and f"now: pyrtan check {built}" in out
+        assert run(capsys, "check", str(built))[0] == 0
+        assert run(capsys, "unanswered", "--at", server.url, "--build", str(built), "--scaffold", str(built))[0] == 2
     finally:
         server.stop()
 
