@@ -22,8 +22,10 @@ runtime." This is that tool. Every phrase was read against it:
 - **"Open source, in the browser."** Open weights under open licences
   (Qwen2.5 and Qwen3 under Apache-2.0, Phi-3.5 under MIT, SmolLM2 under
   Apache-2.0), run by WebLLM on the browser's GPU. A browser without
-  WebGPU can use a server of the person's own that speaks the OpenAI chat
-  API (Ollama, llama.cpp, vLLM). There is no hosted model, and no key of
+  WebGPU (Firefox on Linux, for one) runs the same weights as GGUF files
+  on its CPU through wllama (llama.cpp in WebAssembly), or uses a server
+  of the person's own that speaks the OpenAI chat API (Ollama, llama.cpp,
+  vLLM). There is no hosted model, and no key of
   pyrtan.com's anywhere.
 - **"Test for gaps."** The agent writes sentences a person might say
   and runs the ones that reach a tree, through `/intent`, like any
@@ -96,7 +98,12 @@ operator's.
 
 - **Engines.** `WebLLMEngine` imports WebLLM from jsDelivr (pinned) only
   when a person presses Start, and the model's weights download once
-  into the browser's cache. `OpenAIEngine` calls `/chat/completions` on
+  into the browser's cache. `WllamaEngine` does the same with wllama
+  (pinned), on the CPU (`n_gpu_layers = 0`), for any browser with
+  WebAssembly SIMD: Qwen2.5 0.5B and 1.5B and SmolLM2 1.7B as Q4_K_M
+  GGUF from Hugging Face (wllama reads at most 2 GB, so no 4B model).
+  The console picks it when the browser has no WebGPU, and names the
+  browsers that do. `OpenAIEngine` calls `/chat/completions` on
   a URL the person gives. `ScriptedEngine` is for tests. Small models
   are bad at JSON, so `parseJSON` finds the object in what they say
   (fences, a preamble, a thinking block) and every caller copes with

@@ -1,8 +1,10 @@
 /* agents.js: agents beside the swarm, in the browser.
  *
  * An agent is an open-weights model a person starts in the console. It
- * runs in the page (WebLLM, on the browser's GPU) or on a server of the
- * person's own that speaks the OpenAI chat API (Ollama, llama.cpp, vLLM).
+ * runs in the page (WebLLM, on the browser's GPU; or wllama, llama.cpp in
+ * WebAssembly on its CPU, for a browser without WebGPU such as Firefox on
+ * Linux) or on a server of the person's own that speaks the OpenAI chat
+ * API (Ollama, llama.cpp, vLLM).
  * It is a client of the swarm like any other: it reads the trees'
  * triggers, asks sentences through /intent, reads /gaps and /unanswered,
  * and sends what it thinks to /suggestions. It never sits inside a run:
@@ -48,6 +50,19 @@
   ];
   const DEFAULT_MODEL = MODELS[0].id;
 
+  // The same weights as GGUF files, for llama.cpp in WebAssembly (wllama),
+  // which needs no GPU: any browser with WebAssembly SIMD runs it, Firefox
+  // included. On a CPU, small is the price of slow; wllama reads a file of
+  // at most 2 GB, so the 4B models are not here.
+  const WLLAMA_URL = "https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js";
+  const WLLAMA_WASM = "https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm";
+  const CPU_MODELS = [
+    { id: "qwen2.5-0.5b-instruct-q4_k_m", repo: "Qwen/Qwen2.5-0.5B-Instruct-GGUF", file: "qwen2.5-0.5b-instruct-q4_k_m.gguf", label: "Qwen2.5 0.5B Instruct (small, rough, quickest)", licence: "Apache-2.0", size: "0.5 GB" },
+    { id: "qwen2.5-1.5b-instruct-q4_k_m", repo: "Qwen/Qwen2.5-1.5B-Instruct-GGUF", file: "qwen2.5-1.5b-instruct-q4_k_m.gguf", label: "Qwen2.5 1.5B Instruct", licence: "Apache-2.0", size: "1.1 GB" },
+    { id: "smollm2-1.7b-instruct-q4_k_m", repo: "HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF", file: "smollm2-1.7b-instruct-q4_k_m.gguf", label: "SmolLM2 1.7B Instruct", licence: "Apache-2.0", size: "1.1 GB" },
+  ];
+  const DEFAULT_CPU_MODEL = CPU_MODELS[0].id;
+
   // ------------------------------------------------------------ engines
   // An engine is {name, model, complete(messages, {json, temperature, maxTokens}) -> text}.
   class WebLLMEngine {
@@ -78,6 +93,49 @@
       return (r.choices[0] && r.choices[0].message && r.choices[0].message.content) || "";
     }
     async unload() { if (this.engine) await this.engine.unload(); this.engine = null; this.loading = null; }
+  }
+
+  // llama.cpp in WebAssembly, on the CPU, in a worker: no WebGPU needed.
+  // One thread unless the page is cross-origin isolated, so it is slower
+  // than WebLLM where both run; it is for the browsers WebLLM cannot use.
+  class WllamaEngine {
+    constructor(opts) {
+      opts = opts || {};
+      this.name = "wllama"; this.model = opts.model || DEFAULT_CPU_MODEL; this.url = opts.url || WLLAMA_URL; this.wasm = opts.wasm || WLLAMA_WASM;
+      this.onProgress = opts.onProgress || null; this.engine = null; this.loading = null;
+    }
+    static available() {
+      try {
+        // The smallest module with a SIMD instruction (i8x16.splat, i8x16.popcnt), as wasm-feature-detect has it: wllama needs SIMD.
+        return typeof WebAssembly === "object" && WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]));
+      } catch (e) { return false; }
+    }
+    load() {
+      if (this.engine) return Promise.resolve();
+      if (!this.loading) {
+        this.loading = (async () => {
+          if (!WllamaEngine.available()) throw new Error("this browser has no WebAssembly SIMD; use a server of your own (Ollama, llama.cpp) instead");
+          const m = CPU_MODELS.find((x) => x.id === this.model);
+          if (!m) throw new Error(`no such model for the CPU: ${this.model}`);
+          const lib = await import(this.url);
+          const quiet = { debug() {}, log() {}, warn() {}, error: (...a) => console.error(...a) };
+          const w = new lib.Wllama({ default: this.wasm }, { suppressNativeLog: true, logger: quiet });
+          const progress = ({ loaded, total }) => this.onProgress && this.onProgress(`Downloading ${m.label}: ${total ? Math.round((100 * loaded) / total) : 0}% of ${m.size}`, total ? loaded / total : 0);
+          await w.loadModelFromHF({ repo: m.repo, file: m.file }, { progressCallback: progress, n_ctx: 4096, n_gpu_layers: 0 });
+          this.engine = w;
+        })().catch((e) => { this.loading = null; throw e; });
+      }
+      return this.loading;
+    }
+    async complete(messages, opts) {
+      opts = opts || {};
+      await this.load();
+      const req = { messages, temperature: opts.temperature === undefined ? 0.4 : opts.temperature, max_tokens: opts.maxTokens || 512 };
+      if (opts.json) req.response_format = { type: "json_object" };
+      const r = await this.engine.createChatCompletion(req);
+      return (r.choices[0] && r.choices[0].message && r.choices[0].message.content) || "";
+    }
+    async unload() { if (this.engine) await this.engine.exit(); this.engine = null; this.loading = null; }
   }
 
   // A server of the person's own: Ollama (http://localhost:11434/v1), llama.cpp, vLLM, LM Studio.
@@ -624,5 +682,5 @@
     }
   }
 
-  return { Agent, Memory, Skills, WebLLMEngine, OpenAIEngine, ScriptedEngine, MODELS, DEFAULT_MODEL, WEBLLM_URL, BUILTIN, JOBS, parseJSON, parseSkills, skillProblem, browserStorage, memoryStorage, candidatesOf };
+  return { Agent, Memory, Skills, WebLLMEngine, WllamaEngine, OpenAIEngine, ScriptedEngine, MODELS, DEFAULT_MODEL, WEBLLM_URL, CPU_MODELS, DEFAULT_CPU_MODEL, WLLAMA_URL, WLLAMA_WASM, BUILTIN, JOBS, parseJSON, parseSkills, skillProblem, browserStorage, memoryStorage, candidatesOf };
 });
