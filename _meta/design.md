@@ -378,7 +378,7 @@ Five trees, all against real public APIs, all tested offline:
     that touches a tree); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
-14. **v0.26, built: a check that reads a decision's order.** `pyrtan check`
+14. **v0.27, built: a check that reads a decision's order.** `pyrtan check`
     warns about a branch (or a lookup row) whose every value an earlier
     one takes, and a condition no value meets, and, with no `else`, names
     the numbers no branch takes. The conditions with a plain meaning are
