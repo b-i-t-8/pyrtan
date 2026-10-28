@@ -13,13 +13,18 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 2. `pyrtan check examples/my-tree` until it is clean. Warnings are worth
    reading; an `info` about a `decide` without `else` is a choice, not a
    fault.
-3. Record responses for the tests:
-   `pyrtan run "the sentence" --trees examples --record tests/fixtures/my-tree.json`.
-   Trim the recording to what the test needs, and never commit anything
+3. Record responses for the tests, beside the tree:
+   `pyrtan run "the sentence" --trees examples --record examples/my-tree/my-tree.fixture.json`.
+   Trim the recording to what the tests need, and never commit anything
    with a credential in it.
-4. Add a test in `tests/test_examples.py` that runs the sentence against the
-   recording and asserts the `say`, the `output`, and the branches taken.
-5. `uv run pytest`.
+4. Give the tree its own `[[tests]]`: the sentence, the fixture, and what
+   the run must come to (the `status`, the `say` or `output`, and the
+   `path` it walks). See [`_meta/tree-format.md`](_meta/tree-format.md#tests).
+   `pyrtan test examples/my-tree` runs them.
+5. Changing a tree that has tests? `pyrtan diff examples/my-tree/my-tree.toml`
+   runs them before and after your edit and names every answer or path
+   that moved; check each one is a move you meant.
+6. `uv run pytest`.
 
 A tree that reads a page should prefer an API or a feed when the site offers
 one, and should decide on the status code before it decides on the body.
