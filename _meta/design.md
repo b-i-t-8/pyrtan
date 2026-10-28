@@ -391,7 +391,7 @@ Five trees, all against real public APIs, all tested offline:
     modelled exactly as `conditions.py` runs them, as intervals and
     points; anything else is left alone, so it can miss a dead branch but
     never reports a live one (`analysis.py`).
-16. **v0.30, built: the shape of a good answer.** An `observe` (or an
+16. **v0.31, built: the shape of a good answer.** An `observe` (or an
     `act`) may say with `expect` what a good answer looks like, path by
     path, in the conditions a `decide` uses. A good answer (2xx, exit 0, a
     file that exists…) that misses it stops the run as `drift` and is
