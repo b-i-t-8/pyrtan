@@ -335,6 +335,8 @@ const examples = {
   "hn-search": "search hacker news for sqlite",
   "books": "who wrote The Left Hand of Darkness",
   "holidays": "next holiday in US",
+  "exchange-rate": "convert 100 USD to EUR",
+  "synonyms": "synonyms for happy",
 };
 // Served by a Pyrtan, only its token is kept, under its own origin; served elsewhere, the hub URL and token.
 const KEY = "pyrtan.console:" + location.origin;

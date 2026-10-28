@@ -85,6 +85,13 @@ def _get_index(cur: Any, index: int) -> Any:
     return MISSING
 
 
+def _text(value: Any) -> str:
+    """A value as it reads inside a sentence: a list or table as JSON, the rest as itself."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 FILTERS = {
     "url": lambda v: urllib.parse.quote(str(v), safe=""),
     "json": lambda v: json.dumps(v, ensure_ascii=False),
@@ -98,6 +105,8 @@ FILTERS = {
     "last": lambda v: v[-1] if isinstance(v, (list, tuple, str)) and v else MISSING,
     "length": lambda v: len(v) if hasattr(v, "__len__") else MISSING,
     "title": lambda v: str(v).title(),
+    # A list in a sentence: "a, b, c". Its items read as they would on their own.
+    "join": lambda v: ", ".join(_text(x) for x in v) if isinstance(v, (list, tuple)) else _text(v),
 }
 
 
@@ -143,9 +152,7 @@ def render(template: Any, scope: dict[str, Any], *, strict: bool = True) -> Any:
                 if strict:
                     raise TemplateError(f"{m.group(0)} resolves to nothing")
                 return ""
-            if isinstance(value, (dict, list)):
-                return json.dumps(value, ensure_ascii=False)
-            return str(value)
+            return _text(value)
 
         return PLACEHOLDER.sub(sub, template)
     if isinstance(template, list):

@@ -92,6 +92,7 @@ DURATION_UNITS = {
     "w": 604800, "wk": 604800, "wks": 604800, "week": 604800, "weeks": 604800,
 }
 
+DIGITS = "0123456789"
 WORD = re.compile(r"[A-Za-z][A-Za-z'’]*|\d+(?:[.,]\d+)*|\S")
 HOST_RE = re.compile(r"^(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}|localhost|(?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?(?:/\S*)?$", re.IGNORECASE)
 URL_RE = re.compile(r"^https?://[^\s<>\"']+$", re.IGNORECASE)
@@ -113,11 +114,18 @@ def fold(text: str) -> str:
 
 def trim(text: str) -> str:
     """Drop punctuation that carries nothing: around the whole sentence, and
-    a comma or full stop between words."""
+    a comma or full stop between words. A comma between digits (1,000) is
+    part of a number and stays."""
     text = re.sub(r"^[\s\W_]+|[\s?!.,;:]+$", "", text)
-    text = re.sub(r"\s*[,;!?]+\s*", " ", text)
+    text = re.sub(r"\s*[,;!?]+\s*", lambda m: m.group(0) if _in_number(m) else " ", text)
     text = re.sub(r"(?<=[A-Za-z])\.(?=\s|$)", "", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _in_number(m: re.Match[str]) -> bool:
+    s, i, j = m.string, m.start(), m.end()
+    return m.group(0) == "," and 0 < i and j < len(s) and s[i - 1] in DIGITS and s[j] in DIGITS
+
 
 
 def strip_fillers(text: str, keep: frozenset[str] = frozenset()) -> tuple[str, list[str]]:
