@@ -2,7 +2,8 @@
 
 Every example tree as JSON (the TOML's own table), and for a fixed set of
 runs (a sentence, or a tree and inputs) the outcome the Python runtime
-produced against the recorded responses in tests/fixtures/examples.json,
+produced against the recorded responses in tests/fixtures/examples.json
+(or the run's own fixture, with the run's env),
 with a fixed clock. The JavaScript runtime (src/pyrtan/js/pyrtan.js) must
 produce the same status, say, output, reason, path and gaps.
 
@@ -35,6 +36,8 @@ from pyrtan.service import Service  # noqa: E402
 from pyrtan.tree import build as build_tree  # noqa: E402
 
 CLOCK = _dt.datetime(2026, 10, 25, 12, 0, tzinfo=_dt.timezone.utc)
+POSTFINITE = "tests/fixtures/postfinite.json"
+POSTFINITE_ENV = {"postfinite_email": "ops@example.org", "postfinite_password": "not-a-real-password"}
 CASES: list[dict] = [
     {"intent": "What's the top story on Hacker News?"},
     {"intent": "top 3 stories on hacker news"},
@@ -134,6 +137,16 @@ CASES: list[dict] = [
     {"intent": "when is the next launch"},
     {"intent": "space news"},
     {"intent": "astronomy picture of the day"},
+    # Postfinite, signed in with made-up credentials no trace may show, from its own fixture.
+    *({"intent": text, "env": POSTFINITE_ENV, "fixture": POSTFINITE} for text in [
+        "postfinite", "what data does postfinite have", "search postfinite for rotterdam", "find port of on postfinite",
+        "search postfinite for atlantis", "latest readings for pf:grid:gb on postfinite", "readings for pf:nowhere on postfinite",
+        "latest carbon_intensity for pf:grid:gb on postfinite", "kp at pf:space:kp on postfinite", "wind for pf:grid:gb on postfinite",
+        "carbon_intensity for pf:grid:gb over the last 2 days on postfinite", "history of carbon_intensity for pf:grid:gb on postfinite",
+        "history of solar for pf:grid:gb on postfinite", "postfinite forecasts",
+    ]),
+    {"intent": "how is postfinite doing", "fixture": POSTFINITE},
+    {"intent": "postfinite datasets", "env": {"postfinite_email": "ops@example.org"}, "fixture": POSTFINITE},
 ]
 
 
@@ -331,22 +344,24 @@ def _stable(d: dict) -> dict:
 
 
 def build() -> dict:
-    reg = Registry.from_paths([ROOT / "examples"])
+    reg = Registry.from_paths([ROOT / "examples", ROOT / "catalog"])
     assert not reg.errors, reg.errors
     fixture = ROOT / "tests" / "fixtures" / "examples.json"
     runs = []
     for case in CASES:
-        runner = Runner(reg, RecordedTransport.from_file(fixture), clock=lambda: CLOCK)
+        # A run may bring its own fixture and env (the operator's credentials, say).
+        runner = Runner(reg, RecordedTransport.from_file(ROOT / case["fixture"] if "fixture" in case else fixture), env=dict(case.get("env", {})), clock=lambda: CLOCK)
+        extra = {k: case[k] for k in ("env", "fixture") if k in case}
         if "intent" in case:
             reading = reg.read(case["intent"], CLOCK)
             match = reading.winner
             assert match is not None, case
             outcome = runner.run_intent(case["intent"])
-            runs.append({"intent": case["intent"], "tree": match.tree, "inputs": match.inputs, "expect": _stable(outcome.to_dict())})
+            runs.append({"intent": case["intent"], "tree": match.tree, "inputs": match.inputs, **extra, "expect": _stable(outcome.to_dict())})
         else:
             outcome = runner.run_tree(case["tree"], case["inputs"])
-            runs.append({"tree": case["tree"], "inputs": case["inputs"], "expect": _stable(outcome.to_dict())})
-    both = Registry.from_paths([ROOT / "examples"])
+            runs.append({"tree": case["tree"], "inputs": case["inputs"], **extra, "expect": _stable(outcome.to_dict())})
+    both = Registry.from_paths([ROOT / "examples", ROOT / "catalog"])
     for raw in LANGUAGE_TREES:
         both.add(build_tree(raw))
     readings = [{"text": text, "expect": {**(r := both.read(text, CLOCK)).to_dict(), "step": r.step()}} for text in READINGS]

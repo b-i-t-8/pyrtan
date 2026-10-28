@@ -179,7 +179,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan search WORDS` | Finds trees in a catalog (default: the one at pyrtan.com). |
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
-| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. |
+| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. It carries the default trees, so it holds them with no network; `--trees DIR` carries others instead. |
 | `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
 | `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
 | `pyrtan names init DIR --domain D` | Writes a names repository for a network: a README, `names/`, and for GitHub (or GitLab) the gate and Pages. `names gate` judges a change to names owned by their keys; `hub --names DIR` serves them. `id backup` / `restore` keep your key encrypted with a passphrase; `id release` gives a name up. |
@@ -203,7 +203,11 @@ Open <http://127.0.0.1:8700/> for the console: a sentence box, the answer,
 the output and the trace; everything the swarm can answer; each peer and
 its `link`; and the gaps. The same console lives at
 <https://pyrtan.com/console/>, and there it needs no hub at all: until you
-join one, the browser is the hub. It holds the catalog's trees, reads the
+join one, the browser is the hub. It holds trees with no network to
+fetch them from: every console carries the default trees (the examples and
+the catalog, which a release ships inside the package; `pyrtan console
+--trees DIR` carries others), and takes a fresher catalog only from its own
+site (`../catalog/`) or one named in the address (`?catalog=`). It reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
 while the page is open. Every example runs there but six: weather
@@ -215,8 +219,9 @@ holidays, the Wayback Machine, Pokémon, your IP, jokes, advice and cat
 facts. The six that need a hub reach a box or any site at all:
 `disk-space`, `log-errors`, `modem-check`, `room-temperature`,
 `rendered-headline` and `site-status`. Trees that need a box (files, programs, serial
-lines, brokers, a browser to drive) or a site that does not let a page
-read it say so; for those, join a hub started with
+lines, brokers, a browser to drive), a site that does not let a page
+read it, or the operator's credentials (`--env`, as the Postfinite trees
+need) say so; for those, join a hub started with
 `--cors https://pyrtan.com` by giving its URL and token. Forget it and the
 browser is its own hub again. The wordmark is two colours, **pyr** the
 primary and **tan** the secondary: click either half, right-click it, or
@@ -335,7 +340,7 @@ comes back as its `Answer`, with `peer: <member>` and `via: ["member"]`.
 The runtime that does it is `pyrtan.js`, the same tree runtime in
 JavaScript, served at `/pyrtan.js` by every hub and written beside the
 console; `tests/conformance/` holds the vectors both runtimes must agree
-on, generated from the examples by the Python runtime and checked
+on, generated from the default trees by the Python runtime and checked
 against the JavaScript one in the test suite. The design is in
 [`_meta/members.md`](_meta/members.md). The answer to a federated
 sentence carries `via: [the hub it crossed]`, and the console's Peers tab
@@ -452,6 +457,43 @@ pyrtan.com bakes them hourly into `rendezvous/reports.json`, and the
 catalog page shows each tree's beside it, so `pyrtan reports
 pyrtan/weather` tells an author where reality disagreed with their tree
 across every swarm that opted in.
+
+### Postfinite's data
+
+[Postfinite](https://postfinite.com) keeps published reference data
+(electricity grids and their carbon, rivers, tides, buoys, space weather,
+power prices, central-bank rates, trade, freight, housing, health,
+release calendars and more, each from a free, keyless public source under
+its own licence) in every entitled account's database, beside the
+account's own devices, with horizon tables that forecast each series and
+score the forecast against what happened. The `postfinite` namespace in
+the catalog reads all of it through Postfinite's API, as the `pyrtan`
+tenant, an internal account entitled to every published dataset:
+
+| Tree | Answers | Reads |
+| :-- | :-- | :-- |
+| `postfinite-overview` | "how is postfinite doing" | what the account holds |
+| `postfinite-datasets` | "what data does postfinite have" | every dataset: source, licence, cadence, theme |
+| `postfinite-search` | "search postfinite for rotterdam" | entities by id, name or place |
+| `postfinite-readings` | "latest readings for pf:grid:gb on postfinite" | every metric an entity reports, latest value |
+| `postfinite-reading` | "carbon_intensity for pf:grid:gb on postfinite" | one metric's latest value |
+| `postfinite-history` | "carbon_intensity for pf:grid:gb over the last 2 days on postfinite" | a metric over a span: readings, range, latest bucket |
+| `postfinite-forecasts` | "postfinite forecasts" | each horizon table and its best-scoring method |
+
+Each signs in on every run (an `act`, never retried), then decides on
+every answer Postfinite can give: a refused, locked or identity-provider
+sign-in, a session not accepted, an account without access, rate limits,
+an outage, an empty result, a reading without a unit. Give the service an
+account on the tenant; the credentials go into the request and nowhere
+else, since a `decide` on an `env` value records only that it is `<set>`:
+
+```
+pyrtan serve catalog/postfinite --env postfinite_email=… --env postfinite_password=… --token …
+```
+
+Anyone who can ask that service reads what the account reads, hence the
+token. Every console carries these trees too, but a page has no
+credentials to give, so there they are marked *needs a hub*.
 
 ## Leaving the LAN
 
@@ -730,8 +772,11 @@ slot refused. The whole set of rules is in
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
                 service, hub, federation, identity, names, grants, page (the console),
-                suggestions, catalog, cli; js/ holds pyrtan.js (the runtime
+                suggestions, defaults (the trees every console carries),
+                catalog, cli; js/ holds pyrtan.js (the runtime
                 again), identity.js and agents.js (agents beside the swarm)
+catalog/        trees by namespace, published by pull request; postfinite/
+                reads Postfinite's data
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -746,7 +791,10 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.20.0. The core, the service, the hub, the command, the console, the
+0.21.0. The core, the service, the hub, the command, the console (which
+carries the default trees, so it holds them with no network), the
+Postfinite trees (every published dataset, entity, reading and forecast
+on Postfinite, as the pyrtan tenant), the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; the default one is built

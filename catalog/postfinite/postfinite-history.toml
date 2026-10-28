@@ -1,0 +1,213 @@
+# postfinite-history: one metric of one entity over a span of time, on Postfinite.
+#
+# Postfinite (https://postfinite.com) keeps published reference data (grids,
+# rivers, tides, weather, prices, rates, trade, health and more: free, keyless
+# public sources, each under its own licence) in every entitled tenant's
+# database, beside the tenant's own devices, with horizon tables that forecast
+# each series and score the forecast against what happened. These trees read
+# all of it through the tenant API, as the `pyrtan` tenant, an internal
+# account that is entitled to every published dataset.
+#
+# They sign in on each run with an account on that tenant. Give the service
+# its credentials, which never appear in a trace:
+#
+#   pyrtan serve catalog/postfinite --env postfinite_email=… --env postfinite_password=…
+#
+# Anyone who can ask the service can then read what the account can read, so
+# give it a hub with a token if that is not everyone.
+
+name = "postfinite-history"
+version = 1
+namespace = "postfinite"
+description = "How one metric of one Postfinite entity moved over a span: how many readings, from when to when, and the latest bucket's average, low and high."
+tags = ["postfinite", "data", "history", "read-only"]
+license = "MIT"
+hosts = ["postfinite.com"]
+start = "credentials"
+
+
+# One pattern per preposition: a slot followed by a (choice) could end mid-word.
+[[triggers]]
+pattern = "{metric:word} for {entity:word} over the last {span:duration} (on|in) postfinite"
+[[triggers]]
+pattern = "{metric:word} of {entity:word} over the last {span:duration} (on|in) postfinite"
+[[triggers]]
+pattern = "{metric:word} at {entity:word} over the last {span:duration} (on|in) postfinite"
+
+[[triggers]]
+pattern = "history of {metric:word} for {entity:word} (on|in) postfinite"
+
+[[triggers]]
+pattern = "history of {metric:word} of {entity:word} (on|in) postfinite"
+
+[[triggers]]
+pattern = "history of {metric:word} at {entity:word} (on|in) postfinite"
+
+[inputs.metric]
+type = "str"
+pattern = "^[A-Za-z0-9_.\\-]+$"
+description = "A metric the entity reports, as its readings name it: carbon_intensity, water_level, rate"
+
+[inputs.entity]
+type = "str"
+pattern = "^[A-Za-z0-9:_.\\-]+$"
+description = "An entity id, as search shows it: pf:grid:gb, a gauge, a port, one of the account's own devices"
+
+[inputs.span]
+type = "int"
+default = 86400
+min = 60
+max = 31622400
+description = "How far back, in seconds (a day unless the sentence says)"
+
+# ---- signing in: the same in every Postfinite tree
+
+[nodes.credentials]
+kind = "decide"
+on = "env.postfinite_email"
+branches = [
+  { when = { exists = true }, then = "password" },
+  { else = "no-credentials" },
+]
+
+[nodes.password]
+kind = "decide"
+on = "env.postfinite_password"
+branches = [
+  { when = { exists = true }, then = "sign-in" },
+  { else = "no-credentials" },
+]
+
+# An act, not an observe: a sign-in makes a session and counts towards a
+# lockout, so it is never retried.
+[nodes.sign-in]
+kind = "act"
+http = { method = "POST", url = "https://postfinite.com/api/auth/login", body = { email = "{{ env.postfinite_email }}", password = "{{ env.postfinite_password }}" } }
+into = "login"
+next = "signed-in"
+
+[nodes.signed-in]
+kind = "decide"
+on = "login.status"
+branches = [
+  { when = { eq = 200 }, then = "fetch" },
+  { when = { eq = 401 }, then = "refused" },
+  { when = { eq = 403 }, then = "not-a-password-account" },
+  { when = { eq = 429 }, then = "locked-out" },
+  { when = { gte = 500 }, then = "sign-in-down" },
+  { else = "unexpected-sign-in" },
+]
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://postfinite.com/api/t/entities/{{ inputs.entity | url }}/series?metric={{ inputs.metric | url }}&span={{ inputs.span }}", headers = { Authorization = "Bearer {{ state.login.json.token }}" } }
+into = "resp"
+extract = [{ into = "count", json = "json.readings" }, { into = "unit", json = "json.unit" }, { into = "from", json = "json.from" }, { into = "to", json = "json.to" }, { into = "buckets", json = "json.buckets" }, { into = "last", json = "json.buckets[-1]" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { when = { eq = 400 }, then = "refused-range" },
+  { when = { eq = 401 }, then = "session-refused" },
+  { when = { eq = 403 }, then = "no-access" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { when = { gte = 500 }, then = "postfinite-down" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "count"
+branches = [
+  { when = { eq = 0 }, then = "none" },
+  { when = { gt = 0 }, then = "unit" },
+  { else = "unexpected" },
+]
+
+[nodes.unit]
+kind = "decide"
+on = "unit"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "reply-bare" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.metric }} for {{ inputs.entity }} from {{ state.from }} to {{ state.to }}: {{ state.count }} readings in {{ state.buckets | length }} buckets; the latest averaged {{ state.last.avg }} {{ state.unit }} (low {{ state.last.min }}, high {{ state.last.max }})."
+output = { entity = "{{ inputs.entity }}", metric = "{{ inputs.metric }}", unit = "{{ state.unit }}", from = "{{ state.from }}", to = "{{ state.to }}", readings = "{{ state.count }}", buckets = "{{ state.buckets }}" }
+
+[nodes.reply-bare]
+kind = "done"
+say = "{{ inputs.metric }} for {{ inputs.entity }} from {{ state.from }} to {{ state.to }}: {{ state.count }} readings in {{ state.buckets | length }} buckets; the latest averaged {{ state.last.avg }} (low {{ state.last.min }}, high {{ state.last.max }})."
+output = { entity = "{{ inputs.entity }}", metric = "{{ inputs.metric }}", from = "{{ state.from }}", to = "{{ state.to }}", readings = "{{ state.count }}", buckets = "{{ state.buckets }}" }
+
+[nodes.none]
+kind = "fail"
+reason = "no-readings"
+say = "Postfinite has no {{ inputs.metric }} readings for {{ inputs.entity }} in that span."
+
+[nodes.refused-range]
+kind = "fail"
+reason = "bad-range"
+say = "Postfinite would not read that range: {{ state.resp.json.error }}"
+
+# ---- what can go wrong, said plainly
+
+[nodes.no-credentials]
+kind = "fail"
+reason = "no-credentials"
+say = "These trees sign in to Postfinite as the pyrtan tenant. Start the service with --env postfinite_email=… --env postfinite_password=… (a console on its own has no credentials to give)."
+
+[nodes.refused]
+kind = "fail"
+reason = "sign-in-refused"
+say = "Postfinite refused the sign-in: {{ state.login.json.error }}"
+
+[nodes.not-a-password-account]
+kind = "fail"
+reason = "not-a-password-account"
+say = "Postfinite says this account signs in with an identity provider, not a password. Use an account on an internal tenant such as pyrtan."
+
+[nodes.locked-out]
+kind = "fail"
+reason = "locked-out"
+say = "Postfinite has locked sign-ins for this account for now: {{ state.login.json.error }}"
+
+[nodes.sign-in-down]
+kind = "fail"
+reason = "upstream-down"
+say = "Postfinite answered the sign-in with {{ state.login.status }} and is having trouble; try again later."
+
+[nodes.unexpected-sign-in]
+kind = "fail"
+reason = "unexpected-response"
+say = "Postfinite answered the sign-in with {{ state.login.status }}."
+
+[nodes.session-refused]
+kind = "fail"
+reason = "session-refused"
+say = "Postfinite did not accept the session it had just given: {{ state.resp.json.error }}"
+
+[nodes.no-access]
+kind = "fail"
+reason = "no-access"
+say = "Postfinite refused: {{ state.resp.json.error }}"
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "Postfinite is rate-limiting this account; try again in a minute."
+
+[nodes.postfinite-down]
+kind = "fail"
+reason = "upstream-down"
+say = "Postfinite answered {{ state.resp.status }} and is having trouble; try again later."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-response"
+say = "Postfinite answered {{ state.resp.status }}: {{ state.resp.json.error }}"

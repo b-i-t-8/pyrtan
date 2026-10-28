@@ -14,8 +14,13 @@ host somewhere else.
 Served by a hub or service, it talks to the origin it came from. Served
 from elsewhere (it finds out by asking ``api`` on its own origin), the
 browser is the hub: ``pyrtan.js``'s ``LocalHub`` answers the same
-endpoints inside the page, with the catalog's trees (its ``trees.json``),
-reading sentences and running trees here, keeping gaps and unanswered
+endpoints inside the page, with trees it needs no network for: every
+console carries the default trees (:mod:`pyrtan.defaults`; or what
+``pyrtan console --trees`` gave it), embedded in the shape of a catalog's
+``trees.json``. A catalog named in the address (``?catalog=``) or one
+beside the page (``../catalog/``) is fresher and taken first; only a page
+that carries no trees asks pyrtan.com's, then the copy this browser kept.
+It reads sentences and runs trees here, keeping gaps and unanswered
 sentences for as long as the page is open. Trees that need a box (files,
 programs, devices, brokers, a browser to drive) or a site that will not
 let a page read it say so. Joining a hub is explicit: its URL and token in
@@ -48,11 +53,14 @@ the browser is its own hub, and keeps it at the hub's ``/suggestions``.
 
 from __future__ import annotations
 
+import functools
 import json
 import urllib.parse
 from pathlib import Path
+from typing import Any
 
 from . import __version__
+from .defaults import bundle
 
 # The tree runtime in JavaScript, served beside the console so a member can run trees.
 PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf-8")
@@ -63,7 +71,7 @@ IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding=
 # Agents beside the swarm: open-weights models a person starts in the console (_meta/agents.md).
 AGENTS_JS = (Path(__file__).parent / "js" / "agents.js").read_text(encoding="utf-8")
 
-PAGE = r"""<!doctype html>
+TEMPLATE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -466,6 +474,7 @@ POST /chat/typing {"seat": "…", "typing": true}</pre>
 
   <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://pyrtan.com/source/">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
 </main>
+<script id="pyrtan-trees" type="application/json">__TREES__</script>
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -833,12 +842,20 @@ async function detect() {
 
 // ---------------------------------------------------------------- the hub in this page
 // No hub joined: this browser is one, for as long as the page is open. It
-// holds the catalog's trees and answers the same endpoints a hub does.
+// holds trees and answers the same endpoints a hub does. The trees: a
+// catalog named in the address or one beside this page (fresher, and no
+// further than this page's own site), else the ones this page carries,
+// which need no network at all; only a page that carries none asks
+// pyrtan.com's catalog, then the copy this browser kept.
 const params = new URLSearchParams(location.search);
-const CATALOGS = [params.get("catalog"), "../catalog/", "https://pyrtan.com/catalog/"].filter(Boolean);
+const CATALOGS = [params.get("catalog"), "../catalog/"].filter(Boolean);
+const FARTHER = ["https://pyrtan.com/catalog/"];
+const CARRIED = (() => { try { const d = JSON.parse($("#pyrtan-trees").textContent); return Array.isArray(d.trees) ? d.trees : []; } catch (e) { return []; } })();
 const TREES_KEY = "pyrtan.console.trees";
+let carried = false;
 async function catalogTrees() {
-  for (const c of CATALOGS) {
+  carried = false;
+  for (const c of CATALOGS.concat(CARRIED.length ? [] : FARTHER)) {
     try {
       const at = new URL(c.endsWith("/") ? c : c + "/", location.href);
       const r = await fetch(new URL("trees.json", at), {headers: {"Accept": "application/json"}});
@@ -850,6 +867,7 @@ async function catalogTrees() {
       }
     } catch (e) {}
   }
+  if (CARRIED.length) { catalog = ""; carried = true; return CARRIED; }
   // Offline, or no catalog answers: the trees this browser held last time.
   try { const kept = JSON.parse(localStorage.getItem(TREES_KEY) || "null"); if (kept && Array.isArray(kept.trees)) { catalog = kept.catalog || ""; return kept.trees; } } catch (e) {}
   return [];
@@ -857,6 +875,8 @@ async function catalogTrees() {
 // A tree runs here when every source it uses is http. Hosts of "*" mean any site, and most sites refuse a page, so "Try one" leaves those out.
 const runsHere = (t) => (t.sources || []).every(s => s === "http");
 const anySite = (t) => (t.hosts || []).includes("*");
+// A tree that reads the operator's env (credentials, say) has none to read in a page; a service started with --env runs it.
+const needsEnv = (t) => { const held = local && local.runner.get(t.name); return !!held && /\{\{\s*env\./.test(JSON.stringify(held.raw)); };
 async function startLocal() {
   isHub = false;
   local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__"});
@@ -867,13 +887,13 @@ async function startLocal() {
 }
 function showLocal(on) {
   $("#connect-local").hidden = !on;
-  $("#connect-lede").textContent = on ? "This browser is a hub of its own: it holds the catalog's trees, reads your sentences and runs the trees right here." : "This console is not being served by a Pyrtan. Point it at one:";
+  $("#connect-lede").textContent = on ? `This browser is a hub of its own: it holds ${carried ? "the trees this console carries" : "the catalog's trees"}, reads your sentences and runs the trees right here.` : "This console is not being served by a Pyrtan. Point it at one:";
   $("#connect-local").innerHTML = on ? "Gaps and unanswered sentences are kept only while this page is open. Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token." : "";
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
   $("#api-help").innerHTML = on ? "Answered inside this page by <code>pyrtan.js</code>: the same paths and the same answers as a hub, with no server behind them. Join a hub and they go to the hub." : 'With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.';
-  $("#trees-more").innerHTML = on ? `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees. Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them.` : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
+  $("#trees-more").innerHTML = on ? (carried ? "These are the trees this console carries, so it needs no network to hold them; newer ones are in the <a href=\"https://pyrtan.com/catalog/\">catalog</a>." : `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees.`) + " Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them." : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
 }
 
 async function load() {
@@ -918,13 +938,13 @@ async function load() {
 function renderCaps(c) {
   const body = $("#caps tbody"); const tries = $("#tries");
   body.innerHTML = ""; tries.innerHTML = "";
-  suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t))));
+  suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t) && !needsEnv(t))));
   for (const t of c.trees || []) {
     const tr = document.createElement("tr");
-    const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
+    const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : needsEnv(t) ? '<div class="gap">needs a hub: credentials, given with --env</div>' : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
     tr.innerHTML = `<td><code>${esc(t.name)}</code> <span class="mute">v${esc(t.version||1)}</span><div class="mute">${esc(t.description||"")}</div></td><td>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}</td><td class="mute">${esc((t.hosts||[]).join(", "))}${t.peer ? `<div><span class="link ${esc(t.link||"")}"></span>${esc(t.peer)}</div>` : ""}${here}</td>`;
     body.appendChild(tr);
-    const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
+    const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t) && !needsEnv(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
   }
   // The greyed suggestion in the empty box (Tab takes it) is one this swarm answers.
   const first = tries.querySelector("a[data-q]"), offered = [...tries.querySelectorAll("a[data-q]")].map(a => a.dataset.q);
@@ -1593,6 +1613,31 @@ ident.init().finally(load);
 </body>
 </html>
 """.replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__AGENTS__", AGENTS_JS)
+
+
+def page(trees: dict[str, Any] | None = None) -> str:
+    """The console, carrying ``trees`` (in the shape of a catalog's
+    ``trees.json``; the default trees when None) to hold when no hub is
+    joined, with no network needed."""
+    carried = bundle() if trees is None else trees
+    # Keys keep the file's order (a set node renders its keys in order). Inside
+    # <script>, "<" never appears as itself, so no "</script>" in a tree can end the block.
+    data = json.dumps(carried, ensure_ascii=False, separators=(",", ":"), default=str).replace("<", "\\u003c")
+    return TEMPLATE.replace("__TREES__", data)
+
+
+@functools.lru_cache(maxsize=1)
+def default_page() -> str:
+    """The console a hub or service serves: carrying the default trees,
+    built the first time it is asked for rather than on every import."""
+    return page()
+
+
+def __getattr__(name: str) -> Any:
+    # ``PAGE``, as it was before the console carried trees: the default page.
+    if name == "PAGE":
+        return default_page()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 MANIFEST = json.dumps({
     "name": "Pyrtan",
