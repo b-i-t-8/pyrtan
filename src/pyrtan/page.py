@@ -22,7 +22,13 @@ page's own origin only) or one beside the page (``../catalog/``) is
 fresher and taken first; only a page
 that carries no trees asks pyrtan.com's, then the copy this browser kept.
 It reads sentences and runs trees here, keeping gaps and unanswered
-sentences for as long as the page is open. Trees that need a box (files,
+sentences in the browser's local storage, so they outlive the page, under
+the device that met them: this browser's key when it has one (its
+Identity tab), else an id of its own. Making or forgetting a key moves
+them to the device it now is; the Gaps tab forgets them, and shares them
+with the same identity's other devices, browser to browser with no hub
+(``sync.js``, inlined: a WebRTC link opened by a code or QR carried by
+hand, or a signed file; see _meta/identity.md §5b). Trees that need a box (files,
 programs, devices, brokers, a browser to drive) or a site that will not
 let a page read it say so. Joining a hub is explicit: its URL and token in
 the connect box, kept in the browser's local storage, the token sent as a
@@ -37,7 +43,9 @@ makes your identity in this browser, hands you its backup at once
 repository; the page then holds the key non-extractable), restores one,
 claims a name (pyrtan.com's, through GitHub's own new-file page, which
 opens the pull request from your account; or any network's names
-repository), and adds and revokes devices. A browser can instead be a
+repository), and adds and revokes devices: by code and note, or paired by
+a QR code over a link between the two browsers, the root signing only
+once its person confirms the six digits both screens show (``sync.js``). A browser can instead be a
 device of an identity held elsewhere: it makes its own key and takes the
 note its root signs. On a hub of 0.14 or later the key signs what the
 console sends, and a member joined from here follows as it; the Access
@@ -69,6 +77,8 @@ PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf
 THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
 # Identifiers, canonical JSON and request signing, inlined into the console (_meta/identity.md).
 IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding="utf-8")
+# A person's devices sharing their gaps, browser to browser, with no hub; and QR codes (sync.js).
+SYNC_JS = (Path(__file__).parent / "js" / "sync.js").read_text(encoding="utf-8")
 # Agents beside the swarm: open-weights models a person starts in the console (_meta/agents.md).
 AGENTS_JS = (Path(__file__).parent / "js" / "agents.js").read_text(encoding="utf-8")
 
@@ -84,6 +94,7 @@ TEMPLATE = r"""<!doctype html>
 <meta name="theme-color" content="#c2410c">
 <script>__THEME__</script>
 <script>__IDENTITY__</script>
+<script>__SYNC__</script>
 <script>__AGENTS__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
@@ -133,6 +144,11 @@ TEMPLATE = r"""<!doctype html>
   .link.up { background:var(--ok) } .link.stale { background:var(--ask) } .link.down { background:var(--bad) }
   .notice { border-left:3px solid var(--ask); padding:8px 12px; background:var(--soft); border-radius:6px; margin:0 0 14px; font-size:14px }
   .notice.bad { border-color:var(--bad) }
+  .sync-code { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; margin:10px 0 }
+  .sync-code .qr { width:min(260px, 100%); flex:0 0 auto; background:#fff; border-radius:8px; line-height:0 }
+  .sync-code .qr svg { width:100%; height:auto }
+  .sync-code textarea, #sync-step textarea { flex:1 1 220px; min-width:0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); overflow-wrap:anywhere }
+  #sync-step video { width:min(320px, 100%); border-radius:8px; margin-top:10px }
   footer { color:var(--mute); font-size:13px; margin-top:32px }
   footer a, .card a { color:var(--accent) }
   .pyr { color:var(--pyr) } .tan { color:var(--tan) }
@@ -238,7 +254,22 @@ TEMPLATE = r"""<!doctype html>
   <section id="tab-gaps" hidden>
     <h2>Gaps</h2>
     <p class="mute" style="font-size:14px;margin-top:0">A gap is a decision that met a value no branch covers. Each one is the next branch to write, in the tree and node named.</p>
+    <p class="mute" style="font-size:14px;margin-top:0" id="gaps-local" hidden>Kept in this browser for this device, <code id="gaps-device"></code>, across reloads; making or forgetting a key in the Identity tab takes them along. <button type="button" class="quiet" id="gaps-forget">Forget them</button></p>
     <div class="card"><table id="gaps"><thead><tr><th>Tree · node</th><th>Saw</th><th>Times</th><th>Where</th></tr></thead><tbody></tbody></table></div>
+    <div class="card" id="sync" hidden>
+      <h3 style="margin:0 0 6px">Your other devices</h3>
+      <div class="mute" style="font-size:14px" id="sync-lede"></div>
+      <div class="row" style="margin-top:10px" id="sync-actions" hidden>
+        <button type="button" id="sync-offer">Link a device</button>
+        <button type="button" class="quiet" id="sync-have">I have a code</button>
+        <button type="button" class="quiet" id="sync-scan" hidden>Scan a code</button>
+        <button type="button" class="quiet" id="sync-export">Download for another device</button>
+        <button type="button" class="quiet" id="sync-import">Load a file from one</button>
+        <input type="file" id="sync-file" accept="application/json,.json" hidden>
+      </div>
+      <div id="sync-step"></div>
+      <div style="font-size:14px;margin-top:8px" id="sync-state"></div>
+    </div>
   </section>
 
   <section id="tab-unanswered" hidden>
@@ -362,6 +393,7 @@ TEMPLATE = r"""<!doctype html>
         <button type="button" id="ident-new">Make my identity</button>
         <button type="button" class="quiet" id="ident-restore-open">Restore from a backup</button>
         <button type="button" class="quiet" id="ident-make">Use this browser as a device of an identity I have</button>
+        <button type="button" class="quiet" id="pair-have">I have a pairing code</button>
       </div>
       <form id="ident-new-form" style="margin-top:12px" hidden>
         <div class="mute" style="font-size:14px;margin-bottom:6px">Your key is made here, then sealed with a passphrase into a backup you keep. Choose a long sentence you will remember: nobody can reset it, and the backup is only as strong as it is.</div>
@@ -411,6 +443,7 @@ TEMPLATE = r"""<!doctype html>
           <button type="submit">Sign its note</button></div>
       </form>
       <div id="dev-out"></div>
+      <div style="margin-top:10px"><button type="button" id="pair-offer">Pair a device with a QR code</button></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button type="button" class="quiet" id="doc-push" hidden>Give this hub my newest document</button>
         <button type="button" class="quiet" id="doc-download">Download my identity document</button>
@@ -424,7 +457,10 @@ TEMPLATE = r"""<!doctype html>
         <div class="mute" style="font-size:14px;margin-bottom:6px">Give this code to the browser that holds your identity (its Identity tab, <em>Devices</em>), or run <code id="ident-howto"></code>; then paste the note it gives back here.</div>
         <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
       </form>
+      <div class="mute" style="font-size:14px">Or, quicker: <button type="button" class="quiet" id="pair-have-device">I have a pairing code</button> (the QR the browser that holds your identity shows under <em>Pair a device</em>).</div>
     </div>
+
+    <div id="pair"><div id="pair-step"></div><div id="pair-step-scan"></div><div style="font-size:14px;margin:8px 0" id="pair-state"></div></div>
 
     <div id="ident-common" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px" hidden>
       <label><input type="checkbox" id="ident-sign"> sign requests to the hub with this key</label>
@@ -595,7 +631,7 @@ const ident = {
     if (!this.active()) return {};
     return PyrtanIdentity.signRequest(this.key, this.audience, method, path, body, this.key.note || null);
   },
-  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); },
+  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); moveKept(); },
   // ---- a device of an identity held elsewhere
   async make() {
     const k = await PyrtanIdentity.generate();
@@ -641,7 +677,7 @@ const ident = {
   async forget() {
     const what = this.isRoot() ? "Forget your identity on this browser? Without its backup nobody can give it back." : "Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.";
     if (!confirm(what)) return;
-    await PyrtanIdentity.store.put(null); this.key = null; this.render();
+    await PyrtanIdentity.store.put(null); this.key = null; this.render(); moveKept();
   },
   render() {
     if (!$("#tab-identity")) return;
@@ -815,7 +851,7 @@ async function loadDirectory() {
   }
   if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Join the default network (<code>pyrtan join</code>), or start this hub with <code>--listed</code>.</td></tr>`;
 }
-window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
+window.addEventListener("hashchange", () => showTab(tabFromHash()));
 
 // A trigger as a sentence: the first of each choice, an input's default or "…"
 // for its blank, and the optional words kept or dropped.
@@ -872,8 +908,9 @@ async function detect() {
 }
 
 // ---------------------------------------------------------------- the hub in this page
-// No hub joined: this browser is one, for as long as the page is open. It
-// holds trees and answers the same endpoints a hub does. The trees: a
+// No hub joined: this browser is one. It holds trees and answers the same
+// endpoints a hub does, and keeps its gaps and unanswered sentences in
+// local storage under the device it is (below). The trees: a
 // catalog named in the address or one beside this page (fresher, and no
 // further than this page's own site), else the ones this page carries,
 // which need no network at all; only a page that carries none asks
@@ -910,9 +947,40 @@ const runsHere = (t) => (t.sources || []).every(s => s === "http");
 const anySite = (t) => (t.hosts || []).includes("*");
 // A tree that reads the operator's env (credentials, say) has none to read in a page; a service started with --env runs it.
 const needsEnv = (t) => { const held = local && local.runner.get(t.name); return !!held && /\{\{\s*env\./.test(JSON.stringify(held.raw)); };
+// What the hub in this page keeps across reloads, under the device this
+// browser is: its key when it has one, else an id of its own, made once.
+// Gaps name the device that met them, as a hub's name the peer.
+const DEVICE_KEY = "pyrtan.device";
+function deviceId() {
+  if (ident.key && ident.key.id) return ident.key.id;
+  try {
+    let d = localStorage.getItem(DEVICE_KEY);
+    if (!d) { d = "browser-" + [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join(""); localStorage.setItem(DEVICE_KEY, d); }
+    return d;
+  } catch (e) { return "browser"; }
+}
+const keptFor = (device) => {
+  const k = "pyrtan.kept:" + device;
+  return {
+    load() { return JSON.parse(localStorage.getItem(k) || "null"); },
+    save(v) { localStorage.setItem(k, JSON.stringify(v)); },
+    clear() { localStorage.removeItem(k); },
+  };
+};
+const deviceName = (d) => d && d.startsWith("pyr:") ? PyrtanIdentity.short(d) : d || "";
+// The key changed (made, restored, paired or forgotten): what this browser kept goes to the device it is now.
+function moveKept() {
+  if (!local) return;
+  const d = deviceId();
+  if (d !== local.device) local.rekey(d, keptFor(d));
+  sync.identityChanged();
+  showLocal(true);
+}
 async function startLocal() {
   isHub = false;
-  local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__"});
+  const device = deviceId();
+  local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__", device, keep: keptFor(device)});
+  local.onOwnChange = () => sync.changed();
   const trees = await catalogTrees();
   for (const e of trees) local.add(e.tree, e.id);
   showLocal(true);
@@ -921,7 +989,10 @@ async function startLocal() {
 function showLocal(on) {
   $("#connect-local").hidden = !on;
   $("#connect-lede").textContent = on ? `This browser is a hub of its own: it holds ${carried ? "the trees this console carries" : "the catalog's trees"}, reads your sentences and runs the trees right here.` : "This console is not being served by a Pyrtan. Point it at one:";
-  $("#connect-local").innerHTML = on ? "Gaps and unanswered sentences are kept only while this page is open. Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token." : "";
+  $("#connect-local").innerHTML = on ? `Gaps and unanswered sentences are kept in this browser, across reloads, for this device (<code>${esc(deviceName(local.device))}</code>). Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token.` : "";
+  $("#gaps-local").hidden = !on;
+  if (on) $("#gaps-device").textContent = deviceName(local.device);
+  sync.render();
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
@@ -966,7 +1037,7 @@ async function load() {
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
   renderCaps(c);
-  showTab((location.hash || "#ask").slice(1));
+  showTab(tabFromHash());
 }
 function renderCaps(c) {
   const body = $("#caps tbody"); const tries = $("#tries");
@@ -1033,11 +1104,327 @@ async function loadGaps() {
   const body = $("#gaps tbody"); body.innerHTML = "";
   for (const gap of g.gaps || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer||"")}</td>`;
+    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer || whose(gap.device))}</td>`;
     body.appendChild(tr);
   }
   if (!(g.gaps || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">No gaps: every decision so far had a branch.</td></tr>`;
 }
+
+// ---------------------------------------------------------------- your other devices
+// Devices of one identity share their gaps browser to browser (sync.js): a
+// WebRTC link opened by a code carried by hand or a QR, or a signed file.
+// Only while this browser is its own hub; a joined hub keeps gaps itself.
+const whose = (d) => !d ? "" : local && d === local.device ? "this device" : deviceName(d);
+// The tab an address names; #sync=CODE answers a link, then shows the gaps.
+function tabFromHash() {
+  const h = location.hash.slice(1);
+  if (h.startsWith("sync=")) {
+    history.replaceState(null, "", location.pathname + location.search + "#gaps");
+    sync.answer(decodeURIComponent(h.slice(5)));
+    return "gaps";
+  }
+  if (h.startsWith("pair=")) {
+    history.replaceState(null, "", location.pathname + location.search + "#identity");
+    pair.answer(decodeURIComponent(h.slice(5)));
+    return "identity";
+  }
+  return h || "ask";
+}
+const sync = {
+  link: null, session: null, timer: null,
+  root() { return PyrtanSync.rootOf(ident.key); },
+  ready() { return !!(local && ident.ok && this.root()); },
+  // The devices the root's document revokes: the root's own, or the one its bundle carried here.
+  revoked() {
+    const k = ident.key;
+    const doc = !k ? null : k.role === "root" ? k.document : ((local && local.others.get(this.root())) || {}).document;
+    return doc && Array.isArray(doc.revoked) ? doc.revoked : [];
+  },
+  held() { return local ? [...local.others.values()] : []; },
+  take(b) { const took = local.takeOther(b); if (took && b.document) this.prune(); return took; },
+  prune() { const root = this.root(), gone = this.revoked(); return local ? local.dropOthers((b) => b.root !== root || gone.includes(b.device)) : 0; },
+  state(html, bad) { $("#sync-state").innerHTML = html ? `<span class="${bad ? "failed" : "mute"}">${html}</span>` : ""; },
+  step(html) { this.stopScan(); $("#sync-step").innerHTML = html || ""; },
+  render() {
+    const card = $("#sync");
+    card.hidden = !local;
+    if (!local) { this.close(); return; }
+    const ready = this.ready(), n = local.others.size;
+    $("#sync-actions").hidden = !ready;
+    $("#sync-scan").hidden = !ready || !("BarcodeDetector" in window);
+    $("#sync-lede").innerHTML = !ident.ok
+      ? "This browser cannot hold a key (it has no WebCrypto here), so it cannot share its gaps with your other devices."
+      : !ready ? "To share these gaps with your other devices, make your identity in the <a href=\"#identity\">Identity</a> tab, or pair this browser as a device of the identity you have. Only devices of one identity link, and each checks the other's signature."
+      : `The devices of your identity, <code>${esc(PyrtanIdentity.short(this.root()))}</code>, share their gaps and unanswered sentences directly, browser to browser, with no hub. Link two on the same network (a code to paste, or a QR to scan), or carry a file between any two. ${n ? `Held here from ${n} other device${n === 1 ? "" : "s"}.` : "Nothing held from another device yet."}`;
+  },
+  // A new key or another root closes the link; a revocation drops what the revoked device gave.
+  identityChanged() {
+    if (this.session && (this.session.root !== this.root() || this.revoked().includes(this.session.peer))) { this.close(); this.state("The link closed: this browser's identity changed, or the other device was revoked."); }
+    if (local) { this.prune(); this.render(); }
+  },
+  changed() { clearTimeout(this.timer); this.timer = setTimeout(() => { if (this.session) this.session.push(false).catch(() => {}); }, 1000); },
+  close() { if (this.link) this.link.close(); this.link = null; this.session = null; },
+  handlers(link) {
+    return {
+      onopen: (id) => this.begin(link, id),
+      onmessage: (m) => { if (this.link === link && this.session) this.session.receive(m).catch((e) => this.state(esc(e.message), true)); },
+      onclose: () => { if (this.link !== link) return; this.link = null; this.session = null; this.state("The link closed. What came over it is kept here."); },
+    };
+  },
+  begin(link, id) {
+    if (this.link !== link) return;
+    this.session = new PyrtanSync.Session({key: ident.key, revoked: () => this.revoked(), own: () => local.own(), held: () => this.held(), take: (b) => this.take(b), send: (m) => link.send(m), note: (e, d) => this.noted(e, d)});
+    this.state("Linked. Checking the other device is yours…");
+    this.session.start(id).catch((e) => this.state(esc(e.message), true));
+  },
+  open() {
+    this.close();
+    const link = new PyrtanSync.Link();
+    link.on = this.handlers(link);
+    this.link = link;
+    return link;
+  },
+  // A link that paired a device goes on to share gaps.
+  adopt(link) {
+    this.close();
+    if (!local || !this.ready()) { link.close(); return; }
+    this.link = link; link.on = this.handlers(link);
+    this.begin(link, link.id);
+  },
+  noted(event, detail) {
+    if (event === "linked") { this.step(""); this.state(`Linked with <code>${esc(deviceName(detail))}</code>, a device of yours. New gaps go both ways while both pages are open.`); }
+    if (event === "refused") { this.state(`Not linked: ${esc(detail)}.`, true); this.close(); }
+    if (event === "took") this.took(detail);
+  },
+  took(r) {
+    const from = [...new Set(r.from)].map((d) => `<code>${esc(deviceName(d))}</code>`).join(", ");
+    const refused = r.refused.length ? ` Refused ${r.refused.length}: ${esc([...new Set(r.refused)].join("; "))}.` : "";
+    if (r.took || refused) this.state((r.took ? `Took the newest gaps of ${from}.` : "Nothing newer.") + refused, !!refused && !r.took);
+    if (r.took) { this.render(); if (!$("#tab-gaps").hidden) loadGaps(); }
+  },
+  codeBlock(code, offer) { return codeBlock(code, offer ? "sync" : null).replace("<textarea readonly", '<textarea id="sync-code" readonly'); },
+  async offer() {
+    if (!this.ready()) return;
+    const link = this.open();
+    this.step('<p class="mute">Making a code…</p>'); this.state("");
+    try {
+      const code = await link.offer();
+      this.step(`<p>On your other device, open this console's Gaps tab and press <em>I have a code</em>; paste this there${/^https?:$/.test(location.protocol) ? ", or point its camera at the QR" : ""}. Both devices need to be on the same network.</p>${this.codeBlock(code, true)}
+        <form class="row" id="sync-accept" style="margin-top:12px"><input type="text" id="sync-answer" placeholder="then paste the code it gives back" autocomplete="off"><button type="submit">Connect</button></form>`);
+    } catch (e) { this.step(""); this.state(`Could not make a code: ${esc(e.message)}`, true); }
+  },
+  have() {
+    if (!this.ready()) return;
+    this.step(`<form id="sync-answer-form" style="margin-top:10px"><textarea id="sync-offer-code" rows="4" style="width:100%" placeholder="the code your other device shows"></textarea><div class="row" style="margin-top:8px"><button type="submit">Answer it</button></div></form>`);
+    $("#sync-offer-code").focus();
+  },
+  async answer(code) {
+    if (!local) { problem("A link between your devices needs this browser to be its own hub: forget the hub it joined, then open the link again.", true); return; }
+    if (!this.ready()) { this.render(); this.state("This browser holds no key of your identity yet, so it cannot answer the link: pair it in the Identity tab, then open the link again.", true); return; }
+    const link = this.open();
+    this.step('<p class="mute">Answering…</p>'); this.state("");
+    try {
+      const back = await link.answer(code);
+      this.step(`<p>Paste this on the device that showed you the code${"BarcodeDetector" in window ? ", or scan it there" : ""}. The link opens when it does.</p>${this.codeBlock(back, false)}`);
+    } catch (e) { this.close(); this.step(""); this.state(`Could not answer: ${esc(e.message)}`, true); }
+  },
+  async accept(code) {
+    try { await this.link.accept(code); this.state("Connecting…"); }
+    catch (e) { this.state(`Could not connect: ${esc(e.message)}`, true); }
+  },
+  // A code by camera, where the browser can read one: an offer is answered, an answer opens the link this page offered.
+  async scan() {
+    const code = await scanCode($("#sync-step"), (m) => this.state(m, true));
+    if (!code) return;
+    let d; try { d = await PyrtanSync.decodeCode(code); } catch (e) { this.state(esc(e.message), true); return; }
+    if (d.kind === "o") return this.answer(code);
+    if (this.link) { this.step(""); return this.accept(code); }
+    this.state("That is an answer, and this page made no offer: press Link a device first.", true);
+  },
+  stopScan() { stopScanning(); },
+  async exportFile() {
+    const f = await PyrtanSync.makeFile(ident.key, local.own(), this.held());
+    saveFile(`pyrtan-gaps-${new Date().toISOString().slice(0, 10)}.json`, f);
+    this.state(`Saved the gaps of this device${f.bundles.length > 1 ? ` and ${f.bundles.length - 1} other${f.bundles.length > 2 ? "s" : ""}` : ""}, signed. Load the file on another device of yours.`);
+  },
+  async importFile(file) {
+    try {
+      const f = JSON.parse(await file.text());
+      this.took(await PyrtanSync.readFile(f, ident.key, () => this.revoked(), (b) => this.take(b)));
+      if (!$("#sync-state").textContent) this.state("Nothing newer in that file.");
+    } catch (e) { this.state(`Could not load it: ${esc(e.message)}`, true); }
+  },
+};
+$("#sync-offer").addEventListener("click", () => sync.offer());
+$("#sync-have").addEventListener("click", () => sync.have());
+$("#sync-scan").addEventListener("click", () => sync.scan());
+$("#sync-export").addEventListener("click", () => sync.exportFile().catch((e) => sync.state(esc(e.message), true)));
+$("#sync-import").addEventListener("click", () => $("#sync-file").click());
+$("#sync-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { sync.state(""); sync.importFile(f); } });
+$("#sync-step").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (e.target.id === "sync-accept") sync.accept($("#sync-answer").value);
+  if (e.target.id === "sync-answer-form") sync.answer($("#sync-offer-code").value);
+});
+$("#sync-step").addEventListener("click", (e) => {
+  if (e.target.id === "sync-scan-stop") sync.step("");
+});
+
+// A link code by camera, into el, where the browser can read QR codes: the code, or null when stopped or refused.
+let scanning = null;
+function stopScanning() { const s = scanning; scanning = null; if (s) s.getTracks().forEach((t) => t.stop()); }
+async function scanCode(el, fail) {
+  stopScanning();
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}); }
+  catch (e) { fail(`No camera: ${esc(e.message)}`); return null; }
+  el.innerHTML = '<p class="mute">Point the camera at the other device\'s code.</p><video playsinline muted></video><div><button type="button" class="quiet" data-scan-stop>Stop</button></div>';
+  el.querySelector("[data-scan-stop]").addEventListener("click", () => { stopScanning(); el.innerHTML = ""; });
+  const video = el.querySelector("video"); video.srcObject = stream; await video.play();
+  scanning = stream;
+  const detector = new BarcodeDetector({formats: ["qr_code"]});
+  while (scanning === stream) {
+    let found = null;
+    try { found = (await detector.detect(video)).find((c) => /pyrgaps1\./.test(c.rawValue)); } catch (e) {}
+    if (found) { stopScanning(); el.innerHTML = ""; return found.rawValue; }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
+}
+// A code to carry, as text and a QR. An offer's QR is this page's address when it has one (with #sync= or #pair=), so a phone's camera opens it here.
+function codeBlock(code, hash) {
+  const scan = hash && /^https?:$/.test(location.protocol) ? `${location.origin}${location.pathname}#${hash}=${code}` : code;
+  let qr = ""; try { qr = PyrtanSync.qrSvg(scan); } catch (e) {}
+  return `<div class="sync-code">${qr ? `<div class="qr">${qr}</div>` : ""}<textarea readonly rows="6" data-code>${esc(code)}</textarea></div><button type="button" class="quiet" data-copy>Copy the code</button>`;
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-copy]"); if (!b) return;
+  const t = b.parentElement.querySelector("textarea[data-code]"); t.select();
+  try { navigator.clipboard.writeText(t.value); } catch (err) { document.execCommand("copy"); }
+  b.textContent = "Copied";
+});
+
+// ---------------------------------------------------------------- pairing a device by QR
+// The root offers a link (a QR whose address is this console with #pair=);
+// the new browser makes its key, answers, and asks over the link, signed
+// for it; the root shows six digits both screens show and signs the note
+// only when the person says they match; then the link shares gaps (sync.js).
+const pair = {
+  link: null, pairing: null, pending: [],
+  step(html) { stopScanning(); $("#pair-step").innerHTML = html || ""; },
+  state(html, bad) { $("#pair-state").innerHTML = html ? `<span class="${bad ? "failed" : "mute"}">${html}</span>` : ""; },
+  label() { return /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) ? "phone" : "browser"; },
+  close() { if (this.link) this.link.close(); this.link = null; this.pairing = null; },
+  open(role) {
+    this.close();
+    this.pending = [];
+    const link = new PyrtanSync.Link();
+    link.on = {
+      onopen: (id) => {
+        if (this.link !== link) return;
+        this.pairing = new PyrtanSync.Pairing({key: ident.key, role, label: this.label(), send: (m) => link.send(m), note: (e, d) => this.noted(e, d),
+          sign: async (device, may, label) => ({note: await ident.addDevice(device, may, label), document: ident.key.document})});
+        this.pairing.start(id).catch((e) => this.state(esc(e.message), true));
+      },
+      onmessage: (m) => {
+        if (this.link !== link || !this.pairing) return;
+        // The root goes on to share gaps as soon as it has signed: what it sends meanwhile waits for this side to catch up.
+        if (this.pairing.handles(m)) this.pairing.receive(m).catch((e) => this.state(esc(e.message), true));
+        else if (this.pending.length < 20) this.pending.push(m);
+      },
+      onclose: () => { if (this.link !== link) return; this.link = null; if (this.pairing && !this.pairing.done) this.state("The link closed before the pairing was done.", true); this.pairing = null; },
+    };
+    this.link = link;
+    return link;
+  },
+  async noted(event, d) {
+    if (event === "waiting") {
+      this.step(`<p>Linked. Your identity's browser now asks whether to pair this one. Check that it shows <strong class="pair-words">${esc(d)}</strong>, the digits shown here.</p>`);
+      this.state("");
+    }
+    if (event === "request") {
+      const [ask, chat] = ["ask", "chat"];
+      this.step(`<form id="pair-confirm" style="margin-top:10px">
+        <p>Pair <code>${esc(PyrtanIdentity.short(d.device))}</code> as a device of yours? Only if the other screen shows the same digits: <strong class="pair-words">${esc(d.words)}</strong></p>
+        <div class="row"><input type="text" id="pair-label" value="${esc(d.label || "phone")}" placeholder="what to call it" style="max-width:220px" autocomplete="off"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;font-size:14px;align-items:center" id="pair-may"><span class="mute">it may</span>
+          <label><input type="checkbox" value="${ask}" checked> ask</label><label><input type="checkbox" value="${chat}" checked> chat</label><label><input type="checkbox" value="run"> run trees</label><label><input type="checkbox" value="operate"> operate hubs</label></div>
+        <div class="row"><button type="submit">They match: pair it</button><button type="button" class="quiet" id="pair-refuse">They do not match</button></div></form>`);
+    }
+    if (event === "paired") {
+      ident.key.note = d.note;
+      await ident.keep();
+      this.done(`Paired: this browser now speaks for <code>${esc(PyrtanIdentity.short(d.note.root))}</code>, as <em>${esc(d.note.label || "a device")}</em>.`);
+    }
+    if (event === "refused") { this.step(""); this.state(`Not paired: ${esc(d)}.`, true); this.close(); }
+  },
+  async approve() {
+    const may = [...document.querySelectorAll("#pair-may input:checked")].map((i) => i.value);
+    if (!may.length) { this.state("Choose at least one thing it may do.", true); return; }
+    try {
+      const {note} = await this.pairing.approve(may, $("#pair-label").value.trim());
+      this.done(`Paired <code>${esc(PyrtanIdentity.short(note.device))}</code> as <em>${esc(note.label || "a device")}</em>. Give a hub your newest document (below) for it to know.`);
+    } catch (e) { this.state(`Could not pair it: ${esc(e.message)}`, true); }
+  },
+  // Paired: the same link goes on to share gaps, when this browser is its own hub.
+  done(html) {
+    const link = this.link; this.link = null; this.pairing = null;
+    this.step("");
+    this.state(html + (local ? " Now sharing gaps with it over the same link (the Gaps tab)." : ""));
+    const pending = this.pending; this.pending = [];
+    if (link && local) {
+      sync.adopt(link);
+      for (const m of pending) if (sync.session) sync.session.receive(m).catch((e) => sync.state(esc(e.message), true));
+    } else if (link) link.close();
+  },
+  async offer() {
+    if (!ident.isRoot()) return;
+    const link = this.open("root");
+    this.step('<p class="mute">Making a code…</p>'); this.state("");
+    try {
+      const code = await link.offer();
+      this.step(`<p>On the new device, point its camera at this code${/^https?:$/.test(location.protocol) ? "" : " (or paste the code in its Identity tab, under <em>I have a pairing code</em>)"}. Both need to be on the same network.</p>${codeBlock(code, "pair")}
+        <form class="row" id="pair-accept" style="margin-top:12px"><input type="text" id="pair-answer" placeholder="then paste the code it gives back" autocomplete="off"><button type="submit">Connect</button>${"BarcodeDetector" in window ? '<button type="button" class="quiet" id="pair-scan">Scan it</button>' : ""}</form>`);
+    } catch (e) { this.step(""); this.state(`Could not make a code: ${esc(e.message)}`, true); }
+  },
+  async accept(code) {
+    try { await this.link.accept(code); this.state("Connecting…"); }
+    catch (e) { this.state(`Could not connect: ${esc(e.message)}`, true); }
+  },
+  have() {
+    this.step(`<form id="pair-answer-form" style="margin-top:10px"><textarea id="pair-offer-code" rows="4" style="width:100%" placeholder="the code your identity's browser shows"></textarea><div class="row" style="margin-top:8px"><button type="submit">Answer it</button></div></form>`);
+    $("#pair-offer-code").focus();
+  },
+  // The new device: a key of its own (made now if it has none), then the answer to carry back.
+  async answer(code) {
+    if (!ident.ok) { this.state("This browser cannot hold a key, so it cannot be paired.", true); return; }
+    if (ident.key && (ident.isRoot() || ident.key.note)) { this.state(`This browser already speaks for an identity (${esc(PyrtanIdentity.short(PyrtanSync.rootOf(ident.key)))}); forget its key first to pair it with another.`, true); return; }
+    if (!ident.key) await ident.make();
+    const link = this.open("device");
+    this.step('<p class="mute">Answering…</p>'); this.state("");
+    try {
+      const back = await link.answer(code);
+      this.step(`<p>Paste this on the browser that holds your identity, or let it scan the code. The link opens when it does.</p>${codeBlock(back, null)}`);
+    } catch (e) { this.close(); this.step(""); this.state(`Could not answer: ${esc(e.message)}`, true); }
+  },
+};
+$("#pair-offer").addEventListener("click", () => pair.offer());
+for (const id of ["#pair-have", "#pair-have-device"]) $(id).addEventListener("click", () => pair.have());
+$("#pair-step").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (e.target.id === "pair-accept") pair.accept($("#pair-answer").value);
+  if (e.target.id === "pair-answer-form") pair.answer($("#pair-offer-code").value);
+  if (e.target.id === "pair-confirm") pair.approve();
+});
+$("#pair-step").addEventListener("click", async (e) => {
+  if (e.target.id === "pair-refuse") pair.pairing && pair.pairing.refuse("the digits did not match");
+  if (e.target.id === "pair-scan") { const c = await scanCode($("#pair-step-scan"), (m) => pair.state(m, true)); if (c) pair.accept(c); }
+});
+
+$("#gaps-forget").addEventListener("click", () => {
+  if (!local || !confirm("Forget the gaps and unanswered sentences this browser kept?")) return;
+  local.forget(); loadGaps();
+});
 
 async function loadUnanswered() {
   let u; try { u = await json("unanswered"); } catch (e) { problem(e.message, true); return; }
@@ -1045,7 +1432,7 @@ async function loadUnanswered() {
   for (const e of u.unanswered || []) {
     const p = e.proposal || {};
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code>${local ? "" : `<div style="margin-top:6px"><button type="button" class="quiet build" data-text="${esc(e.text)}" data-name="${esc(p.name||"")}">Build it here</button></div>`}</td>`;
+    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : e.device && local && e.device !== local.device ? " · " + esc(whose(e.device)) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code>${local ? "" : `<div style="margin-top:6px"><button type="button" class="quiet build" data-text="${esc(e.text)}" data-name="${esc(p.name||"")}">Build it here</button></div>`}</td>`;
     body.appendChild(tr);
   }
   if (!(u.unanswered || []).length) body.innerHTML = `<tr><td colspan="3" class="mute">Nothing yet: every sentence so far found a tree.</td></tr>`;
@@ -1728,7 +2115,7 @@ ident.init().finally(load);
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__AGENTS__", AGENTS_JS)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__SYNC__", SYNC_JS).replace("__AGENTS__", AGENTS_JS)
 
 
 def page(trees: dict[str, Any] | None = None) -> str:

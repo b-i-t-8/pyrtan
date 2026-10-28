@@ -219,7 +219,16 @@ site (`../catalog/`, or one on the same origin named in the address,
 `?catalog=`). It reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
-while the page is open. Every example runs there but six: weather
+in the browser across reloads, under the device that met them: the
+browser's key when its Identity tab has made one, else an id of its own.
+Make or forget a key and they move with it; the Gaps tab names the
+device and forgets them. The devices of one identity share them with each
+other, browser to browser and with no hub: the Gaps tab links two on the
+same network by a code carried by hand or a QR (a WebRTC link, asking no
+server, that carries nothing until each side has proved it is a device of
+the same identity), or carries a signed file between any two; each lists
+the others' gaps beside its own, by device
+([`_meta/identity.md`](_meta/identity.md) §5b). Every example runs there but six: weather
 today and tomorrow, sunrise, UV and air quality, local time, elevation,
 postcodes, capitals, pollen, waves, Wikipedia, words (definitions,
 synonyms, antonyms, rhymes), exchange rates and crypto prices, Hacker
@@ -268,7 +277,8 @@ never what it learned from others, and refuses to forward a request that
 already crossed a hub, so there is nothing to loop. **Every message is
 signed**, and a hub started with `--federation-secret` takes follows only
 from hubs that know the secret; `--closed` takes none outside its
-networks. `--state FILE` keeps the relationships and networks across
+networks, and members (phones, browsers) only with its token or a key it
+grants `run`, so a stranger can join neither as a hub nor as a member. `--state FILE` keeps the relationships and networks across
 restarts.
 
 Hubs find each other without a server. A hub started `--listed` puts an
@@ -373,8 +383,10 @@ in the browser and hands you its backup at once, encrypted with your
 passphrase, to download or keep in your own private GitHub repository;
 restores it in another browser; claims a name, at pyrtan.com (GitHub's
 own page opens the pull request from your account) or at any network's
-names repository; and pairs your other devices by a code each shows and
-a note it gets back. The **Access** tab keeps a hub's grants. The same,
+names repository; and pairs your other devices, by a QR code the new
+device's camera opens and six digits both screens show (a link straight
+between the two browsers, `_meta/identity.md` §5b), or by a code each
+shows and a note it gets back. The **Access** tab keeps a hub's grants. The same,
 from a shell:
 
 ```

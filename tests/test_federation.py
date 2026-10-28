@@ -189,7 +189,7 @@ def test_follow_policy_secret_and_closed(tmp_path):
         insider.post("/follow", {"url": guarded.url})
         assert insider.fed.following[guarded.url].state == "accepted"
         stranger.post("/follow", {"url": closed.url})
-        assert stranger.fed.following[closed.url].state == "pending" and "does not take follows" in stranger.fed.following[closed.url].last_error
+        assert stranger.fed.following[closed.url].state == "pending" and "takes follows only within its networks" in stranger.fed.following[closed.url].last_error
         # A closed hub can still follow.
         closed.post("/follow", {"url": stranger.url})
         assert closed.fed.following[stranger.url].state == "accepted"
@@ -1168,3 +1168,34 @@ def test_a_lost_phone_is_let_go(tmp_path, capsys):
     finally:
         hub.stop()
         srv.stop()
+
+
+def test_a_closed_hub_takes_its_family_and_nobody_else(tmp_path, monkeypatch):
+    from pyrtan.federation import Network
+    from pyrtan.hub import join_network, serve_hub
+
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "alpha.toml").write_text(ECHO.format(name="alpha", word="alpha"))
+    home, home_srv = serve_hub(port=0, quiet=True, name="home", trees=[tmp_path / "t"], federate=True, token="tok", open_follows=False, poll_every=60)
+    cousin, cousin_srv = serve_hub(port=0, quiet=True, name="cousin", federate=True, token="tok2", poll_every=60)
+    stranger, stranger_srv = serve_hub(port=0, quiet=True, name="stranger", federate=True, poll_every=60)
+    try:
+        # A phone without the token: refused, and so not handed the hub's blobs.
+        nosy = TrustedMember(home_srv.url, "someone's phone")
+        status, out = nosy.follow()
+        assert status == 403 and out["reason"] == "closed" and nosy.id not in home.federation.followers
+        # A family phone, with the token: in, and trusted.
+        mum = TrustedMember(home_srv.url, "Mum's phone")
+        assert mum.follow(token="tok")[1]["trusted"] is True and mum.id in home.federation.followers
+        # A stranger's hub, outside any network: refused.
+        tried = stranger.federation.follow(home_srv.url)
+        assert tried.state == "pending" and "takes follows only within its networks" in tried.last_error
+        assert stranger_srv.url not in home.federation.followers
+        # A family hub, in the family network: in.
+        family = home.federation.create_network("family")
+        status, out = join_network(cousin.federation, family.invite(home.federation.id))
+        assert out["say"] == f"in family, following {home.federation.id}" and cousin_srv.url in home.federation.followers
+    finally:
+        for hub, srv in ((home, home_srv), (cousin, cousin_srv), (stranger, stranger_srv)):
+            hub.stop()
+            srv.stop()

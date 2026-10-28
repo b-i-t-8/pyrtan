@@ -182,6 +182,14 @@
     const body = without(doc, "sig");
     return Object.assign({}, body, { sig: b64url(await sign(key, enc.encode(DOC_TAG + canonical(body)))) });
   }
+  /** Whether doc's sig is id's signature over the document, as signDocument makes it. */
+  async function verifyDocument(doc, id) {
+    if (!doc || typeof doc !== "object" || typeof doc.sig !== "string") return false;
+    try {
+      const pub = await subtle().importKey("raw", decode(id), { name: "Ed25519" }, false, ["verify"]);
+      return await subtle().verify({ name: "Ed25519" }, pub, unb64url(doc.sig), enc.encode(DOC_TAG + canonical(without(doc, "sig"))));
+    } catch (e) { return false; }
+  }
   const abilities = (may) => { const bad = may.filter((a) => !ABILITIES.includes(a)); if (bad.length || new Set(may).size !== may.length) throw new Error(`may is some of ${ABILITIES.join(", ")}, each once`); return ABILITIES.filter((a) => may.includes(a)); };
   function host(text) {
     const h = String(text || "").toLowerCase(), labels = h.split(".");
@@ -291,7 +299,7 @@
   return {
     PREFIX, ABILITIES, sha256, sha3_256, hex, b64url, unb64url, encode, decode, valid, short, canonical, parseName, requestMessage,
     available, generate, fromSeedAndPublic, signRequest, noteProblem, store,
-    signDocument, makeDevice, makeIdentity, withDevice, withRevoked, makeName, makeRelease,
+    signDocument, verifyDocument, makeDevice, makeIdentity, withDevice, withRevoked, makeName, makeRelease,
     createRoot, makeBackup, backupProblem, openBackup, rootFromSeed,
   };
 });
