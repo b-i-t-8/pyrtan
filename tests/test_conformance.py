@@ -1,4 +1,6 @@
-"""Both runtimes read the same tree and say the same thing.
+"""Both runtimes read the same tree and say the same thing, read the same
+sentence the same way, and (the hub in a browser) answer the same requests
+the same way a service does.
 
 The vectors are what Python says; node runs pyrtan.js over them. The
 vectors file is regenerated here and compared, so it cannot drift from
@@ -31,7 +33,9 @@ def test_vectors_are_current():
 def test_javascript_runtime_agrees_with_python():
     run = subprocess.run(["node", str(ROOT / "tests" / "conformance" / "run.cjs")], capture_output=True, text=True, cwd=str(ROOT))
     assert run.returncode == 0, run.stdout + run.stderr
-    assert f"{len(json.loads(VECTORS.read_text())['runs'])}/" in run.stdout
+    v = json.loads(VECTORS.read_text())
+    total = sum(len(v[k]) for k in ("runs", "readings", "nlp", "proposals", "hub"))
+    assert f"{total}/{total} agree" in run.stdout
 
 
 # ---------------------------------------------------------------- identity.js and identity.py

@@ -174,8 +174,8 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
 | `pyrtan search WORDS` | Finds trees in a catalog (default: the one at pyrtan.com). |
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
-| `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees; what a catalog's CI runs. |
-| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere. |
+| `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
+| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. |
 | `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
 | `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
 | `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
@@ -197,8 +197,15 @@ pyrtan ask "top 3 stories on hacker news"
 Open <http://127.0.0.1:8700/> for the console: a sentence box, the answer,
 the output and the trace; everything the swarm can answer; each peer and
 its `link`; and the gaps. The same console lives at
-<https://pyrtan.com/console/> and can be pointed at any hub started with
-`--cors https://pyrtan.com`. The wordmark is two colours, **pyr** the
+<https://pyrtan.com/console/>, and there it needs no hub at all: until you
+join one, the browser is the hub. It holds the catalog's trees, reads the
+sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
+the same reading as Python's), and keeps gaps and unanswered sentences
+while the page is open. Trees that need a box (files, programs, serial
+lines, brokers, a browser to drive) or a site that does not let a page
+read it say so; for those, join a hub started with
+`--cors https://pyrtan.com` by giving its URL and token. Forget it and the
+browser is its own hub again. The wordmark is two colours, **pyr** the
 primary and **tan** the secondary: click either half, right-click it, or
 press and hold it on a phone to pick that half's colour; tan's picker also
 sets light, dark or auto mode. The choice is kept in the browser. To run the swarm on a NAS or any Docker host,

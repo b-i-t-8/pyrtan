@@ -16,7 +16,8 @@ self-hosted one.** The console, the command, the catalog client and any
 future integration speak only the public API (`/api`, `/health`,
 `/capabilities`, `/peers`, `/intent`, `/run`, `/resume`, `/gaps`), with a
 bearer token when the operator set one. Nothing hosted gets a private
-endpoint.
+endpoint. A browser that has joined no hub answers the same API itself
+(§2.5), so the console cannot tell that apart either.
 
 The consequence for the business: what people pay for lives *around* the
 runtime, not in it. The runtime stays whole and AGPL; the paid product is
@@ -147,10 +148,30 @@ operator's, per hub, and off by default.
 One HTML file, no build, no external assets. Served by a hub or service
 at `/` and `/console`, it talks to that origin. Written out by
 `pyrtan console --out` and hosted anywhere, it finds out on load that its
-own origin is not a Pyrtan (`/api` does not answer as one), shows a
-connect box for a hub URL and a token, keeps them in local storage, and
-sends the token as a bearer. A hub that requires a token and serves the
-console itself shows the same box with only the token field.
+own origin is not a Pyrtan (`/api` does not answer as one), and then the
+browser is the hub, for as long as the page is open: `pyrtan.js`'s
+`LocalHub` answers `/api`, `/health`, `/capabilities`, `/intent`, `/run`,
+`/resume`, `/gaps`, `/unanswered` and `/watches` inside the page, with the
+shapes a service answers them with, and the console calls it through the
+same function it calls a hub through. It holds the catalog's trees, read
+from the catalog's `trees.json` (`../catalog/` beside the console, else
+pyrtan.com's, else the copy the browser kept last time; `?catalog=URL`
+names another), reads sentences with the same rules as the Python
+runtime (the conformance vectors cover the reading, the value parsers,
+the proposals and a run of requests against a service), runs the trees,
+and keeps gaps and unanswered sentences in memory. What a page cannot
+reach it reports instead of attempting: a `file`, `shell`, `serial`,
+`queue` or `browser` node answers `source-unsupported`, and a site that
+does not let a page read it fails as `transport` with that reason; the
+Trees tab marks both, and "Try one" offers only trees that can answer.
+Nothing in it is sent anywhere but the requests the trees make.
+
+Joining is explicit: a hub URL and a token in the connect box, kept in
+local storage, the token sent as a bearer (and `?hub=URL` for a link).
+From then on everything goes to that hub, as before. "Forget" drops it,
+and the browser is its own hub again. A hub that requires a token and
+serves the console itself shows the same box with only the token
+field.
 
 Tabs: Ask (sentence, answer, output, trace, and a pointer when the run met
 a gap), Trees (capabilities, with a link to the catalog), Peers (hub only;

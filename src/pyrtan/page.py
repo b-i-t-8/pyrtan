@@ -1,5 +1,6 @@
 """The console: one HTML file a service or hub serves at ``/``, and the same
-file hosted anywhere else (``pyrtan console --out``).
+file hosted anywhere else (``pyrtan console --out``), where it is a hub of
+its own until it joins one.
 
 It asks a sentence and shows the answer, the output and the trace; lists
 what the swarm can answer; shows the hub's peers and their ``link``; lists
@@ -11,10 +12,17 @@ service, and the same whether it was served by that hub or by a static
 host somewhere else.
 
 Served by a hub or service, it talks to the origin it came from. Served
-from elsewhere (it finds out by asking ``api`` on its own origin), it shows
-a connect box for a hub URL and a token, keeps them in the browser's local
-storage, and sends the token as a bearer. The hub must then allow the
-console's origin with ``--cors``. No external assets, no build step.
+from elsewhere (it finds out by asking ``api`` on its own origin), the
+browser is the hub: ``pyrtan.js``'s ``LocalHub`` answers the same
+endpoints inside the page, with the catalog's trees (its ``trees.json``),
+reading sentences and running trees here, keeping gaps and unanswered
+sentences for as long as the page is open. Trees that need a box (files,
+programs, devices, brokers, a browser to drive) or a site that will not
+let a page read it say so. Joining a hub is explicit: its URL and token in
+the connect box, kept in the browser's local storage, the token sent as a
+bearer; the hub must allow the console's origin with ``--cors``.
+Forgetting the hub makes the browser its own hub again. No external
+assets, no build step.
 
 On a hub of 0.14 or later its Identity tab makes a key for this browser
 (``identity.js``, inlined: WebCrypto's Ed25519, non-extractable, kept in
@@ -115,10 +123,11 @@ PAGE = r"""<!doctype html>
   <section id="connect" hidden>
     <div class="card">
       <div style="margin-bottom:8px" id="connect-lede">This console is not being served by a Pyrtan. Point it at one:</div>
+      <div class="mute" style="font-size:14px;margin:-4px 0 8px" id="connect-local" hidden></div>
       <form class="row" id="connect-form">
         <input type="url" id="hub-url" placeholder="https://hub.example.net or http://192.168.1.20:8700" autocomplete="off">
         <input type="password" id="hub-token" placeholder="token, if the hub needs one" autocomplete="off">
-        <button type="submit">Connect</button>
+        <button type="submit" id="connect-go">Connect</button>
         <button type="button" class="quiet" id="forget">Forget</button>
       </form>
       <div class="mute" style="font-size:14px" id="connect-help">Kept in this browser only. The hub must allow this page's origin: <code>pyrtan hub --cors <span id="origin"></span></code>. A hub on your LAN over <code>http://</code> may be refused by the browser when this page is <code>https://</code>; open the hub's own <code>/</code> instead, which is this same console.</div>
@@ -131,7 +140,7 @@ PAGE = r"""<!doctype html>
     <a href="#ask" data-tab="ask">Ask</a>
     <a href="#trees" data-tab="trees">Trees</a>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
-    <a href="#watches" data-tab="watches">Watches</a>
+    <a href="#watches" data-tab="watches" id="watches-tab">Watches</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
@@ -156,7 +165,7 @@ PAGE = r"""<!doctype html>
   <section id="tab-trees" hidden>
     <h2>What this swarm can answer</h2>
     <div class="card"><table id="caps"><thead><tr><th>Tree</th><th>Answers to</th><th>From</th></tr></thead><tbody></tbody></table></div>
-    <p class="mute" style="font-size:14px">Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.</p>
+    <p class="mute" style="font-size:14px" id="trees-more">Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.</p>
   </section>
 
   <section id="tab-peers" hidden>
@@ -184,7 +193,7 @@ PAGE = r"""<!doctype html>
 
   <section id="tab-unanswered" hidden>
     <h2>Waiting to be written</h2>
-    <p class="mute" style="font-size:14px;margin-top:0">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
+    <p class="mute" style="font-size:14px;margin-top:0" id="unanswered-lede">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
     <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody></tbody></table></div>
   </section>
 
@@ -289,7 +298,7 @@ GET  /unanswered
 GET  /peers    (hub only)
 POST /chat/start {"want": "anyone"|"people"|"bot", "typing_indicator": true}   (hub with --chat)
 POST /chat/typing {"seat": "…", "typing": true}</pre>
-      <div class="mute" style="font-size:14px;margin-top:8px">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
+      <div class="mute" style="font-size:14px;margin-top:8px" id="api-help">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
   </section>
 
@@ -313,9 +322,14 @@ const store = {
   clear() { try { localStorage.removeItem(KEY); } catch (e) {} },
 };
 // base: "" when this page is served by a Pyrtan (relative URLs); otherwise the hub URL the person gave.
-let base = "", token = "", remote = false, isHub = false;
+// local: the hub in this page (pyrtan.js's LocalHub), while no hub is joined.
+let base = "", token = "", remote = false, isHub = false, local = null, catalog = "";
 
 async function api(path, init) {
+  if (local) {
+    const body = init && init.body ? JSON.parse(init.body) : undefined;
+    return local.route((init && init.method) || "GET", path, body).then(([status, payload]) => new Response(JSON.stringify(payload), {status, headers: {"Content-Type": "application/json"}}));
+  }
   const headers = Object.assign({"Accept": "application/json"}, (init && init.headers) || {});
   if (token) headers["Authorization"] = "Bearer " + token;
   const url = base ? base.replace(/\/+$/, "") + "/" + path : path;
@@ -442,7 +456,8 @@ async function detect() {
   $("#connect").hidden = false;
   $("#origin").textContent = location.origin;
   $("#hub-url").value = base; $("#hub-token").value = token;
-  if (!base) return null;
+  local = null; showLocal(false);
+  if (!base) return startLocal();
   try {
     const a = await json("api");
     if (a && a.pyrtan) { isHub = a.pyrtan === "hub"; return a; }
@@ -451,7 +466,53 @@ async function detect() {
   return null;
 }
 
+// ---------------------------------------------------------------- the hub in this page
+// No hub joined: this browser is one, for as long as the page is open. It
+// holds the catalog's trees and answers the same endpoints a hub does.
+const params = new URLSearchParams(location.search);
+const CATALOGS = [params.get("catalog"), "../catalog/", "https://pyrtan.com/catalog/"].filter(Boolean);
+const TREES_KEY = "pyrtan.console.trees";
+async function catalogTrees() {
+  for (const c of CATALOGS) {
+    try {
+      const at = new URL(c.endsWith("/") ? c : c + "/", location.href);
+      const r = await fetch(new URL("trees.json", at), {headers: {"Accept": "application/json"}});
+      const d = r.ok ? await r.json() : null;
+      if (d && Array.isArray(d.trees)) {
+        catalog = at.href;
+        try { localStorage.setItem(TREES_KEY, JSON.stringify({catalog, trees: d.trees})); } catch (e) {}
+        return d.trees;
+      }
+    } catch (e) {}
+  }
+  // Offline, or no catalog answers: the trees this browser held last time.
+  try { const kept = JSON.parse(localStorage.getItem(TREES_KEY) || "null"); if (kept && Array.isArray(kept.trees)) { catalog = kept.catalog || ""; return kept.trees; } } catch (e) {}
+  return [];
+}
+// A tree runs here when every source it uses is http. Hosts of "*" mean any site, and most sites refuse a page, so "Try one" leaves those out.
+const runsHere = (t) => (t.sources || []).every(s => s === "http");
+const anySite = (t) => (t.hosts || []).includes("*");
+async function startLocal() {
+  isHub = false;
+  local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__"});
+  const trees = await catalogTrees();
+  for (const e of trees) local.add(e.tree, e.id);
+  showLocal(true);
+  return (await local.route("GET", "/api"))[1];
+}
+function showLocal(on) {
+  $("#connect-local").hidden = !on;
+  $("#connect-lede").textContent = on ? "This browser is a hub of its own: it holds the catalog's trees, reads your sentences and runs the trees right here." : "This console is not being served by a Pyrtan. Point it at one:";
+  $("#connect-local").innerHTML = on ? "Gaps and unanswered sentences are kept only while this page is open. Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token." : "";
+  $("#connect-go").textContent = on ? "Join" : "Connect";
+  $("#watches-tab").hidden = on;
+  $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
+  $("#api-help").innerHTML = on ? "Answered inside this page by <code>pyrtan.js</code>: the same paths and the same answers as a hub, with no server behind them. Join a hub and they go to the hub." : 'With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.';
+  $("#trees-more").innerHTML = on ? `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees. Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them.` : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
+}
+
 async function load() {
+  problem("");
   const a = await detect();
   for (const el of document.querySelectorAll(".at")) el.textContent = base || location.origin;
   if (!a) { $("#who").textContent = remote ? "not connected" : "unreachable"; return; }
@@ -471,26 +532,28 @@ async function load() {
   }
   member.hub = a.federation || null;
   if (member.hub) member.start();
-  $("#where").textContent = (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
+  $("#where").textContent = local ? "running in this browser" : (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
   $("#hub-version").textContent = a.version ? ` · ${a.pyrtan} v${a.version}` : "";
   try {
     const h = await json("health");
     $("#who").textContent = (h.name ? h.name + " · " : "") + (h.peers != null ? `${h.up}/${h.peers} peers up` + (h.trees != null ? `, ${h.trees} trees` : "") : (h.trees ? `${h.trees.length} trees` : ""));
   } catch (e) { $("#who").textContent = "unreachable"; }
+  for (const el of document.querySelectorAll(".at")) el.textContent = base || location.origin;
   if (a.auth === "bearer" && !token) {
     if (a.chat_public && location.hash === "#chat") showTab("chat");  // the one tab open without the token
     return;
   }
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
-  problem("");
+  problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
   const body = $("#caps tbody"); const tries = $("#tries");
   body.innerHTML = ""; tries.innerHTML = "";
   for (const t of c.trees || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><code>${esc(t.name)}</code> <span class="mute">v${esc(t.version||1)}</span><div class="mute">${esc(t.description||"")}</div></td><td>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}</td><td class="mute">${esc((t.hosts||[]).join(", "))}${t.peer ? `<div><span class="link ${esc(t.link||"")}"></span>${esc(t.peer)}</div>` : ""}</td>`;
+    const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
+    tr.innerHTML = `<td><code>${esc(t.name)}</code> <span class="mute">v${esc(t.version||1)}</span><div class="mute">${esc(t.description||"")}</div></td><td>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}</td><td class="mute">${esc((t.hosts||[]).join(", "))}${t.peer ? `<div><span class="link ${esc(t.link||"")}"></span>${esc(t.peer)}</div>` : ""}${here}</td>`;
     body.appendChild(tr);
-    const s = sample(t); if (s && !s.includes("…")) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
+    const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
   }
   showTab((location.hash || "#ask").slice(1));
 }
@@ -580,7 +643,7 @@ async function ask(snapshot, answer) {
   const ms = Math.round(performance.now() - t0);
   const out = $("#out");
   const card = document.createElement("div"); card.className = "card";
-  let html = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${ms} ms${r.peer ? " · " + esc(r.peer) : ""}</span></div>`;
+  let html = `<div><span class="status ${esc(r.status)}">${esc(r.status)}</span>${r.reason ? ` <span class="mute">(${esc(r.reason)})</span>` : ""} <span class="mute">· ${esc(r.tree||"")} · ${ms} ms${r.peer ? " · " + esc(r.peer) : ""}${local ? " · ran in this browser" : ""}</span></div>`;
   if (r.say) html += `<div class="say">${esc(r.say)}</div>`;
   if (r.output && r.output.reading && r.output.reading.steps && r.output.reading.steps.length) html += `<div class="mute" style="font-size:14px">Read as <code>${esc(r.output.reading.cleaned)}</code>: ${r.output.reading.steps.map(esc).join("; ")}</div>`;
   if (r.reason === "no-match" && r.output && r.output.proposal) {
@@ -590,6 +653,7 @@ async function ask(snapshot, answer) {
   if (r.status === "asked") html += `<form class="row resume"><input type="text" placeholder="${esc(r.question||"")}" autofocus><button>Answer</button></form>`;
   if (r.output != null) html += `<details open><summary>output</summary><pre>${esc(JSON.stringify(r.output, null, 2))}</pre></details>`;
   if (r.trace) html += `<details open><summary>trace</summary><pre>${esc(renderTrace(r.trace))}</pre></details>`;
+  if (local && (r.reason === "source-unsupported" || (r.reason === "transport" && /may not let a page/.test(r.say || "")))) html += `<div class="mute" style="font-size:14px;margin-top:8px">This one needs a hub: a page cannot reach it. Join a hub above that runs <code>${esc(r.tree||"")}</code>, and the same sentence goes there.</div>`;
   if (r.reason === "gap" && r.output && r.output.gap) html += `<div class="mute" style="font-size:14px;margin-top:8px">This run met a gap. It is listed under <a href="#gaps">Gaps</a>; the branch to write is in <code>${esc(r.output.gap.tree)}</code>, node <code>${esc(r.output.gap.node)}</code>.</div>`;
   card.innerHTML = html;
   out.prepend(card);
@@ -878,7 +942,8 @@ $("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leav
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
 window.addEventListener("pagehide", () => chat.leave(true));
 
-$("#forget").addEventListener("click", () => { store.clear(); base = ""; token = ""; $("#hub-url").value = ""; $("#hub-token").value = ""; $("#who").textContent = "not connected"; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); });
+// Forgetting the hub makes this browser its own hub again.
+$("#forget").addEventListener("click", () => { chat.leave(true); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
 ident.init().finally(load);
 </script>
 </body>
