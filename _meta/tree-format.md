@@ -261,6 +261,18 @@ The first branch whose condition holds is taken. `else` must be last. A
 **gap** (`tree`, `node`, `on`, `observed`) and ends the run with reason
 `gap`. `pyrtan gaps --at URL` lists them.
 
+`pyrtan check` reads the order of the branches, too. A branch whose every
+value an earlier branch already takes is never taken (`between = [500,
+599]` after `gte = 400`), and a condition no value meets (`{ gt = 5, lt =
+3 }`, `between = [9, 1]`, `lt = true`) is never true; both are warnings.
+With no `else`, when every branch is a plain comparison of numbers, the
+note about gaps also names the numbers no branch takes (`no branch takes
+whole numbers below 0, 4 to 44, above 99`), so the holes show before a
+run falls into one. Only `eq`, `in`, `lt`, `lte`, `gt`, `gte` and
+`between` are read this way, the way the runtime reads them (numbers
+loosely, booleans strictly); a branch with any other test is left alone.
+The check can miss a dead branch; it never reports a live one.
+
 ### `set`: compute
 
 ```toml
@@ -295,7 +307,7 @@ placeholder that resolves to nothing fails the node. `default` is the value
 when no row holds; without one, such a value is recorded as a **gap**,
 exactly as a `decide` without `else` records one, and `pyrtan grow` drafts
 the row it asks for. The trace names the row's condition (or `default`) as
-the step's `chosen`, and the value read.
+the step's `chosen`, and the value read. `pyrtan check` reads the rows' order the way it reads a `decide`'s branches: a row an earlier one already covers is never read, and without a `default` the note names the numbers no row takes.
 
 A lookup does not branch. It is for the decision whose every outcome is a
 value rather than a different next step: a code into a word, a status into

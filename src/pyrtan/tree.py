@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import adapters, conditions, extract as extractmod
+from . import adapters, analysis, conditions, extract as extractmod
 from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerError
 from .template import PLACEHOLDER, placeholders
 
@@ -518,6 +518,7 @@ def check(tree: Tree) -> list[Problem]:
                 err(where, "a decide node needs a non-empty 'branches' list")
             else:
                 has_else = False
+                ordered: list[tuple[int, dict[str, Any]]] = []  # the branches whose conditions are sound, for _check_order
                 for j, br in enumerate(branches):
                     bw = f"{where}.branches[{j}]"
                     if not isinstance(br, dict):
@@ -535,10 +536,12 @@ def check(tree: Tree) -> list[Problem]:
                             continue
                         try:
                             conditions.validate(br["when"])
+                            ordered.append((j, br["when"]))
                         except conditions.ConditionError as e:
                             err(bw, str(e))
+                holes = _check_order(where, "branches", ordered, has_else, warn)
                 if not has_else:
-                    info(where, "no 'else': an unforeseen value is recorded as a gap and fails the run")
+                    info(where, "no 'else': an unforeseen value is recorded as a gap and fails the run" + (f"; no branch takes {holes}" if holes else ""))
             if node.next:
                 err(where, "a decide node routes through its branches, not 'next'")
 
@@ -555,7 +558,9 @@ def check(tree: Tree) -> list[Problem]:
             table = node.get("table")
             if not isinstance(table, list) or not table:
                 err(where, "a lookup node needs a non-empty 'table' list of rows such as { eq = 0, value = \"clear\" }")
-            else:
+            holes = None
+            if isinstance(table, list) and table:
+                ordered: list[tuple[int, dict[str, Any]]] = []
                 for j, row in enumerate(table):
                     rw = f"{where}.table[{j}]"
                     if not isinstance(row, dict):
@@ -572,10 +577,12 @@ def check(tree: Tree) -> list[Problem]:
                         continue
                     try:
                         conditions.validate(cond)
+                        ordered.append((j, cond))
                     except conditions.ConditionError as e:
                         err(rw, str(e))
+                holes = _check_order(where, "table", ordered, "default" in node.spec, warn)
             if "default" not in node.spec:
-                info(where, "no 'default': a value no row covers is recorded as a gap and fails the run")
+                info(where, "no 'default': a value no row covers is recorded as a gap and fails the run" + (f"; no row takes {holes}" if holes else ""))
 
         elif node.kind == "each":
             if not isinstance(node.get("over"), str):
@@ -970,6 +977,27 @@ def _check_memory(tree: Tree, node: Node, spec: Any, err, warn) -> None:
 
 
 _SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue, "memory": _check_memory}
+
+
+def _check_order(where: str, kind: str, ordered: list[tuple[int, dict[str, Any]]], fallback: bool, warn) -> str | None:
+    """What the order of a decide's branches (or a lookup's rows) gives away
+    without a run: a condition that holds for nothing, one whose every value
+    an earlier one takes. Returns, when nothing catches the rest, the numbers
+    nothing takes, in words (analysis.py says what is modelled, and why it is
+    never wrong)."""
+    noun, verb = ("branch", "taken") if kind == "branches" else ("row", "read")
+    found = analysis.findings([c for _, c in ordered])
+    for f in found:
+        j = ordered[f.index][0]
+        at = f"{where}.{kind}[{j}]"
+        if f.kind == "never-holds":
+            warn(at, f"this condition holds for no value, so the {noun} is never {verb}")
+        else:
+            firsts = ", ".join(f"{kind}[{ordered[i][0]}]" for i in f.by)
+            warn(at, f"never {verb}: every value it holds for is {verb} first by {firsts}")
+    if fallback:
+        return None
+    return analysis.holes_in_words([c for _, c in ordered])
 
 
 def row_condition(row: dict[str, Any]) -> dict[str, Any]:
