@@ -164,7 +164,7 @@ gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md
 
 | Command | What it does |
 | :-- | :-- |
-| `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Exit 1 on any error. |
+| `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Warns about a branch an earlier one already covers and a condition no value meets, and names the numbers a decision without `else` leaves to a gap. Exit 1 on any error. |
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
@@ -847,6 +847,8 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
+a check that reads a decision's order (dead branches, conditions nothing
+meets, the holes a gap will fall into),
 the shape of a good answer (`expect`, and drift when a source changes),
 `pyrtan build` (the tree an unanswered sentence asks for, through a few
 questions with defaults by rules), a tree's own tests and the diff an edit

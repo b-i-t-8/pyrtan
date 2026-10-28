@@ -117,6 +117,7 @@ sentence ──► nlp.py ──► intent.py ──► registry.py ──► ru
                                              └─ transport.py  urllib | recorded | recording
 
 grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
+analysis.py what a decision's order gives away: dead branches, empty conditions, holes
 cases.py    a tree's own [[tests]] against recordings; two versions diffed over them
 service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
             unanswered
@@ -373,8 +374,8 @@ Five trees, all against real public APIs, all tested offline:
     carries `[[tests]]`: a sentence or inputs, a recording beside the
     file, and the status, answer, output and path the run must come to.
     Invariant 1 makes the path a result worth asserting. `pyrtan test`
-    runs them (and the catalog tests job does, for every pull request
-    that touches a tree); `pyrtan diff` runs every test both versions of
+    runs them (and the catalog tests job does, for every pull
+    request); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
 14. **v0.27, built: memory across runs.** A seventh source, `memory`, with
@@ -383,7 +384,14 @@ Five trees, all against real public APIs, all tested offline:
     what was read, so invariant 1 holds and a tree's tests replay it. The
     store is the box's own file (`--memory`), refused under `--egress
     public`, never served or gossiped (`memory.py`, `io.md`).
-15. **v0.29, built: the shape of a good answer.** An `observe` (or an
+15. **v0.28, built: a check that reads a decision's order.** `pyrtan check`
+    warns about a branch (or a lookup row) whose every value an earlier
+    one takes, and a condition no value meets, and, with no `else`, names
+    the numbers no branch takes. The conditions with a plain meaning are
+    modelled exactly as `conditions.py` runs them, as intervals and
+    points; anything else is left alone, so it can miss a dead branch but
+    never reports a live one (`analysis.py`).
+16. **v0.29, built: the shape of a good answer.** An `observe` (or an
     `act`) may say with `expect` what a good answer looks like, path by
     path, in the conditions a `decide` uses. A good answer (2xx, exit 0, a
     file that exists…) that misses it stops the run as `drift` and is
@@ -391,7 +399,7 @@ Five trees, all against real public APIs, all tested offline:
     tell a catalog tree's author which property changed. Section 8's
     "when they stop, the trace will say exactly where" now holds for a
     page that changed shape, not only for a value no branch covers.
-16. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+17. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
