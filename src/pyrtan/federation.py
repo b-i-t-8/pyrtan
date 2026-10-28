@@ -71,7 +71,9 @@ has heard in it, most recent first. Only when none of those accepts does
 it read the hub list and then the snapshot, and only as far as it needs.
 So a hub that has been in the network once never needs pyrtan.com again,
 and any hub's public ``/directory`` or any mirror of the list will do as
-a starting point (``$PYRTAN_HUB_LIST``).
+a starting point (``$PYRTAN_HUB_LIST``). A hub started ``--lan`` also
+hears the hubs on its own network say they are there (:mod:`pyrtan.lan`)
+and tries those right after the ones it follows: no internet needed.
 A follow outside any network (and every member's) works as before.
 
 **Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
@@ -417,6 +419,7 @@ class Federation:
         self._handed: dict[str, dict[str, dict[str, Any]]] = {}  # member -> key -> {sha256, at, confirmed}
         self._asks: dict[str, dict[str, Any]] = {}            # run id -> {member, event, answer}
         self.chat: Any = None                                  # the hub's lobby, when it keeps one (pyrtan.chat.Lobby)
+        self.lan: Any = None                                   # what the hub hears on the LAN, when started --lan (pyrtan.lan.Lan)
         self.ask_timeout = ASK_TIMEOUT
         self.following: dict[str, Remote] = {}
         self.followers: dict[str, Remote] = {}
@@ -527,13 +530,15 @@ class Federation:
 
     def known_hubs(self, network: str) -> list[str]:
         """The hubs this one already knows in a network (by id), to try
-        before asking anyone: the ones it follows in it, then the ones its
+        before asking anyone: the ones it follows in it, then the ones it
+        heard on the LAN say they are in it (``--lan``), then the ones its
         directory heard in it, most recently heard first."""
         now = time.time()
         with self._lock:
             followed = [r.url for r in self.following.values() if r.kind == "hub" and r.network == network and r.state == "accepted"]
             heard = sorted((e for e in self.directory_entries.values() if e.get("network") == network and e.get("kind", "hub") == "hub" and now - e["seen"] < DIRECTORY_TTL), key=lambda e: -e["seen"])
-        return [u for u in dict.fromkeys(followed + [e["id"].rstrip("/") for e in heard]) if u != self.id]
+        nearby = self.lan.hubs(network) if self.lan is not None else []
+        return [u for u in dict.fromkeys(followed + nearby + [e["id"].rstrip("/") for e in heard]) if u != self.id]
 
     def join(self, net: Network, hubs: Iterable[str]) -> Remote | None:
         """Be in ``net`` and follow the first of ``hubs`` that accepts a
