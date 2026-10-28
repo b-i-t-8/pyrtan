@@ -261,7 +261,7 @@ def test_a_console_keeps_its_gaps_across_a_reload(tmp_path):
     device = got["device"]
     assert re.fullmatch(r"browser-[0-9a-f]{16}", device)
     assert device in got["lede"] and got["where"] == device
-    assert len(got["gaps"]) == 1 and "gappy" in got["gaps"][0] and "2" in got["gaps"][0] and device in got["gaps"][0]
+    assert len(got["gaps"]) == 1 and "gappy" in got["gaps"][0] and "2" in got["gaps"][0] and "this device" in got["gaps"][0]
     assert "\t2\t" in got["gaps"][0]  # asked twice, before the reload
     assert "No gaps" in got["forgot"][0]
     assert got["errors"] == []

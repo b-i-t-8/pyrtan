@@ -215,7 +215,13 @@ the same reading as Python's), and keeps gaps and unanswered sentences
 in the browser across reloads, under the device that met them: the
 browser's key when its Identity tab has made one, else an id of its own.
 Make or forget a key and they move with it; the Gaps tab names the
-device and forgets them. Every example runs there but six: weather
+device and forgets them. The devices of one identity share them with each
+other, browser to browser and with no hub: the Gaps tab links two on the
+same network by a code carried by hand or a QR (a WebRTC link, asking no
+server, that carries nothing until each side has proved it is a device of
+the same identity), or carries a signed file between any two; each lists
+the others' gaps beside its own, by device
+([`_meta/identity.md`](_meta/identity.md) §5b). Every example runs there but six: weather
 today and tomorrow, sunrise, UV and air quality, local time, elevation,
 postcodes, capitals, pollen, waves, Wikipedia, words (definitions,
 synonyms, antonyms, rhymes), exchange rates and crypto prices, Hacker

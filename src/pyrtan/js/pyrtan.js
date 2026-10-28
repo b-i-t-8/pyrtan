@@ -1704,7 +1704,14 @@
   // is. It is kept under opts.device, the device that met it (the console's
   // key for this browser, or an id of its own), and each gap names that
   // device the way a hub's gaps name the peer.
-  const UNANSWERED_LIMIT = 200, GAPS_LIMIT = 500, KEPT_VERSION = 1;
+  //
+  // It also holds what the same person's other devices met (takeOther): one
+  // bundle per device, the newest, as that device signed it. Their gaps and
+  // sentences are listed beside its own, each naming its device, and are
+  // never added into its own counts, so a bundle passed back and forth
+  // between two devices is never counted twice. Whoever hands it a bundle
+  // has checked it (sync.js checks the signatures); this only keeps it.
+  const UNANSWERED_LIMIT = 200, GAPS_LIMIT = 500, OTHERS_LIMIT = 20, KEPT_VERSION = 1;
   // Drop the entries seen longest ago until at most limit are left.
   function bound(map, limit, when) {
     while (map.size > limit) {
@@ -1726,6 +1733,7 @@
       this.gaps = new Map(); this.unanswered = new Map(); this.suggestions = new Map();
       this.runs = 0; this.started = this.wall();
       this.device = opts.device || null; this.keep = opts.keep || null;
+      this.others = new Map(); this.onOwnChange = null;  // called when its own gaps or sentences change
       if (this.keep) this.restore(this.load(this.keep));
       for (const raw of opts.trees || []) this.add(raw);
     }
@@ -1733,7 +1741,39 @@
     load(keep) { try { return keep.load(); } catch (e) { return null; } }
     kept() {
       const all = (m) => [...m.values()].map((e) => Object.assign({}, e));
-      return { pyrtan: "kept", version: KEPT_VERSION, device: this.device, saved: this.wall(), gaps: all(this.gaps), unanswered: all(this.unanswered), suggestions: all(this.suggestions) };
+      return { pyrtan: "kept", version: KEPT_VERSION, device: this.device, saved: this.wall(), gaps: all(this.gaps), unanswered: all(this.unanswered), suggestions: all(this.suggestions), others: [...this.others.values()] };
+    }
+    // What this device met itself, as another device of the same person is given it.
+    own() {
+      return {
+        gaps: [...this.gaps.values()].map((g) => { const c = Object.assign({}, g); delete c.device; return c; }),
+        unanswered: [...this.unanswered.values()].map((e) => ({ text: e.text, count: e.count, first: e.first, last: e.last })),
+      };
+    }
+    ownChanged() { this.persist(); if (this.onOwnChange) { try { this.onOwnChange(); } catch (e) {} } }
+    // Another device's bundle ({device, issued, gaps, unanswered, ...}), already checked: kept when it is newer than the one held for that device.
+    takeOther(b) {
+      if (!isObj(b) || typeof b.device !== "string" || b.device === this.device || !Number.isFinite(b.issued)) return false;
+      const cur = this.others.get(b.device);
+      if (cur && cur.issued >= b.issued) return false;
+      this.others.set(b.device, b);
+      bound(this.others, OTHERS_LIMIT, (o) => o.issued);
+      this.persist();
+      return true;
+    }
+    dropOthers(which) {
+      let n = 0;
+      for (const [d, b] of [...this.others]) if (which(b)) { this.others.delete(d); n += 1; }
+      if (n) this.persist();
+      return n;
+    }
+    othersRows(field) {
+      const out = [];
+      for (const b of this.others.values()) for (const e of Array.isArray(b[field]) ? b[field].slice(0, field === "gaps" ? GAPS_LIMIT : UNANSWERED_LIMIT) : []) {
+        if (field === "gaps" && isObj(e) && "tree" in e) out.push({ tree: e.tree, node: e.node, on: e.on, observed: e.observed === undefined ? null : e.observed, count: Math.max(1, Math.trunc(Number(e.count) || 1)), first_seen: Number(e.first_seen) || 0, last_seen: Number(e.last_seen) || 0, device: b.device });
+        if (field === "unanswered" && isObj(e) && typeof e.text === "string") out.push({ text: e.text, count: Math.max(1, Math.trunc(Number(e.count) || 1)), first: Number(e.first) || 0, last: Number(e.last) || 0, proposal: propose(e.text), device: b.device });
+      }
+      return out;
     }
     persist() { if (this.keep) { try { this.keep.save(this.kept()); } catch (e) { /* full or refused: kept in memory still */ } } }
     // Merge what was kept (by this device, or another, or an older page) into what is held: counts add, as gaps.py merges a file.
@@ -1758,7 +1798,12 @@
         if (cur) { cur.count += count; cur.first = Math.min(cur.first, Number(s.first) || now); cur.last = Math.max(cur.last, Number(s.last) || now); }
         else this.suggestions.set(key, Object.assign({}, c, { count, first: Number(s.first) || now, last: Number(s.last) || now }));
       }
-      bound(this.gaps, GAPS_LIMIT, (g) => g.last_seen); bound(this.unanswered, UNANSWERED_LIMIT, (e) => e.last); bound(this.suggestions, UNANSWERED_LIMIT, (e) => e.last);
+      for (const b of Array.isArray(k.others) ? k.others : []) {
+        if (!isObj(b) || typeof b.device !== "string" || b.device === this.device || !Number.isFinite(b.issued)) continue;
+        const cur = this.others.get(b.device);
+        if (!cur || cur.issued < b.issued) this.others.set(b.device, b);
+      }
+      bound(this.gaps, GAPS_LIMIT, (g) => g.last_seen); bound(this.unanswered, UNANSWERED_LIMIT, (e) => e.last); bound(this.suggestions, UNANSWERED_LIMIT, (e) => e.last); bound(this.others, OTHERS_LIMIT, (o) => o.issued);
       return true;
     }
     // This browser is another device now (it made a key, or forgot one): what it kept goes with it, merged with whatever that device kept here before.
@@ -1767,11 +1812,12 @@
       this.device = device || null; this.keep = keep || null;
       for (const g of this.gaps.values()) { if (this.device) g.device = this.device; else delete g.device; }
       if (this.keep) this.restore(this.load(this.keep));
+      if (this.device) this.others.delete(this.device);
       this.persist();
       if (old && old !== this.keep && old.clear) { try { old.clear(); } catch (e) {} }
     }
-    // Forget the gaps and the unanswered sentences, here and in what is kept. Suggestions are the agents' to dismiss.
-    forget() { this.gaps.clear(); this.unanswered.clear(); this.persist(); }
+    // Forget the gaps and the unanswered sentences, its own and its other devices', here and in what is kept. Suggestions are the agents' to dismiss.
+    forget() { this.gaps.clear(); this.unanswered.clear(); this.others.clear(); this.ownChanged(); }
     // where: what to call the tree in errors (a catalog id). The first tree of a name is the one held.
     add(raw, where) {
       const name = raw && raw.name;
@@ -1792,7 +1838,7 @@
         else this.gaps.set(key, Object.assign({ tree: g.tree, node: g.node, on: g.on, observed: g.observed === undefined ? null : g.observed, count: 1, first_seen: now, last_seen: now }, this.device ? { device: this.device } : {}));
       }
       bound(this.gaps, GAPS_LIMIT, (g) => g.last_seen);
-      this.persist();
+      this.ownChanged();
     }
     noteUnanswered(text) {
       const now = this.wall(), key = normalise(text).toLowerCase() || text;
@@ -1800,7 +1846,7 @@
       if (!e) { e = { text: normalise(text) || text, count: 0, first: now, last: now, proposal: propose(text) }; this.unanswered.set(key, e); }
       e.count += 1; e.last = Math.max(e.last, now);
       bound(this.unanswered, UNANSWERED_LIMIT, (v) => v.last);
-      this.persist();
+      this.ownChanged();
     }
     // What agents sent, as suggestions.py keeps it: checked, counted, bounded, never applied.
     noteSuggestions(items) {
@@ -1848,8 +1894,8 @@
       if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"] }];
       if (method === "GET" && path === "/health") return [200, this.health()];
       if (method === "GET" && path === "/capabilities") return [200, this.capabilities()];
-      if (method === "GET" && path === "/gaps") return [200, { gaps: [...this.gaps.values()].map((g) => Object.assign({}, g)).sort((a, b) => b.count - a.count || a.last_seen - b.last_seen) }];
-      if (method === "GET" && path === "/unanswered") return [200, { unanswered: [...this.unanswered.values()].map((e) => Object.assign({}, e)).sort((a, b) => b.count - a.count || b.last - a.last) }];
+      if (method === "GET" && path === "/gaps") return [200, { gaps: [...this.gaps.values()].map((g) => Object.assign({}, g)).concat(this.othersRows("gaps")).sort((a, b) => b.count - a.count || a.last_seen - b.last_seen) }];
+      if (method === "GET" && path === "/unanswered") return [200, { unanswered: [...this.unanswered.values()].map((e) => Object.assign({}, e)).concat(this.othersRows("unanswered")).sort((a, b) => b.count - a.count || b.last - a.last) }];
       if (method === "GET" && path === "/watches") return [200, { count: 0, watches: [], watching: false }];
       if (method === "GET" && path === "/suggestions") return [200, { suggestions: [...this.suggestions.values()].map((e) => Object.assign({}, e)).sort((a, b) => b.count - a.count || b.last - a.last) }];
       if (method === "POST" && path === "/suggestions") {

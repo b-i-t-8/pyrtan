@@ -168,14 +168,18 @@ and keeps gaps, unanswered sentences and suggestions in local storage
 load, the way `--gaps FILE` is), under the device the browser is: its
 key when the Identity tab has made one, else `browser-<random>` made
 once. Each gap names that device, as a hub's gaps name the peer; making
-or forgetting a key moves what was kept to the device it now is. What a page cannot
+or forgetting a key moves what was kept to the device it now is, and the
+devices of one identity share what they kept with each other, with no
+hub (`identity.md` §5b). What a page cannot
 reach it reports instead of attempting: a `file`, `shell`, `serial`,
 `queue` or `browser` node answers `source-unsupported`, and a site that
 does not let a page read it fails as `transport` with that reason; the
 Trees tab marks both, and a tree that reads the operator's `env` (the
 Postfinite trees' credentials), and "Try one" offers only trees that can
 answer.
-Nothing in it is sent anywhere but the requests the trees make.
+Nothing in it is sent anywhere but the requests the trees make, and,
+when the person links two of their own devices, the signed gaps that go
+over that link to the other.
 
 Joining is explicit: a hub URL and a token in the connect box, kept in
 local storage, the token sent as a bearer (and `?hub=URL` for a link).

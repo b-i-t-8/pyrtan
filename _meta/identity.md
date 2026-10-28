@@ -254,6 +254,61 @@ the platform's own keychain, to seal the backup instead of a passphrase.
 Support is uneven across browsers today; the passphrase stays, and a
 passkey would be a second way to open the same backup.
 
+## 5b. A person's devices share their gaps, with no hub
+
+A console that has joined no hub keeps the gaps and unanswered sentences
+it met under its device (`platform.md`). The devices of one identity
+hand them to each other directly, browser to browser (`sync.js`); no hub
+holds them, relays them or learns they exist.
+
+**A bundle** is one device's own gaps and sentences, signed by that
+device's key the way a root signs a document (`pyrtan-doc-v1\n` and the
+canonical JSON), with the device's note beside it:
+
+```json
+{"pyrtan-gaps": 1, "root": "pyr:…", "device": "pyr:…", "note": { its device note },
+ "issued": 1761580800000, "gaps": [ … ], "unanswered": [ … ],
+ "document": { the root's identity document: only in the root's own bundle },
+ "sig": "<the device's>"}
+```
+
+A device takes a bundle only when its `root` is its own root, the device
+is the root or holds a current note the root signed, the device is not in
+the root's `revoked`, and the signature holds. The root's own bundle
+carries its identity document, so a device that never meets a hub still
+learns who is revoked, and drops what a revoked device gave. A device
+keeps the newest bundle per device (by `issued`), lists their gaps beside
+its own with the device named, and never adds them into its own counts;
+it passes the bundles it holds on unchanged, so what the phone met
+reaches the tablet through the laptop, and a bundle that goes round and
+round is still counted once.
+
+**A link** is a WebRTC data channel between two consoles. One page makes
+an offer; the person carries it to the other (pasted, or a QR code, which
+on a page served over HTTPS is the console's address with `#sync=` and the
+offer, so a phone's camera opens it); the other answers, and the answer
+comes back the same way. No STUN or TURN server is asked, because the
+console reaches nothing but the hosts its trees read: two devices link
+when they can reach each other directly, which in practice means the same
+network. Over the link each side first sends a **hello**, signed like a
+bundle (`{"pyrtan-sync-hello": 1, "root", "device", "note", "link",
+"issued"}`), where `link` is both ends' DTLS fingerprints from the offer
+and the answer. Nothing else crosses until the other's hello names this
+link and passes the bundle rules, so a code that reached a stranger
+opens a link that carries nothing, and a hello cannot be replayed onto
+another link. Then each sends its bundles, and its own again whenever it
+meets a new gap, while both pages are open.
+
+**A file** (`{"pyrtan-gaps-file": 1, "root", "made", "bundles": [ … ]}`)
+carries the same bundles for devices that are never on at the same time
+or on the same network, and is checked bundle by bundle the same way.
+
+**What this does not do.** A device whose key is not yet paired (no note)
+or a browser with no key shares nothing: there is no identity to share
+within. Across networks, two consoles cannot link without a server to
+find each other by; the file is the way across, and so is a hub, whose
+own gaps are already shared by everyone who joins it.
+
 ## 6. Names
 
 `alice@example.org` resolves by fetching

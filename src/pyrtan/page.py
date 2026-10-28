@@ -24,7 +24,10 @@ It reads sentences and runs trees here, keeping gaps and unanswered
 sentences in the browser's local storage, so they outlive the page, under
 the device that met them: this browser's key when it has one (its
 Identity tab), else an id of its own. Making or forgetting a key moves
-them to the device it now is; the Gaps tab forgets them. Trees that need a box (files,
+them to the device it now is; the Gaps tab forgets them, and shares them
+with the same identity's other devices, browser to browser with no hub
+(``sync.js``, inlined: a WebRTC link opened by a code or QR carried by
+hand, or a signed file; see _meta/identity.md §5b). Trees that need a box (files,
 programs, devices, brokers, a browser to drive) or a site that will not
 let a page read it say so. Joining a hub is explicit: its URL and token in
 the connect box, kept in the browser's local storage, the token sent as a
@@ -71,6 +74,8 @@ PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf
 THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
 # Identifiers, canonical JSON and request signing, inlined into the console (_meta/identity.md).
 IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding="utf-8")
+# A person's devices sharing their gaps, browser to browser, with no hub; and QR codes (sync.js).
+SYNC_JS = (Path(__file__).parent / "js" / "sync.js").read_text(encoding="utf-8")
 # Agents beside the swarm: open-weights models a person starts in the console (_meta/agents.md).
 AGENTS_JS = (Path(__file__).parent / "js" / "agents.js").read_text(encoding="utf-8")
 
@@ -86,6 +91,7 @@ TEMPLATE = r"""<!doctype html>
 <meta name="theme-color" content="#c2410c">
 <script>__THEME__</script>
 <script>__IDENTITY__</script>
+<script>__SYNC__</script>
 <script>__AGENTS__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
@@ -135,6 +141,11 @@ TEMPLATE = r"""<!doctype html>
   .link.up { background:var(--ok) } .link.stale { background:var(--ask) } .link.down { background:var(--bad) }
   .notice { border-left:3px solid var(--ask); padding:8px 12px; background:var(--soft); border-radius:6px; margin:0 0 14px; font-size:14px }
   .notice.bad { border-color:var(--bad) }
+  .sync-code { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; margin:10px 0 }
+  .sync-code .qr { width:min(260px, 100%); flex:0 0 auto; background:#fff; border-radius:8px; line-height:0 }
+  .sync-code .qr svg { width:100%; height:auto }
+  .sync-code textarea, #sync-step textarea { flex:1 1 220px; min-width:0; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); overflow-wrap:anywhere }
+  #sync-step video { width:min(320px, 100%); border-radius:8px; margin-top:10px }
   footer { color:var(--mute); font-size:13px; margin-top:32px }
   footer a, .card a { color:var(--accent) }
   .pyr { color:var(--pyr) } .tan { color:var(--tan) }
@@ -242,6 +253,20 @@ TEMPLATE = r"""<!doctype html>
     <p class="mute" style="font-size:14px;margin-top:0">A gap is a decision that met a value no branch covers. Each one is the next branch to write, in the tree and node named.</p>
     <p class="mute" style="font-size:14px;margin-top:0" id="gaps-local" hidden>Kept in this browser for this device, <code id="gaps-device"></code>, across reloads; making or forgetting a key in the Identity tab takes them along. <button type="button" class="quiet" id="gaps-forget">Forget them</button></p>
     <div class="card"><table id="gaps"><thead><tr><th>Tree · node</th><th>Saw</th><th>Times</th><th>Where</th></tr></thead><tbody></tbody></table></div>
+    <div class="card" id="sync" hidden>
+      <h3 style="margin:0 0 6px">Your other devices</h3>
+      <div class="mute" style="font-size:14px" id="sync-lede"></div>
+      <div class="row" style="margin-top:10px" id="sync-actions" hidden>
+        <button type="button" id="sync-offer">Link a device</button>
+        <button type="button" class="quiet" id="sync-have">I have a code</button>
+        <button type="button" class="quiet" id="sync-scan" hidden>Scan a code</button>
+        <button type="button" class="quiet" id="sync-export">Download for another device</button>
+        <button type="button" class="quiet" id="sync-import">Load a file from one</button>
+        <input type="file" id="sync-file" accept="application/json,.json" hidden>
+      </div>
+      <div id="sync-step"></div>
+      <div style="font-size:14px;margin-top:8px" id="sync-state"></div>
+    </div>
   </section>
 
   <section id="tab-unanswered" hidden>
@@ -818,7 +843,7 @@ async function loadDirectory() {
   }
   if (!(d.hubs || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nobody heard of yet. Join the default network (<code>pyrtan join</code>), or start this hub with <code>--listed</code>.</td></tr>`;
 }
-window.addEventListener("hashchange", () => showTab((location.hash || "#ask").slice(1)));
+window.addEventListener("hashchange", () => showTab(tabFromHash()));
 
 // A trigger as a sentence: the first of each choice, an input's default or "…"
 // for its blank, and the optional words kept or dropped.
@@ -938,12 +963,14 @@ function moveKept() {
   if (!local) return;
   const d = deviceId();
   if (d !== local.device) local.rekey(d, keptFor(d));
+  sync.identityChanged();
   showLocal(true);
 }
 async function startLocal() {
   isHub = false;
   const device = deviceId();
   local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__", device, keep: keptFor(device)});
+  local.onOwnChange = () => sync.changed();
   const trees = await catalogTrees();
   for (const e of trees) local.add(e.tree, e.id);
   showLocal(true);
@@ -955,6 +982,7 @@ function showLocal(on) {
   $("#connect-local").innerHTML = on ? `Gaps and unanswered sentences are kept in this browser, across reloads, for this device (<code>${esc(deviceName(local.device))}</code>). Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token.` : "";
   $("#gaps-local").hidden = !on;
   if (on) $("#gaps-device").textContent = deviceName(local.device);
+  sync.render();
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
@@ -999,7 +1027,7 @@ async function load() {
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
   renderCaps(c);
-  showTab((location.hash || "#ask").slice(1));
+  showTab(tabFromHash());
 }
 function renderCaps(c) {
   const body = $("#caps tbody"); const tries = $("#tries");
@@ -1064,11 +1092,173 @@ async function loadGaps() {
   const body = $("#gaps tbody"); body.innerHTML = "";
   for (const gap of g.gaps || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer || deviceName(gap.device))}</td>`;
+    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer || whose(gap.device))}</td>`;
     body.appendChild(tr);
   }
   if (!(g.gaps || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">No gaps: every decision so far had a branch.</td></tr>`;
 }
+
+// ---------------------------------------------------------------- your other devices
+// Devices of one identity share their gaps browser to browser (sync.js): a
+// WebRTC link opened by a code carried by hand or a QR, or a signed file.
+// Only while this browser is its own hub; a joined hub keeps gaps itself.
+const whose = (d) => !d ? "" : local && d === local.device ? "this device" : deviceName(d);
+// The tab an address names; #sync=CODE answers a link, then shows the gaps.
+function tabFromHash() {
+  const h = location.hash.slice(1);
+  if (h.startsWith("sync=")) {
+    history.replaceState(null, "", location.pathname + location.search + "#gaps");
+    sync.answer(decodeURIComponent(h.slice(5)));
+    return "gaps";
+  }
+  return h || "ask";
+}
+const sync = {
+  link: null, session: null, timer: null,
+  root() { return PyrtanSync.rootOf(ident.key); },
+  ready() { return !!(local && ident.ok && this.root()); },
+  // The devices the root's document revokes: the root's own, or the one its bundle carried here.
+  revoked() {
+    const k = ident.key;
+    const doc = !k ? null : k.role === "root" ? k.document : ((local && local.others.get(this.root())) || {}).document;
+    return doc && Array.isArray(doc.revoked) ? doc.revoked : [];
+  },
+  held() { return local ? [...local.others.values()] : []; },
+  take(b) { const took = local.takeOther(b); if (took && b.document) this.prune(); return took; },
+  prune() { const root = this.root(), gone = this.revoked(); return local ? local.dropOthers((b) => b.root !== root || gone.includes(b.device)) : 0; },
+  state(html, bad) { $("#sync-state").innerHTML = html ? `<span class="${bad ? "failed" : "mute"}">${html}</span>` : ""; },
+  step(html) { this.stopScan(); $("#sync-step").innerHTML = html || ""; },
+  render() {
+    const card = $("#sync");
+    card.hidden = !local;
+    if (!local) { this.close(); return; }
+    const ready = this.ready(), n = local.others.size;
+    $("#sync-actions").hidden = !ready;
+    $("#sync-scan").hidden = !ready || !("BarcodeDetector" in window);
+    $("#sync-lede").innerHTML = !ident.ok
+      ? "This browser cannot hold a key (it has no WebCrypto here), so it cannot share its gaps with your other devices."
+      : !ready ? "To share these gaps with your other devices, make your identity in the <a href=\"#identity\">Identity</a> tab, or pair this browser as a device of the identity you have. Only devices of one identity link, and each checks the other's signature."
+      : `The devices of your identity, <code>${esc(PyrtanIdentity.short(this.root()))}</code>, share their gaps and unanswered sentences directly, browser to browser, with no hub. Link two on the same network (a code to paste, or a QR to scan), or carry a file between any two. ${n ? `Held here from ${n} other device${n === 1 ? "" : "s"}.` : "Nothing held from another device yet."}`;
+  },
+  // A new key or another root closes the link; a revocation drops what the revoked device gave.
+  identityChanged() {
+    if (this.session && (this.session.root !== this.root() || this.revoked().includes(this.session.peer))) { this.close(); this.state("The link closed: this browser's identity changed, or the other device was revoked."); }
+    if (local) { this.prune(); this.render(); }
+  },
+  changed() { clearTimeout(this.timer); this.timer = setTimeout(() => { if (this.session) this.session.push(false).catch(() => {}); }, 1000); },
+  close() { if (this.link) this.link.close(); this.link = null; this.session = null; },
+  open() {
+    this.close();
+    const link = new PyrtanSync.Link({
+      onopen: (id) => {
+        if (this.link !== link) return;
+        this.session = new PyrtanSync.Session({key: ident.key, revoked: () => this.revoked(), own: () => local.own(), held: () => this.held(), take: (b) => this.take(b), send: (m) => link.send(m), note: (e, d) => this.noted(e, d)});
+        this.state("Linked. Checking the other device is yours…");
+        this.session.start(id).catch((e) => this.state(esc(e.message), true));
+      },
+      onmessage: (m) => { if (this.link === link && this.session) this.session.receive(m).catch((e) => this.state(esc(e.message), true)); },
+      onclose: () => { if (this.link !== link) return; this.link = null; this.session = null; this.state("The link closed. What came over it is kept here."); },
+    });
+    this.link = link;
+    return link;
+  },
+  noted(event, detail) {
+    if (event === "linked") { this.step(""); this.state(`Linked with <code>${esc(deviceName(detail))}</code>, a device of yours. New gaps go both ways while both pages are open.`); }
+    if (event === "refused") { this.state(`Not linked: ${esc(detail)}.`, true); this.close(); }
+    if (event === "took") this.took(detail);
+  },
+  took(r) {
+    const from = [...new Set(r.from)].map((d) => `<code>${esc(deviceName(d))}</code>`).join(", ");
+    const refused = r.refused.length ? ` Refused ${r.refused.length}: ${esc([...new Set(r.refused)].join("; "))}.` : "";
+    if (r.took || refused) this.state((r.took ? `Took the newest gaps of ${from}.` : "Nothing newer.") + refused, !!refused && !r.took);
+    if (r.took) { this.render(); if (!$("#tab-gaps").hidden) loadGaps(); }
+  },
+  // A code to carry: shown as text, with a QR. An offer's QR is this page's address when it has one, so a phone's camera opens it here.
+  codeBlock(code, offer) {
+    const web = /^https?:$/.test(location.protocol), scan = offer && web ? `${location.origin}${location.pathname}#sync=${code}` : code;
+    let qr = ""; try { qr = PyrtanSync.qrSvg(scan); } catch (e) {}
+    return `<div class="sync-code">${qr ? `<div class="qr">${qr}</div>` : ""}<textarea readonly rows="6" id="sync-code">${esc(code)}</textarea></div><button type="button" class="quiet" id="sync-copy">Copy the code</button>`;
+  },
+  async offer() {
+    if (!this.ready()) return;
+    const link = this.open();
+    this.step('<p class="mute">Making a code…</p>'); this.state("");
+    try {
+      const code = await link.offer();
+      this.step(`<p>On your other device, open this console's Gaps tab and press <em>I have a code</em>; paste this there${/^https?:$/.test(location.protocol) ? ", or point its camera at the QR" : ""}. Both devices need to be on the same network.</p>${this.codeBlock(code, true)}
+        <form class="row" id="sync-accept" style="margin-top:12px"><input type="text" id="sync-answer" placeholder="then paste the code it gives back" autocomplete="off"><button type="submit">Connect</button></form>`);
+    } catch (e) { this.step(""); this.state(`Could not make a code: ${esc(e.message)}`, true); }
+  },
+  have() {
+    if (!this.ready()) return;
+    this.step(`<form id="sync-answer-form" style="margin-top:10px"><textarea id="sync-offer-code" rows="4" style="width:100%" placeholder="the code your other device shows"></textarea><div class="row" style="margin-top:8px"><button type="submit">Answer it</button></div></form>`);
+    $("#sync-offer-code").focus();
+  },
+  async answer(code) {
+    if (!local) { problem("A link between your devices needs this browser to be its own hub: forget the hub it joined, then open the link again.", true); return; }
+    if (!this.ready()) { this.render(); this.state("This browser holds no key of your identity yet, so it cannot answer the link: pair it in the Identity tab, then open the link again.", true); return; }
+    const link = this.open();
+    this.step('<p class="mute">Answering…</p>'); this.state("");
+    try {
+      const back = await link.answer(code);
+      this.step(`<p>Paste this on the device that showed you the code${"BarcodeDetector" in window ? ", or scan it there" : ""}. The link opens when it does.</p>${this.codeBlock(back, false)}`);
+    } catch (e) { this.close(); this.step(""); this.state(`Could not answer: ${esc(e.message)}`, true); }
+  },
+  async accept(code) {
+    try { await this.link.accept(code); this.state("Connecting…"); }
+    catch (e) { this.state(`Could not connect: ${esc(e.message)}`, true); }
+  },
+  // A code by camera, where the browser can read one: an offer is answered, an answer opens the link this page offered.
+  async scan() {
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}}); }
+    catch (e) { this.state(`No camera: ${esc(e.message)}`, true); return; }
+    this.step('<p class="mute">Point the camera at the other device\'s code.</p><video id="sync-video" playsinline muted></video><div><button type="button" class="quiet" id="sync-scan-stop">Stop</button></div>');
+    const video = $("#sync-video"); video.srcObject = stream; await video.play();
+    this.scanning = stream;
+    const detector = new BarcodeDetector({formats: ["qr_code"]});
+    while (this.scanning === stream) {
+      let found = null;
+      try { found = (await detector.detect(video)).find((c) => /pyrgaps1\./.test(c.rawValue)); } catch (e) {}
+      if (found) {
+        this.stopScan();
+        let d; try { d = await PyrtanSync.decodeCode(found.rawValue); } catch (e) { this.state(esc(e.message), true); return; }
+        if (d.kind === "o") return this.answer(found.rawValue);
+        if (this.link) { this.step(""); return this.accept(found.rawValue); }
+        this.state("That is an answer, and this page made no offer: press Link a device first.", true); return;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  },
+  stopScan() { const s = this.scanning; this.scanning = null; if (s) s.getTracks().forEach((t) => t.stop()); },
+  async exportFile() {
+    const f = await PyrtanSync.makeFile(ident.key, local.own(), this.held());
+    saveFile(`pyrtan-gaps-${new Date().toISOString().slice(0, 10)}.json`, f);
+    this.state(`Saved the gaps of this device${f.bundles.length > 1 ? ` and ${f.bundles.length - 1} other${f.bundles.length > 2 ? "s" : ""}` : ""}, signed. Load the file on another device of yours.`);
+  },
+  async importFile(file) {
+    try {
+      const f = JSON.parse(await file.text());
+      this.took(await PyrtanSync.readFile(f, ident.key, () => this.revoked(), (b) => this.take(b)));
+      if (!$("#sync-state").textContent) this.state("Nothing newer in that file.");
+    } catch (e) { this.state(`Could not load it: ${esc(e.message)}`, true); }
+  },
+};
+$("#sync-offer").addEventListener("click", () => sync.offer());
+$("#sync-have").addEventListener("click", () => sync.have());
+$("#sync-scan").addEventListener("click", () => sync.scan());
+$("#sync-export").addEventListener("click", () => sync.exportFile().catch((e) => sync.state(esc(e.message), true)));
+$("#sync-import").addEventListener("click", () => $("#sync-file").click());
+$("#sync-file").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { sync.state(""); sync.importFile(f); } });
+$("#sync-step").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (e.target.id === "sync-accept") sync.accept($("#sync-answer").value);
+  if (e.target.id === "sync-answer-form") sync.answer($("#sync-offer-code").value);
+});
+$("#sync-step").addEventListener("click", (e) => {
+  if (e.target.id === "sync-copy") { const t = $("#sync-code"); t.select(); try { navigator.clipboard.writeText(t.value); } catch (err) { document.execCommand("copy"); } e.target.textContent = "Copied"; }
+  if (e.target.id === "sync-scan-stop") sync.step("");
+});
 
 $("#gaps-forget").addEventListener("click", () => {
   if (!local || !confirm("Forget the gaps and unanswered sentences this browser kept?")) return;
@@ -1081,7 +1271,7 @@ async function loadUnanswered() {
   for (const e of u.unanswered || []) {
     const p = e.proposal || {};
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code>${local ? "" : `<div style="margin-top:6px"><button type="button" class="quiet build" data-text="${esc(e.text)}" data-name="${esc(p.name||"")}">Build it here</button></div>`}</td>`;
+    tr.innerHTML = `<td>${esc(e.text)} <span class="mute">×${esc(e.count||1)}${e.peer ? " · " + esc(e.peer) : e.device && local && e.device !== local.device ? " · " + esc(whose(e.device)) : ""}</span></td><td><code>${esc(p.name||"")}</code><div class="mute"><code>${esc(p.trigger||"")}</code></div></td><td><code>${esc(p.scaffold||"")}</code>${local ? "" : `<div style="margin-top:6px"><button type="button" class="quiet build" data-text="${esc(e.text)}" data-name="${esc(p.name||"")}">Build it here</button></div>`}</td>`;
     body.appendChild(tr);
   }
   if (!(u.unanswered || []).length) body.innerHTML = `<tr><td colspan="3" class="mute">Nothing yet: every sentence so far found a tree.</td></tr>`;
@@ -1754,7 +1944,7 @@ ident.init().finally(load);
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__AGENTS__", AGENTS_JS)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__SYNC__", SYNC_JS).replace("__AGENTS__", AGENTS_JS)
 
 
 def page(trees: dict[str, Any] | None = None) -> str:
