@@ -165,7 +165,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
-| `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network pyrtan.com publishes, or the one an invite (`NAME:SECRET@HUB`) names. |
+| `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network (built in), or the one an invite (`NAME:SECRET@HUB`) names. |
 | `pyrtan network new NAME --at HUB` | Starts a network of your own, a network of one, and prints its invite. `network list` shows each network with its invite; `network leave NAME` cuts the links made in it. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
@@ -271,15 +271,21 @@ keeper. Leaving a network (`pyrtan network leave`) cuts the links made
 in it and forgets what was heard there. A follow made outside any
 network, and a member's, works as it always has.
 
-The **default network** is the one pyrtan.com publishes in
-`rendezvous/network.json`: `pyrtan`, with a secret that is public on
-purpose. It names the network rather than guarding it: anyone may join,
-and what keeps a stranger's hub harmless is that following is still the
-one act of trust. `pyrtan join` (or `pyrtan hub --join default`, or
-`$PYRTAN_JOIN=default`) puts a hub in it and follows the first hub in
-`rendezvous/hubs.json` that answers, then the first from the snapshot;
-when none does, the hub is the network so far, and others join through
-it. pyrtan.com runs no hub: it is static files on GitHub Pages. Every
+The **default network** is built into pyrtan: `pyrtan`, with a secret
+that is public on purpose. It names the network rather than guarding
+it: anyone may join, and what keeps a stranger's hub harmless is that
+following is still the one act of trust. `pyrtan join` (or `pyrtan hub
+--join default`, or `$PYRTAN_JOIN=default`) puts a hub in it and follows
+the first hub that accepts, trying what the hub already knows before
+asking anyone: the hubs it follows in the network, then the ones its
+directory has heard in it, then the hub list, then the snapshot, each
+fetched only if the ones before it did not do. So a hub that has been in
+the network once never needs pyrtan.com again; when nobody accepts, the
+hub is the network so far, and others join through it. `$PYRTAN_HUB_LIST`
+takes any number of sources (a hub list, any hub's `/directory`, a
+snapshot or a mirror of one), so pyrtan.com is one starting point among
+any others. pyrtan.com runs no hub: it is static files on GitHub Pages,
+and publishes the default network's name and secret only as a mirror. Every
 hour its build asks every hub it knows of for its directory (the hub
 list, then everyone the last snapshot or a hub names), keeps the default
 network's part, and publishes it as `rendezvous/directory.json`, so the
@@ -645,11 +651,11 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.14.0. The core, the service, the hub, the command, the console, the
+0.15.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
-between hubs, networks (any hub starts one; pyrtan.com publishes the
-default), the gossiped directory, members (a browser or a phone as
+between hubs, networks (any hub starts one; the default one is built
+in), the gossiped directory, members (a browser or a phone as
 part of the swarm), the blobs they keep and the trees they run
 (`pyrtan.js`, conformant with the Python runtime), six forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each

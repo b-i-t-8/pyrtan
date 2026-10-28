@@ -1027,3 +1027,53 @@ def test_the_default_network_from_pyrtan_com(two, tmp_path, monkeypatch, capsys)
     assert done.returncode == 0, done.stderr
     ids = {h["id"] for h in json.loads(out.read_text())["hubs"]}
     assert "http://public.example" in ids and "http://private.example" not in ids and b.url in ids
+
+
+def test_the_default_network_is_built_in_and_pyrtan_com_only_mirrors_it(monkeypatch):
+    import pyrtan.federation as federation
+
+    monkeypatch.delenv("PYRTAN_NETWORK", raising=False)
+    monkeypatch.setattr(federation, "http_json", lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked the network for the default network")))
+    net = federation.default_network()
+    assert net is not None and net.public and net.name == "pyrtan"
+    mirror = json.loads((ROOT / "site" / "rendezvous" / "network.json").read_text())
+    assert (net.name, net.secret) == (mirror["name"], mirror["secret"])  # the site publishes the same network, or joining would split it
+
+
+def test_the_hub_list_reads_many_sources_of_either_shape(tmp_path, monkeypatch):
+    from pyrtan.federation import hub_urls, rendezvous_hubs
+
+    listed = tmp_path / "hubs.json"
+    listed.write_text(json.dumps({"hubs": ["https://a.example/", "https://b.example"]}))
+    directory = tmp_path / "directory.json"  # a hub's /directory, or a snapshot: newest first
+    directory.write_text(json.dumps({"hubs": [{"id": "https://old.example", "seen": 1}, {"id": "https://b.example", "seen": 3}, {"id": "https://new.example", "seen": 5}]}))
+    monkeypatch.delenv("PYRTAN_RENDEZVOUS", raising=False)
+    monkeypatch.setenv("PYRTAN_HUB_LIST", f"{listed}, {tmp_path / 'missing.json'} {directory}")
+    assert rendezvous_hubs() == ["https://a.example", "https://b.example", "https://new.example", "https://old.example"]
+    assert hub_urls({"hubs": ["ftp://x", 3, None]}) == [] and hub_urls(None) == []
+
+
+def test_joining_tries_the_hubs_it_knows_before_asking_anyone(two, monkeypatch):
+    import pyrtan.hub as hubmod
+    from pyrtan.federation import default_network
+
+    a, b = two
+    monkeypatch.delenv("PYRTAN_NETWORK", raising=False)  # the built-in default network
+    default = default_network()
+    assert hubmod.join_network(b.fed, "default")[1]["say"].startswith("in pyrtan")  # b is in it, a network of one
+
+    # a has heard of b in the default network, from gossip: that is enough.
+    a.fed.add_network(default)
+    a.fed.merge_directory([{"id": b.url, "name": "b", "trees": [], "seen": time.time()}], via="http://someone.example", network=default.id)
+    assert a.fed.known_hubs(default.id) == [b.url]
+
+    def nobody(*_):
+        raise AssertionError("asked pyrtan.com although a known hub answered")
+
+    monkeypatch.setattr(hubmod, "rendezvous_hubs", nobody)
+    monkeypatch.setattr(hubmod, "snapshot_hubs", nobody)
+    status, out = hubmod.join_network(a.fed, "default")
+    assert status == 200 and out["say"] == f"in pyrtan, following {b.url}" and a.fed.following[b.url].network == default.id
+    # Joining again (a restart with --join default) is the follow it has, and asks nobody either.
+    assert hubmod.join_network(a.fed, "default")[1]["following"]["url"] == b.url
+    assert a.fed.known_hubs(default.id)[0] == b.url
