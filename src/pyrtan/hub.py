@@ -144,12 +144,12 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, chat_reach: int = 0) -> None:
         self.name = name
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
         self._audience = audience
-        self.lobby = Lobby(self, typing=chat_typing) if chat or chat_public else None
+        self.lobby = Lobby(self, typing=chat_typing, reach=chat_reach) if chat or chat_public else None
         self.chat_public = chat_public  # callers without the token may chat, with people only
         self.lan: Lan | None = None     # hubs heard on the local network (--lan)
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
@@ -302,6 +302,8 @@ class Hub:
         if self.federation is not None:
             self.federation.refresh_all()
             self.federation.announce()  # only when what we hold changed
+            if self.lobby is not None:
+                self.lobby.reach_out()  # chat links, for chat only (--chat-reach)
 
     def start_polling(self) -> None:
         def loop() -> None:
@@ -584,6 +586,8 @@ class Hub:
                 out: dict[str, Any] = {"peers": ([self.local.to_dict()] if self.local else []) + [p.to_dict() for p in self.peers.values()]}
             if fed is not None:
                 out.update(fed.to_dict())
+            if self.lobby is not None and self.lobby.reach:
+                out["chat_links"] = self.lobby.links_view()
             return 200, out
         if fed is not None:
             if method == "GET" and path == "/actor":
@@ -815,6 +819,7 @@ def serve_hub(
     unanswered: str | Path | None = None,
     watch: bool = False,
     lan: bool = False,
+    chat_reach: int = 0,
     chat: bool = False,
     allow: list[str] | None = None,
     grants: str | None = None,
@@ -833,10 +838,10 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
-    if federate or advertise or join or lan:
+    if federate or advertise or join or lan or chat_reach:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
         hub.add_peer(url)

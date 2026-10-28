@@ -76,8 +76,9 @@ hears the hubs on its own network say they are there (:mod:`pyrtan.lan`)
 and tries those right after the ones it follows: no internet needed.
 A follow outside any network (and every member's) works as before.
 
-**Chat.** A hub with a lobby (``--chat``) asks the hubs it follows for a
-stranger with ``Meet``, and the two seats talk in ``Say`` and end with
+**Chat.** A hub with a lobby (``--chat``) asks the hubs it follows, and
+the ones it keeps a chat link with (``ChatLink``, ``--chat-reach``: for
+chat only, never a follow), for a stranger with ``Meet``, and the two seats talk in ``Say`` and end with
 ``Part``, with ``Typing`` while someone types, both ways between any two
 hubs that share a secret; a ``Say`` is logged without its text and a
 ``Typing`` not at all. See :mod:`pyrtan.chat`.
@@ -125,7 +126,7 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part")
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part", "ChatLink")
 CHAT_TYPES = ("Meet", "Say", "Typing", "Part")   # a lobby's: two strangers on two hubs
 UNLOGGED = ("Typing",)                 # said every couple of seconds while someone types: not worth a log line
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
@@ -384,10 +385,13 @@ def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any
 
 
 def _logged(activity: dict[str, Any]) -> dict[str, Any]:
-    """An activity as the outbox and inbox logs keep it: a chat line without its text."""
+    """An activity as the outbox and inbox logs keep it: a chat line without
+    its text, a chat link without its secret."""
     obj = activity.get("object")
     if activity.get("type") == "Say" and isinstance(obj, dict) and "text" in obj:
         return {**activity, "object": {**obj, "text": f"<{len(str(obj['text']))} characters>"}}
+    if activity.get("type") == "ChatLink" and "secret" in activity:
+        return {**activity, "secret": "<secret>"}
     return activity
 
 
@@ -1178,6 +1182,8 @@ class Federation:
             self.inbox_log.append({**_logged(activity), "received": time.time()})
         if kind == "Follow":
             return self._on_follow(actor, activity, h, trusted, trusted_by=trusted_by, signer=signer)
+        if kind == "ChatLink":
+            return self._on_chat_link(actor, activity, h)
         followed = self.following.get(actor)
         follower = self.followers.get(actor)
         if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES):
@@ -1187,6 +1193,11 @@ class Federation:
             remote = followed or follower
         else:
             remote = followed if kind in ("Accept", "Reject") else follower
+        linked = False
+        if remote is None and kind in CHAT_TYPES and self.chat is not None:
+            # A chat link: chat may travel on it, and nothing else does.
+            remote = self.chat.link_for(actor)
+            linked = remote is not None
         if remote is None:
             return 403, {"status": "error", "reason": "unknown-actor", "say": f"{actor} is not a hub this one follows or is followed by."}
         problem = verify(remote.secret, "POST", "/inbox", activity, h)
@@ -1194,6 +1205,11 @@ class Federation:
             # Mutual follow: the announce may be signed with the other pair.
             remote = follower if remote is followed else followed
             problem = verify(remote.secret, "POST", "/inbox", activity, h)
+        if problem and kind in CHAT_TYPES and self.chat is not None and not linked:
+            # A follow made after a chat link: the line may be signed with the link's secret.
+            link = self.chat.link_for(actor)
+            if link is not None and verify(link.secret, "POST", "/inbox", activity, h) is None:
+                remote, linked, problem = link, True, None
         if problem:
             return 401, {"status": "error", "reason": "unsigned", "say": problem}
         if kind in CHAT_TYPES:
@@ -1202,7 +1218,7 @@ class Federation:
             if remote.kind != "hub":
                 return 403, {"status": "error", "reason": "not-a-hub", "say": "Strangers meet hub to hub; a member chats through its hub's lobby."}
             remote.last_ok = time.time()
-            return self.chat.on_activity(kind, remote, activity.get("object"), follower=remote is follower)
+            return self.chat.on_activity(kind, remote, activity.get("object"), follower=remote is follower or linked)
         if kind == "Accept":
             with self._lock:
                 remote.state = "accepted"
@@ -1296,6 +1312,28 @@ class Federation:
             self.store.drop_kept(actor)
             self._save()
         return gone
+
+    def _on_chat_link(self, actor: str, activity: dict[str, Any], h: dict[str, str]) -> tuple[int, dict[str, Any]]:
+        """A hub asks for a chat link: checked as an open ``Follow`` is (signed
+        with the pair secret it carries; its inbox is the one its ``/actor``
+        names), then the lobby decides. A closed federation links with nobody."""
+        pair, inbox = activity.get("secret"), activity.get("inbox")
+        if not isinstance(pair, str) or len(pair) < 16 or not isinstance(inbox, str) or not actor.startswith(("http://", "https://")):
+            return 400, {"status": "error", "reason": "bad-activity", "say": "A ChatLink comes from a hub and carries a pair secret and its inbox."}
+        if self.chat is None:
+            return 404, {"status": "error", "reason": "no-chat", "say": f"{self.id} keeps no lobby."}
+        if self.secret or not self.open_follows:
+            return 403, {"status": "error", "reason": "closed", "say": "This hub links only with hubs its operator chose."}
+        problem = verify(pair, "POST", "/inbox", activity, h)
+        if problem:
+            return 401, {"status": "error", "reason": "unsigned", "say": problem}
+        try:
+            status, doc = http_json("GET", f"{actor}/actor", timeout=10.0)
+        except Exception as e:
+            return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor did not answer: {e}"}
+        if status != 200 or not isinstance(doc, dict) or doc.get("id", "").rstrip("/") != actor or doc.get("inbox") != inbox:
+            return 400, {"status": "error", "reason": "no-actor", "say": f"{actor}/actor does not describe this hub."}
+        return self.chat.accept_link(Remote(actor, inbox, pair, str(activity.get("name") or doc.get("name") or "")[:80], state="accepted", last_ok=time.time(), kind="hub"))
 
     def _on_follow(self, actor: str, activity: dict[str, Any], h: dict[str, str], trusted: bool = False, *, trusted_by: str | None = None, signer: Any = None) -> tuple[int, dict[str, Any]]:
         pair = activity.get("secret")
