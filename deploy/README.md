@@ -70,10 +70,16 @@ file's environment `PYRTAN_ADVERTISE` (that address), `PYRTAN_JOIN:
 default` and `PYRTAN_LISTED: "true"`, with `PYRTAN_TOKEN` set and
 `PYRTAN_EGRESS: public` (hubs that follow yours may ask it to run trees,
 and `any` would let them point a tree at your LAN). The hub then joins
-the default network pyrtan.com publishes, follows the first hub in it
-that answers (from pyrtan.com's hub list, then its snapshot),
+the default network (built in), follows the first hub in it that
+accepts (one it already knows, else from pyrtan.com's hub list, then
+its snapshot),
 routes to it, and is listed in the directory every hub gossips; `pyrtan
-follow URL --at <your hub> --token …` follows any other. For a network
+follow URL --at <your hub> --token …` follows any other. With other hubs
+in the same house (a second NAS, a laptop running `pyrtan hub`), set
+`PYRTAN_LAN: "true"` too, with `network_mode: host` on the hub service
+and `PYRTAN_ADVERTISE` at the box's LAN address: the hubs find each
+other by multicast, and join through each other before asking
+pyrtan.com anything. For a network
 of your own, `pyrtan network new home --at <your hub> --token …` prints
 an invite; a friend's hub joins with `pyrtan join <invite>`, or by
 adding it to its `PYRTAN_JOIN`. Following is one-directional trust: your
@@ -94,6 +100,55 @@ NAS: mount the paths and pass the devices through in the compose file
 `commands` and `devices` lists decide what it may touch. Trees that
 drive a browser need Playwright, which the image does not carry; run
 those from a checkout with `uv sync --extra browser`.
+
+### A family intranet: a private network
+
+For a hub that serves a family (or a team) and nobody else, keep it off
+everything public: no `PYRTAN_LISTED`, no `PYRTAN_JOIN: default`, nothing
+added to pyrtan.com's `hubs.json`, no `PYRTAN_CHAT_PUBLIC` and no
+`PYRTAN_CHAT_REACH`. Make a private network instead, and share its
+invite only with the family. In the hub's environment:
+
+```yaml
+PYRTAN_TOKEN: "<long random string>"          # openssl rand -hex 24; the family's way in
+PYRTAN_EGRESS: public                          # hubs that follow this one may ask it to run trees
+PYRTAN_ADVERTISE: "http://<nas-ip>:8700"       # an address every family hub can reach (below)
+PYRTAN_CHAT: "true"                            # the lobby, behind the token: family only
+```
+
+Then, once, from any machine that reaches the hub:
+
+```
+pyrtan network new family --at http://<nas-ip>:8700 --token <token>
+```
+
+It prints an invite, `family:SECRET@http://<nas-ip>:8700`. Send it the
+way you would send a house key. Another family hub (a second NAS, a
+laptop running `pyrtan hub`) joins with `pyrtan join <invite> --at <that
+hub> --token <its token>`, or with the invite in its `PYRTAN_JOIN`. A
+private network's hubs never reach the public directory or the snapshot,
+and its secret signs every follow made in it. Following is one-way:
+the hub that joined follows the NAS, so its people can meet the NAS's
+in the lobby, and for the NAS's people to meet theirs, the NAS follows
+it back: `pyrtan follow http://<that hub>:8700 --network family --at
+http://<nas-ip>:8700 --token <token>`.
+
+Phones and browsers do not need a hub of their own. Open the NAS's
+console at `http://<nas-ip>:8700/`, enter the token, and chat in the
+Chat tab; join in the Member tab to keep the hub's blobs and run its
+trees.
+
+`PYRTAN_ADVERTISE` is the address the other hubs reach this one at. If
+every family hub is in one house, that is the NAS's LAN address. If
+they are in different houses, keep it off the public internet and put
+every hub and phone on one private overlay network instead, such as
+[Tailscale](https://tailscale.com) (`tailscale up` on each machine, not
+`tailscale funnel`, which is public), and advertise the NAS's address
+there (`http://<nas-name>.<tailnet>.ts.net:8700`). An internal hostname
+under a domain you own works too, if every family network resolves it.
+`PYRTAN_LAN` adds nothing here: hubs on the LAN only announce public
+networks, and the invite already carries the NAS's address, so leave
+it off and the hub needs no `network_mode: host`.
 
 ### Without the plugin
 

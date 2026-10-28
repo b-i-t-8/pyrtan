@@ -24,6 +24,14 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 A tree that reads a page should prefer an API or a feed when the site offers
 one, and should decide on the status code before it decides on the body.
 
+A tree whose every node is `http` against an API that lets other origins
+read it (it answers with `Access-Control-Allow-Origin`) also runs in a
+browser: the console at pyrtan.com runs it in the page, with no hub.
+`curl -sI -H "Origin: https://pyrtan.com" URL` shows whether it does.
+Keep to headers a page may send as they are (`Accept` is fine; a
+custom `User-Agent` is not): anything else makes the browser send a
+preflight request first, which many APIs do not answer.
+
 A tree meant for the catalog at pyrtan.com carries a `license` line (an
 SPDX identifier; `MIT`, `Apache-2.0` or `CC0-1.0` are the usual choices)
 and a `namespace` line (who publishes it; the catalog id is

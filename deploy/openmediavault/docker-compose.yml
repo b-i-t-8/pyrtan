@@ -35,9 +35,12 @@ x-pyrtan: &pyrtan
     PYRTAN_EGRESS: any
     # Federation: once the hub is reachable from outside (a tunnel or a
     # port-forward with TLS), give it its public URL and it joins the
-    # default network pyrtan.com publishes, follows a hub in it, and lists
+    # default network (built into pyrtan), follows a hub in it, and lists
     # itself in the directory. Needs the token, and PYRTAN_EGRESS: public
     # above: hubs that follow this one may ask it to run trees.
+    # PYRTAN_LAN: "true" finds the other hubs in the house by multicast,
+    # with nobody to ask; it needs `network_mode: host` on the hub and
+    # PYRTAN_ADVERTISE set to the box's LAN address (http://<nas-ip>:8700).
     # PYRTAN_JOIN may also hold invites to networks of your own
     # (NAME:SECRET@HUB, from `pyrtan network new`), space-separated.
     # PYRTAN_ADVERTISE: "https://hub.example.net"
@@ -47,6 +50,7 @@ x-pyrtan: &pyrtan
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run
     # PYRTAN_CHAT: "true"               # a lobby at /chat: people meet a random stranger here or on a hub this one follows, or a bot made of its trees
     # PYRTAN_CHAT_PUBLIC: "true"        # open the lobby to people without the token (they meet people, never a bot); everything else keeps the token
+    # PYRTAN_CHAT_REACH: "8"            # an open lobby links with up to 8 other open lobbies it hears of (LAN, directory), for chat only, never a follow
     # PYRTAN_CHAT_TYPING: "0"           # turn the lobby's "Stranger is typing…" off for everyone (each person can also turn it off for themselves)
     PYRTAN_UNANSWERED: /state/unanswered.jsonl   # sentences nobody answered, kept across restarts (the hub's; services with a hub leave the record to it)
     PYRTAN_STATE: /state/federation.json

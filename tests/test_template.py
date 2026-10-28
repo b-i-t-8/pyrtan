@@ -25,6 +25,10 @@ def test_interpolation_and_filters():
     assert render("{{ state.ids | length }}", SCOPE) == 3
     assert render("{{ state.ids | first }}", SCOPE) == 1
     assert render("{{ state.resp.json.items | json }}", SCOPE) == '[{"title": "a"}, {"title": "b"}]'
+    # join: a list in a sentence, each item as it would read on its own.
+    assert render("ids {{ state.ids | join }}.", SCOPE) == "ids 1, 2, 3."
+    assert render("{{ state.resp.json.items | join }}", SCOPE) == '{"title": "a"}, {"title": "b"}'
+    assert render("{{ inputs.city | join }}", SCOPE) == "New York"
 
 
 def test_nested_structures_render():

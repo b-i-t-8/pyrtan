@@ -60,11 +60,12 @@ import threading
 from pathlib import Path
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 from . import __version__
 from .chat import Lobby, is_chat_path
-from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_hub, parse_invite, sign
+from .lan import Lan
+from .federation import MAX_HOPS, Federation, Remote, default_network, first_live_hub, parse_invite, rendezvous_hubs, sign, snapshot_hubs
 from . import identity
 from .grants import Grants, ability_for, parse_may
 from .identity import IdentityError
@@ -145,13 +146,14 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, suggestions: str | Path | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, chat_reach: int = 0, suggestions: str | Path | None = None) -> None:
         self.name = name
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
         self._audience = audience
-        self.lobby = Lobby(self, typing=chat_typing) if chat or chat_public else None
+        self.lobby = Lobby(self, typing=chat_typing, reach=chat_reach) if chat or chat_public else None
         self.chat_public = chat_public  # callers without the token may chat, with people only
+        self.lan: Lan | None = None     # hubs heard on the local network (--lan)
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
         self.poll_every = poll_every
         self.token = token or None
@@ -303,6 +305,8 @@ class Hub:
         if self.federation is not None:
             self.federation.refresh_all()
             self.federation.announce()  # only when what we hold changed
+            if self.lobby is not None:
+                self.lobby.reach_out()  # chat links, for chat only (--chat-reach)
 
     def start_polling(self) -> None:
         def loop() -> None:
@@ -312,8 +316,18 @@ class Hub:
         self._thread = threading.Thread(target=loop, daemon=True)
         self._thread.start()
 
+    def on_lan(self) -> Lan:
+        """Announce this hub on the LAN and listen for others (``--lan``)."""
+        fed = self.federation
+        assert fed is not None, "a hub is federated before it goes on the LAN"
+        self.lan = Lan(lambda: {"id": fed.id, "name": self.name, "networks": sorted(n.id for n in fed.networks.values() if n.public)}).start()
+        fed.lan = self.lan
+        return self.lan
+
     def stop(self) -> None:
         self._stop.set()
+        if self.lan is not None:
+            self.lan.stop()
         if self.local is not None:
             self.local.service.stop()
 
@@ -576,10 +590,14 @@ class Hub:
                 out: dict[str, Any] = {"peers": ([self.local.to_dict()] if self.local else []) + [p.to_dict() for p in self.peers.values()]}
             if fed is not None:
                 out.update(fed.to_dict())
+            if self.lobby is not None and self.lobby.reach:
+                out["chat_links"] = self.lobby.links_view()
             return 200, out
         if fed is not None:
             if method == "GET" and path == "/actor":
                 return 200, fed.actor()
+            if method == "GET" and path == "/lan":
+                return (200, self.lan.view()) if self.lan is not None else (404, {"status": "error", "reason": "no-lan", "say": "This hub is not on the LAN; start it with --lan."})
             if method == "GET" and path == "/directory":
                 # A private network's part only to the operator (or to anyone, on a hub with no token).
                 return 200, fed.directory(private=not self.token or operator)
@@ -702,7 +720,7 @@ class Hub:
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -727,13 +745,26 @@ def _rank(peer: Local | Peer | Remote) -> int:
 
 def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
     """Join a network from an invite (``name:secret[@hub]``), or the default
-    network pyrtan.com publishes when ``invite`` is empty or ``default``,
-    and follow a hub in it. When the default network cannot be read, the
-    first listed hub that answers is followed outside any network, as
-    before networks."""
+    network (built in) when ``invite`` is empty or ``default``, and follow a
+    hub in it: for the default network, the hubs this one already knows in
+    it first, then the hub list, then the snapshot, each fetched only when
+    the ones before it did not do. When ``$PYRTAN_NETWORK`` names a default
+    network that cannot be read, the first listed hub that answers is
+    followed outside any network, as before networks."""
+    tried: list[str] = []
     if invite in (None, "", "default"):
         net = default_network()
-        hubs = bootstrap_candidates()
+        if net is not None:
+            known = net.id
+
+            def candidates() -> Iterator[str]:
+                for source in (lambda: fed.known_hubs(known), rendezvous_hubs, snapshot_hubs):
+                    for url in source():
+                        if url not in tried and url != fed.id:
+                            tried.append(url)
+                            yield url
+
+            hubs: Iterable[str] = candidates()
         if net is None:
             url = first_live_hub()
             if url is None:
@@ -749,12 +780,13 @@ def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:
         except ValueError as e:
             return 400, {"status": "error", "reason": "bad-invite", "say": str(e)}
         hubs = [url] if url else []
+        tried.extend(h for h in hubs if h.rstrip("/") != fed.id)
     try:
         remote = fed.join(net, hubs)
     except ValueError as e:
         return 400, {"status": "error", "reason": "bad-network", "say": str(e)}
     net = fed.networks[net.name]
-    hubs = [h for h in hubs if h.rstrip("/") != fed.id]
+    hubs = tried
     if remote is not None:
         say = f"in {net.name}, following {remote.url}"
     elif hubs:
@@ -792,6 +824,8 @@ def serve_hub(
     report_gaps: bool = False,
     unanswered: str | Path | None = None,
     watch: bool = False,
+    lan: bool = False,
+    chat_reach: int = 0,
     chat: bool = False,
     suggestions: str | Path | None = None,
     allow: list[str] | None = None,
@@ -811,10 +845,10 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, suggestions=suggestions)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
-    if federate or advertise or join:
+    if federate or advertise or join or lan or chat_reach:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
         hub.add_peer(url)
@@ -823,8 +857,14 @@ def serve_hub(
             hub.federation.follow(url)  # type: ignore[union-attr]
         except ValueError as e:
             print(f"pyrtan hub: cannot follow {url}: {e}", flush=True)
+    if lan:
+        hub.on_lan()
+        if join and hub.lan is not None and hub.lan.error is None:
+            hub.lan.wait(1.5)  # the hubs nearby answer the first question in that time: join one of them
     for invite in join or []:
         _, answer = join_network(hub.federation, invite)  # type: ignore[arg-type]
         print(f"pyrtan hub: join {answer.get('network') or invite.split(':', 1)[0]}: {answer.get('say')}", flush=True)
+    if join and hub.lan is not None:
+        hub.lan.send()  # now in its networks: say so at once, not at the next beacon
     hub.start_polling()
     return hub, server

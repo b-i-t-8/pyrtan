@@ -156,10 +156,10 @@ def test_swarm_of_two_behind_a_hub(tmp_path):
         assert status == 200 and reg["peer"]["link"] == "up"
 
         _, health = http_json("GET", f"{hub_srv.url}/health")
-        assert health["peers"] == 2 and health["up"] == 2 and health["trees"] == 12
+        assert health["peers"] == 2 and health["up"] == 2 and health["trees"] == len(reg_a) + 1  # the examples, and picnic
 
         _, caps = http_json("GET", f"{hub_srv.url}/capabilities")
-        assert {t["name"] for t in caps["trees"]} == {"weather", "hacker-news", "hacker-news-item", "site-status", "github-release", "picnic", "disk-space", "log-errors", "room-temperature", "rendered-headline", "modem-check", "small-talk"}
+        assert {t["name"] for t in caps["trees"]} == set(reg_a.names()) | {"picnic"}
 
         # Routed by the hub to B, which delegates back through the hub to A.
         _, out = http_json("POST", f"{hub_srv.url}/intent", {"text": "picnic in Oslo"})
@@ -223,6 +223,7 @@ def test_demo_page_is_served_by_service_and_hub(example_service):
         # The wordmark's two halves pick their own colours; the picker is inline, not another request.
         assert b'data-theme-part="pyr">pyr<' in page and b'data-theme-part="tan">tan<' in page
         assert b"__THEME__" not in page and b'localStorage.getItem(KEY)' in page
+        assert b'role="combobox"' in page and b'id="suggestions"' in page and b'pyrtan.console.asked' in page  # the ask box suggests
     status, api = http_json("GET", f"{server.url}/api")
     assert status == 200 and api["pyrtan"] == "service"
     hub = Hub()

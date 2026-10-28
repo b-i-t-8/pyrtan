@@ -312,5 +312,367 @@
     "lines": [
       "+CME ERROR: 10"
     ]
+  },
+  "GET https://en.wikipedia.org/api/rest_v1/page/summary/Ursula%20K%20Le%20Guin": {
+    "status": 200,
+    "body": {
+      "type": "standard",
+      "title": "Ursula K. Le Guin",
+      "extract": "Ursula Kroeber Le Guin was an American author. She is best known for her works of speculative fiction.",
+      "content_urls": {
+        "desktop": {
+          "page": "https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+        }
+      }
+    }
+  },
+  "GET https://en.wikipedia.org/api/rest_v1/page/summary/Mercury": {
+    "status": 200,
+    "body": {
+      "type": "disambiguation",
+      "title": "Mercury",
+      "extract": "Mercury most commonly refers to:Mercury (planet), the closest planet to the Sun\n",
+      "content_urls": {
+        "desktop": {
+          "page": "https://en.wikipedia.org/wiki/Mercury"
+        }
+      }
+    }
+  },
+  "GET https://en.wikipedia.org/api/rest_v1/page/summary/Xyzzyplugh%20Notaperson": {
+    "status": 404,
+    "body": {
+      "status": 404,
+      "type": "Internal error"
+    }
+  },
+  "GET https://en.wikipedia.org/api/rest_v1/page/summary/Alan%20Turing": {
+    "status": 429,
+    "body": "You are making too many requests to the API."
+  },
+  "GET https://api.dictionaryapi.dev/api/v2/entries/en/serendipity": {
+    "status": 200,
+    "body": [
+      {
+        "word": "serendipity",
+        "phonetic": "/ˌsɛ.ɹən.ˈdɪ.pɪ.ti/",
+        "meanings": [
+          {
+            "partOfSpeech": "noun",
+            "definitions": [
+              {
+                "definition": "A combination of events which have come together by chance to make a surprisingly good or wonderful outcome."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "GET https://api.dictionaryapi.dev/api/v2/entries/en/zzzqx": {
+    "status": 404,
+    "body": {
+      "title": "No Definitions Found"
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=59.91&longitude=10.75&daily=sunrise,sunset&timezone=auto&forecast_days=1": {
+    "status": 200,
+    "body": {
+      "timezone": "Europe/Oslo",
+      "daily": {
+        "time": [
+          "2026-10-28"
+        ],
+        "sunrise": [
+          "2026-10-28T07:28"
+        ],
+        "sunset": [
+          "2026-10-28T16:32"
+        ]
+      }
+    }
+  },
+  "GET https://api.open-meteo.com/v1/forecast?latitude=78.22&longitude=15.65&daily=sunrise,sunset&timezone=auto&forecast_days=1": {
+    "status": 200,
+    "body": {
+      "timezone": "Arctic/Longyearbyen",
+      "daily": {
+        "time": [
+          "2026-12-21"
+        ],
+        "sunrise": [
+          null
+        ],
+        "sunset": [
+          null
+        ]
+      }
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Longyearbyen&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Longyearbyen",
+          "country": "Svalbard and Jan Mayen",
+          "latitude": 78.22,
+          "longitude": 15.65
+        }
+      ]
+    }
+  },
+  "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=59.91&longitude=10.75&current=european_aqi,pm2_5,pm10": {
+    "status": 200,
+    "body": {
+      "current": {
+        "time": "2026-10-28T00:00",
+        "interval": 3600,
+        "european_aqi": 21,
+        "pm2_5": 3.8,
+        "pm10": 10.2
+      }
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Delhi&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Delhi",
+          "country": "India",
+          "latitude": 28.65,
+          "longitude": 77.23
+        }
+      ]
+    }
+  },
+  "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=28.65&longitude=77.23&current=european_aqi,pm2_5,pm10": {
+    "status": 200,
+    "body": {
+      "current": {
+        "european_aqi": 87,
+        "pm2_5": 61.4,
+        "pm10": 118.3
+      }
+    }
+  },
+  "GET https://registry.npmjs.org/%40types%2Fnode/latest": {
+    "status": 200,
+    "body": {
+      "name": "@types/node",
+      "version": "26.6.5",
+      "description": "TypeScript definitions for node"
+    }
+  },
+  "GET https://registry.npmjs.org/nope-not-a-pkg-zz/latest": {
+    "status": 404,
+    "body": "Not Found"
+  },
+  "GET https://pypi.org/pypi/requests/json": {
+    "status": 200,
+    "body": {
+      "info": {
+        "name": "requests",
+        "version": "2.34.2",
+        "summary": "Python HTTP for Humans.",
+        "package_url": "https://pypi.org/project/requests/"
+      }
+    }
+  },
+  "GET https://pypi.org/pypi/nope-not-a-pkg-zz/json": {
+    "status": 404,
+    "body": {
+      "message": "Not Found"
+    }
+  },
+  "GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson": {
+    "status": 200,
+    "body": {
+      "metadata": {
+        "count": 19
+      },
+      "features": [
+        {
+          "properties": {
+            "mag": 5.1,
+            "place": "7 km ENE of Pangyan, Philippines",
+            "tsunami": 0,
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+          }
+        },
+        {
+          "properties": {
+            "mag": 5.4,
+            "place": "197 km WSW of Merizo Village, Guam",
+            "tsunami": 0,
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttke"
+          }
+        }
+      ]
+    }
+  },
+  "GET https://api.wheretheiss.at/v1/satellites/25544": {
+    "status": 200,
+    "body": {
+      "latitude": -26.625662371377,
+      "longitude": -60.102704384113,
+      "altitude": 422.43868994227,
+      "velocity": 27577.69858816,
+      "visibility": "eclipsed"
+    }
+  },
+  "GET https://hn.algolia.com/api/v1/search?query=sqlite&tags=story&hitsPerPage=3": {
+    "status": 200,
+    "body": {
+      "nbHits": 4632,
+      "hits": [
+        {
+          "title": "Hosting SQLite databases on GitHub Pages or any static file hoster",
+          "url": "https://phiresky.github.io/blog/2021/hosting-sqlite-databases-on-github-pages/",
+          "points": 1812,
+          "author": "phiresky",
+          "objectID": "27016630"
+        },
+        {
+          "title": "I'm all-in on server-side SQLite",
+          "url": "https://fly.io/blog/all-in-on-sqlite-litestream/",
+          "points": 1353,
+          "author": "dpeck",
+          "objectID": "31318708"
+        },
+        {
+          "title": "Tracking down the 16-year-old WAL-reset SQLite bug",
+          "url": "https://tailscale.com/blog/sqlite-wal-reset-bug",
+          "points": 1223,
+          "author": "ropbear",
+          "objectID": "49272832"
+        }
+      ]
+    }
+  },
+  "GET https://hn.algolia.com/api/v1/search?query=qqqzzzxxyyy&tags=story&hitsPerPage=3": {
+    "status": 200,
+    "body": {
+      "nbHits": 0,
+      "hits": []
+    }
+  },
+  "GET https://openlibrary.org/search.json?q=The%20Left%20Hand%20of%20Darkness&limit=1&fields=title,author_name,first_publish_year,key": {
+    "status": 200,
+    "body": {
+      "numFound": 112,
+      "docs": [
+        {
+          "author_name": [
+            "Ursula K. Le Guin"
+          ],
+          "first_publish_year": 1969,
+          "key": "/works/OL59800W",
+          "title": "The Left Hand of Darkness"
+        }
+      ]
+    }
+  },
+  "GET https://openlibrary.org/search.json?q=qqqzzzxxyyy&limit=1&fields=title,author_name,first_publish_year,key": {
+    "status": 200,
+    "body": {
+      "numFound": 0,
+      "docs": []
+    }
+  },
+  "GET https://date.nager.at/api/v3/NextPublicHolidays/NO": {
+    "status": 200,
+    "body": [
+      {
+        "date": "2026-12-25",
+        "localName": "Første juledag",
+        "name": "Christmas Day"
+      },
+      {
+        "date": "2026-12-26",
+        "localName": "Andre juledag",
+        "name": "St. Stephen's Day"
+      }
+    ]
+  },
+  "GET https://date.nager.at/api/v3/NextPublicHolidays/XX": {
+    "status": 500,
+    "body": ""
+  },
+  "GET https://icanhazdadjoke.com/": {
+    "status": 200,
+    "body": {
+      "id": "oOKBsPZ0wc",
+      "joke": "I am so good at sleeping I can do it with my eyes closed!",
+      "status": 200
+    }
+  },
+  "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=XYZ&amount=1": {
+    "status": 404,
+    "body": {
+      "message": "not found"
+    }
+  },
+  "GET https://api.datamuse.com/words?rel_syn=qqqzzz&max=8": {
+    "status": 200,
+    "body": []
+  },
+  "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR&amount=100": {
+    "status": 200,
+    "body": {
+      "amount": 100.0,
+      "base": "USD",
+      "date": "2026-10-27",
+      "rates": {
+        "EUR": 89.69
+      }
+    }
+  },
+  "GET https://api.frankfurter.dev/v1/latest?base=EUR&symbols=JPY&amount=1000": {
+    "status": 200,
+    "body": {
+      "amount": 1000.0,
+      "base": "EUR",
+      "date": "2026-10-27",
+      "rates": {
+        "JPY": 175970
+      }
+    }
+  },
+  "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=USD&amount=1": {
+    "status": 422,
+    "body": {
+      "message": "bad currency pair"
+    }
+  },
+  "GET https://api.datamuse.com/words?rel_syn=happy&max=8": {
+    "status": 200,
+    "body": [
+      {
+        "word": "halcyon"
+      },
+      {
+        "word": "content"
+      },
+      {
+        "word": "bright"
+      },
+      {
+        "word": "felicitous"
+      },
+      {
+        "word": "riant"
+      },
+      {
+        "word": "expansive"
+      },
+      {
+        "word": "elysian"
+      },
+      {
+        "word": "joyful"
+      }
+    ]
   }
 }

@@ -1,0 +1,87 @@
+# Converting an amount between currencies at the European Central Bank's
+# reference rate, from Frankfurter. Asked for one currency, the API answers
+# with a table of one, so the value is read from it by its shape rather
+# than by the currency's name.
+
+name = "exchange-rate"
+version = 1
+namespace = "pyrtan"
+description = "An amount in another currency at today's European Central Bank reference rate, from Frankfurter."
+tags = ["money", "read-only"]
+license = "MIT"
+hosts = ["api.frankfurter.dev"]
+start = "fetch"
+
+[[triggers]]
+pattern = "convert {amount:number} {from:word} (to|into|in) {to:word}"
+[[triggers]]
+pattern = "how much is {amount:number} {from:word} in {to:word}"
+[[triggers]]
+pattern = "[the] exchange rate (from|for) {from:word} to {to:word}"
+[[triggers]]
+pattern = "{from:word} to {to:word} (rate|exchange rate)"
+
+# Kept as the digits read from the sentence, so 100 reads as 100, not 100.0.
+[inputs.amount]
+type = "str"
+default = "1"
+pattern = "^[0-9]+(\\.[0-9]+)?$"
+description = "How much of the first currency, as in: 100 or 2.5"
+
+[inputs.from]
+type = "str"
+pattern = "^[A-Za-z]{3}$"
+description = "A three-letter currency code, as in: USD"
+
+[inputs.to]
+type = "str"
+pattern = "^[A-Za-z]{3}$"
+description = "A three-letter currency code, as in: EUR"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.frankfurter.dev/v1/latest?base={{ inputs.from | upper }}&symbols={{ inputs.to | upper }}&amount={{ inputs.amount }}" }
+into = "resp"
+extract = [
+  { into = "value", regex = "\"rates\":\\s*\\{\\s*\"[A-Z]{3}\":\\s*(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)\\s*\\}" },
+  { into = "day", json = "json.date" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-rate" },
+  { when = { eq = 404 }, then = "unknown-currency" },
+  { when = { eq = 422 }, then = "same-currency" },
+  { else = "unexpected" },
+]
+
+[nodes.has-rate]
+kind = "decide"
+on = "value"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.amount }} {{ inputs.from | upper }} is {{ state.value }} {{ inputs.to | upper }} at the ECB rate of {{ state.day }}."
+output = { amount = "{{ inputs.amount | float }}", from = "{{ inputs.from | upper }}", to = "{{ inputs.to | upper }}", value = "{{ state.value | float }}", date = "{{ state.day }}" }
+
+[nodes.unknown-currency]
+kind = "fail"
+reason = "unknown-currency"
+say = "The ECB publishes no rate between {{ inputs.from | upper }} and {{ inputs.to | upper }}; it covers about thirty currencies, by their three-letter codes."
+
+[nodes.same-currency]
+kind = "fail"
+reason = "same-currency"
+say = "{{ inputs.from | upper }} to {{ inputs.to | upper }} is the same currency."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Frankfurter answered {{ state.resp.status }}."

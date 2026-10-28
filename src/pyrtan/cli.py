@@ -12,6 +12,8 @@
     pyrtan hub    --trees DIR                and hold trees itself: a swarm in one process
     pyrtan hub    --federate --advertise URL [--follow URL ...] [--listed]  and between hubs
     pyrtan hub    --chat                     and keep a lobby: strangers and bots, Omegle-style
+    pyrtan hub    --lan --join default       and find the hubs on this LAN by multicast, with nobody to ask
+    pyrtan hub    --chat-public --chat-reach 8  and link its lobby with other open lobbies, for chat only
     pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: join the default network
     pyrtan unfollow URL --at HUB
     pyrtan peers  --at HUB                   services, and hubs followed and following
@@ -172,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--federate", action="store_true", help="answer /actor and /inbox so other hubs can follow this one, and follow others")
     p.add_argument("--advertise", default=os.environ.get("PYRTAN_ADVERTISE"), help="the URL other hubs reach this hub at (implies --federate; default $PYRTAN_ADVERTISE, else this host and port)")
     p.add_argument("--follow", action="append", default=[h for h in os.environ.get("PYRTAN_FOLLOW", "").replace(",", " ").split() if h], metavar="URL", help="a hub to follow on start (repeatable; default $PYRTAN_FOLLOW; to join the default network, --join default)")
-    p.add_argument("--join", action="append", default=[h for h in os.environ.get("PYRTAN_JOIN", "").replace(",", " ").split() if h], metavar="INVITE", help="a network to be in on start: 'default' for the public one pyrtan.com publishes, or an invite NAME:SECRET[@HUB] (repeatable; default $PYRTAN_JOIN)")
+    p.add_argument("--join", action="append", default=[h for h in os.environ.get("PYRTAN_JOIN", "").replace(",", " ").split() if h], metavar="INVITE", help="a network to be in on start: 'default' for the public one built into pyrtan, or an invite NAME:SECRET[@HUB] (repeatable; default $PYRTAN_JOIN)")
     p.add_argument("--federation-secret", default=os.environ.get("PYRTAN_FEDERATION_SECRET"), help="only hubs that sign their Follow with this secret may follow (default $PYRTAN_FEDERATION_SECRET; without it, follows are open)")
     p.add_argument("--closed", action="store_true", help="take no follows at all (this hub can still follow others)")
     p.add_argument("--state", metavar="FILE", default=os.environ.get("PYRTAN_STATE"), help="keep who this hub follows and is followed by, and the directory, in this file across restarts (default $PYRTAN_STATE)")
@@ -182,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
     p.add_argument("--allow", action="append", default=[a for a in os.environ.get("PYRTAN_ALLOW", "").split() if a], metavar="WHO=ABILITIES", help="grant an identity (pyr:… or name@domain, resolved and pinned now) abilities here: ask, chat, run, operate (repeatable; default $PYRTAN_ALLOW, space-separated)")
     p.add_argument("--grants", metavar="FILE", default=os.environ.get("PYRTAN_GRANTS"), help="keep the grants in this file (default $PYRTAN_GRANTS, else grants.json beside --state, else in memory)")
+    p.add_argument("--lan", action="store_true", default=os.environ.get("PYRTAN_LAN", "").lower() in ("1", "true", "yes"), help="find hubs on this local network with no one to ask: announce this hub over UDP multicast (TTL 1) and try the hubs heard there when joining a network; needs --advertise with a LAN address (default $PYRTAN_LAN)")
+    p.add_argument("--chat-reach", type=int, metavar="N", default=int(os.environ.get("PYRTAN_CHAT_REACH", "0") or 0), help="keep up to N chat links with other open lobbies this hub hears of (LAN, directory), so its strangers can meet theirs: for chat only, never a follow; needs an open lobby (--chat-public, or no token) (default $PYRTAN_CHAT_REACH or 0)")
     p.add_argument("--chat-public", action="store_true", default=os.environ.get("PYRTAN_CHAT_PUBLIC", "").lower() in ("1", "true", "yes"), help="open the lobby to callers without the token (implies --chat): they meet people only, never a bot, and everything else still needs the token (default $PYRTAN_CHAT_PUBLIC)")
     p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
@@ -1036,10 +1040,10 @@ def cmd_hub(args: argparse.Namespace) -> int:
     try:
         hub, server = serve_hub(
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
-            federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
+            federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan or args.chat_reach > 0, advertise=args.advertise, federation_secret=args.federation_secret,
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
             trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public,
+            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
             allow=args.allow, grants=args.grants,
         )
     except IdentityError as e:
@@ -1053,6 +1057,11 @@ def cmd_hub(args: argparse.Namespace) -> int:
         local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
     if hub.lobby is not None:
         local += ", chatting at /chat" + (" (open to callers without the token, people only)" if hub.chat_public and args.token else "")
+        if hub.lobby.reach:
+            local += f", linking with up to {hub.lobby.reach} other open lobbies" if hub.lobby.open() else ", but --chat-reach links only an open lobby (--chat-public, or no token)"
+    if hub.lan is not None:
+        lan = hub.lan.view()
+        local += f", on the LAN ({lan['group']}): " + (f"cannot join it: {hub.lan.error}" if hub.lan.error else f"heard {len(lan['hubs'])} hub(s)" + ("" if lan["announcing"] else "; listening only, since this hub's id is not a LAN address (give --advertise http://<its LAN address>:PORT)"))
     if len(hub.grants):
         local += f", granting {len(hub.grants)} identit{'y' if len(hub.grants) == 1 else 'ies'}"
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){local}{fed}" + _access_note(args), flush=True)

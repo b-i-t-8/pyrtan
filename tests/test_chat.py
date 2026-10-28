@@ -243,9 +243,9 @@ def test_the_lobby_is_opt_in_and_in_the_api():
 class Lobbyist:
     """A federated hub with a lobby and no trees, over a real socket."""
 
-    def __init__(self, name):
-        self.hub = Hub(name=name, poll_every=60, chat=True)
-        self.srv = Server(self.hub.route, quiet=True, federated=True).start()
+    def __init__(self, name, **hub):
+        self.hub = Hub(name=name, poll_every=60, chat=True, **hub)
+        self.srv = Server(self.hub.route, quiet=True, federated=True, token=hub.get("token")).start()
         self.fed = self.hub.federate(self.srv.url)
         self.url = self.srv.url
 
@@ -494,3 +494,100 @@ def test_a_lobby_that_is_not_public_follows_the_token(tmp_path):
     finally:
         hub.stop()
         srv.stop()
+
+
+def heard_of(a, b):
+    """``a`` heard of ``b`` in its directory, outside any network (as gossip would bring it)."""
+    a.fed.directory_entries[b.url] = {"id": b.url, "name": b.hub.name, "trees": [], "seen": time.time()}
+
+
+def test_chat_links_share_strangers_and_nothing_else():
+    a, b = Lobbyist("a", chat_reach=4), Lobbyist("b", chat_reach=4)
+    try:
+        heard_of(a, b)
+        assert a.hub.lobby.reach_out() == 1
+        assert list(a.hub.lobby.links) == [b.url] and list(b.hub.lobby.links) == [a.url]
+        # A link is not a follow: nothing is routed, announced or kept over it.
+        assert a.fed.following == {} and a.fed.followers == {} and b.fed.following == {} and b.fed.followers == {}
+        assert all(h.url != b.url for h in a.hub.holders())
+        assert a.call("/chat")[1]["hubs"] == 1 and a.call("/peers")[1]["chat_links"]["links"][0]["url"] == b.url
+
+        # a's stranger meets b's, over the link, and they talk both ways.
+        there = start(b.hub, "people")
+        _, here = a.call("/chat/start", {"want": "people"})
+        assert here["state"] == "talking" and "random stranger on b" in " ".join(texts(here["events"], "system"))
+        a.call("/chat/say", {"seat": here["seat"], "text": "hi from a"})
+        events, view = until(b.hub, there["seat"], lambda ev, v: texts(ev, "stranger"), after=there["after"])
+        assert texts(events, "stranger") == ["hi from a"]
+        post(b.hub, "/chat/say", {"seat": there["seat"], "text": "hi from b"})
+        until(a.hub, here["seat"], lambda ev, v: texts(ev, "stranger"), after=here["after"])
+        # Either end may ask: the link goes both ways.
+        a.call("/chat/leave", {"seat": here["seat"]})
+        post(b.hub, "/chat/leave", {"seat": there["seat"]})
+        waiting = start(a.hub, "people")
+        met = start(b.hub, "people")
+        assert met["state"] == "talking" and "random stranger on a" in " ".join(texts(met["events"], "system"))
+        # The secret a link carries stays out of the logs.
+        sent = [x for x in a.fed.outbox if x["type"] == "ChatLink"]
+        assert sent and sent[0]["secret"] == "<secret>" and all(x.get("secret") in (None, "<secret>") for x in list(b.fed.inbox_log) if x["type"] == "ChatLink")
+        # Already linked: nothing more to do.
+        assert a.hub.lobby.reach_out() == 0
+        # b follows a later: a's lines over the link are still taken, signed with the link's secret.
+        b.fed.follow(a.url)
+        post(b.hub, "/chat/leave", {"seat": met["seat"]})
+        post(a.hub, "/chat/leave", {"seat": waiting["seat"]})
+        there = start(b.hub, "people")
+        _, here = a.call("/chat/start", {"want": "people"})
+        assert here["state"] == "talking" and a.call("/chat/say", {"seat": here["seat"], "text": "still here"})[0] == 200
+        events, _ = until(b.hub, there["seat"], lambda ev, v: texts(ev, "stranger"), after=there["after"])
+        assert texts(events, "stranger") == ["still here"]
+    finally:
+        a.stop()
+        b.stop()
+
+
+def test_who_takes_a_chat_link():
+    a = Lobbyist("a", chat_reach=4)
+    unwilling = Lobbyist("unwilling")                                            # no --chat-reach
+    private = Lobbyist("private", chat_reach=4, token="t")                       # a token, and a lobby that is not public
+    closed = Lobbyist("closed", chat_reach=4)
+    closed.fed.open_follows = False                                              # takes no follows: no links either
+    try:
+        for other in (unwilling, private, closed):
+            heard_of(a, other)
+        assert a.hub.lobby.reach_out() == 0 and len(a.hub.lobby._refused) == 2  # two tried per round, both refused
+        assert a.hub.lobby.reach_out() == 0 and len(a.hub.lobby._refused) == 3  # then the third, refused too
+        assert a.hub.lobby.links == {} and all(o.hub.lobby.links == {} for o in (unwilling, private, closed))
+        assert {u: why for u, (_, why) in a.hub.lobby._refused.items()} == {unwilling.url: "not-linking", private.url: "private-lobby", closed.url: "closed"}
+        assert {r["reason"] for r in a.hub.lobby.links_view()["refused"]} == {"not-linking", "private-lobby", "closed"}
+        assert a.hub.lobby.reach_out() == 0  # a hub that refused is not asked again today
+        # A Meet from a hub it neither follows, is followed by, nor links with, goes nowhere.
+        from pyrtan.federation import Remote
+
+        stranger = Remote(a.url, a.fed.inbox, "x" * 32, "a", state="accepted", kind="hub")
+        ok, _, answer = unwilling.fed.deliver(stranger, unwilling.fed._activity("Meet", {"ref": "r" * 16}))
+        assert not ok and answer["reason"] == "unknown-actor"
+        # A public lobby with a token links: its strangers are welcome anyway.
+        public = Lobbyist("public", chat_reach=4, token="t", chat_public=True)
+        try:
+            assert a.hub.lobby.link(public.url) is True and a.url in public.hub.lobby.links
+        finally:
+            public.stop()
+    finally:
+        for h in (a, unwilling, private, closed):
+            h.stop()
+
+
+def test_a_link_that_stops_answering_is_dropped():
+    a, b = Lobbyist("a", chat_reach=1), Lobbyist("b", chat_reach=1)
+    try:
+        assert a.hub.lobby.link(b.url)
+        lobby = a.hub.lobby
+        lobby._link_answered(b.url, False)
+        lobby._link_answered(b.url, True)  # an answer resets the count
+        for _ in range(3):
+            lobby._link_answered(b.url, False)
+        assert lobby.links == {}
+    finally:
+        a.stop()
+        b.stop()

@@ -62,7 +62,7 @@ Four things a reader might expect, and will not find.
   path, and that the path can be read. A model anywhere in the path makes
   the trace a story rather than a record. A model may later sit *beside*
   the swarm, reading gaps and proposing branches for a person to accept;
-  that is an author's tool, not a runtime. Since v0.15 it does: an agent
+  that is an author's tool, not a runtime. Since v0.18 it does: an agent
   in the console, checked by rules, accepted by a person
   ([`agents.md`](agents.md)).
 - **Code in trees.** Templates are paths and filters. Conditions are
@@ -325,7 +325,7 @@ Five trees, all against real public APIs, all tested offline:
    (`grow.py`: a missing value, the hole between ranges, else the value),
    `--apply` writes it into the file, and a person says what it means.
    Unanswered sentences persist with `--unanswered FILE`.
-10. **v0.15, built: agents beside the swarm.** Open-weights models a
+10. **v0.18, built: agents beside the swarm.** Open-weights models a
     person starts in the console (WebLLM in the browser, or a server of
     their own) probe the trees with sentences of their own, say what a
     gap's value means, find the patterns trees missed and the trees
