@@ -71,7 +71,8 @@ secret (which proves nothing yet, but keeps every message signed).
 
 **Accept.** B checks its policy: with a federation secret, the Follow
 must be signed with it (401 otherwise); without one, open follows are
-taken unless `--closed` (403). B fetches `A/actor` and refuses unless
+taken unless `--closed` (403; a member that brings the token, or a key
+granted `run`, is still taken). B fetches `A/actor` and refuses unless
 `id` and `inbox` match (400). B records A as a follower with the pair
 secret, then posts to A's inbox an `Accept` and an `Announce`, both
 signed with the pair secret. A marks B `accepted`. The whole handshake is
@@ -170,7 +171,9 @@ pyrtan ask "a sentence only B's trees answer" --at https://a.example --token "$A
 To let only hubs you know follow yours, start it with
 `--federation-secret` (or `$PYRTAN_FEDERATION_SECRET`) and give the
 secret to those operators; their hubs must carry the same secret to
-follow. `--closed` takes no follows at all while still following others.
+follow. `--closed` takes no follows outside the hub's networks (§7a)
+while still following others; a member is taken only with the token or
+a key granted `run`.
 `--state FILE` keeps the relationships across restarts; without it a
 restart forgets them and the other side's `link` goes `down` until the
 follow is redone.
@@ -301,7 +304,9 @@ takes it only if it is in a network with that id and the signature holds
 under its secret; otherwise `403 not-in-network` or `401 unsigned`. A
 Follow without `network` is judged as before (§2): open, the
 `--federation-secret`, or refused by `--closed`, which now means "no
-follows outside my networks". Both sides remember the network on the
+follows outside my networks, and members only with my token" (v0.25: a
+trusted member gets in; a stranger's phone does not, so it is not handed
+the hub's blobs either). Both sides remember the network on the
 link (`Remote.network`). A pair of hubs has one link, so a follow in a
 second network moves the link there.
 

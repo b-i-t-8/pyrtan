@@ -127,6 +127,7 @@ PYRTAN_TOKEN: "<long random string>"          # openssl rand -hex 24; the family
 PYRTAN_EGRESS: public                          # hubs that follow this one may ask it to run trees
 PYRTAN_ADVERTISE: "http://<nas-ip>:8700"       # an address every family hub can reach (below)
 PYRTAN_CHAT: "true"                            # the lobby, behind the token: family only
+PYRTAN_CLOSED: "true"                          # follows only within its networks, members only with the token
 ```
 
 Then, once, from any machine that reaches the hub:
@@ -202,11 +203,12 @@ hub to run its trees and receives what the hub hands it. Do all three:
    the old one. Every other phone asks for the new token once; the ones
    that joined as members stay members.
 
-If the phone could come back within range of the house Wi-Fi, change the
-Wi-Fi password too. On the LAN it can still reach the hub. Without the
-new token it cannot ask, chat or run anything there, but it could join
-again as an untrusted member, and the hub hands an untrusted member
-copies of its directory, gaps and unanswered sentences.
+If the phone comes back within range of the house Wi-Fi it can reach the
+hub again, but with `PYRTAN_CLOSED` (as the compose file sets it) and
+without the new token it can neither ask, chat nor run anything, nor join
+again as a member of any kind. On a hub that is not closed it could join
+again as an untrusted member and be handed copies of the hub's directory,
+gaps and unanswered sentences; there, change the Wi-Fi password too.
 
 `PYRTAN_ADVERTISE` is the address the other hubs reach this one at. If
 every family hub is in one house, that is the NAS's LAN address. If
