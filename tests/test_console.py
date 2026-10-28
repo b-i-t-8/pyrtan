@@ -128,3 +128,140 @@ def test_a_console_opened_as_a_file_with_no_network_holds_its_own_trees(tmp_path
     assert "Top of Hacker News: Pyrtan 0.1" in hn
     assert "no-credentials" in postfinite and "--env postfinite_email=" in postfinite
     assert got["errors"] == []
+
+
+GAPPY = """
+name = "gappy"
+description = "a decide with no else, and no I/O"
+start = "d"
+
+[[triggers]]
+pattern = "pick {n:int}"
+
+[inputs.n]
+type = "int"
+
+[nodes.d]
+kind = "decide"
+on = "inputs.n"
+branches = [ { when = { eq = 1 }, then = "ok" } ]
+
+[nodes.ok]
+kind = "done"
+say = "one"
+"""
+
+KEEP = r"""
+const Pyrtan = require(process.argv[2]);
+const tree = JSON.parse(process.argv[3]);
+const disk = {};
+const keep = (d) => ({ load: () => (disk[d] ? JSON.parse(disk[d]) : null), save: (v) => { disk[d] = JSON.stringify(v); }, clear: () => { delete disk[d]; } });
+const gaps = async (hub) => (await hub.route("GET", "/gaps"))[1].gaps.map((g) => [g.observed, g.count, g.device]);
+(async () => {
+  const out = {};
+  const a = new Pyrtan.LocalHub({ trees: [tree], device: "browser-1", keep: keep("browser-1") });
+  for (const n of [2, 2, 3]) await a.route("POST", "/run", { tree: "gappy", inputs: { n } });
+  await a.route("POST", "/intent", { text: "nobody answers this" });
+  // The page again: what the first kept, and nothing counted twice.
+  const b = new Pyrtan.LocalHub({ trees: [tree], device: "browser-1", keep: keep("browser-1") });
+  out.reloaded = await gaps(b);
+  out.unanswered = (await b.route("GET", "/unanswered"))[1].unanswered.map((e) => [e.text, e.count]);
+  // A key is made: the gaps go to it, merged with what it kept here before.
+  disk["pyr:k"] = JSON.stringify({ pyrtan: "kept", version: 1, device: "pyr:k", gaps: [{ tree: "gappy", node: "d", on: "inputs.n", observed: 2, count: 5, first_seen: 1, last_seen: 2 }], unanswered: [], suggestions: [] });
+  b.rekey("pyr:k", keep("pyr:k"));
+  out.rekeyed = await gaps(b);
+  out.disk = Object.keys(disk);
+  // Without anywhere to keep them, a hub keeps them as before, and its gaps name no device.
+  const c = new Pyrtan.LocalHub({ trees: [tree] });
+  await c.route("POST", "/run", { tree: "gappy", inputs: { n: 2 } });
+  out.plain = await gaps(c);
+  b.forget();
+  out.forgot = [await gaps(new Pyrtan.LocalHub({ trees: [tree], device: "pyr:k", keep: keep("pyr:k") })), JSON.parse(disk["pyr:k"]).unanswered];
+  // What is kept and cannot be read is no reason not to start.
+  disk["x"] = "{not json";
+  out.bad = await gaps(new Pyrtan.LocalHub({ trees: [tree], device: "x", keep: keep("x") }));
+  console.log(JSON.stringify(out));
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_the_hub_in_a_page_keeps_its_gaps_under_the_device_that_met_them(tmp_path):
+    (tmp_path / "gappy.toml").write_text(GAPPY, encoding="utf-8")
+    tree = Registry.from_paths([tmp_path]).get("gappy").raw
+    script = tmp_path / "keep.cjs"
+    script.write_text(KEEP, encoding="utf-8")
+    run = subprocess.run(["node", str(script), str(ROOT / "src" / "pyrtan" / "js" / "pyrtan.js"), json.dumps(tree)], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr
+    got = json.loads(run.stdout)
+    assert got["reloaded"] == [[2, 2, "browser-1"], [3, 1, "browser-1"]]
+    assert got["unanswered"] == [["nobody answers this", 1]]
+    assert got["rekeyed"] == [[2, 7, "pyr:k"], [3, 1, "pyr:k"]]
+    assert got["disk"] == ["pyr:k"]  # moved, not copied
+    assert got["plain"] == [[2, 1, None]]
+    assert got["forgot"] == [[], []]
+    assert got["bad"] == []
+
+
+RELOAD = r"""
+const { chromium } = require("playwright");
+const [file] = process.argv.slice(2);
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.route(/^https?:\/\//, (route) => route.abort());
+  const ready = () => page.waitForFunction(() => document.querySelectorAll("#caps tbody tr").length > 0);
+  const ask = async (q) => {
+    const n = (await page.$$("#out .card")).length;
+    await page.fill("#text", q);
+    await page.click("#go");
+    await page.waitForFunction((n) => document.querySelectorAll("#out .card").length > n, n);
+  };
+  const gaps = async () => {
+    await page.click('#tabs a[data-tab="gaps"]');
+    await page.waitForFunction(() => document.querySelectorAll("#gaps tbody tr").length > 0);
+    return page.$$eval("#gaps tbody tr", (trs) => trs.map((t) => t.innerText));
+  };
+  await page.goto("file://" + file);
+  await ready();
+  await ask("pick 2");
+  await ask("pick 2");
+  const result = { device: await page.evaluate(() => localStorage.getItem("pyrtan.device")) };
+  await page.reload();
+  await ready();
+  result.lede = await page.textContent("#connect-local");
+  result.gaps = await gaps();
+  result.where = await page.textContent("#gaps-device");
+  page.once("dialog", (d) => d.accept());
+  await page.click("#gaps-forget");
+  await page.reload();
+  await ready();
+  result.forgot = await gaps();
+  result.errors = errors;
+  console.log(JSON.stringify(result));
+  await browser.close();
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="node with playwright is not installed")
+def test_a_console_keeps_its_gaps_across_a_reload(tmp_path):
+    trees = tmp_path / "trees"
+    trees.mkdir()
+    (trees / "gappy.toml").write_text(GAPPY, encoding="utf-8")
+    out = tmp_path / "console" / "index.html"
+    assert main(["console", "--out", str(out), "--trees", str(trees)]) == 0
+    script = tmp_path / "reload.cjs"
+    script.write_text(RELOAD, encoding="utf-8")
+    run = subprocess.run(["node", str(script), str(out)], capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr
+    got = json.loads(run.stdout)
+    device = got["device"]
+    assert re.fullmatch(r"browser-[0-9a-f]{16}", device)
+    assert device in got["lede"] and got["where"] == device
+    assert len(got["gaps"]) == 1 and "gappy" in got["gaps"][0] and "2" in got["gaps"][0] and device in got["gaps"][0]
+    assert "\t2\t" in got["gaps"][0]  # asked twice, before the reload
+    assert "No gaps" in got["forgot"][0]
+    assert got["errors"] == []

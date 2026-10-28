@@ -212,7 +212,10 @@ the catalog, which a release ships inside the package; `pyrtan console
 site (`../catalog/`) or one named in the address (`?catalog=`). It reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
-while the page is open. Every example runs there but six: weather
+in the browser across reloads, under the device that met them: the
+browser's key when its Identity tab has made one, else an id of its own.
+Make or forget a key and they move with it; the Gaps tab names the
+device and forgets them. Every example runs there but six: weather
 today and tomorrow, sunrise, UV and air quality, local time, elevation,
 postcodes, capitals, pollen, waves, Wikipedia, words (definitions,
 synonyms, antonyms, rhymes), exchange rates and crypto prices, Hacker

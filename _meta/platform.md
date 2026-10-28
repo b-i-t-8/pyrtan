@@ -149,7 +149,7 @@ One HTML file, no build, no external assets. Served by a hub or service
 at `/` and `/console`, it talks to that origin. Written out by
 `pyrtan console --out` and hosted anywhere, it finds out on load that its
 own origin is not a Pyrtan (`/api` does not answer as one), and then the
-browser is the hub, for as long as the page is open: `pyrtan.js`'s
+browser is the hub: `pyrtan.js`'s
 `LocalHub` answers `/api`, `/health`, `/capabilities`, `/intent`, `/run`,
 `/resume`, `/gaps`, `/unanswered` and `/watches` inside the page, with the
 shapes a service answers them with, and the console calls it through the
@@ -163,7 +163,12 @@ console. Only a page that carries no trees asks pyrtan.com's catalog,
 then the copy the browser kept last time. It reads sentences with the same rules as the Python
 runtime (the conformance vectors cover the reading, the value parsers,
 the proposals and a run of requests against a service), runs the trees,
-and keeps gaps and unanswered sentences in memory. What a page cannot
+and keeps gaps, unanswered sentences and suggestions in local storage
+(`pyrtan.kept:<device>`, saved after each change and merged back on
+load, the way `--gaps FILE` is), under the device the browser is: its
+key when the Identity tab has made one, else `browser-<random>` made
+once. Each gap names that device, as a hub's gaps name the peer; making
+or forgetting a key moves what was kept to the device it now is. What a page cannot
 reach it reports instead of attempting: a `file`, `shell`, `serial`,
 `queue` or `browser` node answers `source-unsupported`, and a site that
 does not let a page read it fails as `transport` with that reason; the

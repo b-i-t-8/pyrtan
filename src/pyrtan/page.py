@@ -21,7 +21,10 @@ console carries the default trees (:mod:`pyrtan.defaults`; or what
 beside the page (``../catalog/``) is fresher and taken first; only a page
 that carries no trees asks pyrtan.com's, then the copy this browser kept.
 It reads sentences and runs trees here, keeping gaps and unanswered
-sentences for as long as the page is open. Trees that need a box (files,
+sentences in the browser's local storage, so they outlive the page, under
+the device that met them: this browser's key when it has one (its
+Identity tab), else an id of its own. Making or forgetting a key moves
+them to the device it now is; the Gaps tab forgets them. Trees that need a box (files,
 programs, devices, brokers, a browser to drive) or a site that will not
 let a page read it say so. Joining a hub is explicit: its URL and token in
 the connect box, kept in the browser's local storage, the token sent as a
@@ -237,6 +240,7 @@ TEMPLATE = r"""<!doctype html>
   <section id="tab-gaps" hidden>
     <h2>Gaps</h2>
     <p class="mute" style="font-size:14px;margin-top:0">A gap is a decision that met a value no branch covers. Each one is the next branch to write, in the tree and node named.</p>
+    <p class="mute" style="font-size:14px;margin-top:0" id="gaps-local" hidden>Kept in this browser for this device, <code id="gaps-device"></code>, across reloads; making or forgetting a key in the Identity tab takes them along. <button type="button" class="quiet" id="gaps-forget">Forget them</button></p>
     <div class="card"><table id="gaps"><thead><tr><th>Tree · node</th><th>Saw</th><th>Times</th><th>Where</th></tr></thead><tbody></tbody></table></div>
   </section>
 
@@ -593,7 +597,7 @@ const ident = {
     if (!this.active()) return {};
     return PyrtanIdentity.signRequest(this.key, this.audience, method, path, body, this.key.note || null);
   },
-  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); },
+  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); moveKept(); },
   // ---- a device of an identity held elsewhere
   async make() {
     const k = await PyrtanIdentity.generate();
@@ -639,7 +643,7 @@ const ident = {
   async forget() {
     const what = this.isRoot() ? "Forget your identity on this browser? Without its backup nobody can give it back." : "Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.";
     if (!confirm(what)) return;
-    await PyrtanIdentity.store.put(null); this.key = null; this.render();
+    await PyrtanIdentity.store.put(null); this.key = null; this.render(); moveKept();
   },
   render() {
     if (!$("#tab-identity")) return;
@@ -867,8 +871,9 @@ async function detect() {
 }
 
 // ---------------------------------------------------------------- the hub in this page
-// No hub joined: this browser is one, for as long as the page is open. It
-// holds trees and answers the same endpoints a hub does. The trees: a
+// No hub joined: this browser is one. It holds trees and answers the same
+// endpoints a hub does, and keeps its gaps and unanswered sentences in
+// local storage under the device it is (below). The trees: a
 // catalog named in the address or one beside this page (fresher, and no
 // further than this page's own site), else the ones this page carries,
 // which need no network at all; only a page that carries none asks
@@ -903,9 +908,38 @@ const runsHere = (t) => (t.sources || []).every(s => s === "http");
 const anySite = (t) => (t.hosts || []).includes("*");
 // A tree that reads the operator's env (credentials, say) has none to read in a page; a service started with --env runs it.
 const needsEnv = (t) => { const held = local && local.runner.get(t.name); return !!held && /\{\{\s*env\./.test(JSON.stringify(held.raw)); };
+// What the hub in this page keeps across reloads, under the device this
+// browser is: its key when it has one, else an id of its own, made once.
+// Gaps name the device that met them, as a hub's name the peer.
+const DEVICE_KEY = "pyrtan.device";
+function deviceId() {
+  if (ident.key && ident.key.id) return ident.key.id;
+  try {
+    let d = localStorage.getItem(DEVICE_KEY);
+    if (!d) { d = "browser-" + [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join(""); localStorage.setItem(DEVICE_KEY, d); }
+    return d;
+  } catch (e) { return "browser"; }
+}
+const keptFor = (device) => {
+  const k = "pyrtan.kept:" + device;
+  return {
+    load() { return JSON.parse(localStorage.getItem(k) || "null"); },
+    save(v) { localStorage.setItem(k, JSON.stringify(v)); },
+    clear() { localStorage.removeItem(k); },
+  };
+};
+const deviceName = (d) => d && d.startsWith("pyr:") ? PyrtanIdentity.short(d) : d || "";
+// The key changed (made, restored, paired or forgotten): what this browser kept goes to the device it is now.
+function moveKept() {
+  if (!local) return;
+  const d = deviceId();
+  if (d !== local.device) local.rekey(d, keptFor(d));
+  showLocal(true);
+}
 async function startLocal() {
   isHub = false;
-  local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__"});
+  const device = deviceId();
+  local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__", device, keep: keptFor(device)});
   const trees = await catalogTrees();
   for (const e of trees) local.add(e.tree, e.id);
   showLocal(true);
@@ -914,7 +948,9 @@ async function startLocal() {
 function showLocal(on) {
   $("#connect-local").hidden = !on;
   $("#connect-lede").textContent = on ? `This browser is a hub of its own: it holds ${carried ? "the trees this console carries" : "the catalog's trees"}, reads your sentences and runs the trees right here.` : "This console is not being served by a Pyrtan. Point it at one:";
-  $("#connect-local").innerHTML = on ? "Gaps and unanswered sentences are kept only while this page is open. Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token." : "";
+  $("#connect-local").innerHTML = on ? `Gaps and unanswered sentences are kept in this browser, across reloads, for this device (<code>${esc(deviceName(local.device))}</code>). Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token.` : "";
+  $("#gaps-local").hidden = !on;
+  if (on) $("#gaps-device").textContent = deviceName(local.device);
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
@@ -1024,11 +1060,16 @@ async function loadGaps() {
   const body = $("#gaps tbody"); body.innerHTML = "";
   for (const gap of g.gaps || []) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer||"")}</td>`;
+    tr.innerHTML = `<td><code>${esc(gap.tree)}</code> · <code>${esc(gap.node)}</code></td><td><code>${esc(gap.on)}</code> = <code class="gap">${esc(JSON.stringify(gap.observed))}</code></td><td>${esc(gap.count||1)}</td><td class="mute">${esc(gap.peer || deviceName(gap.device))}</td>`;
     body.appendChild(tr);
   }
   if (!(g.gaps || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">No gaps: every decision so far had a branch.</td></tr>`;
 }
+
+$("#gaps-forget").addEventListener("click", () => {
+  if (!local || !confirm("Forget the gaps and unanswered sentences this browser kept?")) return;
+  local.forget(); loadGaps();
+});
 
 async function loadUnanswered() {
   let u; try { u = await json("unanswered"); } catch (e) { problem(e.message, true); return; }
