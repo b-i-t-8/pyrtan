@@ -2118,7 +2118,14 @@ agentsUI.init();
 
 // Forgetting the hub makes this browser its own hub again.
 $("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
-ident.init().finally(load);
+// The trees do not wait long on the key: IndexedDB can leave it unanswered
+// (Safari, private windows), and then the console would hold no trees at
+// all. A key that comes late moves what this browser kept, as any new key
+// does; a hub's console starts again, so its calls are signed.
+let loading = null;
+const begin = () => { if (!loading) loading = load(); };
+ident.init().finally(() => { if (!loading) return begin(); loading.finally(() => { if (local) moveKept(); else if (ident.key) load(); }); });
+setTimeout(begin, 1500);
 </script>
 </body>
 </html>

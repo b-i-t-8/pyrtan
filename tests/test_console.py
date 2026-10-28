@@ -265,3 +265,35 @@ def test_a_console_keeps_its_gaps_across_a_reload(tmp_path):
     assert "\t2\t" in got["gaps"][0]  # asked twice, before the reload
     assert "No gaps" in got["forgot"][0]
     assert got["errors"] == []
+
+
+STUCK = r"""
+const { chromium } = require("playwright");
+const [file] = process.argv.slice(2);
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.route(/^https?:\/\//, (route) => route.abort());
+  // IndexedDB that never answers, as Safari and private windows sometimes leave it: the key never comes.
+  await page.addInitScript(() => { IDBFactory.prototype.open = () => ({}); });
+  await page.goto("file://" + file);
+  await page.waitForFunction(() => document.querySelectorAll("#caps tbody tr").length > 0, null, { timeout: 10000 });
+  console.log(JSON.stringify({ who: await page.textContent("#who"), errors }));
+  await browser.close();
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="node with playwright is not installed")
+def test_a_console_holds_its_trees_when_the_key_store_never_answers(tmp_path):
+    out = tmp_path / "console" / "index.html"
+    assert main(["console", "--out", str(out)]) == 0
+    script = tmp_path / "stuck.cjs"
+    script.write_text(STUCK, encoding="utf-8")
+    run = subprocess.run(["node", str(script), str(out)], capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr
+    got = json.loads(run.stdout)
+    assert f"{defaults.bundle()['count']} trees" in got["who"]
+    assert got["errors"] == []
