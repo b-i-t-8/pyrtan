@@ -468,6 +468,12 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             if not isinstance(body, dict):
                 self._send(400, {"status": "error", "reason": "bad-json", "say": "The body must be a JSON object."})
                 return
+            try:
+                json.dumps(body, ensure_ascii=False).encode("utf-8")
+            except UnicodeEncodeError:
+                # "\ud800" is valid JSON and no text: signatures and logs are over UTF-8.
+                self._send(400, {"status": "error", "reason": "bad-json", "say": "The body holds a lone surrogate (\\ud800-\\udfff), which is not text."})
+                return
             status, payload = route("POST", path, body, _with_peer(self.headers, self.client_address[0]))
             self._send(status, payload)
 

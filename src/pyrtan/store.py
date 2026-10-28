@@ -37,7 +37,21 @@ class StoreError(ValueError):
 
 
 def canonical(data: Any) -> bytes:
-    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    """The bytes every signature and digest is over: JSON with no spaces, not
+    escaped beyond what JSON needs, keys in UTF-16 code-unit order (as RFC 8785
+    and JavaScript's sort have them; code-point order differs for a key past
+    U+FFFF beside one from U+E000). Numbers are Python's (``2.0``, ``1e-07``),
+    which a browser writes otherwise; a signed body with a non-integral float
+    is one the two runtimes may not agree on, and it fails closed."""
+    return json.dumps(_utf16_ordered(data), separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _utf16_ordered(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {k: _utf16_ordered(data[k]) for k in sorted(data, key=lambda k: str(k).encode("utf-16-be"))}
+    if isinstance(data, (list, tuple)):
+        return [_utf16_ordered(v) for v in data]
+    return data
 
 
 def write_private(path: Path, text: str) -> None:

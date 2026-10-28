@@ -133,6 +133,17 @@ def commit_page(sha: str) -> str:
 
 # -- Markdown, enough for this repository's documents ---------------------
 
+def outside(url: str) -> str | None:
+    """A Markdown link that is not a path in the repository: the link as written
+    for a fragment, http(s) or mailto; ``#`` for any other scheme (``javascript:``,
+    ``data:``), which no page here makes a link of; None for a path."""
+    if url.startswith("#") or re.match(r"(?i)(https?|mailto):", url):
+        return url
+    if re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", url):
+        return "#"
+    return None
+
+
 def md_inline(text: str, resolve) -> str:
     out, pos = [], 0
     for m in re.finditer(r"`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*", text):
@@ -325,8 +336,9 @@ def build(out: Path, branch: str, max_commits: int) -> int:
         dirs |= {d for p in list(dirs) for d in _parents(p)}
 
         def resolve(url: str) -> str:
-            if re.match(r"[a-z]+:|#", url):
-                return url
+            elsewhere = outside(url)
+            if elsewhere is not None:
+                return elsewhere
             target, _, frag = url.partition("#")
             target = posixpath.normpath(posixpath.join(base_dir, target)) if target else ""
             target = "" if target == "." else target.rstrip("/")
