@@ -325,7 +325,7 @@ def make_device(root: Key, device: str, may: list[str], *, label: str = "", issu
     issued = int(time.time()) if issued is None else issued
     note = {
         "pyrtan-device": 1, "root": root.id, "device": normal(device), "label": label,
-        "may": _abilities(may), "issued": issued, "expires": issued + YEAR if expires is None else expires,
+        "may": [x for x in ABILITIES if x in _abilities(may)], "issued": issued, "expires": issued + YEAR if expires is None else expires,
     }
     if note["device"] == root.id:
         raise IdentityError("a root does not delegate to itself; it signs for itself")
