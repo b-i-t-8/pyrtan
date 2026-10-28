@@ -13,6 +13,11 @@
 # left in either checkout and no cache. Keep it that way: never add a step
 # that runs, installs or imports anything from pr/.
 # A maintainer merges when it is green; the pages workflow publishes on merge.
+# The gate judges against main as the event found it: if an OWNERS file on
+# main changes after a pull request's gate ran, that pull request is green
+# against the old one until it runs again. Branch protection's "require
+# branches to be up to date before merging" makes it run again on today's
+# main before any merge.
 
 name: catalog-gate
 
