@@ -207,6 +207,47 @@
       "version": 1
      },
      {
+      "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",
+      "hosts": [
+       "api.frankfurter.dev"
+      ],
+      "inputs": {
+       "amount": {
+        "default": "1",
+        "description": "How much of the first currency, as in: 100 or 2.5",
+        "type": "str"
+       },
+       "from": {
+        "description": "A three-letter currency code, as in: USD",
+        "required": true,
+        "type": "str"
+       },
+       "to": {
+        "description": "A three-letter currency code, as in: EUR",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "exchange-rate",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "money",
+       "read-only"
+      ],
+      "triggers": [
+       "convert {amount:number} {from:word} (to|into|in) {to:word}",
+       "how much is {amount:number} {from:word} in {to:word}",
+       "[the] exchange rate (from|for) {from:word} to {to:word}",
+       "{from:word} to {to:word} (rate|exchange rate)"
+      ],
+      "version": 1
+     },
+     {
       "description": "echo for fixed",
       "hosts": [],
       "inputs": {
@@ -814,6 +855,37 @@
        "[when is] (sunrise|sunset) in {place}",
        "when does the sun (rise|set) in {place}",
        "(sunrise|sun) times (in|for) {place}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Synonyms for an English word, best first, from Datamuse.",
+      "hosts": [
+       "api.datamuse.com"
+      ],
+      "inputs": {
+       "word": {
+        "description": "One English word",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "synonyms",
+      "namespace": "pyrtan",
+      "sources": [
+       "http"
+      ],
+      "tags": [
+       "reference",
+       "language",
+       "read-only"
+      ],
+      "triggers": [
+       "synonyms (for|of) {word:word}",
+       "(another|other) word for {word:word}",
+       "what is another word for {word:word}"
       ],
       "version": 1
      },
@@ -2957,6 +3029,22 @@
    ]
   },
   {
+   "fn": "clean",
+   "text": "convert 1,000.5 EUR, then 2, 3",
+   "value": [
+    "convert 1,000.5 EUR then 2 3",
+    []
+   ]
+  },
+  {
+   "fn": "clean",
+   "text": "a,b and 1 ,2 and 3, 4",
+   "value": [
+    "a b and 1 2 and 3 4",
+    []
+   ]
+  },
+  {
    "fn": "singular",
    "text": "stories",
    "value": "story"
@@ -4907,18 +4995,51 @@
   },
   {
    "expect": {
-    "cleaned": "count to 1 000.5",
-    "considered": [],
-    "matches": [],
+    "cleaned": "count to 1,000.5",
+    "considered": [
+     {
+      "inputs": {
+       "n": 1000.5
+      },
+      "notes": [
+       "n: '1,000.5' read as 1000.5"
+      ],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
+    "matches": [
+     {
+      "inputs": {
+       "n": 1000.5
+      },
+      "notes": [
+       "n: '1,000.5' read as 1000.5"
+      ],
+      "rejected": false,
+      "specificity": 7,
+      "tree": "count",
+      "trigger": "count to {n:number}"
+     }
+    ],
     "now": "2026-10-25T12:00:00+00:00",
     "step": {
      "kind": "intent",
      "node": "intent",
      "observed": {
-      "cleaned": "count to 1 000.5",
-      "steps": []
+      "cleaned": "count to 1,000.5",
+      "inputs": {
+       "n": 1000.5
+      },
+      "notes": [
+       "n: '1,000.5' read as 1000.5"
+      ],
+      "steps": [],
+      "trigger": "count to {n:number}"
      },
-     "summary": "'count to 1,000.5' -> 'count to 1 000.5'; no trigger matched"
+     "summary": "'count to 1,000.5'; count via 'count to {n:number}' (7 literal chars); n: '1,000.5' read as 1000.5"
     },
     "steps": [],
     "text": "count to 1,000.5"
@@ -10603,6 +10724,489 @@
    "inputs": {},
    "intent": "tell me a joke",
    "tree": "dad-joke"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "amount": "100",
+     "from": "usd",
+     "to": "eur"
+    },
+    "output": {
+     "amount": 100.0,
+     "date": "2026-10-27",
+     "from": "USD",
+     "to": "EUR",
+     "value": 89.69
+    },
+    "say": "100 USD is 89.69 EUR at the ECB rate of 2026-10-27.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "convert 100 usd to eur",
+        "inputs": {
+         "amount": 100,
+         "from": "usd",
+         "to": "eur"
+        },
+        "steps": [],
+        "trigger": "convert {amount:number} {from:word} (to|into|in) {to:word}"
+       },
+       "summary": "'convert 100 usd to eur'; exchange-rate via 'convert {amount:number} {from:word} (to|into|in) {to:word}' (15 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": "2026-10-27",
+        "value": "89.69"
+       },
+       "summary": "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR&amount=100 -> 200; value=89.69, day=2026-10-27"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-rate",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-rate",
+       "observed": "89.69",
+       "summary": "state.value = 89.69"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "100 USD is 89.69 EUR at the ECB rate of 2026-10-27."
+      }
+     ],
+     "tree": "exchange-rate"
+    },
+    "tree": "exchange-rate"
+   },
+   "inputs": {
+    "amount": 100,
+    "from": "usd",
+    "to": "eur"
+   },
+   "intent": "convert 100 usd to eur",
+   "tree": "exchange-rate"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "amount": "1000",
+     "from": "EUR",
+     "to": "JPY"
+    },
+    "output": {
+     "amount": 1000.0,
+     "date": "2026-10-27",
+     "from": "EUR",
+     "to": "JPY",
+     "value": 175970.0
+    },
+    "say": "1000 EUR is 175970 JPY at the ECB rate of 2026-10-27.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "convert 1,000 EUR into JPY",
+        "inputs": {
+         "amount": 1000,
+         "from": "EUR",
+         "to": "JPY"
+        },
+        "notes": [
+         "amount: '1,000' read as 1000"
+        ],
+        "steps": [],
+        "trigger": "convert {amount:number} {from:word} (to|into|in) {to:word}"
+       },
+       "summary": "'convert 1,000 EUR into JPY'; exchange-rate via 'convert {amount:number} {from:word} (to|into|in) {to:word}' (15 literal chars); amount: '1,000' read as 1000"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": "2026-10-27",
+        "value": "175970"
+       },
+       "summary": "GET https://api.frankfurter.dev/v1/latest?base=EUR&symbols=JPY&amount=1000 -> 200; value=175970, day=2026-10-27"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "has-rate",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "exists True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "has-rate",
+       "observed": "175970",
+       "summary": "state.value = 175970"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "1000 EUR is 175970 JPY at the ECB rate of 2026-10-27."
+      }
+     ],
+     "tree": "exchange-rate"
+    },
+    "tree": "exchange-rate"
+   },
+   "inputs": {
+    "amount": 1000,
+    "from": "EUR",
+    "to": "JPY"
+   },
+   "intent": "convert 1,000 EUR into JPY",
+   "tree": "exchange-rate"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "amount": "1",
+     "from": "usd",
+     "to": "xyz"
+    },
+    "reason": "unknown-currency",
+    "say": "The ECB publishes no rate between USD and XYZ; it covers about thirty currencies, by their three-letter codes.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "usd to xyz rate",
+        "inputs": {
+         "from": "usd",
+         "to": "xyz"
+        },
+        "steps": [],
+        "trigger": "{from:word} to {to:word} (rate|exchange rate)"
+       },
+       "summary": "'usd to xyz rate'; exchange-rate via '{from:word} to {to:word} (rate|exchange rate)' (18 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": null,
+        "value": null
+       },
+       "summary": "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=XYZ&amount=1 -> 404; value=None, day=None"
+      },
+      {
+       "chosen": "eq 404",
+       "depth": 0,
+       "kind": "decide",
+       "next": "unknown-currency",
+       "node": "status",
+       "observed": 404,
+       "summary": "state.resp.status = 404"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "unknown-currency",
+       "summary": "unknown-currency: The ECB publishes no rate between USD and XYZ; it covers about thirty currencies, by their three-letter codes."
+      }
+     ],
+     "tree": "exchange-rate"
+    },
+    "tree": "exchange-rate"
+   },
+   "inputs": {
+    "from": "usd",
+    "to": "xyz"
+   },
+   "intent": "usd to xyz rate",
+   "tree": "exchange-rate"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "amount": "1",
+     "from": "usd",
+     "to": "usd"
+    },
+    "reason": "same-currency",
+    "say": "USD to USD is the same currency.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "exchange rate from usd to usd",
+        "inputs": {
+         "from": "usd",
+         "to": "usd"
+        },
+        "steps": [],
+        "trigger": "[the] exchange rate (from|for) {from:word} to {to:word}"
+       },
+       "summary": "'exchange rate from usd to usd'; exchange-rate via '[the] exchange rate (from|for) {from:word} to {to:word}' (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "day": null,
+        "value": null
+       },
+       "summary": "GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=USD&amount=1 -> 422; value=None, day=None"
+      },
+      {
+       "chosen": "eq 422",
+       "depth": 0,
+       "kind": "decide",
+       "next": "same-currency",
+       "node": "status",
+       "observed": 422,
+       "summary": "state.resp.status = 422"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "same-currency",
+       "summary": "same-currency: USD to USD is the same currency."
+      }
+     ],
+     "tree": "exchange-rate"
+    },
+    "tree": "exchange-rate"
+   },
+   "inputs": {
+    "from": "usd",
+    "to": "usd"
+   },
+   "intent": "exchange rate from usd to usd",
+   "tree": "exchange-rate"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "happy"
+    },
+    "output": {
+     "synonyms": [
+      "halcyon",
+      "content",
+      "bright",
+      "felicitous",
+      "riant",
+      "expansive",
+      "elysian",
+      "joyful"
+     ],
+     "word": "happy"
+    },
+    "say": "Synonyms for happy: halcyon, content, bright, felicitous, riant, expansive, elysian, joyful.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "synonyms for happy",
+        "inputs": {
+         "word": "happy"
+        },
+        "steps": [],
+        "trigger": "synonyms (for|of) {word:word}"
+       },
+       "summary": "'synonyms for happy'; synonyms via 'synonyms (for|of) {word:word}' (13 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": [
+         "halcyon",
+         "content",
+         "bright",
+         "felicitous",
+         "riant",
+         "expansive",
+         "elysian",
+         "joyful"
+        ]
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_syn=happy&max=8 -> 200; words=['halcyon', 'content', 'bright', 'felicitous', 'riant', 'expansive', 'elysian',…"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "any",
+       "observed": [
+        "halcyon",
+        "content",
+        "bright",
+        "felicitous",
+        "riant",
+        "expansive",
+        "elysian",
+        "joyful"
+       ],
+       "summary": "state.words = ['halcyon', 'content', 'bright', 'felicitous', 'riant', 'expansive', 'elysian',…"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "Synonyms for happy: halcyon, content, bright, felicitous, riant, expansive, elysian, joyful."
+      }
+     ],
+     "tree": "synonyms"
+    },
+    "tree": "synonyms"
+   },
+   "inputs": {
+    "word": "happy"
+   },
+   "intent": "synonyms for happy",
+   "tree": "synonyms"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "word": "qqqzzz"
+    },
+    "reason": "no-synonyms",
+    "say": "Datamuse knows no synonyms for qqqzzz.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "another word for qqqzzz",
+        "inputs": {
+         "word": "qqqzzz"
+        },
+        "steps": [],
+        "trigger": "(another|other) word for {word:word}"
+       },
+       "summary": "'another word for qqqzzz'; synonyms via '(another|other) word for {word:word}' (19 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "status",
+       "node": "fetch",
+       "observed": {
+        "words": []
+       },
+       "summary": "GET https://api.datamuse.com/words?rel_syn=qqqzzz&max=8 -> 200; words=[]"
+      },
+      {
+       "chosen": "eq 200",
+       "depth": 0,
+       "kind": "decide",
+       "next": "any",
+       "node": "status",
+       "observed": 200,
+       "summary": "state.resp.status = 200"
+      },
+      {
+       "chosen": "empty True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": [],
+       "summary": "state.words = []"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-synonyms: Datamuse knows no synonyms for qqqzzz."
+      }
+     ],
+     "tree": "synonyms"
+    },
+    "tree": "synonyms"
+   },
+   "inputs": {
+    "word": "qqqzzz"
+   },
+   "intent": "another word for qqqzzz",
+   "tree": "synonyms"
   }
  ],
  "trees": {
@@ -11395,6 +11999,142 @@
     },
     {
      "pattern": "latest earthquake"
+    }
+   ],
+   "version": 1
+  },
+  "exchange-rate": {
+   "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",
+   "hosts": [
+    "api.frankfurter.dev"
+   ],
+   "inputs": {
+    "amount": {
+     "default": "1",
+     "description": "How much of the first currency, as in: 100 or 2.5",
+     "pattern": "^[0-9]+(\\.[0-9]+)?$",
+     "type": "str"
+    },
+    "from": {
+     "description": "A three-letter currency code, as in: USD",
+     "pattern": "^[A-Za-z]{3}$",
+     "type": "str"
+    },
+    "to": {
+     "description": "A three-letter currency code, as in: EUR",
+     "pattern": "^[A-Za-z]{3}$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "exchange-rate",
+   "namespace": "pyrtan",
+   "nodes": {
+    "fetch": {
+     "extract": [
+      {
+       "into": "value",
+       "regex": "\"rates\":\\s*\\{\\s*\"[A-Z]{3}\":\\s*(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)\\s*\\}"
+      },
+      {
+       "into": "day",
+       "json": "json.date"
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.frankfurter.dev/v1/latest?base={{ inputs.from | upper }}&symbols={{ inputs.to | upper }}&amount={{ inputs.amount }}"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "has-rate": {
+     "branches": [
+      {
+       "then": "reply",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "value"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "amount": "{{ inputs.amount | float }}",
+      "date": "{{ state.day }}",
+      "from": "{{ inputs.from | upper }}",
+      "to": "{{ inputs.to | upper }}",
+      "value": "{{ state.value | float }}"
+     },
+     "say": "{{ inputs.amount }} {{ inputs.from | upper }} is {{ state.value }} {{ inputs.to | upper }} at the ECB rate of {{ state.day }}."
+    },
+    "same-currency": {
+     "kind": "fail",
+     "reason": "same-currency",
+     "say": "{{ inputs.from | upper }} to {{ inputs.to | upper }} is the same currency."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "has-rate",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "then": "unknown-currency",
+       "when": {
+        "eq": 404
+       }
+      },
+      {
+       "then": "same-currency",
+       "when": {
+        "eq": 422
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Frankfurter answered {{ state.resp.status }}."
+    },
+    "unknown-currency": {
+     "kind": "fail",
+     "reason": "unknown-currency",
+     "say": "The ECB publishes no rate between {{ inputs.from | upper }} and {{ inputs.to | upper }}; it covers about thirty currencies, by their three-letter codes."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "money",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "convert {amount:number} {from:word} (to|into|in) {to:word}"
+    },
+    {
+     "pattern": "how much is {amount:number} {from:word} in {to:word}"
+    },
+    {
+     "pattern": "[the] exchange rate (from|for) {from:word} to {to:word}"
+    },
+    {
+     "pattern": "{from:word} to {to:word} (rate|exchange rate)"
     }
    ],
    "version": 1
@@ -13198,6 +13938,106 @@
     },
     {
      "pattern": "(sunrise|sun) times (in|for) {place}"
+    }
+   ],
+   "version": 1
+  },
+  "synonyms": {
+   "description": "Synonyms for an English word, best first, from Datamuse.",
+   "hosts": [
+    "api.datamuse.com"
+   ],
+   "inputs": {
+    "word": {
+     "description": "One English word",
+     "pattern": "^[A-Za-z][A-Za-z'\\-]*$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "synonyms",
+   "namespace": "pyrtan",
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "empty": true
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "words"
+    },
+    "fetch": {
+     "extract": [
+      {
+       "all": true,
+       "into": "words",
+       "regex": "\"word\":\\s*\"([^\"]+)\""
+      }
+     ],
+     "http": {
+      "method": "GET",
+      "url": "https://api.datamuse.com/words?rel_syn={{ inputs.word | lower | url }}&max=8"
+     },
+     "into": "resp",
+     "kind": "observe",
+     "next": "status"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-synonyms",
+     "say": "Datamuse knows no synonyms for {{ inputs.word }}."
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "synonyms": "{{ state.words }}",
+      "word": "{{ inputs.word }}"
+     },
+     "say": "Synonyms for {{ inputs.word }}: {{ state.words | join }}."
+    },
+    "status": {
+     "branches": [
+      {
+       "then": "any",
+       "when": {
+        "eq": 200
+       }
+      },
+      {
+       "else": "unexpected"
+      }
+     ],
+     "kind": "decide",
+     "on": "resp.status"
+    },
+    "unexpected": {
+     "kind": "fail",
+     "reason": "unexpected-status",
+     "say": "Datamuse answered {{ state.resp.status }}."
+    }
+   },
+   "start": "fetch",
+   "tags": [
+    "reference",
+    "language",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "synonyms (for|of) {word:word}"
+    },
+    {
+     "pattern": "(another|other) word for {word:word}"
+    },
+    {
+     "pattern": "what is another word for {word:word}"
     }
    ],
    "version": 1
