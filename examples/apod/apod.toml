@@ -1,0 +1,53 @@
+# NASA's Astronomy Picture of the Day. The public DEMO_KEY allows thirty
+# requests an hour from one address, which is plenty for one person.
+
+name = "apod"
+version = 1
+namespace = "pyrtan"
+description = "NASA's Astronomy Picture of the Day: its title, and the picture or video."
+tags = ["space", "science", "read-only"]
+license = "MIT"
+hosts = ["api.nasa.gov"]
+start = "fetch"
+
+[[triggers]]
+pattern = "astronomy picture of the day"
+[[triggers]]
+pattern = "[nasa] (apod|space picture) [of the day|today]"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY" }
+into = "resp"
+extract = [
+  { into = "title", json = "json.title" },
+  { into = "day", json = "json.date" },
+  { into = "media", json = "json.url" },
+  { into = "kind", json = "json.media_type" },
+  { into = "about", json = "json.explanation" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Astronomy Picture of the Day, {{ state.day }}: {{ state.title }}. {{ state.media }}"
+output = { date = "{{ state.day }}", title = "{{ state.title }}", media_type = "{{ state.kind }}", url = "{{ state.media }}", explanation = "{{ state.about }}", page = "https://apod.nasa.gov/apod/astropix.html" }
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "NASA's demo key has used up its hour from this address; try again later, or see https://apod.nasa.gov/apod/astropix.html"
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "NASA's API answered {{ state.resp.status }}."

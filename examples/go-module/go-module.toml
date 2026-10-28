@@ -1,0 +1,54 @@
+# The latest version of a Go module, from the Go module proxy.
+
+name = "go-module"
+version = 1
+namespace = "pyrtan"
+description = "The latest version of a Go module, and when it was published, from proxy.golang.org."
+tags = ["software", "go", "read-only"]
+license = "MIT"
+hosts = ["proxy.golang.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest version of {module:word} on go"
+[[triggers]]
+pattern = "go (module|version) {module:word}"
+
+[inputs.module]
+type = "str"
+pattern = "^[a-z0-9.\\-]+(/[A-Za-z0-9._~\\-]+)+$"
+description = "A module path, as in: github.com/gorilla/mux"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://proxy.golang.org/{{ inputs.module | lower }}/@latest" }
+into = "resp"
+extract = [
+  { into = "version", json = "json.Version" },
+  { into = "day", regex = "^(\\d{4}-\\d\\d-\\d\\d)", from = "json.Time" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { in = [404, 410] }, then = "no-module" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.module }} {{ state.version }}, published {{ state.day }}. https://pkg.go.dev/{{ inputs.module }}"
+output = { module = "{{ inputs.module }}", version = "{{ state.version }}", published = "{{ state.day }}", url = "https://pkg.go.dev/{{ inputs.module }}" }
+
+[nodes.no-module]
+kind = "fail"
+reason = "no-module"
+say = "The Go module proxy has no module {{ inputs.module }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Go module proxy answered {{ state.resp.status }}."

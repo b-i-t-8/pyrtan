@@ -14,8 +14,13 @@ host somewhere else.
 Served by a hub or service, it talks to the origin it came from. Served
 from elsewhere (it finds out by asking ``api`` on its own origin), the
 browser is the hub: ``pyrtan.js``'s ``LocalHub`` answers the same
-endpoints inside the page, with the catalog's trees (its ``trees.json``),
-reading sentences and running trees here, keeping gaps and unanswered
+endpoints inside the page, with trees it needs no network for: every
+console carries the default trees (:mod:`pyrtan.defaults`; or what
+``pyrtan console --trees`` gave it), embedded in the shape of a catalog's
+``trees.json``. A catalog named in the address (``?catalog=``) or one
+beside the page (``../catalog/``) is fresher and taken first; only a page
+that carries no trees asks pyrtan.com's, then the copy this browser kept.
+It reads sentences and runs trees here, keeping gaps and unanswered
 sentences for as long as the page is open. Trees that need a box (files,
 programs, devices, brokers, a browser to drive) or a site that will not
 let a page read it say so. Joining a hub is explicit: its URL and token in
@@ -24,21 +29,38 @@ bearer; the hub must allow the console's origin with ``--cors``.
 Forgetting the hub makes the browser its own hub again. No external
 assets, no build step.
 
-On a hub of 0.14 or later its Identity tab makes a key for this browser
-(``identity.js``, inlined: WebCrypto's Ed25519, non-extractable, kept in
-IndexedDB) and takes the device note ``pyrtan id device add`` prints;
-from then on it signs what it sends the hub with that key, and a member
-joined from here follows as it. A page served over plain ``http://`` to
+Its Identity tab does all of ``pyrtan id`` without a shell
+(``identity.js``, inlined: WebCrypto's Ed25519, PBKDF2 and AES-GCM). It
+makes your identity in this browser, hands you its backup at once
+(encrypted with your passphrase, to download or keep in your own private
+repository; the page then holds the key non-extractable), restores one,
+claims a name (pyrtan.com's, through GitHub's own new-file page, which
+opens the pull request from your account; or any network's names
+repository), and adds and revokes devices. A browser can instead be a
+device of an identity held elsewhere: it makes its own key and takes the
+note its root signs. On a hub of 0.14 or later the key signs what the
+console sends, and a member joined from here follows as it; the Access
+tab keeps the hub's grants. A page served over plain ``http://`` to
 anything but localhost has no WebCrypto, holds no key, and says so.
+
+Its Agents tab starts an agent beside the swarm (``agents.js``, inlined;
+see _meta/agents.md): an open-weights model in this browser (WebLLM,
+imported only when a person presses Start) or on a server of theirs. It
+calls the same endpoints this page does, its suggestions are checked by
+rules before they are shown, and accepting one grows the tree here when
+the browser is its own hub, and keeps it at the hub's ``/suggestions``.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import urllib.parse
 from pathlib import Path
+from typing import Any
 
 from . import __version__
+from .defaults import bundle
 
 # The tree runtime in JavaScript, served beside the console so a member can run trees.
 PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf-8")
@@ -46,8 +68,10 @@ PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf
 THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
 # Identifiers, canonical JSON and request signing, inlined into the console (_meta/identity.md).
 IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding="utf-8")
+# Agents beside the swarm: open-weights models a person starts in the console (_meta/agents.md).
+AGENTS_JS = (Path(__file__).parent / "js" / "agents.js").read_text(encoding="utf-8")
 
-PAGE = r"""<!doctype html>
+TEMPLATE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -59,6 +83,7 @@ PAGE = r"""<!doctype html>
 <meta name="theme-color" content="#c2410c">
 <script>__THEME__</script>
 <script>__IDENTITY__</script>
+<script>__AGENTS__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
@@ -77,7 +102,10 @@ PAGE = r"""<!doctype html>
   section[hidden] { display:none }
   p.lede { color:var(--mute); margin:0 0 16px }
   form.row { display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap }
-  form.row input[type=text], form.row input[type=url], form.row input[type=password] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  div.row { display:flex; gap:8px; flex-wrap:wrap }
+  form.row input[type=text], form.row input[type=url], form.row input[type=password], div.row input[type=text] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  [hidden] { display:none !important }  /* even where an inline style sets display */
+  #tab-identity input[type=text], #tab-identity input[type=password], #tab-identity input[type=file], #tab-access input[type=text] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   button { font:inherit; padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-fg); cursor:pointer }
   button.quiet { background:var(--soft); color:var(--fg) }
   button:disabled { opacity:.6; cursor:wait }
@@ -113,7 +141,7 @@ PAGE = r"""<!doctype html>
   .chat-log .line { margin:6px 0 }
   .chat-log .sys { color:var(--mute); font-size:14px }
   .chat-log .who { font-weight:600; margin-right:6px }
-  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) }
+  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) } .chat-log .tree .who { color:var(--tan) }
   .chat-log details { font-size:13px; margin-top:2px }
   .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
   #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
@@ -133,7 +161,7 @@ PAGE = r"""<!doctype html>
     <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
-  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved in an answer; an agent you start sits beside the trees, never inside them.</p>
 
   <section id="connect" hidden>
     <div class="card">
@@ -158,9 +186,11 @@ PAGE = r"""<!doctype html>
     <a href="#watches" data-tab="watches" id="watches-tab">Watches</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
+    <a href="#agents" data-tab="agents">Agents</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
     <a href="#identity" data-tab="identity" id="identity-tab" hidden>Identity</a>
+    <a href="#access" data-tab="access" id="access-tab" hidden>Access</a>
     <a href="#chat" data-tab="chat" id="chat-tab" hidden>Chat</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
@@ -225,6 +255,61 @@ PAGE = r"""<!doctype html>
     </div>
   </section>
 
+  <section id="tab-agents" hidden>
+    <h2>Agents beside the swarm</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">An agent is an open-weights model you start here: in this browser, on its GPU, or on a server of your own (Ollama, llama.cpp). It tests the trees with sentences of its own, says what a gap's value means, finds the patterns a tree missed and the trees nobody has written, and talks with you. It never answers for a tree and never sits inside a run: what it suggests is checked by rules here, checked again by <code>pyrtan grow --suggestions</code> before it is written, and only you accept it. It remembers what it learns and follows its skills, in this browser only. Nothing is downloaded until you start one.</p>
+    <div class="card" id="agent-setup">
+      <form class="row" id="agent-start" style="margin:0 0 8px">
+        <input type="text" id="agent-name" placeholder="a name, e.g. scout" autocomplete="off" style="flex:0 1 140px">
+        <select id="agent-engine" aria-label="where the model runs"><option value="webllm">in this browser (WebGPU)</option><option value="openai">on a server of mine (OpenAI API)</option></select>
+        <select id="agent-model" aria-label="model"></select>
+        <input type="url" id="agent-url" placeholder="http://localhost:11434/v1" autocomplete="off" hidden>
+        <input type="text" id="agent-server-model" placeholder="model, e.g. qwen2.5:3b" autocomplete="off" hidden>
+        <button type="submit" id="agent-go">Start</button>
+      </form>
+      <div class="mute" style="font-size:14px" id="agent-help">In this browser: the weights download once (from Hugging Face, through WebLLM) and stay in the browser's cache. On a server of yours, it must let this page's origin call it (Ollama: <code>OLLAMA_ORIGINS=<span class="origin-here"></span></code>).</div>
+      <div class="notice" id="agent-gpu" hidden style="margin:8px 0 0">This browser has no WebGPU, so a model cannot run in it. Point it at a server of yours instead, or use a browser that has WebGPU.</div>
+      <div class="mute" style="font-size:14px;margin-top:6px" id="agent-progress"></div>
+    </div>
+    <div id="agent-on" hidden>
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+          <div><span class="status done" id="agent-who"></span> <span class="mute" id="agent-what"></span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" id="agent-patrol" title="probe every tree, then the gaps, then the unanswered">Patrol</button>
+            <button type="button" class="quiet" id="agent-stop" disabled>Stop</button>
+            <button type="button" class="quiet" id="agent-off">Put away</button>
+          </div>
+        </div>
+        <div class="chat-log" id="agent-log" aria-live="polite" style="height:min(50vh,420px);margin-top:8px"></div>
+        <div class="typing-line" id="agent-typing" aria-live="polite"></div>
+        <form class="row" id="agent-say" style="margin:8px 0 0;flex-wrap:nowrap">
+          <input type="text" id="agent-text" placeholder="talk to the agent, or /help" autocomplete="off" maxlength="1000" style="flex-basis:0">
+          <button type="submit">Send</button>
+        </form>
+      </div>
+      <h2>Suggestions</h2>
+      <p class="mute" style="font-size:14px;margin-top:0" id="agent-sug-lede">Each passed the rules in this page. Accept one and it is kept at the hub's <code>/suggestions</code>, for <code>pyrtan grow --suggestions <span class="at">URL</span> --trees DIR --apply</code>. Dismiss one and the agent remembers why.</p>
+      <div id="agent-sugs"><p class="mute">Nothing yet. Press Patrol, or ask it to <code>/probe</code> a tree.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px"><button type="button" class="quiet" id="agent-download">Download accepted</button></div>
+      <details class="card" id="agent-memory"><summary>Memory</summary>
+        <p class="mute" style="font-size:14px">What this agent keeps, for this hub, in this browser: your notes, its own, and what happened (refusals, your verdicts, patrols). The most relevant go into every prompt.</p>
+        <form class="row" id="agent-note-form"><input type="text" id="agent-note" placeholder="a note for the agent, e.g. Oslo's weather API is in Celsius" autocomplete="off"><button type="submit">Remember</button></form>
+        <table id="agent-notes"><tbody></tbody></table>
+        <div style="margin-top:8px"><button type="button" class="quiet" id="agent-forget-all">Forget everything</button></div>
+      </details>
+      <details class="card" id="agent-skills-box"><summary>Skills</summary>
+        <p class="mute" style="font-size:14px">Instructions for a job, the way a skill is for Claude: the built-in ones are the jobs, yours are added to the job you name (or to all of them). A chat skill of yours can be called as <code>/name</code>. Kept in this browser, shared by every agent; a skill file is Markdown with <code>name</code>, <code>description</code> and <code>when</code> in its front matter, or JSON.</p>
+        <table id="agent-skills"><thead><tr><th>Skill</th><th>For</th><th></th></tr></thead><tbody></tbody></table>
+        <form id="agent-skill-form" style="margin-top:10px">
+          <div class="row"><input type="text" id="skill-name" placeholder="name, e.g. tourist" autocomplete="off"><select id="skill-when" aria-label="for which job"><option value="chat">chat</option><option value="probe">probe</option><option value="meaning">meaning</option><option value="trigger">trigger</option><option value="tree">tree</option><option value="always">always</option></select><input type="text" id="skill-desc" placeholder="one line: what it is for" autocomplete="off"></div>
+          <textarea id="skill-body" rows="4" placeholder="the instructions, e.g. Write probe sentences the way a tourist would: short, a little misspelled, with place names in their own language." style="width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="submit">Add skill</button><label class="quiet" style="padding:10px 16px;border-radius:8px;background:var(--soft);cursor:pointer">Import…<input type="file" id="skill-import" accept=".md,.json,.txt" hidden></label><button type="button" class="quiet" id="skill-export">Export mine</button></div>
+        </form>
+      </details>
+    </div>
+  </section>
+
   <section id="tab-directory" hidden>
     <h2>Directory</h2>
     <p class="mute" style="font-size:14px;margin-top:0">Every hub that asked to be found, as this hub has heard it through the swarm. Entries are hints carried hub to hub; <em>link</em> is how recently each announced. Nothing here is routed to: to use one, follow it from your own hub, <code>pyrtan follow URL --at YOUR-HUB</code>. To be in it: <code>pyrtan hub --listed</code>.</p>
@@ -267,25 +352,97 @@ PAGE = r"""<!doctype html>
   </section>
 
   <section id="tab-identity" hidden>
-    <h2>This browser's key</h2>
-    <p class="mute" style="font-size:14px;margin-top:0">A key made here, kept here (the browser holds it and will not hand it over, not even to this page), and used to sign what this console sends the hub. Pair it with your identity and the hub gives it what it grants you, capped by what the note lets this browser do; or grant the key itself, <code>pyrtan allow pyr:… --may chat</code>. A member joined from here follows as this key.</p>
-    <div class="card">
-      <div id="ident-none" class="notice" hidden>This page cannot hold a key: it needs a secure page (https, or localhost) in a browser with Ed25519 in WebCrypto. It still asks, chats and joins, without a key: with the hub's token, or as an anonymous member.</div>
-      <div id="ident-off" hidden>
-        <button type="button" id="ident-make">Make a key for this browser</button>
+    <h2>Your identity</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">An identity is a key, made here and held by this browser, which will not hand it over, not even to this page. No account anywhere: hubs grant your key what they choose, a name like <code>you@pyrtan.com</code> points at it, and your other devices speak for it with a note it signs. Lose the key and its backup and nobody can give it back.</p>
+    <div id="ident-none" class="notice" hidden>This page cannot hold a key: it needs a secure page (https, or localhost) in a browser with Ed25519 in WebCrypto. It still asks, chats and joins, without a key: with the hub's token, or as an anonymous member.</div>
+
+    <div class="card" id="ident-start" hidden>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="ident-new">Make my identity</button>
+        <button type="button" class="quiet" id="ident-restore-open">Restore from a backup</button>
+        <button type="button" class="quiet" id="ident-make">Use this browser as a device of an identity I have</button>
       </div>
-      <div id="ident-on" hidden>
-        <div><span class="status done">key</span> <code id="ident-id"></code></div>
-        <div class="mute" style="font-size:14px;margin:6px 0" id="ident-paired"></div>
-        <form id="ident-note-form" style="margin:10px 0">
-          <div class="mute" style="font-size:14px;margin-bottom:6px">On the machine with your identity: <code id="ident-howto"></code>, then paste what it prints here.</div>
-          <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
-        </form>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <label><input type="checkbox" id="ident-sign"> sign requests to this hub with it</label>
-          <button type="button" class="quiet" id="ident-forget">Forget this key</button>
+      <form id="ident-new-form" style="margin-top:12px" hidden>
+        <div class="mute" style="font-size:14px;margin-bottom:6px">Your key is made here, then sealed with a passphrase into a backup you keep. Choose a long sentence you will remember: nobody can reset it, and the backup is only as strong as it is.</div>
+        <div class="row"><input type="password" id="ident-pass" placeholder="passphrase (a long sentence)" autocomplete="new-password"><input type="password" id="ident-pass2" placeholder="the same again" autocomplete="new-password"><button type="submit">Make it</button></div>
+      </form>
+      <form id="ident-restore-form" style="margin-top:12px" hidden>
+        <div class="mute" style="font-size:14px;margin-bottom:6px">The backup file this console or <code>pyrtan id backup</code> wrote, and its passphrase.</div>
+        <div class="row"><input type="file" id="ident-file" accept="application/json,.json"><input type="password" id="ident-restore-pass" placeholder="passphrase" autocomplete="current-password"><button type="submit">Restore</button></div>
+      </form>
+    </div>
+
+    <div class="card" id="ident-root" hidden>
+      <div><span class="status done">identity</span> <code id="root-id"></code></div>
+      <div id="root-backup-state" style="margin:8px 0"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="root-download">Download my backup</button>
+        <input type="text" id="root-gh" placeholder="your GitHub login" autocomplete="off" style="max-width:220px">
+        <button type="button" class="quiet" id="root-gh-go">Keep it in a private GitHub repository</button>
+      </div>
+      <div id="root-gh-out" class="mute" style="font-size:14px;margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="ident-claim" hidden>
+      <h2 style="font-size:15px;margin:0 0 8px">Claim a name</h2>
+      <form id="claim-form">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;font-size:14px">
+          <label><input type="radio" name="claim-where" value="pyrtan" checked> at pyrtan.com (your GitHub login)</label>
+          <label><input type="radio" name="claim-where" value="network"> at another network</label>
         </div>
+        <div class="row" id="claim-pyrtan"><input type="text" id="claim-login" placeholder="your GitHub login" autocomplete="off"><button type="submit">Make my claim</button></div>
+        <div id="claim-network" hidden>
+          <div class="row"><input type="text" id="claim-name" placeholder="name@network-domain, e.g. alice@names.example.org" autocomplete="off"></div>
+          <div class="row" style="margin-top:6px"><input type="text" id="claim-repo" placeholder="its names repository, e.g. https://github.com/example/names" autocomplete="off"><input type="text" id="claim-branch" value="main" style="max-width:120px" autocomplete="off"><button type="submit">Make my claim</button></div>
+        </div>
+      </form>
+      <div id="claim-out"></div>
+    </div>
+
+    <div class="card" id="ident-devices" hidden>
+      <h2 style="font-size:15px;margin:0 0 8px">Devices that speak for you</h2>
+      <table id="dev-table"><thead><tr><th>Device</th><th>May</th><th>Until</th><th></th></tr></thead><tbody></tbody></table>
+      <form id="dev-form" style="margin-top:10px">
+        <div class="mute" style="font-size:14px;margin-bottom:6px">On the other device, open this console's Identity tab, choose <em>Use this browser as a device</em>, and paste its code here.</div>
+        <div class="row"><input type="text" id="dev-code" placeholder="its code, pyr:…" autocomplete="off"><input type="text" id="dev-label" placeholder="what to call it: phone" style="max-width:200px" autocomplete="off"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;font-size:14px;align-items:center" id="dev-may"><span class="mute">it may</span>
+          <label><input type="checkbox" value="ask" checked> ask</label><label><input type="checkbox" value="chat" checked> chat</label><label><input type="checkbox" value="run"> run trees</label><label><input type="checkbox" value="operate"> operate hubs</label>
+          <button type="submit">Sign its note</button></div>
+      </form>
+      <div id="dev-out"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="quiet" id="doc-push" hidden>Give this hub my newest document</button>
+        <button type="button" class="quiet" id="doc-download">Download my identity document</button>
       </div>
+    </div>
+
+    <div class="card" id="ident-on" hidden>
+      <div><span class="status done">device</span> <code id="ident-id"></code> <button type="button" class="quiet" id="ident-copy">Copy its code</button></div>
+      <div class="mute" style="font-size:14px;margin:6px 0" id="ident-paired"></div>
+      <form id="ident-note-form" style="margin:10px 0">
+        <div class="mute" style="font-size:14px;margin-bottom:6px">Give this code to the browser that holds your identity (its Identity tab, <em>Devices</em>), or run <code id="ident-howto"></code>; then paste the note it gives back here.</div>
+        <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
+      </form>
+    </div>
+
+    <div id="ident-common" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px" hidden>
+      <label><input type="checkbox" id="ident-sign"> sign requests to the hub with this key</label>
+      <button type="button" class="quiet" id="ident-forget">Forget it on this browser</button>
+    </div>
+  </section>
+
+  <section id="tab-access" hidden>
+    <h2>Who may do what here</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">The identities this hub grants anything, instead of handing out its token: <em>ask</em> (the trees), <em>chat</em> (the lobby, bots included), <em>run</em> (be a trusted member, running its trees) and <em>operate</em> (everything the token allows). A device gets what its identity is granted, capped by its note. A name is looked up once and pinned.</p>
+    <div id="access-note" class="notice" hidden></div>
+    <div class="card">
+      <table id="grant-table"><thead><tr><th>Who</th><th>May</th><th>Document</th><th></th></tr></thead><tbody></tbody></table>
+      <form id="grant-form" style="margin-top:10px">
+        <div class="row"><input type="text" id="grant-who" placeholder="name@domain or pyr:…" autocomplete="off"><button type="submit">Grant</button></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:14px" id="grant-may">
+          <label><input type="checkbox" value="ask" checked> ask</label><label><input type="checkbox" value="chat"> chat</label><label><input type="checkbox" value="run"> run</label><label><input type="checkbox" value="operate"> operate</label>
+        </div>
+      </form>
     </div>
   </section>
 
@@ -333,6 +490,7 @@ POST /chat/typing {"seat": "…", "typing": true}</pre>
 
   <footer><a href="https://pyrtan.com">pyrtan.com</a> · <a href="https://pyrtan.com/source/">source</a> · AGPL-3.0-or-later · console v__VERSION__<span id="hub-version"></span></footer>
 </main>
+<script id="pyrtan-trees" type="application/json">__TREES__</script>
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -353,6 +511,17 @@ const examples = {
   "holidays": "next holiday in US",
   "exchange-rate": "convert 100 USD to EUR",
   "synonyms": "synonyms for happy",
+  "forecast": "weather in Oslo tomorrow",
+  "uv-index": "uv index in Sydney",
+  "local-time": "what time is it in Tokyo",
+  "elevation": "how high is Quito",
+  "postal-code": "where is zip 90210",
+  "wayback": "is example.com archived",
+  "rhymes": "what rhymes with moon",
+  "github-repo": "how many stars does astral-sh/uv have",
+  "go-module": "latest version of github.com/gorilla/mux on go",
+  "homebrew": "brew formula wget",
+  "pokemon": "pokemon pikachu",
 };
 // Served by a Pyrtan, only its token is kept, under its own origin; served elsewhere, the hub URL and token.
 const KEY = "pyrtan.console:" + location.origin;
@@ -389,6 +558,17 @@ function problem(msg, bad) { $("#problem").innerHTML = msg ? `<div class="notice
 // This browser's key: made and held by crypto.subtle (non-extractable, in
 // IndexedDB), paired with a root by a device note, used to sign requests
 // for the hub's audience (named at /api). See identity.js.
+// pyrtan.com's names: files in this repository, added by pull request (site/names/README.md).
+const PYRTAN_NAMES = {repo: "b-i-t-8/pyrtan", branch: "main", dir: "site/names", domain: "pyrtan.com"};
+const githubNewFile = (repo, branch, dir, filename, text) => `https://github.com/${repo}/new/${encodeURIComponent(branch)}${dir ? "/" + dir : ""}?filename=${encodeURIComponent(filename)}&value=${encodeURIComponent(text)}`;
+const githubRepo = (url) => { const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(String(url || "").trim()); return m ? m[1] : null; };
+function saveFile(name, data) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + "\n"], {type: "application/json"}));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const pre = (data) => `<pre style="max-height:180px">${esc(JSON.stringify(data, null, 2))}</pre>`;
+
 const ident = {
   ok: null, key: null, audience: null, sign: true,
   async init() {
@@ -397,46 +577,206 @@ const ident = {
     try { this.sign = localStorage.getItem("pyrtan.identity.sign") !== "off"; } catch (e) {}
     this.render();
   },
+  isRoot() { return !!(this.key && this.key.role === "root"); },
   active() { return !!(this.ok && this.key && this.sign && this.audience); },
   async headers(method, path, body) {
     if (!this.active()) return {};
     return PyrtanIdentity.signRequest(this.key, this.audience, method, path, body, this.key.note || null);
   },
+  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); },
+  // ---- a device of an identity held elsewhere
   async make() {
     const k = await PyrtanIdentity.generate();
-    this.key = {id: k.id, privateKey: k.privateKey, publicKey: k.publicKey, note: null, made: Date.now()};
-    await PyrtanIdentity.store.put(this.key);
-    this.render();
+    this.key = {role: "device", id: k.id, privateKey: k.privateKey, publicKey: k.publicKey, note: null, made: Date.now()};
+    await this.keep();
   },
   async useNote(text) {
-    let note; try { note = JSON.parse(text); } catch (e) { problem("The note is JSON: paste the line pyrtan id device add printed.", true); return; }
+    let note; try { note = JSON.parse(text); } catch (e) { problem("The note is JSON: paste what the browser holding your identity, or pyrtan id device add, gave you.", true); return; }
     const bad = PyrtanIdentity.noteProblem(note, this.key.id);
     if (bad) { problem(bad, true); return; }
-    this.key.note = note; await PyrtanIdentity.store.put(this.key); problem(""); this.render();
+    this.key.note = note; problem(""); await this.keep();
+  },
+  // ---- your identity, in this browser
+  async makeRoot(pass) {
+    const r = await PyrtanIdentity.createRoot();
+    const sealed = await PyrtanIdentity.makeBackup(r.seed, r.id, pass);
+    const key = await PyrtanIdentity.rootFromSeed(r.seed, r.id);  // non-extractable from here on; the seed is wiped
+    const document = await PyrtanIdentity.makeIdentity(key);
+    this.key = {role: "root", id: key.id, privateKey: key.privateKey, sealed, document, backedUp: false, note: null, made: Date.now()};
+    await this.keep();
+  },
+  async restore(file, pass) {
+    let b; try { b = JSON.parse(await file.text()); } catch (e) { throw new Error("that file is not a backup"); }
+    const seed = await PyrtanIdentity.openBackup(b, pass);
+    const key = await PyrtanIdentity.rootFromSeed(seed, b.id.toLowerCase());
+    const sealed = Object.fromEntries(Object.entries(b).filter(([k]) => k !== "document"));
+    const document = b.document || await PyrtanIdentity.makeIdentity(key);
+    this.key = {role: "root", id: key.id, privateKey: key.privateKey, sealed, document, backedUp: true, note: null, made: Date.now()};
+    await this.keep();
+  },
+  backup() { return Object.assign({}, this.key.sealed, {document: this.key.document}); },
+  async backedUp() { if (!this.key.backedUp) { this.key.backedUp = true; await this.keep(); } },
+  async addDevice(code, may, label) {
+    const note = await PyrtanIdentity.makeDevice(this.key, code.trim(), may, {label});
+    this.key.document = await PyrtanIdentity.withDevice(this.key.document, this.key, note);
+    await this.keep();
+    return note;
+  },
+  async revoke(device) {
+    this.key.document = await PyrtanIdentity.withRevoked(this.key.document, this.key, device);
+    await this.keep();
   },
   async forget() {
-    if (!confirm("Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.")) return;
+    const what = this.isRoot() ? "Forget your identity on this browser? Without its backup nobody can give it back." : "Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.";
+    if (!confirm(what)) return;
     await PyrtanIdentity.store.put(null); this.key = null; this.render();
   },
   render() {
     if (!$("#tab-identity")) return;
+    const root = this.isRoot(), device = !!this.key && !root;
     $("#ident-none").hidden = this.ok !== false;
-    $("#ident-off").hidden = !this.ok || !!this.key;
-    $("#ident-on").hidden = !this.ok || !this.key;
+    $("#ident-start").hidden = !this.ok || !!this.key;
+    for (const id of ["#ident-root", "#ident-claim", "#ident-devices"]) $(id).hidden = !this.ok || !root;
+    $("#ident-on").hidden = !this.ok || !device;
+    $("#ident-common").hidden = !this.ok || !this.key;
     if (!this.key) return;
-    $("#ident-id").textContent = this.key.id;
-    const n = this.key.note;
-    $("#ident-paired").innerHTML = n
-      ? `speaks for <code>${esc(n.root)}</code> · may ${esc(n.may.join(", ") || "nothing")} · until ${esc(new Date(n.expires * 1000).toLocaleDateString())}${n.label ? " · " + esc(n.label) : ""}`
-      : "not paired: it signs as itself, so a hub grants this key, or nothing";
-    $("#ident-howto").textContent = `pyrtan id device add ${this.key.id} --may ask,chat,run --label browser`;
     $("#ident-sign").checked = this.sign;
+    $("#doc-push").hidden = !root || !this.audience;
+    if (device) {
+      $("#ident-id").textContent = this.key.id;
+      const n = this.key.note;
+      $("#ident-paired").innerHTML = n
+        ? `speaks for <code>${esc(n.root)}</code> · may ${esc(n.may.join(", ") || "nothing")} · until ${esc(new Date(n.expires * 1000).toLocaleDateString())}${n.label ? " · " + esc(n.label) : ""}`
+        : "not paired yet: it signs as itself, so a hub grants this key, or nothing";
+      $("#ident-howto").textContent = `pyrtan id device add ${this.key.id} --may ask,chat --label browser`;
+      return;
+    }
+    $("#root-id").textContent = this.key.id;
+    $("#root-backup-state").innerHTML = this.key.backedUp
+      ? `<span class="mute" style="font-size:14px">Backed up. Keep the file somewhere only you can read; never in a public repository.</span>`
+      : `<div class="notice bad" style="margin:0">Save your backup now. It is the only way back to this identity if this browser's data is cleared. It is encrypted with your passphrase; keep it where only you can read it.</div>`;
+    const tb = $("#dev-table tbody"); tb.innerHTML = "";
+    const doc = this.key.document;
+    for (const n of doc.devices) tb.insertAdjacentHTML("beforeend", `<tr><td>${esc(n.label || "-")}<div class="mute"><code>${esc(PyrtanIdentity.short(n.device))}</code></div></td><td>${esc(n.may.join(", "))}</td><td class="mute">${esc(new Date(n.expires * 1000).toLocaleDateString())}</td><td><button type="button" class="quiet" data-revoke="${esc(n.device)}">Revoke</button></td></tr>`);
+    for (const r of doc.revoked) tb.insertAdjacentHTML("beforeend", `<tr><td class="mute"><code>${esc(PyrtanIdentity.short(r))}</code></td><td class="mute" colspan="3">revoked</td></tr>`);
+    if (!doc.devices.length && !doc.revoked.length) tb.innerHTML = `<tr><td class="mute" colspan="4">none yet</td></tr>`;
   },
 };
+
+// ---- starting
 $("#ident-make").addEventListener("click", () => ident.make().catch((e) => problem("Could not make a key: " + e.message, true)));
+$("#ident-new").addEventListener("click", () => { $("#ident-new-form").hidden = false; $("#ident-restore-form").hidden = true; $("#ident-pass").focus(); });
+$("#ident-restore-open").addEventListener("click", () => { $("#ident-restore-form").hidden = false; $("#ident-new-form").hidden = true; });
+$("#ident-new-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const a = $("#ident-pass").value, b = $("#ident-pass2").value;
+  if (a !== b) { problem("The two passphrases differ.", true); return; }
+  if (a.length < 8) { problem("A passphrase is at least 8 characters; a long sentence is better.", true); return; }
+  const btn = e.submitter || e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Making it…";
+  try { await ident.makeRoot(a); problem(""); } catch (err) { problem("Could not make your identity: " + err.message, true); }
+  btn.disabled = false; btn.textContent = "Make it"; $("#ident-pass").value = $("#ident-pass2").value = "";
+});
+$("#ident-restore-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = $("#ident-file").files[0]; if (!f) { problem("Choose the backup file.", true); return; }
+  try { await ident.restore(f, $("#ident-restore-pass").value); problem(""); } catch (err) { problem(err.message, true); }
+  $("#ident-restore-pass").value = "";
+});
+// ---- a device
 $("#ident-note-form").addEventListener("submit", (e) => { e.preventDefault(); ident.useNote($("#ident-note").value.trim()); });
+$("#ident-copy").addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(ident.key.id); });
+// ---- backup
+$("#root-download").addEventListener("click", async () => { saveFile("pyrtan-identity-backup.json", ident.backup()); await ident.backedUp(); });
+$("#root-gh-go").addEventListener("click", async () => {
+  const login = $("#root-gh").value.trim();
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(login)) { problem("Enter your GitHub login.", true); return; }
+  const create = "https://github.com/new?name=pyrtan-identity&visibility=private&description=" + encodeURIComponent("My pyrtan identity backup (encrypted). Keep this repository private.");
+  const file = githubNewFile(`${login}/pyrtan-identity`, "main", "", "pyrtan-identity-backup.json", JSON.stringify(ident.backup(), null, 2) + "\n");
+  $("#root-gh-out").innerHTML = `1. <a href="${esc(create)}" target="_blank" rel="noopener">Make a <strong>private</strong> repository named pyrtan-identity</a> (check that it says Private). 2. <a href="${esc(file)}" target="_blank" rel="noopener" id="root-gh-file">Commit your backup to it</a>. GitHub keeps every version; the backup is only as strong as your passphrase, so never make that repository public.`;
+  $("#root-gh-file").addEventListener("click", () => ident.backedUp());
+});
+// ---- claiming a name
+for (const r of document.querySelectorAll('input[name="claim-where"]')) r.addEventListener("change", () => { const net = document.querySelector('input[name="claim-where"]:checked').value === "network"; $("#claim-pyrtan").hidden = net; $("#claim-network").hidden = !net; });
+$("#claim-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const out = $("#claim-out"); out.innerHTML = "";
+  try {
+    let claim, repo, branch, dir, gh = null;
+    if (document.querySelector('input[name="claim-where"]:checked').value === "pyrtan") {
+      const login = $("#claim-login").value.trim().toLowerCase();
+      if (!/^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/.test(login)) throw new Error("enter your GitHub login");
+      const r = await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`, {headers: {"Accept": "application/json"}});
+      if (!r.ok) throw new Error(`GitHub does not know ${login} (${r.status})`);
+      gh = (await r.json()).id;
+      claim = await PyrtanIdentity.makeName(ident.key, `${login}@${PYRTAN_NAMES.domain}`, {extra: {github: gh}});
+      ({repo, branch, dir} = PYRTAN_NAMES);
+    } else {
+      claim = await PyrtanIdentity.makeName(ident.key, $("#claim-name").value);
+      repo = githubRepo($("#claim-repo").value); branch = $("#claim-branch").value.trim() || "main"; dir = "names";
+      if (!repo && $("#claim-repo").value.trim()) repo = null;
+    }
+    const file = `${claim.name}.json`, docFile = `${claim.name}.id.json`, text = JSON.stringify(claim, null, 2) + "\n", docText = JSON.stringify(ident.key.document, null, 2) + "\n";
+    let html = `<div style="margin-top:10px">Your claim to <code>${esc(claim.name)}@${esc(claim.domain)}</code>, signed by your key:</div>${pre(claim)}`;
+    if (repo) {
+      html += `<div>1. <a href="${esc(githubNewFile(repo, branch, dir, file, text))}" target="_blank" rel="noopener" id="claim-open">Propose it on GitHub</a>: GitHub opens <code>${esc(dir)}/${esc(file)}</code> filled in; choose <em>Propose changes</em>, then <em>Create pull request</em>${gh !== null ? `, from the GitHub account ${esc(claim.name)}` : ""}.</div>`;
+      html += `<div>2. Optional, once that is merged: <a href="${esc(githubNewFile(repo, branch, dir, docFile, docText))}" target="_blank" rel="noopener">propose your identity document</a> (<code>${esc(docFile)}</code>), so hubs find your devices there.</div>`;
+    } else {
+      html += `<div>Add it to the network's names repository as <code>names/${esc(file)}</code> (and your identity document as <code>names/${esc(docFile)}</code>), and open a merge request there.</div>`;
+    }
+    html += `<div style="margin-top:6px"><button type="button" class="quiet" id="claim-save">Download the claim</button> <button type="button" class="quiet" id="claim-copy">Copy it</button></div>`;
+    out.innerHTML = html;
+    $("#claim-save").addEventListener("click", () => saveFile(file, claim));
+    $("#claim-copy").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText(text));
+    problem("");
+  } catch (err) { problem("Could not make the claim: " + err.message, true); }
+});
+// ---- devices
+$("#dev-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const may = Array.from(document.querySelectorAll("#dev-may input:checked")).map((i) => i.value);
+  try {
+    const note = await ident.addDevice($("#dev-code").value, may, $("#dev-label").value.trim());
+    $("#dev-out").innerHTML = `<div style="margin-top:10px">Paste this on <code>${esc(note.label || PyrtanIdentity.short(note.device))}</code>, under <em>Use this note</em>:</div>${pre(note)}<button type="button" class="quiet" id="dev-copy">Copy it</button>`;
+    $("#dev-copy").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(note)));
+    $("#dev-code").value = $("#dev-label").value = ""; problem("");
+  } catch (err) { problem("Could not sign the note: " + err.message, true); }
+});
+$("#dev-table").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-revoke]"); if (!b) return;
+  if (!confirm("Revoke this device? Hubs refuse it once they have your newer document.")) return;
+  await ident.revoke(b.dataset.revoke);
+  problem("Revoked. Give your newest document to the hubs you use, and to your name's repository, so they know now.");
+});
+$("#doc-push").addEventListener("click", async () => {
+  const r = await api("identity", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({document: ident.key.document})});
+  const b = await r.json().catch(() => ({}));
+  problem(r.ok ? "This hub holds your newest document." : `The hub did not take it: ${b.say || r.status}`, !r.ok);
+});
+$("#doc-download").addEventListener("click", () => saveFile(`${ident.key.id.slice(4, 12)}.id.json`, ident.key.document));
 $("#ident-forget").addEventListener("click", () => ident.forget());
 $("#ident-sign").addEventListener("change", (e) => { ident.sign = e.target.checked; try { localStorage.setItem("pyrtan.identity.sign", ident.sign ? "on" : "off"); } catch (err) {} });
+
+// ---------------------------------------------------------------- access: the hub's grants
+async function loadGrants() {
+  const tb = $("#grant-table tbody"), note = $("#access-note");
+  let r; try { r = await api("allow"); } catch (e) { note.hidden = false; note.textContent = String(e); return; }
+  if (r.status === 401 || r.status === 403) { note.hidden = false; note.textContent = "Only this hub's operator sees and changes its grants: connect with its token, or as an identity it grants operate."; tb.innerHTML = ""; return; }
+  note.hidden = true;
+  const body = await r.json().catch(() => ({grants: []}));
+  tb.innerHTML = (body.grants || []).map((g) => `<tr><td>${g.name ? `<code>${esc(g.name)}</code>` : ""}<div class="mute"><code>${esc(PyrtanIdentity.short(g.id))}</code></div></td><td>${esc(g.may.join(", "))}</td><td class="mute">${g.document ? `${esc(String(g.document.devices))} device(s), ${esc(String(g.document.revoked))} revoked` : "none yet"}</td><td><button type="button" class="quiet" data-disallow="${esc(g.id)}">Remove</button></td></tr>`).join("") || `<tr><td class="mute" colspan="4">nobody yet</td></tr>`;
+}
+async function grantPost(path, payload) {
+  const r = await api(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) problem(b.say || `the hub answered ${r.status}`, true); else problem("");
+  loadGrants();
+}
+$("#grant-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const may = Array.from(document.querySelectorAll("#grant-may input:checked")).map((i) => i.value);
+  grantPost("allow", {who: $("#grant-who").value.trim(), may}).then(() => { $("#grant-who").value = ""; });
+});
+$("#grant-table").addEventListener("click", (e) => { const b = e.target.closest("button[data-disallow]"); if (b) grantPost("disallow", {who: b.dataset.disallow}); });
 
 function showTab(name) {
   for (const a of document.querySelectorAll("#tabs a")) { if (a.dataset.tab === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
@@ -448,7 +788,9 @@ function showTab(name) {
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
   if (name === "identity") ident.render();
+  if (name === "access") loadGrants();
   if (name === "chat") chat.count();
+  if (name === "agents") agentsUI.render();
 }
 
 async function loadDirectory() {
@@ -516,12 +858,20 @@ async function detect() {
 
 // ---------------------------------------------------------------- the hub in this page
 // No hub joined: this browser is one, for as long as the page is open. It
-// holds the catalog's trees and answers the same endpoints a hub does.
+// holds trees and answers the same endpoints a hub does. The trees: a
+// catalog named in the address or one beside this page (fresher, and no
+// further than this page's own site), else the ones this page carries,
+// which need no network at all; only a page that carries none asks
+// pyrtan.com's catalog, then the copy this browser kept.
 const params = new URLSearchParams(location.search);
-const CATALOGS = [params.get("catalog"), "../catalog/", "https://pyrtan.com/catalog/"].filter(Boolean);
+const CATALOGS = [params.get("catalog"), "../catalog/"].filter(Boolean);
+const FARTHER = ["https://pyrtan.com/catalog/"];
+const CARRIED = (() => { try { const d = JSON.parse($("#pyrtan-trees").textContent); return Array.isArray(d.trees) ? d.trees : []; } catch (e) { return []; } })();
 const TREES_KEY = "pyrtan.console.trees";
+let carried = false;
 async function catalogTrees() {
-  for (const c of CATALOGS) {
+  carried = false;
+  for (const c of CATALOGS.concat(CARRIED.length ? [] : FARTHER)) {
     try {
       const at = new URL(c.endsWith("/") ? c : c + "/", location.href);
       const r = await fetch(new URL("trees.json", at), {headers: {"Accept": "application/json"}});
@@ -533,6 +883,7 @@ async function catalogTrees() {
       }
     } catch (e) {}
   }
+  if (CARRIED.length) { catalog = ""; carried = true; return CARRIED; }
   // Offline, or no catalog answers: the trees this browser held last time.
   try { const kept = JSON.parse(localStorage.getItem(TREES_KEY) || "null"); if (kept && Array.isArray(kept.trees)) { catalog = kept.catalog || ""; return kept.trees; } } catch (e) {}
   return [];
@@ -540,6 +891,8 @@ async function catalogTrees() {
 // A tree runs here when every source it uses is http. Hosts of "*" mean any site, and most sites refuse a page, so "Try one" leaves those out.
 const runsHere = (t) => (t.sources || []).every(s => s === "http");
 const anySite = (t) => (t.hosts || []).includes("*");
+// A tree that reads the operator's env (credentials, say) has none to read in a page; a service started with --env runs it.
+const needsEnv = (t) => { const held = local && local.runner.get(t.name); return !!held && /\{\{\s*env\./.test(JSON.stringify(held.raw)); };
 async function startLocal() {
   isHub = false;
   local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__"});
@@ -550,13 +903,13 @@ async function startLocal() {
 }
 function showLocal(on) {
   $("#connect-local").hidden = !on;
-  $("#connect-lede").textContent = on ? "This browser is a hub of its own: it holds the catalog's trees, reads your sentences and runs the trees right here." : "This console is not being served by a Pyrtan. Point it at one:";
+  $("#connect-lede").textContent = on ? `This browser is a hub of its own: it holds ${carried ? "the trees this console carries" : "the catalog's trees"}, reads your sentences and runs the trees right here.` : "This console is not being served by a Pyrtan. Point it at one:";
   $("#connect-local").innerHTML = on ? "Gaps and unanswered sentences are kept only while this page is open. Trees that need a box (files, programs, devices) or a site that will not let a page read it need a hub: to join one, give its URL and token." : "";
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
   $("#api-help").innerHTML = on ? "Answered inside this page by <code>pyrtan.js</code>: the same paths and the same answers as a hub, with no server behind them. Join a hub and they go to the hub." : 'With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.';
-  $("#trees-more").innerHTML = on ? `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees. Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them.` : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
+  $("#trees-more").innerHTML = on ? (carried ? "These are the trees this console carries, so it needs no network to hold them; newer ones are in the <a href=\"https://pyrtan.com/catalog/\">catalog</a>." : `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees.`) + " Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them." : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
 }
 
 async function load() {
@@ -568,7 +921,8 @@ async function load() {
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
   ident.audience = a.audience || null;
-  $("#identity-tab").hidden = !(isHub && a.audience);
+  $("#identity-tab").hidden = false;  // an identity needs no hub; signing does, when there is one
+  $("#access-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   if (a.chat && a.chat_bots === false && token) {
     try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
@@ -594,20 +948,23 @@ async function load() {
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
+  renderCaps(c);
+  showTab((location.hash || "#ask").slice(1));
+}
+function renderCaps(c) {
   const body = $("#caps tbody"); const tries = $("#tries");
   body.innerHTML = ""; tries.innerHTML = "";
-  suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t))));
+  suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t) && !needsEnv(t))));
   for (const t of c.trees || []) {
     const tr = document.createElement("tr");
-    const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
+    const here = !local ? "" : !runsHere(t) ? `<div class="gap">needs a hub: ${esc((t.sources||[]).filter(x => x !== "http").join(", "))}</div>` : needsEnv(t) ? '<div class="gap">needs a hub: credentials, given with --env</div>' : anySite(t) ? '<div class="gap">any site; most will not let a page read them</div>' : "";
     tr.innerHTML = `<td><code>${esc(t.name)}</code> <span class="mute">v${esc(t.version||1)}</span><div class="mute">${esc(t.description||"")}</div></td><td>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}</td><td class="mute">${esc((t.hosts||[]).join(", "))}${t.peer ? `<div><span class="link ${esc(t.link||"")}"></span>${esc(t.peer)}</div>` : ""}${here}</td>`;
     body.appendChild(tr);
-    const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
+    const s = sample(t); if (s && !s.includes("…") && (!local || (runsHere(t) && !anySite(t) && !needsEnv(t)))) { const li = document.createElement("li"); li.innerHTML = `<a href="#" data-q="${esc(s)}">${esc(s)}</a>`; tries.appendChild(li); }
   }
   // The greyed suggestion in the empty box (Tab takes it) is one this swarm answers.
   const first = tries.querySelector("a[data-q]"), offered = [...tries.querySelectorAll("a[data-q]")].map(a => a.dataset.q);
   if (first && !offered.includes($("#text").placeholder)) $("#text").placeholder = first.dataset.q;
-  showTab((location.hash || "#ask").slice(1));
 }
 
 async function loadPeers() {
@@ -890,6 +1247,7 @@ window.addEventListener("resize", () => suggest.ghost());
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
 $("#connect-form").addEventListener("submit", (e) => {
   e.preventDefault();
+  agentsUI.putAway();
   token = $("#hub-token").value;
   store.set(remote ? {url: $("#hub-url").value.trim(), token} : {token});
   load();
@@ -1165,13 +1523,208 @@ $("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leav
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
 window.addEventListener("pagehide", () => chat.leave(true));
 
+// ---------------------------------------------------------------- agents
+// A model beside the swarm, never inside it (agents.js, _meta/agents.md).
+// It reaches the swarm only through this page's own calls, and what it
+// suggests is applied here only when you accept it, and only to the trees
+// this browser holds; a hub keeps it at /suggestions for pyrtan grow.
+const agentsUI = {
+  agent: null, config: {}, skills: null, busy: false,
+  init() {
+    try { this.config = JSON.parse(localStorage.getItem("pyrtan.agents.config") || "{}"); } catch (e) { this.config = {}; }
+    $("#agent-model").innerHTML = PyrtanAgents.MODELS.map(m => `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.licence)} · ${esc(m.size)}</option>`).join("");
+    $("#agent-name").value = this.config.name || "scout";
+    $("#agent-engine").value = this.config.engine || (PyrtanAgents.WebLLMEngine.available() ? "webllm" : "openai");
+    $("#agent-model").value = this.config.model || PyrtanAgents.DEFAULT_MODEL;
+    $("#agent-url").value = this.config.url || "http://localhost:11434/v1";
+    $("#agent-server-model").value = this.config.serverModel || "qwen2.5:3b";
+    for (const el of document.querySelectorAll(".origin-here")) el.textContent = location.origin;
+    this.skills = new PyrtanAgents.Skills(PyrtanAgents.browserStorage("pyrtan.agents:"));
+    this.engineChanged();
+  },
+  engineChanged() {
+    const web = $("#agent-engine").value === "webllm";
+    $("#agent-model").hidden = !web; $("#agent-url").hidden = web; $("#agent-server-model").hidden = web;
+    $("#agent-gpu").hidden = !web || PyrtanAgents.WebLLMEngine.available();
+  },
+  where() { return local ? "this browser" : (base || location.origin); },
+  hub(method, path, body) { return json(path, method === "GET" ? undefined : {method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})}); },
+  raw(name) { const t = local && local.runner.get(name); return t ? t.raw : null; },
+  async start() {
+    const engineKind = $("#agent-engine").value;
+    this.config = {name: $("#agent-name").value.trim() || "scout", engine: engineKind, model: $("#agent-model").value, url: $("#agent-url").value.trim(), serverModel: $("#agent-server-model").value.trim()};
+    try { localStorage.setItem("pyrtan.agents.config", JSON.stringify(this.config)); } catch (e) {}
+    const progress = (text) => { $("#agent-progress").textContent = text; };
+    const engine = engineKind === "webllm"
+      ? new PyrtanAgents.WebLLMEngine({model: this.config.model, onProgress: (text) => progress(text)})
+      : new PyrtanAgents.OpenAIEngine({url: this.config.url, model: this.config.serverModel});
+    $("#agent-go").disabled = true;
+    progress(engineKind === "webllm" ? "Loading WebLLM and the model; the first time, this is a download…" : `Asking ${this.config.url}…`);
+    try {
+      await engine.load();
+      if (engineKind === "openai") await engine.complete([{role: "user", content: "Say ok."}], {maxTokens: 4});
+    } catch (e) { progress(""); problem(`The agent could not start: ${e.message}`, true); $("#agent-go").disabled = false; return; }
+    progress("");
+    const hubKey = local ? "browser" : (base || location.origin);
+    this.agent = new PyrtanAgents.Agent({name: this.config.name, engine, hub: (m, p, b) => this.hub(m, p, b), raw: (n) => this.raw(n), storage: PyrtanAgents.browserStorage(`pyrtan.agents:${hubKey}:`), skills: this.skills, onEvent: (e) => this.event(e)});
+    $("#agent-go").disabled = false;
+    $("#agent-setup").hidden = true; $("#agent-on").hidden = false;
+    $("#agent-who").textContent = this.agent.name;
+    const m = PyrtanAgents.MODELS.find(x => x.id === engine.model);
+    $("#agent-what").textContent = `${m ? m.label : engine.model} · ${engineKind === "webllm" ? "in this browser" : "on " + this.config.url} · beside ${this.where()}`;
+    $("#agent-log").innerHTML = "";
+    for (const msg of this.agent.memory.chat.slice(-10)) this.line(msg.role === "you" ? "you" : "bot", msg.role === "you" ? "You" : this.agent.name, esc(msg.content));
+    this.sys(`${this.agent.name} is a model, not a tree: what it says is its own, and what a tree says comes with the tree's name and path. /help lists what it can do.`);
+    this.render();
+  },
+  putAway() {
+    if (!this.agent) return;
+    this.agent.stop();
+    if (this.agent.engine.unload) this.agent.engine.unload().catch(() => {});
+    this.agent = null; $("#agent-setup").hidden = false; $("#agent-on").hidden = true;
+  },
+  line(cls, who, html, extra) {
+    const log = $("#agent-log"), div = document.createElement("div");
+    div.className = "line " + cls;
+    div.innerHTML = (who ? `<span class="who">${esc(who)}:</span>` : "") + html + (extra || "");
+    log.appendChild(div); log.scrollTop = log.scrollHeight;
+  },
+  sys(text) { this.line("sys", "", esc(text)); },
+  event(e) {
+    if (e.type === "thinking") $("#agent-typing").textContent = `${e.agent} is thinking (${e.job})…`;
+    else if (e.type === "probe") { const r = e.result; this.sys(`probe ${e.tree}: “${r.text}” → ${r.read === null ? "no tree reads it" : r.read === "tie" ? "a tie" : r.read === e.tree ? (r.status ? `${r.status}${r.reason ? " (" + r.reason + ")" : ""}` : "reads, not run") : "reads as " + r.read}`); }
+    else if (e.type === "refused") this.sys(`refused by the rules: ${e.what}: ${e.why}`);
+    else if (e.type === "suggestion") { this.sys(`suggests a ${e.item.suggestion.kind} for ${e.item.suggestion.tree || "“" + e.item.suggestion.text + "”"}`); this.renderSuggestions(); }
+    else if (e.type === "patrol" && e.step !== "done") this.sys(e.step === "probe" ? `patrol: probing ${e.tree}` : `patrol: the ${e.step}`);
+    else if (e.type === "action") { const a = e.action; if (a.kind === "ask" && a.result) this.line("tree", a.result.tree || "no tree", esc(a.result.say || a.result.status), a.result.path && a.result.path.length ? `<details><summary>path</summary><code>${esc(a.result.path.join(" > "))}</code></details>` : ""); else if (a.kind === "remember") this.sys(`remembered: ${a.input}`); }
+  },
+  async run(fn) {
+    if (this.busy) return; this.busy = true; $("#agent-stop").disabled = false;
+    try { await fn(); } catch (e) { this.sys(`error: ${e.message}`); }
+    finally { this.busy = false; $("#agent-stop").disabled = true; $("#agent-typing").textContent = ""; this.renderMemory(); }
+  },
+  say(text) {
+    if (!this.agent || !text) return;
+    this.line("you", "You", esc(text));
+    return this.run(async () => {
+      const r = await this.agent.chat(text);
+      if (r.outcome) this.line("tree", r.outcome.tree || "no tree", esc(r.outcome.say || r.outcome.status), (r.outcome.trace ? `<details><summary>trace</summary><pre>${esc(renderTrace(r.outcome.trace))}</pre></details>` : ""));
+      else if (r.say) this.line("bot", this.agent.name, esc(r.say).replace(/\n/g, "<br>"));
+    });
+  },
+  patrol() { return this.run(async () => { const r = await this.agent.patrol(); this.line("bot", this.agent.name, esc(`Patrolled ${r.trees.length} trees: ${r.tally.sentences} sentences, ${r.tally.read} read, ${r.tally.unread} read to nothing, ${r.tally.misread} to another tree, ${r.tally.gaps} met a gap. ${r.suggestions.length} suggestions, ${r.refused.length} refused by the rules.${r.stopped ? " (stopped)" : ""}`)); }); },
+  // Accepting: in a browser that is its own hub, the tree grows here and now; any hub keeps the suggestion for pyrtan grow.
+  async accept(id) {
+    const item = this.agent.suggestions.find(x => x.id === id); if (!item) return;
+    const s = item.suggestion; let applied = "";
+    if (local && (s.kind === "branch" || s.kind === "trigger")) {
+      const raw = this.raw(s.tree);
+      try {
+        let grown = null;
+        if (raw && s.kind === "branch") { const d = Pyrtan.grow.draftBranch(raw, s); if (d) grown = Pyrtan.grow.growTree(raw, d, s.meaning); }
+        if (raw && s.kind === "trigger") { grown = JSON.parse(JSON.stringify(raw)); grown.triggers = (grown.triggers || []).concat([{pattern: s.pattern}]); }
+        if (grown) { new Pyrtan.Tree(grown); local.add(grown, local.held[s.tree]); applied = "grown in this page"; }
+      } catch (e) { this.sys(`could not grow ${s.tree} here: ${e.message}`); return; }
+    }
+    let kept = "";
+    try { const out = await this.agent.send([item]); kept = (out.refused || []).length ? `refused by the hub: ${out.refused[0].why}` : `kept at ${this.where()}'s /suggestions`; }
+    catch (e) { kept = `not kept: ${e.message}${/404/.test(e.message) ? " (a hub older than 0.18 has no /suggestions; download it instead)" : ""}`; }
+    this.agent.decide(id, "accepted");
+    item.note = [applied, kept].filter(Boolean).join(" · ");
+    if (applied) { try { renderCaps(await json("capabilities")); await this.agent.trees(true); } catch (e) {} }
+    this.renderSuggestions(); this.renderMemory();
+  },
+  dismiss(id) {
+    const why = prompt("Why not? The agent remembers. (optional)") || "";
+    this.agent.decide(id, "dismissed", why.trim()); this.renderSuggestions(); this.renderMemory();
+  },
+  download() {
+    const items = (this.agent ? this.agent.suggestions : []).filter(x => x.status === "accepted").map(x => x.suggestion);
+    if (!items.length) { this.sys("Nothing accepted yet."); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({"pyrtan-suggestions": 1, suggestions: items}, null, 2)], {type: "application/json"}));
+    a.download = "pyrtan-suggestions.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    this.sys("Saved. Then: pyrtan grow --suggestions pyrtan-suggestions.json --trees DIR --apply");
+  },
+  render() { if (!this.skills) this.init(); this.renderSuggestions(); this.renderMemory(); this.renderSkills(); },
+  renderSuggestions() {
+    const box = $("#agent-sugs"); if (!box) return;
+    const items = this.agent ? this.agent.suggestions.slice().reverse() : [];
+    if (!items.length) { box.innerHTML = '<p class="mute">Nothing yet. Press Patrol, or ask it to <code>/probe</code> a tree.</p>'; return; }
+    box.innerHTML = items.map(x => {
+      const s = x.suggestion, by = s.by || {};
+      const what = s.kind === "branch" ? `<code>${esc(s.tree)}</code> · <code>${esc(s.node)}</code>: <code>${esc(s.on || "")}</code> = <code class="gap">${esc(JSON.stringify(s.observed))}</code> means a <strong>${esc(s.meaning.kind)}</strong>${s.meaning.reason ? ` <span class="mute">(${esc(s.meaning.reason)})</span>` : ""}<div class="say">${esc(s.meaning.say)}</div>`
+        : s.kind === "trigger" ? `<code>${esc(s.tree)}</code> should answer to <code>${esc(s.pattern)}</code><div class="mute" style="font-size:14px">reads ${(s.covers || []).map(c => "“" + esc(c) + "”").join(", ")}</div>`
+        : `a new tree for “${esc(s.text)}”<div class="say">${esc(s.description || "")}</div>${(s.hosts_hint || []).length ? `<div class="mute" style="font-size:14px">hosts it guessed (a note, never a host): ${esc(s.hosts_hint.join(", "))}</div>` : ""}`;
+      const state = x.status === "new" ? `<div style="display:flex;gap:8px;margin-top:8px"><button type="button" data-accept="${x.id}">Accept</button><button type="button" class="quiet" data-dismiss="${x.id}">Dismiss</button></div>` : `<div class="mute sug-state" style="font-size:14px;margin-top:6px">${esc(x.status)}${x.note ? " · " + esc(x.note) : ""}</div>`;
+      return `<div class="card"><div><span class="status asked">${esc(s.kind)}</span> <span class="mute">by ${esc(by.agent || "")}${by.model ? " · " + esc(by.model) : ""}</span></div><div style="margin-top:4px">${what}</div>${s.why ? `<div class="mute" style="font-size:14px">${esc(s.why)}</div>` : ""}${x.preview && x.preview.text ? `<details><summary>what it would write</summary><pre>${esc(x.preview.text)}</pre></details>` : ""}${state}</div>`;
+    }).join("");
+  },
+  renderMemory() {
+    const body = $("#agent-notes tbody"); if (!body) return;
+    const notes = this.agent ? this.agent.memory.notes.slice().reverse() : [];
+    body.innerHTML = notes.length ? notes.map(n => `<tr><td class="mute">${esc(n.source)}</td><td>${esc(n.text)}</td><td><button type="button" class="quiet" data-forget="${n.id}">Forget</button></td></tr>`).join("") : `<tr><td class="mute">${this.agent ? "Nothing kept yet." : "Start an agent to see what it remembers."}</td></tr>`;
+  },
+  renderSkills() {
+    const body = $("#agent-skills tbody"); if (!body || !this.skills) return;
+    body.innerHTML = this.skills.list().map(s => `<tr><td><code>${esc(s.name)}</code><div class="mute">${esc(s.description || "")}</div></td><td>${esc(s.when)}</td><td>${s.builtin ? '<span class="mute">built in</span>' : `<label><input type="checkbox" data-skill-on="${esc(s.name)}"${s.on ? " checked" : ""}> on</label> <button type="button" class="quiet" data-skill-remove="${esc(s.name)}">Remove</button>`}</td></tr>`).join("");
+  },
+};
+$("#agent-engine").addEventListener("change", () => agentsUI.engineChanged());
+$("#agent-start").addEventListener("submit", (e) => { e.preventDefault(); agentsUI.start(); });
+$("#agent-say").addEventListener("submit", (e) => { e.preventDefault(); const t = $("#agent-text").value.trim(); $("#agent-text").value = ""; agentsUI.say(t); });
+$("#agent-patrol").addEventListener("click", () => agentsUI.patrol());
+$("#agent-stop").addEventListener("click", () => { if (agentsUI.agent) { agentsUI.agent.stop(); agentsUI.sys("stopping after this step…"); } });
+$("#agent-off").addEventListener("click", () => agentsUI.putAway());
+$("#agent-download").addEventListener("click", () => agentsUI.download());
+$("#agent-sugs").addEventListener("click", (e) => { const a = e.target.closest("[data-accept]"), d = e.target.closest("[data-dismiss]"); if (a) agentsUI.accept(Number(a.dataset.accept)); if (d) agentsUI.dismiss(Number(d.dataset.dismiss)); });
+$("#agent-note-form").addEventListener("submit", (e) => { e.preventDefault(); if (agentsUI.agent && $("#agent-note").value.trim()) { agentsUI.agent.memory.remember($("#agent-note").value, "you"); $("#agent-note").value = ""; agentsUI.renderMemory(); } });
+$("#agent-notes").addEventListener("click", (e) => { const f = e.target.closest("[data-forget]"); if (f && agentsUI.agent) { agentsUI.agent.memory.forget(f.dataset.forget); agentsUI.renderMemory(); } });
+$("#agent-forget-all").addEventListener("click", () => { if (agentsUI.agent && confirm("Forget everything this agent keeps for this hub: notes, probes, verdicts and the conversation?")) { agentsUI.agent.memory.clear(); agentsUI.renderMemory(); } });
+$("#agent-skill-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  try { agentsUI.skills.add({name: $("#skill-name").value, when: $("#skill-when").value, description: $("#skill-desc").value, instructions: $("#skill-body").value}); for (const id of ["#skill-name", "#skill-desc", "#skill-body"]) $(id).value = ""; problem(""); }
+  catch (err) { problem(err.message, true); }
+  agentsUI.renderSkills();
+});
+$("#agent-skills").addEventListener("change", (e) => { const t = e.target.closest("[data-skill-on]"); if (t) agentsUI.skills.toggle(t.dataset.skillOn, t.checked); });
+$("#agent-skills").addEventListener("click", (e) => { const r = e.target.closest("[data-skill-remove]"); if (r) { agentsUI.skills.remove(r.dataset.skillRemove); agentsUI.renderSkills(); } });
+$("#skill-import").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const got = agentsUI.skills.import(await f.text()); problem(""); if (agentsUI.agent) agentsUI.sys(`imported ${got.map(s => s.name).join(", ")}`); } catch (err) { problem(`${f.name}: ${err.message}`, true); } e.target.value = ""; agentsUI.renderSkills(); });
+$("#skill-export").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([agentsUI.skills.export()], {type: "application/json"})); a.download = "pyrtan-skills.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); });
+agentsUI.init();
+
 // Forgetting the hub makes this browser its own hub again.
-$("#forget").addEventListener("click", () => { chat.leave(true); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
+$("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
 ident.init().finally(load);
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__AGENTS__", AGENTS_JS)
+
+
+def page(trees: dict[str, Any] | None = None) -> str:
+    """The console, carrying ``trees`` (in the shape of a catalog's
+    ``trees.json``; the default trees when None) to hold when no hub is
+    joined, with no network needed."""
+    carried = bundle() if trees is None else trees
+    # Keys keep the file's order (a set node renders its keys in order). Inside
+    # <script>, "<" never appears as itself, so no "</script>" in a tree can end the block.
+    data = json.dumps(carried, ensure_ascii=False, separators=(",", ":"), default=str).replace("<", "\\u003c")
+    return TEMPLATE.replace("__TREES__", data)
+
+
+@functools.lru_cache(maxsize=1)
+def default_page() -> str:
+    """The console a hub or service serves: carrying the default trees,
+    built the first time it is asked for rather than on every import."""
+    return page()
+
+
+def __getattr__(name: str) -> Any:
+    # ``PAGE``, as it was before the console carried trees: the default page.
+    if name == "PAGE":
+        return default_page()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 MANIFEST = json.dumps({
     "name": "Pyrtan",

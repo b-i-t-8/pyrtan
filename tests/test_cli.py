@@ -14,7 +14,7 @@ def run(capsys, *argv):
 
 def test_check_examples(capsys):
     code, out, _ = run(capsys, "check", str(EXAMPLES))
-    assert code == 0 and "weather: 15 nodes" in out
+    assert code == 0 and "weather: 8 nodes" in out
 
 
 def test_check_reports_errors(tmp_path, capsys):

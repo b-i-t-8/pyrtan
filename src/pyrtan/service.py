@@ -19,6 +19,10 @@ Endpoints, all JSON:
     Sentences no tree answered, counted, each with a proposed tree. Each is
     a tree waiting to be written; ``pyrtan unanswered --at URL --scaffold
     DIR`` writes the files.
+``GET /suggestions`` and ``POST /suggestions`` ``{"suggestions": [...]}``
+    What agents beside the swarm suggest (:mod:`pyrtan.suggestions`): a
+    branch's meaning, a trigger, a tree. Kept, never applied;
+    ``pyrtan grow --suggestions`` writes them, by rules, for a person.
 ``POST /build``    ``{"text": "...", "answers": {...}}``
     The builder (:mod:`pyrtan.build`): the questions that apply to the
     sentence given the answers so far, each with its default, and the
@@ -59,9 +63,10 @@ from typing import Any, Callable
 
 from . import __version__
 from .gaps import GapStore
-from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
+from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
 from .build import BuildError, build
 from .grow import Unanswered
+from .suggestions import Suggestions
 from .registry import Registry
 from .runtime import Outcome, Runner
 from .trace import Trace
@@ -165,6 +170,7 @@ class Service:
         egress: str = "any",
         unanswered: str | Path | None = None,
         watch: bool = False,
+        suggestions: str | Path | None = None,
     ) -> None:
         self.registry = registry
         self.name = name
@@ -177,6 +183,7 @@ class Service:
         self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {}, adapters=adapters)
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
         self.unanswered = Unanswered(path=unanswered)
+        self.suggestions = Suggestions(path=suggestions)
         self.runs = 0
         self._lock = threading.Lock()
         self.watcher: Watcher | None = None
@@ -198,7 +205,7 @@ class Service:
 
     def health(self) -> dict[str, Any]:
         self.registry.reload()
-        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "egress": self.egress, "uptime_s": int(time.time() - self.started), "watches": len(self.watcher) if self.watcher else 0}
+        health = {"status": "ok", "name": self.name, "trees": self.registry.names(), "errors": self.registry.errors, "runs": self.runs, "gaps": len(self.gaps), "unanswered": len(self.unanswered), "suggestions": len(self.suggestions), "egress": self.egress, "uptime_s": int(time.time() - self.started), "watches": len(self.watcher) if self.watcher else 0}
         if self.gaps.error:
             health["gaps_file_error"] = self.gaps.error
         return health
@@ -264,10 +271,12 @@ class Service:
             return 200, {"gaps": self.gaps.all()}
         if method == "GET" and path == "/unanswered":
             return 200, {"unanswered": self.unanswered.to_list()}
+        if method in ("GET", "POST") and path == "/suggestions":
+            return self.suggestions.route(method, body)
         if method == "GET" and path == "/watches":
             return 200, self.watcher.status() if self.watcher else {"count": 0, "watches": [], "watching": False}
         if method == "GET" and path in ("/", "/index.html", "/console"):
-            return 200, PAGE
+            return 200, default_page()
         if method == "GET" and path == "/manifest.webmanifest":
             return 200, ("application/manifest+json", MANIFEST)
         if method == "GET" and path == "/sw.js":
@@ -275,7 +284,7 @@ class Service:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/watches"]}
+            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":
@@ -486,9 +495,10 @@ def serve(
     egress: str = "any",
     unanswered: str | Path | None = None,
     watch: bool = False,
+    suggestions: str | Path | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
-    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch)
+    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions)
     server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a

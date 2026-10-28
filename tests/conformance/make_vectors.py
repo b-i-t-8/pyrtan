@@ -2,7 +2,8 @@
 
 Every example tree as JSON (the TOML's own table), and for a fixed set of
 runs (a sentence, or a tree and inputs) the outcome the Python runtime
-produced against the recorded responses in tests/fixtures/examples.json,
+produced against the recorded responses in tests/fixtures/examples.json
+(or the run's own fixture, with the run's env),
 with a fixed clock. The JavaScript runtime (src/pyrtan/js/pyrtan.js) must
 produce the same status, say, output, reason, path and gaps.
 
@@ -30,11 +31,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from pyrtan import Registry, RecordedTransport, Runner  # noqa: E402
 from pyrtan import nlp  # noqa: E402
-from pyrtan.grow import propose  # noqa: E402
+from pyrtan.grow import draft_branch, propose  # noqa: E402
 from pyrtan.service import Service  # noqa: E402
 from pyrtan.tree import build as build_tree  # noqa: E402
 
 CLOCK = _dt.datetime(2026, 10, 25, 12, 0, tzinfo=_dt.timezone.utc)
+POSTFINITE = "tests/fixtures/postfinite.json"
+POSTFINITE_ENV = {"postfinite_email": "ops@example.org", "postfinite_password": "not-a-real-password"}
 CASES: list[dict] = [
     {"intent": "What's the top story on Hacker News?"},
     {"intent": "top 3 stories on hacker news"},
@@ -107,11 +110,49 @@ CASES: list[dict] = [
     {"intent": "exchange rate from usd to usd"},
     {"intent": "synonyms for happy"},
     {"intent": "another word for qqqzzz"},
+    {"intent": "weather in Oslo tomorrow"},
+    {"intent": "uv index in Sydney"},
+    {"intent": "what time is it in La Paz"},
+    {"intent": "how high is La Paz"},
+    {"intent": "how high is Oslo"},
+    {"intent": "where is zip 90210"},
+    {"intent": "postcode SW1A in GB"},
+    {"intent": "where is zip 00000"},
+    {"intent": "is example.com archived"},
+    {"intent": "is nothing-here-qqzz.example archived"},
+    {"intent": "what rhymes with cat"},
+    {"intent": "what rhymes with qqzzx"},
+    {"intent": "how many stars does astral-sh/uv have"},
+    {"intent": "github repo b-i-t-8/nothing-here"},
+    {"intent": "latest version of github.com/gorilla/mux on go"},
+    {"intent": "go module github.com/nope/nope-qq"},
+    {"intent": "brew formula wget"},
+    {"intent": "brew formula nope-qqzz"},
+    {"intent": "pokemon pikachu"},
+    {"intent": "what type is charizard"},
+    {"intent": "pokemon notapokemonqq"},
+    {"intent": "what is my ip"},
+    {"intent": "give me some advice"},
+    {"intent": "tell me a cat fact"},
+    {"intent": "when is the next launch"},
+    {"intent": "space news"},
+    {"intent": "astronomy picture of the day"},
+    # Postfinite, signed in with made-up credentials no trace may show, from its own fixture.
+    *({"intent": text, "env": POSTFINITE_ENV, "fixture": POSTFINITE} for text in [
+        "postfinite", "what data does postfinite have", "search postfinite for rotterdam", "find port of on postfinite",
+        "search postfinite for atlantis", "latest readings for pf:grid:gb on postfinite", "readings for pf:nowhere on postfinite",
+        "latest carbon_intensity for pf:grid:gb on postfinite", "kp at pf:space:kp on postfinite", "wind for pf:grid:gb on postfinite",
+        "carbon_intensity for pf:grid:gb over the last 2 days on postfinite", "history of carbon_intensity for pf:grid:gb on postfinite",
+        "history of solar for pf:grid:gb on postfinite", "postfinite forecasts",
+    ]),
+    {"intent": "how is postfinite doing", "fixture": POSTFINITE},
+    {"intent": "postfinite datasets", "env": {"postfinite_email": "ops@example.org"}, "fixture": POSTFINITE},
 ]
 
 
 # Trees that exercise what the examples do not: every slot kind, synonyms
-# (a word and a phrase), typos, fixed inputs, a tie, and an ask.
+# (a word and a phrase), typos, fixed inputs, a tie, an ask, and a lookup
+# that meets a templated value, a table value, an absent value and a gap.
 def _echo(name: str, triggers: list, inputs: dict, **extra) -> dict:
     return {"name": name, "version": 1, "description": f"echo for {name}", "hosts": [], "start": "reply", "triggers": triggers,
             "inputs": inputs, "nodes": {"reply": {"kind": "done", "say": "ok", "output": {k: f"{{{{ inputs.{k} }}}}" for k in inputs}}}, **extra}
@@ -131,6 +172,13 @@ LANGUAGE_TREES: list[dict] = [
      "nodes": {"size": {"kind": "ask", "prompt": "What size of {{ inputs.drink }}?", "into": "state.size", "next": "shots"},
                "shots": {"kind": "ask", "prompt": "How many shots?", "into": "inputs.shots", "next": "reply"},
                "reply": {"kind": "done", "say": "A {{ state.size }} {{ inputs.drink }}, {{ inputs.shots }} shot(s).", "output": {"size": "{{ state.size }}", "shots": "{{ inputs.shots }}"}}}},
+    {"name": "grade", "version": 1, "description": "a score, looked up", "hosts": [], "start": "word",
+     "triggers": ["grade {score:int}"], "inputs": {"score": {"type": "int", "required": False}, "strict": {"type": "bool", "default": False}},
+     "nodes": {"word": {"kind": "lookup", "on": "inputs.score", "into": "word", "next": "mark",
+                        "table": [{"between": [90, 100], "value": "excellent"}, {"between": [50, 89], "value": "a pass, {{ inputs.score }}"},
+                                  {"exists": False, "value": {"word": "absent", "points": 0}, "note": "a table value"}]},
+               "mark": {"kind": "lookup", "on": "inputs.strict", "into": "mark", "next": "reply", "table": [{"eq": True, "value": "strict"}], "default": "~"},
+               "reply": {"kind": "done", "say": "{{ state.mark }}", "output": {"word": "{{ state.word }}", "mark": "{{ state.mark }}"}}}},
 ]
 
 READINGS = [
@@ -179,6 +227,23 @@ PROPOSALS = [
     'say "hello" to $USER', "it's raining",
 ]
 
+# Gaps on the examples, and the branch grow.py's rules draft for each.
+DRAFTS = [
+    ("weather", {"node": "sky", "on": "code", "observed": 4}),       # the hole between 3 and 45
+    ("weather", {"node": "sky", "on": "code", "observed": 100}),     # past the last range
+    ("weather", {"node": "sky", "on": "code", "observed": 61}),      # covered already
+    ("weather", {"node": "sky", "on": "code", "observed": None}),    # missing
+    ("weather", {"node": "sky", "on": "code", "observed": "<dict>"}),  # a report's type
+    ("weather", {"node": "sky", "on": "code", "observed": "Sunny Spells"}),
+    ("weather", {"node": "geocode", "on": "x", "observed": 1}),     # not a decide
+    ("site-status", {"node": "status", "observed": 700}),
+    ("site-status", {"node": "status", "observed": True}),
+    ("grade", {"node": "word", "on": "inputs.score", "observed": 20}),   # a lookup: a row, the hole below 50
+    ("grade", {"node": "word", "on": "inputs.score", "observed": 120}),  # past the last range
+    ("grade", {"node": "word", "on": "inputs.score", "observed": 95}),   # covered already
+    ("grade", {"node": "mark", "on": "inputs.strict", "observed": False}),  # has a default, so no run leaves this gap; the rules draft the row all the same
+]
+
 HUB = [
     ("GET", "/capabilities", None),
     ("POST", "/intent", {"text": "top 3 stories on hacker news"}),
@@ -201,10 +266,27 @@ HUB = [
     ("POST", "/intent", {"text": "order a mocha"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "small"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "many"}),
+    ("POST", "/intent", {"text": "grade 95"}),
+    ("POST", "/run", {"tree": "grade", "inputs": {"score": 60, "strict": True}}),
+    ("POST", "/run", {"tree": "grade", "inputs": {"strict": True}}),
+    ("POST", "/intent", {"text": "grade 10"}),
     ("POST", "/intent", {"text": "temperature in the hall"}),
     ("POST", "/intent", {"text": "what's the temperature in the hall"}),
     ("GET", "/gaps", None),
     ("GET", "/unanswered", None),
+    ("POST", "/suggestions", {"suggestions": [
+        {"kind": "branch", "tree": "weather", "node": "sky", "on": "code", "observed": 100, "meaning": {"kind": "fail", "say": "{{ state.name }}: code 100 is not a WMO code.", "reason": "not-wmo"}, "why": "WMO codes stop at 99.", "by": {"agent": "scout", "model": "test"}, "extra": "dropped"},
+        {"kind": "trigger", "tree": "weather", "pattern": "is it raining in {place}", "covers": ["is it raining in Oslo"]},
+        {"kind": "tree", "text": "top 3 stories on lobsters", "description": "Top stories from lobste.rs.", "hosts_hint": ["lobste.rs"]},
+        {"kind": "branch", "tree": "weather", "node": "sky", "observed": 1, "meaning": {"kind": "done", "say": "{{ env.SECRET }}"}},
+        {"kind": "trigger", "tree": "weather", "pattern": "{place}", "covers": ["Oslo"]},
+        {"kind": "act", "tree": "weather"},
+        "not a table",
+    ]}),
+    ("POST", "/suggestions", {"kind": "trigger", "tree": "weather", "pattern": "is it raining in {place}", "covers": ["is it raining in Oslo", "is it raining in Bergen"]}),
+    ("POST", "/suggestions", {"nothing": True}),
+    ("GET", "/suggestions", None),
+    ("GET", "/health", None),
     ("GET", "/watches", None),
     ("GET", "/nowhere", None),
 ]
@@ -241,8 +323,11 @@ def _hub_exchanges(reg: Registry, fixture: Path) -> list[dict]:
 
 def _untimed(d):
     """Drop when a gap or a sentence was seen: the counts and order stay."""
-    for key in ("gaps", "unanswered"):
-        for e in d.get(key, []) if isinstance(d, dict) else []:
+    if isinstance(d, dict) and "uptime_s" in d:
+        d.pop("uptime_s")
+        d.pop("egress", None)  # a page has no egress policy to report
+    for key in ("gaps", "unanswered", "suggestions"):
+        for e in d.get(key, []) if isinstance(d, dict) and isinstance(d.get(key), list) else []:
             for k in ("first_seen", "last_seen", "first", "last"):
                 e.pop(k, None)
     return d
@@ -259,22 +344,24 @@ def _stable(d: dict) -> dict:
 
 
 def build() -> dict:
-    reg = Registry.from_paths([ROOT / "examples"])
+    reg = Registry.from_paths([ROOT / "examples", ROOT / "catalog"])
     assert not reg.errors, reg.errors
     fixture = ROOT / "tests" / "fixtures" / "examples.json"
     runs = []
     for case in CASES:
-        runner = Runner(reg, RecordedTransport.from_file(fixture), clock=lambda: CLOCK)
+        # A run may bring its own fixture and env (the operator's credentials, say).
+        runner = Runner(reg, RecordedTransport.from_file(ROOT / case["fixture"] if "fixture" in case else fixture), env=dict(case.get("env", {})), clock=lambda: CLOCK)
+        extra = {k: case[k] for k in ("env", "fixture") if k in case}
         if "intent" in case:
             reading = reg.read(case["intent"], CLOCK)
             match = reading.winner
             assert match is not None, case
             outcome = runner.run_intent(case["intent"])
-            runs.append({"intent": case["intent"], "tree": match.tree, "inputs": match.inputs, "expect": _stable(outcome.to_dict())})
+            runs.append({"intent": case["intent"], "tree": match.tree, "inputs": match.inputs, **extra, "expect": _stable(outcome.to_dict())})
         else:
             outcome = runner.run_tree(case["tree"], case["inputs"])
-            runs.append({"tree": case["tree"], "inputs": case["inputs"], "expect": _stable(outcome.to_dict())})
-    both = Registry.from_paths([ROOT / "examples"])
+            runs.append({"tree": case["tree"], "inputs": case["inputs"], **extra, "expect": _stable(outcome.to_dict())})
+    both = Registry.from_paths([ROOT / "examples", ROOT / "catalog"])
     for raw in LANGUAGE_TREES:
         both.add(build_tree(raw))
     readings = [{"text": text, "expect": {**(r := both.read(text, CLOCK)).to_dict(), "step": r.step()}} for text in READINGS]
@@ -289,13 +376,19 @@ def build() -> dict:
         "nlp": [_nlp_case(fn, text) for fn, text in NLP],
         "proposals": [{"text": text, "expect": propose(text).to_dict()} for text in PROPOSALS],
         "hub": _hub_exchanges(both, fixture),
+        "drafts": [{"tree": t, "gap": g, "expect": _draft(both, t, g)} for t, g in DRAFTS],
     }
+
+
+def _draft(reg: Registry, tree: str, gap: dict) -> dict | None:
+    d = draft_branch(reg.get(tree), gap)
+    return None if d is None else {k: v for k, v in d.to_dict().items() if k != "node_text"}
 
 
 def main() -> int:
     out = ROOT / "tests" / "conformance" / "vectors.json"
     out.write_text(json.dumps(build(), indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"wrote {out}: {len(CASES)} runs, {len(READINGS)} readings, {len(NLP)} rules, {len(PROPOSALS)} proposals, {len(HUB)} requests")
+    print(f"wrote {out}: {len(CASES)} runs, {len(READINGS)} readings, {len(NLP)} rules, {len(PROPOSALS)} proposals, {len(HUB)} requests, {len(DRAFTS)} drafts")
     return 0
 
 

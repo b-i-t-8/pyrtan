@@ -1,0 +1,49 @@
+# The public IP address this tree's requests come from, from ipify. In a
+# browser that is the visitor's; on a service, the service's.
+
+name = "my-ip"
+version = 1
+namespace = "pyrtan"
+description = "The public IP address requests from here come from, from ipify."
+tags = ["network", "read-only"]
+license = "MIT"
+hosts = ["api.ipify.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "what is my [public] ip [address]"
+[[triggers]]
+pattern = "my [public] ip [address]"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.ipify.org?format=json" }
+into = "resp"
+extract = [{ into = "ip", json = "json.ip" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-ip" },
+  { else = "unexpected" },
+]
+
+[nodes.has-ip]
+kind = "decide"
+on = "ip"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Your public IP address is {{ state.ip }}."
+output = { ip = "{{ state.ip }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "ipify answered {{ state.resp.status }}."

@@ -27,7 +27,10 @@ part of its work to any other tree in the swarm, every decision that meets a
 value no branch covers is recorded as a **gap**, and every sentence nobody
 answers is recorded as **unanswered** with a proposed tree, and a builder
 that asks the few things the proposal cannot know. That is how the swarm
-tells its authors where to grow next.
+tells its authors where to grow next. An **agent**, an open-weights
+model you start in the console, goes looking for both and suggests what
+to write; it sits beside the trees, never inside a run, and a person
+accepts what it suggests.
 
 ```
 $ pyrtan run "what's the weather in Oslo" --trees examples
@@ -36,8 +39,7 @@ trace: weather
   found (decide) [exists True]: state.hit = {…} -> forecast
   forecast (observe): GET https://api.open-meteo.com/v1/forecast?latitude=59.91&… -> 200; temp=4.2, humidity=80, wind=12.3, code=61, unit=°C -> have-temp
   have-temp (decide) [type 'number']: state.temp = 4.2 -> sky
-  sky (decide) [between [51, 67]]: state.code = 61 -> rain
-  rain (set): sky=raining -> reply
+  sky (lookup) [between [51, 67]]: state.code = 61; sky=raining -> reply
   reply (done): Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
 
 Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.
@@ -115,7 +117,8 @@ say = "GitHub answered {{ state.resp.status }}."
 ```
 
 Node kinds: `observe` (read; retried), `act` (change; never retried),
-`decide` (one value, plain conditions, one branch), `set`, `each` (walk a
+`decide` (one value, plain conditions, one branch), `set`, `lookup` (one
+value, plain conditions, one row of a table read into state), `each` (walk a
 list with a limit, through another tree or a local sub-flow), `delegate`
 (hand a sentence or a tree name to the swarm), `ask` (pause for an input),
 `done` and `fail`. Trees do not loop; `pyrtan check` refuses a cycle. The
@@ -162,7 +165,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
-| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
+| `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`, `/suggestions`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
@@ -172,14 +175,16 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them; `--build DIR` asks you about each one first. |
+| `pyrtan suggestions --at URL` | What agents beside the swarm suggested: a branch's meaning, a trigger, a tree. `pyrtan grow --suggestions URL_OR_FILE --trees DIR --apply` writes them, through the rules. |
 | `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
 | `pyrtan build --from "…"` | The builder: asks what the tree reads (an API or page, a file, a program, a browser, another tree, or nothing), what to pull out, what it decides on and which branches, and what it says; every answer has a default drawn from the sentence by rules, and the file it writes passes `pyrtan check`. `--answer k=v` answers ahead, `--yes` takes the defaults, `--show` prints instead of writing. The console offers the same questions on any unanswered sentence. |
 | `pyrtan search WORDS` | Finds trees in a catalog (default: the one at pyrtan.com). |
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
-| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. |
+| `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. It carries the default trees, so it holds them with no network; `--trees DIR` carries others instead. |
 | `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
 | `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
+| `pyrtan names init DIR --domain D` | Writes a names repository for a network: a README, `names/`, and for GitHub (or GitLab) the gate and Pages. `names gate` judges a change to names owned by their keys; `hub --names DIR` serves them. `id backup` / `restore` keep your key encrypted with a passphrase; `id release` gives a name up. |
 | `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
 
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
@@ -200,16 +205,25 @@ Open <http://127.0.0.1:8700/> for the console: a sentence box, the answer,
 the output and the trace; everything the swarm can answer; each peer and
 its `link`; and the gaps. The same console lives at
 <https://pyrtan.com/console/>, and there it needs no hub at all: until you
-join one, the browser is the hub. It holds the catalog's trees, reads the
+join one, the browser is the hub. It holds trees with no network to
+fetch them from: every console carries the default trees (the examples and
+the catalog, which a release ships inside the package; `pyrtan console
+--trees DIR` carries others), and takes a fresher catalog only from its own
+site (`../catalog/`) or one named in the address (`?catalog=`). It reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
-while the page is open. Nineteen of the examples run there: weather,
-sunrise and sunset, air quality, Wikipedia, a dictionary, synonyms,
-exchange rates, Hacker News (top stories, an item, a search), books,
-npm and PyPI versions, GitHub releases, earthquakes, where the ISS is,
-public holidays, a dad joke, and small talk. Trees that need a box (files, programs, serial
-lines, brokers, a browser to drive) or a site that does not let a page
-read it say so; for those, join a hub started with
+while the page is open. Every example runs there but six: weather
+today and tomorrow, sunrise, UV and air quality, local time, elevation,
+postcodes, Wikipedia, words (definitions, synonyms, rhymes), exchange
+rates, Hacker News, GitHub, packages (npm, PyPI, Go, Homebrew), books,
+earthquakes, the ISS, launches, space news, NASA's picture of the day,
+holidays, the Wayback Machine, Pokémon, your IP, jokes, advice and cat
+facts. The six that need a hub reach a box or any site at all:
+`disk-space`, `log-errors`, `modem-check`, `room-temperature`,
+`rendered-headline` and `site-status`. Trees that need a box (files, programs, serial
+lines, brokers, a browser to drive), a site that does not let a page
+read it, or the operator's credentials (`--env`, as the Postfinite trees
+need) say so; for those, join a hub started with
 `--cors https://pyrtan.com` by giving its URL and token. Forget it and the
 browser is its own hub again. The wordmark is two colours, **pyr** the
 primary and **tan** the secondary: click either half, right-click it, or
@@ -328,7 +342,7 @@ comes back as its `Answer`, with `peer: <member>` and `via: ["member"]`.
 The runtime that does it is `pyrtan.js`, the same tree runtime in
 JavaScript, served at `/pyrtan.js` by every hub and written beside the
 console; `tests/conformance/` holds the vectors both runtimes must agree
-on, generated from the examples by the Python runtime and checked
+on, generated from the default trees by the Python runtime and checked
 against the JavaScript one in the test suite. The design is in
 [`_meta/members.md`](_meta/members.md). The answer to a federated
 sentence carries `via: [the hub it crossed]`, and the console's Peers tab
@@ -344,8 +358,18 @@ signature against without asking anybody. `pyr:<key>@host` (a hub, an
 domain vouches for. No domain owns an identity, and none grants
 anything by it: each hub keeps its own list of who may do what.
 
+**No shell needed.** The console's **Identity** tab makes your identity
+in the browser and hands you its backup at once, encrypted with your
+passphrase, to download or keep in your own private GitHub repository;
+restores it in another browser; claims a name, at pyrtan.com (GitHub's
+own page opens the pull request from your account) or at any network's
+names repository; and pairs your other devices by a code each shows and
+a note it gets back. The **Access** tab keeps a hub's grants. The same,
+from a shell:
+
 ```
 pyrtan id new                                       # your root key, ~/.config/pyrtan/identity/
+pyrtan id backup --out backup.json                  # encrypted with a passphrase; restore with pyrtan id restore
 pyrtan id device add pyr:… --may chat,run --label phone
 pyrtan id name alice@pyrtan.com --github <your numeric GitHub id>
 pyrtan id check pyr:…@hub.example
@@ -360,6 +384,17 @@ wellknown DIR --domain D` builds the files). pyrtan.com hands out
 <login>@pyrtan.com --into <checkout>`, then a pull request from that
 account, and the gate checks the account's numeric id
 ([`site/names/README.md`](site/names/README.md)).
+
+**Any network can run its own names**, in any git repository, owned by
+their keys: a new name is open to whoever signs it, it moves only with a
+handover its old key signs, and is given up only by a release it signs.
+The gate reads nothing but signatures, so it runs on any git host.
+
+```
+pyrtan names init names-repo --domain names.example.org --host github   # or gitlab, or plain
+pyrtan id name alice@names.example.org --into names-repo               # the first name
+pyrtan hub --names names-repo/names --names-domain names.example.org   # hubs can serve them too
+```
 
 **Grants** replace handing out the token. A hub grants identities
 abilities: `ask` (the routed paths), `chat` (the lobby), `run` (be a
@@ -424,6 +459,43 @@ pyrtan.com bakes them hourly into `rendezvous/reports.json`, and the
 catalog page shows each tree's beside it, so `pyrtan reports
 pyrtan/weather` tells an author where reality disagreed with their tree
 across every swarm that opted in.
+
+### Postfinite's data
+
+[Postfinite](https://postfinite.com) keeps published reference data
+(electricity grids and their carbon, rivers, tides, buoys, space weather,
+power prices, central-bank rates, trade, freight, housing, health,
+release calendars and more, each from a free, keyless public source under
+its own licence) in every entitled account's database, beside the
+account's own devices, with horizon tables that forecast each series and
+score the forecast against what happened. The `postfinite` namespace in
+the catalog reads all of it through Postfinite's API, as the `pyrtan`
+tenant, an internal account entitled to every published dataset:
+
+| Tree | Answers | Reads |
+| :-- | :-- | :-- |
+| `postfinite-overview` | "how is postfinite doing" | what the account holds |
+| `postfinite-datasets` | "what data does postfinite have" | every dataset: source, licence, cadence, theme |
+| `postfinite-search` | "search postfinite for rotterdam" | entities by id, name or place |
+| `postfinite-readings` | "latest readings for pf:grid:gb on postfinite" | every metric an entity reports, latest value |
+| `postfinite-reading` | "carbon_intensity for pf:grid:gb on postfinite" | one metric's latest value |
+| `postfinite-history` | "carbon_intensity for pf:grid:gb over the last 2 days on postfinite" | a metric over a span: readings, range, latest bucket |
+| `postfinite-forecasts` | "postfinite forecasts" | each horizon table and its best-scoring method |
+
+Each signs in on every run (an `act`, never retried), then decides on
+every answer Postfinite can give: a refused, locked or identity-provider
+sign-in, a session not accepted, an account without access, rate limits,
+an outage, an empty result, a reading without a unit. Give the service an
+account on the tenant; the credentials go into the request and nowhere
+else, since a `decide` on an `env` value records only that it is `<set>`:
+
+```
+pyrtan serve catalog/postfinite --env postfinite_email=… --env postfinite_password=… --token …
+```
+
+Anyone who can ask that service reads what the account reads, hence the
+token. Every console carries these trees too, but a page has no
+credentials to give, so there they are marked *needs a hub*.
 
 ## Leaving the LAN
 
@@ -578,21 +650,69 @@ gaps (from a running service or hub, a `--gaps` file, or the federation's
 reports for your catalog trees) and drafts, by rules, the branch each one
 asks for: `{ exists = false }` for a missing value, the range of the hole
 a number fell into between the ranges the node already has, `{ eq = … }`
-otherwise, and a new `fail` node that says what was seen. `--apply`
-writes it into the file, which must still check clean; the person then
-says what the value means.
+otherwise, and a new `fail` node that says what was seen. A `lookup`
+with no `default` gets a row instead: the same condition, with the value
+seen as its value. `--apply` writes it into the file, which must still
+check clean; the person then says what the value means.
 
 ```
 $ pyrtan grow --at http://127.0.0.1:8700 --trees trees --apply
-# weather: in [nodes.sky], add to branches (before the else, if any):
-  { when = { between = [68, 70] }, then = "sky-70" },
-...
+# weather: in [nodes.sky], add to table:
+  { between = [68, 70], value = 70 },
 # why: the value falls in the hole between 67 and 71, which the ranges around it leave open
-# written into trees/weather.toml; now edit [nodes.sky-70] to say what the value means
+# written into trees/weather.toml; now edit the new row's value in [nodes.sky] to say what the value means
 ```
 
 Unanswered sentences survive a restart too, with `--unanswered FILE` on a
 service or hub.
+
+## Agents: models beside the swarm
+
+The console's **Agents** tab starts an agent: an open-weights model
+(Qwen2.5, Qwen3, Phi-3.5 or SmolLM2, under Apache-2.0 or MIT) running
+in the browser on WebGPU through WebLLM, or on a server of your own that
+speaks the OpenAI chat API (Ollama, llama.cpp). Nothing downloads until
+you press Start. The agent is a client of the swarm like you are:
+
+- **It tests the trees.** *Patrol* (or `/probe weather`) has it write
+  sentences a person might say, read them here by the same rules the
+  swarm reads them, and run the ones that reach the tree. A value no
+  branch covers is a real gap, with a real trace. Sentences that read to
+  nothing, or to the wrong tree, are what it reports next.
+- **It suggests.** What a gap's value means (a `done` or a `fail`, and
+  its words), a pattern that would let a tree read the sentences it
+  missed, a tree for a sentence nobody answers. Each is checked by rules
+  before you see it: the branch's condition is the one `pyrtan grow`'s
+  rules draft, not the model's; a pattern is kept only if the reading
+  says it reads the sentences and takes none from another tree; no
+  suggestion adds a host, any I/O, or a read of `env`.
+- **You accept.** In a browser that is its own hub, the tree grows in
+  the page at once. On a hub, the suggestion is kept at `/suggestions`;
+  `pyrtan grow --suggestions HUB --trees DIR --apply` checks it again
+  and writes it (or download the accepted ones and point `--suggestions`
+  at the file). Dismiss one and say why, and the agent remembers.
+- **You can talk to it.** It answers in its own words and, when a tree
+  can answer, asks the swarm and quotes the tree, whose name and path are
+  shown beside what it said. `/help` lists the commands (`/ask`, `/read`,
+  `/probe`, `/gaps`, `/unanswered`, `/patrol`, `/remember`, `/memory`).
+- **It remembers and has skills.** Its memory (your notes, its own,
+  what it probed, what was accepted, dismissed or refused, the
+  conversation) is kept in the browser per hub, and the relevant part
+  goes into every prompt. Its skills are instructions for each job, the
+  way a Claude skill is: five built in, and your own (a name, when it
+  applies, and the text; Markdown with front matter, or JSON), called as
+  `/name` in chat.
+
+```
+$ pyrtan suggestions --at http://127.0.0.1:8700
+branch  weather.sky: code = 100 means fail: 'Code 100 is not a weather code we know.'  x1
+        by scout (Qwen2.5-1.5B-Instruct-q4f16_1-MLC): WMO codes stop at 99
+trigger weather: 'is it raining in {place}', covering 'is it raining in Oslo'  x2
+        by scout (Qwen2.5-1.5B-Instruct-q4f16_1-MLC): people ask about rain
+$ pyrtan grow --suggestions http://127.0.0.1:8700 --trees trees --apply
+```
+
+The design is in [`_meta/agents.md`](_meta/agents.md).
 
 ## Sentences
 
@@ -633,10 +753,12 @@ slot refused. The whole set of rules is in
 
 ## What Pyrtan refuses
 
-- **No model in the loop.** Nothing in this repository calls an LLM. The
-  reading of a sentence is tables and rules, each named in the trace when
-  it fires. A model may one day sit *beside* the swarm, proposing branches
-  for recorded gaps; it will not sit inside a run deciding anything.
+- **No model in the loop.** No run calls an LLM, and nothing in the
+  Python package does. The reading of a sentence is tables and rules,
+  each named in the trace when it fires. A model sits only *beside* the
+  swarm, as an agent a person starts in the console: it asks like any
+  caller and proposes branches, triggers and trees, which rules check
+  and a person accepts. It never sits inside a run deciding anything.
 - **No endpoint a tree did not name.** Every HTTP node's host is checked
   against the tree's `hosts` at load time where it is literal and at run
   time where it is templated. Every further form of I/O arrives with an
@@ -652,7 +774,11 @@ slot refused. The whole set of rules is in
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
                 service, hub, federation, identity, names, grants, page (the console),
-                catalog, cli
+                suggestions, defaults (the trees every console carries),
+                catalog, cli; js/ holds pyrtan.js (the runtime
+                again), identity.js and agents.js (agents beside the swarm)
+catalog/        trees by namespace, published by pull request; postfinite/
+                reads Postfinite's data
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -667,7 +793,10 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.18.0. The core, the service, the hub, the command, the console, the
+0.22.0. The core, the service, the hub, the command, the console (which
+carries the default trees, so it holds them with no network), the
+Postfinite trees (every published dataset, entity, reading and forecast
+on Postfinite, as the pyrtan tenant), the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; the default one is built
@@ -677,13 +806,20 @@ part of the swarm), the blobs they keep and the trees they run
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
-for, drafted by rules), `pyrtan build` (the tree an unanswered sentence
-asks for, through a few questions with defaults by rules), and the chat lobby (strangers on the hub and the
+for, drafted by rules), lookup tables (a code into a word in one node),
+`pyrtan build` (the tree an unanswered sentence asks for, through a few
+questions with defaults by rules), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
 name claims, names at pyrtan.com and pins, grants on hubs, the console's
-key, `pyrtan id` and `pyrtan allow`) are built. Not yet built: hosting.
+key, `pyrtan id` and `pyrtan allow`) are built, and all of it works from
+the console with no shell; encrypted key backups, and names any network
+runs in its own git repository, too. Agents beside the swarm
+(open-weights models in the browser or on a server of your own that
+probe the trees, suggest branches, triggers and trees, chat, and keep a
+memory and skills; `/suggestions` and `pyrtan grow --suggestions`) are
+built. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

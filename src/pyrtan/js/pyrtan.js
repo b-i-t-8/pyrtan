@@ -1,7 +1,7 @@
 /* pyrtan.js: the tree runtime, in JavaScript.
  *
  * The same tree files the Python runtime reads (as JSON, the TOML's own
- * table), walked the same way: observe, act, decide, set, each, delegate,
+ * table), walked the same way: observe, act, decide, set, lookup, each, delegate,
  * ask, done, fail; the same templates, conditions and extraction; the same
  * trace. tests/conformance holds the vectors both runtimes must agree on.
  *
@@ -19,6 +19,8 @@
  *   plain first).
  * - LocalHub makes a page a hub of its own: the paths and answers of a
  *   service, in memory, for a browser that has joined no hub.
+ * - `grow` drafts the branch a gap asks for by grow.py's rules, and checks
+ *   an agent's suggestion as suggestions.py does; it never asks a model.
  *
  * No model. No dependencies. Runs in a browser as `Pyrtan` and in node.
  */
@@ -1465,18 +1467,41 @@
     do_decide(tree, node, scope, trace, depth) {
       const on = statePath(node.get("on"));
       const value = resolve(on, scope);
+      // A value from env is the operator's (a token, a password): the trace says it is set, never what it is.
+      const shown = on.split(".")[0].split("[")[0] === "env" && !isMissing(value) && value !== null && value !== undefined ? "<set>" : value;
       for (const br of node.get("branches")) {
-        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: "else" }), br.else];
-        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: condText(br.when) }), br.then];
+        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: "else" }), br.else];
+        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: condText(br.when) }), br.then];
       }
-      trace.gap(node.id, on, plain(value));
-      trace.add(step(node.id, "decide", `${on} = ${brief(value)}: no branch`, { observed: plain(value), depth }));
-      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+      trace.gap(node.id, on, plain(shown));
+      trace.add(step(node.id, "decide", `${on} = ${brief(shown)}: no branch`, { observed: plain(shown), depth }));
+      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(shown)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
     }
     do_set(tree, node, scope) {
       const values = {};
       for (const [key, tmpl] of Object.entries(node.get("set"))) { const value = render(tmpl, scope); put(scope.state, key, value); values[key] = value; }
       return [step(node.id, "set", Object.keys(values).map((k) => `${k}=${brief(values[k])}`).join(", "), { observed: values }), node.next];
+    }
+    do_lookup(tree, node, scope, trace, depth) {
+      const on = statePath(node.get("on"));
+      const value = resolve(on, scope);
+      const into = node.get("into");
+      let found = MISSING, chosen = null;
+      for (const row of node.get("table")) {
+        const cond = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "value" && k !== "note"));
+        if (holds(cond, value)) { found = row.value; chosen = condText(cond); break; }
+      }
+      if (isMissing(found)) {
+        if (!("default" in node.spec)) {
+          trace.gap(node.id, on, plain(value));
+          trace.add(step(node.id, "lookup", `${on} = ${brief(value)}: no row`, { observed: plain(value), depth }));
+          return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no row for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+        }
+        found = node.spec.default; chosen = "default";
+      }
+      const result = render(found, scope);
+      put(scope.state, into, result);
+      return [step(node.id, "lookup", `${on} = ${brief(value)}; ${into}=${brief(result)}`, { observed: plain(value), chosen }), node.next];
     }
     async do_each(tree, node, scope, trace, depth) {
       const state = scope.state;
@@ -1539,6 +1564,130 @@
   }
 
   // ------------------------------------------------------------ the hub in a page
+  // ------------------------------------------------------------ growing (grow.py, suggestions.py)
+  // The branch a gap asks for, by the same rules as grow.draft_branch, on a
+  // tree's raw table; and the checks suggestions.problem makes of what an
+  // agent sends. Rules only: an agent's words are data these check.
+  const tomlStr = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+  function tomlValue(v) {
+    if (isBool(v)) return v ? "true" : "false";
+    if (isNum(v)) return Number.isInteger(v) ? String(v) : String(v);
+    if (Array.isArray(v)) return "[" + v.map(tomlValue).join(", ") + "]";
+    return '"' + tomlStr(v === null || v === undefined ? "None" : String(v)) + '"';
+  }
+  const tomlInline = (cond) => "{ " + Object.keys(cond).map((k) => `${k} = ${tomlValue(cond[k])}`).join(", ") + " }";
+  function growSlug(value, limit = 24) {
+    let text = value === null || value === undefined ? "missing" : (typeof value === "string" ? value : pyrepr(value)).toLowerCase();
+    text = text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return text.slice(0, limit).replace(/-+$/, "") || "value";
+  }
+  const safeHolds = (cond, value) => { try { return holds(cond, value); } catch (e) { return false; } };
+  function conditionFor(observed, branches) {
+    if (observed === null || observed === undefined) return [{ exists: false }, "the value was missing"];
+    if (typeof observed === "string" && /^<(str|dict|list|int|float|bool)>$/.test(observed)) return [{ type: observed.slice(1, -1) }, "a report carries a long or structured value as its type"];
+    if (isNum(observed)) {
+      const covered = [];
+      for (const b of branches) {
+        const w = isObj(b) ? b.when : null;
+        if (!isObj(w)) continue;
+        if (Array.isArray(w.between) && w.between.length === 2) { const lo = Number(w.between[0]), hi = Number(w.between[1]); if (!Number.isNaN(lo) && !Number.isNaN(hi)) covered.push([lo, hi]); }
+        else if (isNum(w.eq)) covered.push([w.eq, w.eq]);
+      }
+      if (covered.length && Number.isInteger(observed)) {
+        const below = covered.filter(([, hi]) => hi < observed).map(([, hi]) => hi), above = covered.filter(([lo]) => lo > observed).map(([lo]) => lo);
+        if (below.length && above.length && below.concat(above).every(Number.isInteger)) {
+          const b = Math.max(...below), a = Math.min(...above), lo = b + 1, hi = a - 1;
+          if (lo <= hi) return [{ between: [lo, hi] }, `the value falls in the hole between ${b} and ${a}, which the ranges around it leave open`];
+        }
+      }
+    }
+    return [{ eq: observed }, "the value itself"];
+  }
+  // raw: a tree's table (as trees.json carries it); gap: {node, on, observed}. null when the gap names no decide or lookup node or a branch covers the value.
+  // For a lookup the draft is a row (list "table") whose value is the value seen, and there is no new node.
+  function draftBranch(raw, gap) {
+    const nodes = (raw && raw.nodes) || {};
+    const id = String(gap.node === undefined ? "" : gap.node), node = nodes[id];
+    if (!isObj(node) || (node.kind !== "decide" && node.kind !== "lookup")) return null;
+    const on = String(gap.on || node.on || ""), observed = gap.observed === undefined ? null : gap.observed;
+    const branches = node.kind === "lookup"
+      ? (node.table || []).filter(isObj).map((r) => ({ when: Object.fromEntries(Object.entries(r).filter(([k]) => k !== "value" && k !== "note")) }))
+      : (node.branches || []).filter(isObj);
+    if (branches.some((b) => "when" in b && safeHolds(b.when, observed))) return null;
+    const [when, reason] = conditionFor(observed, branches);
+    if (node.kind === "lookup") {
+      const row = "{ " + Object.keys(when).map((k) => `${k} = ${tomlValue(when[k])}`).join(", ") + `, value = ${tomlValue(observed === null ? "" : observed)} },`;
+      return { tree: raw.name, node: id, on, observed, when, then: "", branch: row, reason, list: "table" };
+    }
+    const base = `${id}-${growSlug(observed)}`;
+    let then = base, n = 2;
+    while (has(nodes, then)) then = `${base}-${n++}`;
+    return { tree: raw.name, node: id, on, observed, when, then, branch: `{ when = ${tomlInline(when)}, then = "${then}" },`, reason, list: "branches" };
+  }
+  // The tree a draft and a meaning make, as a new raw table: the branch before the else, the node after the rest. The caller loads it (new Tree) to see it holds.
+  function growTree(raw, draft, meaning) {
+    const out = JSON.parse(JSON.stringify(raw));
+    const node = out.nodes[draft.node];
+    const branches = node.branches || (node.branches = []);
+    const at = branches.findIndex((b) => isObj(b) && "else" in b);
+    branches.splice(at < 0 ? branches.length : at, 0, { when: draft.when, then: draft.then });
+    out.nodes[draft.then] = Object.assign({ kind: meaning.kind }, meaning.kind === "fail" ? { reason: meaning.reason || growSlug(draft.then, 40) } : {}, { say: meaning.say });
+    return out;
+  }
+
+  const SUGGESTION_KINDS = ["branch", "trigger", "tree"], SAY_ROOTS = ["inputs", "state", "tree"];
+  function suggestionProblem(s) {
+    if (!isObj(s)) return "a suggestion is a table";
+    const kind = s.kind;
+    if (!SUGGESTION_KINDS.includes(kind)) return `kind is one of ${SUGGESTION_KINDS.join(", ")}`;
+    const why = s.why === undefined ? "" : s.why;
+    if (typeof why !== "string" || why.length > 500) return "why is text of at most 500 characters";
+    const by = s.by === undefined ? {} : s.by;
+    if (!isObj(by) || !Object.values(by).every((v) => typeof v === "string" && v.length <= 120)) return "by is a table of short strings: agent, model, engine";
+    if ((kind === "branch" || kind === "trigger") && !(typeof s.tree === "string" && s.tree)) return "a branch or a trigger names its tree";
+    if (kind === "branch") {
+      if (typeof s.node !== "string" || !s.node) return "a branch names the decide node it belongs to";
+      if (!("observed" in s)) return "a branch says what value it is for (observed)";
+      const m = s.meaning;
+      if (!isObj(m) || !["done", "fail"].includes(m.kind)) return "a branch's meaning is a done or a fail";
+      if (typeof m.say !== "string" || !m.say.trim() || m.say.length > 300) return "a meaning says something, in at most 300 characters";
+      for (const mm of m.say.matchAll(PLACEHOLDER)) {
+        const head = mm[1].split("|")[0].trim().split(/[.[|\s]/)[0];
+        if (!SAY_ROOTS.includes(head)) return `say may read ${SAY_ROOTS.join(", ")}, not ${head}`;
+      }
+      if ("reason" in m && !(typeof m.reason === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(m.reason))) return "reason is a short lowercase slug, like no-such-place";
+    }
+    if (kind === "trigger") {
+      const pattern = s.pattern;
+      if (typeof pattern !== "string" || !pattern.trim() || pattern.length > 200) return "a trigger is a pattern of at most 200 characters";
+      try { new Trigger(pattern); } catch (e) { if (e instanceof TriggerError) return `pattern: ${e.message}`; throw e; }
+      const covers = s.covers === undefined ? [] : s.covers;
+      if (!Array.isArray(covers) || !covers.length || covers.length > 10 || !covers.every((c) => typeof c === "string" && c.length > 0 && c.length <= 200)) return "a trigger names the sentences it covers (1 to 10)";
+    }
+    if (kind === "tree") {
+      if (typeof s.text !== "string" || !s.text.trim() || s.text.length > 200) return "a tree suggestion carries the sentence it would answer";
+      const d = s.description === undefined ? "" : s.description;
+      if (typeof d !== "string" || d.length > 200) return "description is one line";
+      const hints = s.hosts_hint === undefined ? [] : s.hosts_hint;
+      if (!Array.isArray(hints) || !hints.every((h) => typeof h === "string" && h.length <= 100)) return "hosts_hint is a list of host names (a note, never a host)";
+    }
+    return null;
+  }
+  function suggestionKey(s) {
+    const parts = s.kind === "branch" ? [s.kind, s.tree, s.node, s.on === undefined ? null : s.on, s.observed === undefined ? null : s.observed]
+      : s.kind === "trigger" ? [s.kind, s.tree, s.pattern] : [s.kind, String(s.text === undefined ? "" : s.text).trim().toLowerCase()];
+    return JSON.stringify(parts);
+  }
+  const SUGGESTION_FIELDS = ["kind", "tree", "node", "on", "observed", "meaning", "pattern", "covers", "text", "description", "hosts_hint", "why", "by", "evidence"];
+  function suggestionClean(s) {
+    const out = {};
+    for (const k of SUGGESTION_FIELDS) if (has(s, k)) out[k] = s[k];
+    if (isObj(out.meaning)) { const m = {}; for (const k of ["kind", "say", "reason"]) if (has(out.meaning, k)) m[k] = out.meaning[k]; out.meaning = m; }
+    if (out.evidence !== undefined) out.evidence = Array.isArray(out.evidence) ? out.evidence.filter(isObj).slice(0, 10) : [];
+    return JSON.parse(JSON.stringify(out));
+  }
+  const grow = { draftBranch, growTree, conditionFor, problem: suggestionProblem, key: suggestionKey, clean: suggestionClean, SAY_ROOTS };
+
   // A browser that has joined no hub is a hub of its own, for as long as the
   // page is open: it holds trees (the catalog's, as a page loads them), reads
   // sentences, runs the trees and keeps the gaps and the unanswered sentences
@@ -1557,7 +1706,7 @@
       this.wall = opts.wall || (() => Date.now() / 1000);
       this.runner = new Runner({ transport: opts.transport || new FetchTransport(), adapters: opts.adapters || null, clock: this.clock, env: opts.env });
       this.errors = {}; this.held = {};
-      this.gaps = new Map(); this.unanswered = new Map();
+      this.gaps = new Map(); this.unanswered = new Map(); this.suggestions = new Map();
       this.runs = 0; this.started = this.wall();
       for (const raw of opts.trees || []) this.add(raw);
     }
@@ -1570,7 +1719,7 @@
     }
     trees() { return Object.keys(this.runner.trees).sort().map((n) => this.runner.trees[n]); }
     health() {
-      return { status: "ok", name: this.name, trees: this.trees().map((t) => t.name), errors: this.errors, runs: this.runs, gaps: this.gaps.size, unanswered: this.unanswered.size, uptime_s: Math.floor(this.wall() - this.started), watches: 0 };
+      return { status: "ok", name: this.name, trees: this.trees().map((t) => t.name), errors: this.errors, runs: this.runs, gaps: this.gaps.size, unanswered: this.unanswered.size, suggestions: this.suggestions.size, uptime_s: Math.floor(this.wall() - this.started), watches: 0 };
     }
     capabilities() { return { name: this.name, trees: this.trees().map((t) => t.capability()) }; }
     noteGaps(gaps) {
@@ -1592,6 +1741,26 @@
         for (const [k, v] of this.unanswered) if (oldest === null || v.last < this.unanswered.get(oldest).last) oldest = k;
         this.unanswered.delete(oldest);
       }
+    }
+    // What agents sent, as suggestions.py keeps it: checked, counted, bounded, never applied.
+    noteSuggestions(items) {
+      const now = this.wall(), refused = [];
+      let kept = 0;
+      items.forEach((s, index) => {
+        const why = suggestionProblem(s);
+        if (why) { refused.push({ index, why }); return; }
+        const c = suggestionClean(s), k = suggestionKey(c);
+        let e = this.suggestions.get(k);
+        if (!e) { e = Object.assign({}, c, { count: 0, first: now, last: now }); this.suggestions.set(k, e); }
+        else Object.assign(e, c);
+        e.count += 1; e.last = Math.max(e.last, now); kept += 1;
+        while (this.suggestions.size > UNANSWERED_LIMIT) {
+          let oldest = null;
+          for (const [kk, v] of this.suggestions) if (oldest === null || v.last < this.suggestions.get(oldest).last) oldest = kk;
+          this.suggestions.delete(oldest);
+        }
+      });
+      return { status: "ok", kept, refused };
     }
     finish(o, body) {
       this.runs += 1;
@@ -1619,12 +1788,19 @@
       method = String(method || "GET").toUpperCase();
       path = "/" + String(path || "").split("?")[0].replace(/^\/+/, "");
       body = isObj(body) ? body : {};
-      if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/watches"] }];
+      if (method === "GET" && path === "/api") return [200, { pyrtan: "browser", name: this.name, version: this.version, auth: "none", endpoints: ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"] }];
       if (method === "GET" && path === "/health") return [200, this.health()];
       if (method === "GET" && path === "/capabilities") return [200, this.capabilities()];
       if (method === "GET" && path === "/gaps") return [200, { gaps: [...this.gaps.values()].map((g) => Object.assign({}, g)).sort((a, b) => b.count - a.count || a.last_seen - b.last_seen) }];
       if (method === "GET" && path === "/unanswered") return [200, { unanswered: [...this.unanswered.values()].map((e) => Object.assign({}, e)).sort((a, b) => b.count - a.count || b.last - a.last) }];
       if (method === "GET" && path === "/watches") return [200, { count: 0, watches: [], watching: false }];
+      if (method === "GET" && path === "/suggestions") return [200, { suggestions: [...this.suggestions.values()].map((e) => Object.assign({}, e)).sort((a, b) => b.count - a.count || b.last - a.last) }];
+      if (method === "POST" && path === "/suggestions") {
+        const items = Array.isArray(body.suggestions) ? body.suggestions : body.kind ? [body] : null;
+        if (items === null) return [400, { status: "error", reason: "bad-request", say: 'Send {"suggestions": [{"kind": "branch"|"trigger"|"tree", ...}]}.' }];
+        if (items.length > 50) return [400, { status: "error", reason: "too-many", say: "At most 50 suggestions at a time." }];
+        return [200, this.noteSuggestions(items)];
+      }
       if (method === "POST" && path === "/intent") return [200, await this.intent(body)];
       if (method === "POST" && path === "/run") return [200, await this.run(body)];
       if (method === "POST" && path === "/resume") return [200, await this.resume(body)];
@@ -1634,5 +1810,5 @@
     }
   }
 
-  return { MISSING, Tree, Runner, LocalHub, Reading, nlp, intent, read, propose, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: VERSION };
+  return { MISSING, Tree, Runner, LocalHub, Reading, nlp, intent, read, propose, grow, Trace, FetchTransport, RecordedTransport, Response, render, resolve, holds, extract, outcomeDict, fromDict, pyrepr, pyJson, html, TemplateError, TreeError, TransportError, ConditionError, SOURCES, adapterKey, version: VERSION };
 });

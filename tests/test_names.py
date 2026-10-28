@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 
@@ -269,3 +270,165 @@ def test_cli_wellknown(tmp_path, capsys, alice):
     (d / "bad.json").write_text("{}")
     code, _, err = run(capsys, "id", "wellknown", str(d), "--domain", "example.org", "--out", str(tmp_path / "site"))
     assert code == 1 and "bad.json" in err
+
+
+# ---------------------------------------------------------------- a network's names, owned by their keys
+
+DOMAIN = "names.example.org"
+
+
+def write(d, name, doc):
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text(json.dumps(doc))
+
+
+def test_key_rule_new_names_and_handovers(tmp_path, alice, bob):
+    base, head = tmp_path / "base", tmp_path / "head"
+    write(head, "alice.json", identity.make_name(alice, f"alice@{DOMAIN}"))
+    assert names.gate_key(head, None, DOMAIN) == []                  # a new name: anyone who signs it
+    shutil.copytree(head, base)
+    write(head, "alice.json", identity.make_name(alice, f"alice@{DOMAIN}"))
+    assert names.gate_key(head, base, DOMAIN) == []                  # re-signed by the same key
+    write(head, "alice.json", identity.make_name(bob, f"alice@{DOMAIN}"))
+    assert "without a handover" in messages(names.gate_key(head, base, DOMAIN))
+    write(head, "alice.json", identity.make_name(bob, f"alice@{DOMAIN}", handover_from=bob))
+    assert "not" in messages(names.gate_key(head, base, DOMAIN))
+    write(head, "alice.json", identity.make_name(bob, f"alice@{DOMAIN}", handover_from=alice))
+    assert names.gate_key(head, base, DOMAIN) == []                  # moved, with alice's handover
+    write(head, "alice.json", identity.make_name(alice, "alice@elsewhere.org"))
+    assert "the claim is for alice@elsewhere.org" in messages(names.gate_key(head, base, DOMAIN))
+
+
+def test_key_rule_releases_and_deletions(tmp_path, alice, bob):
+    base, head = tmp_path / "base", tmp_path / "head"
+    write(base, "alice.json", identity.make_name(alice, f"alice@{DOMAIN}"))
+    head.mkdir()
+    assert "not by deleting it" in messages(names.gate_key(head, base, DOMAIN))
+    write(head, "alice.json", identity.make_release(bob, f"alice@{DOMAIN}"))
+    assert "is held by" in messages(names.gate_key(head, base, DOMAIN))
+    write(head, "alice.json", identity.make_release(alice, f"alice@{DOMAIN}"))
+    assert names.gate_key(head, base, DOMAIN) == []                  # given up by its key
+    # Released, the name is free: anyone may claim it.
+    shutil.rmtree(base)
+    shutil.copytree(head, base)
+    write(head, "alice.json", identity.make_name(bob, f"alice@{DOMAIN}"))
+    assert names.gate_key(head, base, DOMAIN) == []
+    write(head, "carol.json", identity.make_release(bob, f"carol@{DOMAIN}"))
+    assert "nothing to release" in messages(names.gate_key(head, base, DOMAIN))
+    # A release is not served as a name.
+    count, _ = names.build_wellknown(base, tmp_path / "out", DOMAIN)
+    assert count == 0
+
+
+def test_key_rule_documents_only_move_forward(tmp_path, alice):
+    base, head = tmp_path / "base", tmp_path / "head"
+    claim = identity.make_name(alice, f"alice@{DOMAIN}")
+    old = identity.make_identity(alice, updated=1_700_000_000)
+    new = identity.make_identity(alice, updated=1_700_000_100, revoked=[identity.Key.generate().id])
+    write(base, "alice.json", claim)
+    write(base, "alice.id.json", new)
+    write(head, "alice.json", claim)
+    write(head, "alice.id.json", old)
+    assert "older than the one it replaces" in messages(names.gate_key(head, base, DOMAIN))
+    (head / "alice.id.json").unlink()
+    assert "not deleted" in messages(names.gate_key(head, base, DOMAIN))
+    write(head, "alice.id.json", identity.make_identity(alice, updated=1_700_000_200))
+    assert names.gate_key(head, base, DOMAIN) == []
+
+
+def test_names_init_and_the_github_gate_steps(tmp_path, alice, bob):
+    """names init writes a repository; the gate workflow's merge-base step, against real git,
+    judges only what a pull request changed, not what landed on main after it branched."""
+    repo = tmp_path / "repo"
+    written, kept = names.init_repo(repo, DOMAIN, host="github", pyrtan_ref="0123abc")
+    rels = sorted(p.relative_to(repo).as_posix() for p in written)
+    assert rels == [".github/workflows/names-gate.yml", ".github/workflows/names-pages.yml", "README.md", "names/.gitkeep", "pyrtan-names.json"]
+    gate_yml = (repo / ".github/workflows/names-gate.yml").read_text()
+    assert "pull_request_target" in gate_yml and "@0123abc" in gate_yml and DOMAIN in gate_yml and "merge-base" in gate_yml
+    assert "upload-pages-artifact@v3" in (repo / ".github/workflows/names-pages.yml").read_text()
+    assert names.repo_domain(repo) == DOMAIN
+    assert names.init_repo(repo, DOMAIN)[1]                           # nothing overwritten the second time
+    with pytest.raises(IdentityError):
+        names.init_repo(tmp_path / "x", DOMAIN, pyrtan_ref="main; rm -rf /")
+    git = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=repo, check=True, capture_output=True, text=True)
+    git("init", "-q", "-b", "main")
+    write(repo / "names", "alice.json", identity.make_name(alice, f"alice@{DOMAIN}"))
+    git("add", ".")
+    git("commit", "-q", "-m", "alice")
+    git("checkout", "-q", "-b", "pr")
+    write(repo / "names", "bob.json", identity.make_name(bob, f"bob@{DOMAIN}"))
+    git("add", ".")
+    git("commit", "-q", "-m", "bob")
+    git("checkout", "-q", "main")
+    write(repo / "names", "carol.json", identity.make_name(identity.Key.generate(), f"carol@{DOMAIN}"))
+    git("add", ".")
+    git("commit", "-q", "-m", "carol, after the pull request branched")
+    main_sha = git("rev-parse", "HEAD").stdout.strip()
+    git("checkout", "-q", "pr")
+    base = tmp_path / "base"
+    git("worktree", "add", "--detach", str(base), git("merge-base", main_sha, "HEAD").stdout.strip())
+    assert names.gate_key(repo / "names", base / "names", DOMAIN) == []    # carol is not a deletion by the pull request
+    gate = subprocess.run([sys.executable, "-m", "pyrtan.cli", "names", "gate", str(repo / "names"), "--base", str(base / "names"), "--domain", DOMAIN], capture_output=True, text=True)
+    assert gate.returncode == 0 and "open" in gate.stdout
+
+
+def test_names_init_for_gitlab(tmp_path):
+    written, _ = names.init_repo(tmp_path / "gl", DOMAIN, host="gitlab")
+    ci = (tmp_path / "gl" / ".gitlab-ci.yml").read_text()
+    assert "merge_request_event" in ci and "merge-base" in ci and "public" in ci
+    assert not (tmp_path / "gl" / ".github").exists()
+
+
+def test_a_hub_serves_its_networks_names(tmp_path, alice, bob):
+    from pyrtan.hub import serve_hub
+    from pyrtan.service import http_json
+    d = tmp_path / "names"
+    claim = identity.make_name(alice, f"alice@{DOMAIN}")
+    doc = identity.make_identity(alice, routes=["hub.example"])
+    write(d, "alice.json", claim)
+    write(d, "alice.id.json", doc)
+    write(d, "bob.json", identity.make_release(bob, f"bob@{DOMAIN}"))
+    h, srv = serve_hub(port=0, quiet=True, token="tok", names=str(d), names_domain=DOMAIN, poll_every=60)
+    try:
+        url = srv.url.rstrip("/")
+        assert http_json("GET", f"{url}/.well-known/pyrtan/name/alice.json") == (200, claim)   # public, behind a token
+        assert http_json("GET", f"{url}/.well-known/pyrtan/name/bob.json")[0] == 404            # released
+        assert http_json("GET", f"{url}/.well-known/pyrtan/id/{alice.id[4:]}.json") == (200, doc)
+        assert list(http_json("GET", f"{url}/.well-known/pyrtan/names.json")[1]["names"]) == ["alice"]
+        # A new claim lands (a git pull, say) and is served at once.
+        claim_b = identity.make_name(bob, f"bob@{DOMAIN}")
+        write(d, "bob.json", claim_b)
+        assert http_json("GET", f"{url}/.well-known/pyrtan/name/bob.json") == (200, claim_b)
+        # And resolving through it is the same as through any domain.
+        fetch = lambda u: http_json("GET", u.replace(f"https://{DOMAIN}", url))
+        assert names.resolve(f"alice@{DOMAIN}", fetch=fetch)["id"] == alice.id
+    finally:
+        h.stop()
+        srv.stop()
+
+
+def test_cli_names_and_releases(tmp_path, capsys, monkeypatch):
+    repo = tmp_path / "repo"
+    code, out, _ = run(capsys, "names", "init", str(repo), "--domain", DOMAIN, "--host", "plain")
+    assert code == 0 and "pyrtan-names.json" in out and not (repo / ".github").exists()
+    me, new = str(tmp_path / "me"), str(tmp_path / "new")
+    run(capsys, "id", "new", "--dir", me)
+    code, out, err = run(capsys, "id", "name", f"alice@{DOMAIN}", "--into", str(repo), "--dir", me)
+    assert code == 0, err
+    assert (repo / "names" / "alice.json").is_file() and (repo / "names" / "alice.id.json").is_file()
+    assert "from the GitHub account" not in out                       # a network's repository asks no GitHub id
+    shutil.copytree(repo / "names", tmp_path / "base")
+    # Moving the name to a new key: the old key signs the handover.
+    run(capsys, "id", "new", "--dir", new)
+    (repo / "names" / "alice.id.json").unlink()
+    code, _, err = run(capsys, "id", "name", f"alice@{DOMAIN}", "--into", str(repo), "--handover-from", str(tmp_path / "me" / "root.key"), "--dir", new)
+    assert code == 0, err
+    code, out, _ = run(capsys, "names", "gate", str(repo / "names"), "--base", str(tmp_path / "base"), "--domain", DOMAIN)
+    assert code == 0 and "open" in out
+    # Giving it up: a release in its place.
+    code, _, _ = run(capsys, "id", "release", f"alice@{DOMAIN}", "--out", str(repo / "names" / "alice.json"), "--dir", new)
+    (repo / "names" / "alice.id.json").unlink()
+    code, out, _ = run(capsys, "id", "check", str(repo / "names" / "alice.json"))
+    assert code == 0 and "gives up" in out
+    code, out, _ = run(capsys, "names", "gate", str(repo / "names"), "--base", str(tmp_path / "base"), "--domain", DOMAIN)
+    assert code == 1 and "is held by" in out                           # the base still holds it under the first key

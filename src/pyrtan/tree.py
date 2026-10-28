@@ -15,6 +15,10 @@ needs (``inputs``), which hosts it may touch (``hosts``), and a set of
     format; every decision a run makes is one of these.
 ``set``
     Compute state from templates.
+``lookup``
+    Look at one value and read the matching row of a table: the same
+    conditions as ``decide``, but each row gives a value rather than a
+    node, so a code-to-word table is one node, not one per word.
 ``each``
     For every item of a list (up to ``limit``), run another tree or a local
     sub-flow, collecting the outputs.
@@ -47,7 +51,8 @@ from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerErr
 from .template import PLACEHOLDER, placeholders
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9\-]*$")
-KINDS = {"observe", "act", "decide", "set", "each", "delegate", "ask", "done", "fail"}
+KINDS = {"observe", "act", "decide", "set", "lookup", "each", "delegate", "ask", "done", "fail"}
+ROW_KEYS = {"value", "note"}  # what a lookup row holds besides its condition
 TERMINAL = {"done", "fail"}
 INPUT_TYPES = {"str", "int", "float", "bool", "list", "dict"}
 HTTP_METHODS = {"GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"}
@@ -533,6 +538,37 @@ def check(tree: Tree) -> list[Problem]:
             if not isinstance(node.get("set"), dict) or not node.get("set"):
                 err(where, "a set node needs a non-empty 'set' table")
 
+        elif node.kind == "lookup":
+            on = node.get("on")
+            if not isinstance(on, str) or not on.strip():
+                err(where, "a lookup node needs 'on': the state path it looks at")
+            if not isinstance(node.get("into"), str):
+                err(where, "a lookup node needs 'into': where the row's value goes")
+            table = node.get("table")
+            if not isinstance(table, list) or not table:
+                err(where, "a lookup node needs a non-empty 'table' list of rows such as { eq = 0, value = \"clear\" }")
+            else:
+                for j, row in enumerate(table):
+                    rw = f"{where}.table[{j}]"
+                    if not isinstance(row, dict):
+                        err(rw, "a row is a table: a condition and a 'value'")
+                        continue
+                    if "value" not in row:
+                        err(rw, "a row needs a 'value'")
+                    if "then" in row or "else" in row:
+                        err(rw, "a row gives a value, not a node; a value for anything else is the node's 'default', and branching is a decide")
+                        continue
+                    cond = row_condition(row)
+                    if not cond:
+                        err(rw, "a row needs a condition such as eq or between; a value for anything else is the node's 'default'")
+                        continue
+                    try:
+                        conditions.validate(cond)
+                    except conditions.ConditionError as e:
+                        err(rw, str(e))
+            if "default" not in node.spec:
+                info(where, "no 'default': a value no row covers is recorded as a gap and fails the run")
+
         elif node.kind == "each":
             if not isinstance(node.get("over"), str):
                 err(where, "an each node needs 'over': the list to walk")
@@ -826,6 +862,11 @@ def _check_http(tree: Tree, node: Node, http: Any, err, warn) -> None:
 
 
 _SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue}
+
+
+def row_condition(row: dict[str, Any]) -> dict[str, Any]:
+    """A lookup row's condition: the row without its value and note."""
+    return {k: v for k, v in row.items() if k not in ROW_KEYS}
 
 
 def _check_graph(tree: Tree) -> list[Problem]:

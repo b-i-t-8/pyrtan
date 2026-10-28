@@ -69,12 +69,19 @@ bump the version.
 
 The runtime is small on purpose, and every node kind is paid for by every
 tree author who has to learn it. A new kind needs a case that `observe`,
-`decide`, `set`, `each` and `delegate` cannot express together, written down
-in the pull request. The same goes for a new filter or condition.
+`decide`, `set`, `lookup`, `each` and `delegate` cannot express together,
+written down in the pull request. The same goes for a new filter or condition.
 
-Nothing in `src/pyrtan` may call a model, execute code from a tree, or reach
-a host outside a tree's `hosts`. Those are the three rules the design rests
-on; see `_meta/design.md`. A fourth, from `_meta/platform.md`: nothing in
+No run may call a model, nothing may execute code from a tree, and nothing
+may reach a host outside a tree's `hosts`. Those are the three rules the
+design rests on; see `_meta/design.md`. The one place a model appears is
+an agent in the console (`src/pyrtan/js/agents.js`), which a person starts,
+which reaches the swarm only through its public endpoints, and whose
+suggestions are data that rules check before anyone sees them and again
+before `pyrtan grow` writes them; nothing in the Python package calls a
+model. A change that lets an agent's suggestion add I/O, a host or a read
+of `env`, or apply itself without a person, breaks the first rule; see
+`_meta/agents.md`. A fourth, from `_meta/platform.md`: nothing in
 `src/pyrtan` knows about tenants, plans or billing. The hosted product runs
 this code unchanged.
 
