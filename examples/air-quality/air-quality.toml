@@ -1,0 +1,108 @@
+# The air where a place is, now: the European Air Quality Index and the
+# fine particles behind it, from Open-Meteo. The index's own bands name it.
+
+name = "air-quality"
+version = 1
+namespace = "pyrtan"
+description = "Current air quality for a place: the European AQI, its band, and PM2.5 and PM10, from Open-Meteo."
+tags = ["weather", "health", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[what's the] air quality (in|for) {place}"
+[[triggers]]
+pattern = "how is the air in {place}"
+[[triggers]]
+pattern = "(aqi|pollution) in {place}"
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "air" },
+  { else = "unknown-place" },
+]
+
+[nodes.air]
+kind = "observe"
+http = { method = "GET", url = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ state.lat }}&longitude={{ state.lon }}&current=european_aqi,pm2_5,pm10" }
+into = "aq"
+extract = [
+  { into = "aqi", json = "json.current.european_aqi" },
+  { into = "pm25", json = "json.current.pm2_5" },
+  { into = "pm10", json = "json.current.pm10" },
+]
+next = "band"
+
+# The bands of the European Air Quality Index.
+[nodes.band]
+kind = "decide"
+on = "aqi"
+branches = [
+  { when = { type = "number", lte = 20 }, then = "good" },
+  { when = { lte = 40 }, then = "fair" },
+  { when = { lte = 60 }, then = "moderate" },
+  { when = { lte = 80 }, then = "poor" },
+  { when = { lte = 100 }, then = "very-poor" },
+  { when = { gt = 100 }, then = "extremely-poor" },
+  { else = "no-reading" },
+]
+
+[nodes.good]
+kind = "set"
+set = { band = "good" }
+next = "reply"
+[nodes.fair]
+kind = "set"
+set = { band = "fair" }
+next = "reply"
+[nodes.moderate]
+kind = "set"
+set = { band = "moderate" }
+next = "reply"
+[nodes.poor]
+kind = "set"
+set = { band = "poor" }
+next = "reply"
+[nodes.very-poor]
+kind = "set"
+set = { band = "very poor" }
+next = "reply"
+[nodes.extremely-poor]
+kind = "set"
+set = { band = "extremely poor" }
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, {{ state.country }}: air quality {{ state.band }} (European AQI {{ state.aqi }}), PM2.5 {{ state.pm25 }} µg/m³, PM10 {{ state.pm10 }} µg/m³."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", aqi = "{{ state.aqi }}", band = "{{ state.band }}", pm2_5 = "{{ state.pm25 }}", pm10 = "{{ state.pm10 }}" }
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[nodes.no-reading]
+kind = "fail"
+reason = "no-reading"
+say = "Open-Meteo found {{ state.name }} but gave no air quality reading (status {{ state.aq.status }})."

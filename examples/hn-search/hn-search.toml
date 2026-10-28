@@ -1,0 +1,77 @@
+# Hacker News stories matching some words, through Algolia's HN Search
+# API: how many match, and the three best by its ranking.
+
+name = "hn-search"
+version = 1
+namespace = "pyrtan"
+description = "Hacker News stories about something, through HN Search: the top three matches."
+tags = ["news", "tech", "read-only"]
+license = "MIT"
+hosts = ["hn.algolia.com"]
+start = "search"
+
+[[triggers]]
+pattern = "search hacker news for {query}"
+[[triggers]]
+pattern = "hacker news stories about {query}"
+[[triggers]]
+pattern = "what does hacker news say about {query}"
+
+[inputs.query]
+type = "str"
+description = "Words to search story titles and text for"
+
+[nodes.search]
+kind = "observe"
+http = { method = "GET", url = "https://hn.algolia.com/api/v1/search?query={{ inputs.query | url }}&tags=story&hitsPerPage=3" }
+into = "resp"
+extract = [
+  { into = "total", json = "json.nbHits" },
+  { into = "first", json = "json.hits[0].title" },
+  { into = "first_url", json = "json.hits[0].url" },
+  { into = "hits", json = "json.hits" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "hits"
+branches = [
+  { when = { empty = true }, then = "nothing" },
+  { else = "each" },
+]
+
+[nodes.each]
+kind = "each"
+over = "hits"
+limit = 3
+start = "one"
+into = "stories"
+next = "reply"
+
+[nodes.one]
+kind = "done"
+output = { title = "{{ item.title }}", url = "{{ item.url }}", points = "{{ item.points }}", by = "{{ item.author }}", discussion = "https://news.ycombinator.com/item?id={{ item.objectID }}" }
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.total }} Hacker News stories match {{ inputs.query }}. Top: {{ state.first }} {{ state.first_url }}"
+output = { query = "{{ inputs.query }}", total = "{{ state.total }}", stories = "{{ state.stories }}" }
+
+[nodes.nothing]
+kind = "done"
+say = "No Hacker News stories match {{ inputs.query }}."
+output = { query = "{{ inputs.query }}", total = 0, stories = [] }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "HN Search answered {{ state.resp.status }}."
