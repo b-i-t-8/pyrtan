@@ -32,12 +32,12 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from . import conditions
-from .adapters import SOURCES, LocalAdapters, brief_result, what
+from .adapters import SOURCES, LocalAdapters, brief_result, good, what
 from .extract import extract
 from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
 from .template import MISSING, TemplateError, render, resolve
-from .trace import Step, Trace
+from .trace import Step, Trace, cond_words
 from .transport import EgressRefused, Transport, TransportError, UrllibTransport
 from .tree import Node, Tree, TreeError, row_condition
 
@@ -272,6 +272,7 @@ class Runner:
             _put(state, into, observed)
             source = observed
             summary = f"{label} -> {brief_result(source_name, observed)}"
+            at = _state_path(into)
         else:
             frm = node.get("from")
             source_val = resolve(_state_path(frm), scope)
@@ -282,6 +283,18 @@ class Runner:
             else:
                 source = {"value": source_val, "body": source_val if isinstance(source_val, str) else None}
             summary = f"from {frm}"
+            at = _state_path(frm)
+            label = f"from {frm}"
+        expect = node.get("expect")
+        if expect and good(source_name, source):
+            misses = [(path, resolve(path, source), cond) for path, cond in expect.items() if not conditions.holds(cond, resolve(path, source))]
+            if misses:
+                for path, value, cond in misses:
+                    trace.gap(node.id, f"{at}.{path}", _plain(value), expected=cond)
+                first, value, cond = misses[0]
+                trace.add(Step(node.id, node.kind, f"{summary}; drift: {first} = {_brief(value)}, expected {cond_words(cond)}", observed={p: _plain(v) for p, v, _ in misses}))
+                more = f" (and {len(misses) - 1} more)" if len(misses) > 1 else ""
+                return Outcome("error", tree.name, reason="drift", say=f"{node.id}: {label} answered, but not in the shape this tree expects: {first} = {_brief(value)}, expected {cond_words(cond)}{more}.", output={"drift": trace.gaps[-len(misses):]})
         extracted: dict[str, Any] = {}
         cache: dict[int, Any] = {}
         for entry in node.get("extract", []) or []:

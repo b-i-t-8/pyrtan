@@ -377,7 +377,15 @@ Five trees, all against real public APIs, all tested offline:
     that touches a tree); `pyrtan diff` runs every test both versions of
     a file carry on both, against the same recordings, and names each
     run whose answer or path moved (`cases.py`).
-14. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+14. **v0.28, built: the shape of a good answer.** An `observe` (or an
+    `act`) may say with `expect` what a good answer looks like, path by
+    path, in the conditions a `decide` uses. A good answer (2xx, exit 0, a
+    file that exists…) that misses it stops the run as `drift` and is
+    recorded as a gap on that node and path, so the federation's reports
+    tell a catalog tree's author which property changed. Section 8's
+    "when they stop, the trace will say exactly where" now holds for a
+    page that changed shape, not only for a value no branch covers.
+15. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

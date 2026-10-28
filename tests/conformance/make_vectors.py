@@ -54,6 +54,7 @@ CASES: list[dict] = [
     {"intent": "latest release of b-i-t-8/pyrtan"},
     {"intent": "latest b-i-t-8/nothing release"},
     {"intent": "latest release of b-i-t-8/busy"},
+    {"intent": "latest release of b-i-t-8/drifted"},  # a 200 in a shape the tree does not expect: drift
     {"intent": "weather in Paris"},
     {"tree": "hacker-news-item", "inputs": {"id": 101}},
     {"tree": "hacker-news", "inputs": {"count": 2}},

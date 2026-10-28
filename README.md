@@ -82,6 +82,7 @@ pattern = "^[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+$"
 kind = "observe"
 http = { method = "GET", url = "https://api.github.com/repos/{{ inputs.repo }}/releases/latest" }
 into = "resp"
+expect = { "json.tag_name" = { type = "str" } }     # a 200 without one is drift, not a release called "None"
 extract = [{ into = "tag", json = "json.tag_name" }, { into = "url", json = "json.html_url" }]
 next = "status"
 
@@ -811,7 +812,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.25.1. The core, the service, the hub, the command, the console (which
+0.28.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -825,6 +826,7 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
+the shape of a good answer (`expect`, and drift when a source changes),
 `pyrtan build` (the tree an unanswered sentence asks for, through a few
 questions with defaults by rules), a tree's own tests and the diff an edit
 makes to them (`pyrtan test`, `pyrtan diff`), and the chat lobby (strangers on the hub and the

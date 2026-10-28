@@ -2,7 +2,7 @@
 # optional token from the service's env and a decision on the status code.
 
 name = "github-release"
-version = 2
+version = 3
 namespace = "pyrtan"
 description = "The latest release of a GitHub repository."
 tags = ["github", "read-only"]
@@ -24,6 +24,10 @@ description = "owner/name"
 kind = "observe"
 http = { method = "GET", url = "https://api.github.com/repos/{{ inputs.repo }}/releases/latest", headers = { Accept = "application/vnd.github+json" } }
 into = "resp"
+# What a good (2xx) answer looks like. If GitHub ever answers 200 without
+# these, the run stops as "drift" and names the field, instead of saying
+# a release is called "None".
+expect = { "json.tag_name" = { type = "str" }, "json.html_url" = { startswith = "https://" } }
 extract = [
   { into = "tag", json = "json.tag_name" },
   { into = "name", json = "json.name" },
