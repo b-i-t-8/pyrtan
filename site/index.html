@@ -56,7 +56,7 @@ trace: weather
   geocode (observe): GET https://geocoding-api.open-meteo.com/v1/search?name=Oslo… -> 200 -> found
   found (decide) [exists True]: state.hit = {…} -> forecast
   forecast (observe): GET https://api.open-meteo.com/v1/forecast?latitude=59.91… -> 200 -> have-temp
-  sky (lookup) [between [51, 67]]: state.code = 61; sky=raining -> reply
+  sky (decide) [between [51, 67]]: state.code = 61 -> rain
   reply (done): Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.</pre>
 
   <h2>Why trees instead of a model</h2>

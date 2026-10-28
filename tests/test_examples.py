@@ -50,9 +50,7 @@ def test_weather_two_hops(runner):
     out = runner.run_intent("weather in Oslo")
     assert out.status == "done"
     assert out.say == "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h."
-    assert [s.chosen for s in out.trace.steps if s.kind == "decide"] == ["exists True", "type 'number'"]
-    sky = next(s for s in out.trace.steps if s.kind == "lookup")
-    assert (sky.node, sky.chosen, sky.observed, sky.next) == ("sky", "between [51, 67]", 61, "reply")
+    assert [s.chosen for s in out.trace.steps if s.kind == "decide"] == ["exists True", "type 'number'", "between [51, 67]"]
 
 
 def test_weather_units_input(runner):
