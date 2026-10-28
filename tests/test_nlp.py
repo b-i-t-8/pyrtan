@@ -36,6 +36,12 @@ def test_numbers(text, value):
     assert nlp.parse_number(text) == value
 
 
+def test_a_comma_between_digits_is_part_of_the_number():
+    assert nlp.clean("convert 1,000 EUR into JPY")[0] == "convert 1,000 EUR into JPY"
+    assert nlp.clean("hi, 1, 2, 3 go")[0] == "1 2 3 go"  # a comma and a space is a pause
+    assert nlp.clean("a,b and 1 ,2")[0] == "a b and 1 2"
+
+
 def test_number_words_only_touch_number_runs():
     assert nlp.words_to_digits("a dozen eggs and two hundred and five items") == ("12 eggs and 205 items", ["a dozen->12", "two hundred and five->205"])
     assert nlp.words_to_digits("set a reminder and one more")[0] == "set a reminder and 1 more"

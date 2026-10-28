@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.14 and v0.15, in four steps** (§10): identifiers, the three documents and `pyrtan id`; names (§6), resolved, pinned and served, with pyrtan.com's by pull request; the wire (§7): signed requests, grants on hubs, members as identities, and the console's device key; and, in v0.15, all of it from the console with no shell, a root's encrypted backup (§5a), and names any network runs in any git repository (§6a). What is left is in §10, *Later*. |
+| **Status** | **Built, v0.14 and v0.17, in four steps** (§10): identifiers, the three documents and `pyrtan id`; names (§6), resolved, pinned and served, with pyrtan.com's by pull request; the wire (§7): signed requests, grants on hubs, members as identities, and the console's device key; and, in v0.17, all of it from the console with no shell, a root's encrypted backup (§5a), and names any network runs in any git repository (§6a). What is left is in §10, *Later*. |
 | **Date** | 2026-10-27 |
 | **Decision** | A person (or a hub, or a device) is a public key. The identifier is that key, written so that anyone can check a signature from it without asking anybody. Domains, hubs and onion services are where an identity can be *reached* and what it can be *called*, never what it *is*: `pyr:<key>` is the identity, `pyr:<key>@host` says where to find it, and `alice@pyrtan.com` is a name a domain vouches for. pyrtan.com hands out names by pull request, as one name provider among any number. An identity grants nothing by itself: each hub keeps its own list of who may do what. |
-| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. `src/pyrtan/grants.py` (who may do what on a hub), `src/pyrtan/hub.py`, `federation.py` and `service.py` (signed requests, `/allow`, `/identity`, members as identities), `src/pyrtan/js/identity.js` and `page.py` (the console's key), `tests/test_grants.py`, `tests/conformance/identity.json` and `identity.cjs`, `tests/browser/console_identity.cjs`; since v0.15, the console's Identity and Access tabs, `pyrtan id backup|restore|release`, `pyrtan names init|gate`, `pyrtan hub --names`, `tests/test_console_identity.py` and `tests/browser/console_gui.cjs`. |
+| **Where** | Built: `src/pyrtan/identity.py` (the encoding, documents, signing and checking), `src/pyrtan/names.py` (resolving, pins, `/.well-known/pyrtan/`, pyrtan.com's gate), `pyrtan id` in `src/pyrtan/cli.py`, `site/names/`, `site/gate.py`, `tests/test_identity.py`, `tests/test_names.py`. `src/pyrtan/grants.py` (who may do what on a hub), `src/pyrtan/hub.py`, `federation.py` and `service.py` (signed requests, `/allow`, `/identity`, members as identities), `src/pyrtan/js/identity.js` and `page.py` (the console's key), `tests/test_grants.py`, `tests/conformance/identity.json` and `identity.cjs`, `tests/browser/console_identity.cjs`; since v0.17, the console's Identity and Access tabs, `pyrtan id backup|restore|release`, `pyrtan names init|gate`, `pyrtan hub --names`, `tests/test_console_identity.py` and `tests/browser/console_gui.cjs`. |
 
 ## 0. The brief
 
@@ -199,7 +199,7 @@ shell. An unpaired key signs as itself, so a hub can also grant the key
 directly. A QR code of the code and of the note, and picking the note up
 from the root's hub instead of pasting it, are later (§10).
 
-## 5a. A root in a browser, and its backup (v0.15)
+## 5a. A root in a browser, and its backup (v0.17)
 
 The root was meant to live somewhere quiet: a file on one machine, or
 offline. That asks for a shell, and a shell turns people away. So the
@@ -326,7 +326,7 @@ wellknown DIR --domain D --out SITE` builds them from a directory of
 claims; nothing about them is pyrtan.com's business. An operator can serve names from their own
 hub. An onion service can serve names to anyone who fetches over Tor.
 
-## 6a. Any network's names, in any git repository (v0.15)
+## 6a. Any network's names, in any git repository (v0.17)
 
 pyrtan.com is one name provider. A network can be another: its names are
 a git repository on any host, served by any static host or by its own
@@ -556,7 +556,7 @@ hub that checks Alice with a shared secret can also forge Alice.
   the console in Chromium end to end (a key, a note, a reload, an answer
   with no token, a trusted member). This is the step that replaces
   handing out the token.
-- **Fourth, built (v0.15): no shell, backups, any network's names.**
+- **Fourth, built (v0.17): no shell, backups, any network's names.**
   `identity.py` seals and opens backups, and signs releases and
   handovers; `names.py` judges names owned by their keys, writes a names
   repository for GitHub, GitLab or anything, and a hub serves one;

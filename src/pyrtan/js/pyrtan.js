@@ -122,6 +122,7 @@
     return MISSING;
   }
   const pyQuote = (s) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+  const asText = (v) => (Array.isArray(v) || isObj(v) ? pyJson(v) : pyStr(v));  // a value as it reads inside a sentence
   const pyStr = (v) => (typeof v === "string" ? v : isBool(v) ? (v ? "True" : "False") : v === null || v === undefined ? "None" : Array.isArray(v) || isObj(v) ? pyrepr(v) : String(v));
   const FILTERS = {
     url: (v) => pyQuote(pyStr(v)),
@@ -135,6 +136,7 @@
     first: (v) => ((Array.isArray(v) || typeof v === "string") && v.length ? v[0] : MISSING),
     last: (v) => ((Array.isArray(v) || typeof v === "string") && v.length ? v[v.length - 1] : MISSING),
     length: (v) => (Array.isArray(v) || typeof v === "string" ? v.length : isObj(v) ? Object.keys(v).length : MISSING),
+    join: (v) => (Array.isArray(v) ? v.map(asText).join(", ") : asText(v)),
     title: (v) => pyStr(v).toLowerCase().replace(/(^|[^a-z0-9'])([a-z])/gi, (m, pre, c) => pre + c.toUpperCase()).replace(/'([a-z])/gi, (m, c) => "'" + c.toUpperCase()),
   };
   function renderValue(expr, scope) {
@@ -159,8 +161,7 @@
       return template.replace(PLACEHOLDER, (m, expr) => {
         const value = renderValue(expr, scope);
         if (isMissing(value)) { if (strict) throw new TemplateError(`${m} resolves to nothing`); return ""; }
-        if (Array.isArray(value) || isObj(value)) return pyJson(value);
-        return pyStr(value);
+        return asText(value);
       });
     }
     if (Array.isArray(template)) return template.map((t) => render(t, scope, strict));
@@ -587,7 +588,8 @@
   }
   function trim(text) {
     text = text.replace(/^[^\p{L}\p{N}]+|[\s?!.,;:]+$/gu, "");
-    text = text.replace(/\s*[,;!?]+\s*/g, " ");
+    // A comma between digits (1,000) is part of a number and stays.
+    text = text.replace(/\s*[,;!?]+\s*/g, (m, at, s) => (m === "," && /[0-9]/.test(s[at - 1] || "") && /[0-9]/.test(s[at + 1] || "") ? m : " "));
     text = text.replace(/(?<=[A-Za-z])\.(?=\s|$)/g, "");
     return text.replace(/\s+/gu, " ").trim();
   }
