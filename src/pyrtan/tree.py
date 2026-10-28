@@ -174,6 +174,7 @@ class Tree:
     commands: list[str] = field(default_factory=list)   # what ``shell`` nodes may run
     devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
+    tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
 
     def node(self, node_id: str) -> Node:
         try:
@@ -325,6 +326,9 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     watches = raw.get("watches", [])
     if not isinstance(watches, list) or not all(isinstance(w, dict) for w in watches):
         raise TreeError(f"{name}: 'watches' is a list of tables ([[watches]])")
+    tests = raw.get("tests", [])
+    if not isinstance(tests, list) or not all(isinstance(t, dict) for t in tests):
+        raise TreeError(f"{name}: 'tests' is a list of tables ([[tests]])")
 
     try:
         language = Language.from_raw(raw.get("language"), "language")
@@ -385,7 +389,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists, tests=tests)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))
@@ -619,6 +623,9 @@ def check(tree: Tree) -> list[Problem]:
     for i, w in enumerate(tree.watches):
         used.update(_check_watch(tree, i, w, err, warn))
 
+    for i, t in enumerate(tree.tests):
+        _check_test(tree, i, t, err)
+
     for list_name, sources in _NEEDS.items():
         have = getattr(tree, list_name)
         using = sorted(used & sources)
@@ -719,6 +726,64 @@ def _check_watch(tree: Tree, i: int, w: dict[str, Any], err, warn) -> set[str]:
     if w.get("name") is not None and not isinstance(w["name"], str):
         err(where, "'name' is a string")
     return used
+
+
+TEST_KEYS = {"name", "sentence", "inputs", "fixture", "now", "env", "answers", "expect"}
+EXPECT_KEYS = ("status", "say", "say_contains", "reason", "output", "path")
+STATUSES = ("done", "failed", "asked", "error")
+
+
+def _check_test(tree: Tree, i: int, t: dict[str, Any], err) -> None:
+    """A test is checked for shape here; ``pyrtan test`` runs it."""
+    where = f"tests[{i}]"
+    unknown = sorted(set(t) - TEST_KEYS)
+    if unknown:
+        err(where, f"unknown keys {unknown}; a test has {', '.join(sorted(TEST_KEYS))}")
+    if ("sentence" in t) == ("inputs" in t):
+        err(where, "a test needs exactly one of 'sentence' (read it, then run what it reads to) or 'inputs' (run this tree with them)")
+    if "sentence" in t:
+        if not isinstance(t["sentence"], str) or not t["sentence"].strip():
+            err(where, "'sentence' is the text a person would send")
+        elif not tree.triggers:
+            err(where, "this tree has no triggers, so no sentence reads to it; give 'inputs' instead")
+    if "inputs" in t:
+        if not isinstance(t["inputs"], dict):
+            err(where, "'inputs' is a table of input = value")
+        else:
+            for k in t["inputs"]:
+                if k not in tree.inputs:
+                    err(where, f"input {k!r} is not declared")
+    for key in ("name", "fixture"):
+        if key in t and (not isinstance(t[key], str) or not t[key]):
+            err(where, f"'{key}' is a string")
+    if "now" in t:
+        from .cases import parse_now
+
+        try:
+            parse_now(t["now"])
+        except (TypeError, ValueError):
+            err(where, f"'now' is a date-time such as \"2026-10-25T12:00:00Z\", got {t['now']!r}")
+    if "env" in t and (not isinstance(t["env"], dict) or not all(isinstance(v, str) for v in t["env"].values())):
+        err(where, "'env' is a table of name = text, what {{ env.NAME }} reads")
+    if "answers" in t and not isinstance(t["answers"], list):
+        err(where, "'answers' is a list: what each ask is answered, in order")
+    expect = t.get("expect")
+    if not isinstance(expect, dict) or not expect:
+        err(where, f"a test needs 'expect': a table of what the run must come to ({', '.join(EXPECT_KEYS)})")
+        return
+    unknown = sorted(set(expect) - set(EXPECT_KEYS))
+    if unknown:
+        err(f"{where}.expect", f"unknown keys {unknown}; one of {', '.join(EXPECT_KEYS)}")
+    if "status" in expect and expect["status"] not in STATUSES:
+        err(f"{where}.expect", f"status is one of {', '.join(STATUSES)}, got {expect['status']!r}")
+    if "path" in expect:
+        steps = expect["path"]
+        if not isinstance(steps, list) or not all(isinstance(n, str) for n in steps):
+            err(f"{where}.expect", "'path' is the list of node ids the run walks, in order")
+        else:
+            for n in steps:
+                if n not in tree.nodes:
+                    err(f"{where}.expect", f"path names node {n!r}, which does not exist")
 
 
 def _literal(value: Any) -> str | None:

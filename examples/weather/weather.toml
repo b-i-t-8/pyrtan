@@ -3,7 +3,7 @@
 # own decision so a failure says which hop failed.
 
 name = "weather"
-version = 3
+version = 4
 namespace = "pyrtan"
 description = "Current weather for a place, from Open-Meteo."
 tags = ["weather", "read-only"]
@@ -30,6 +30,27 @@ description = "A town or city name"
 type = "str"
 default = "celsius"
 one_of = ["celsius", "fahrenheit"]
+
+# The tree's own tests: pyrtan test runs them against the recording
+# beside this file (pyrtan run --record writes one), and pyrtan diff runs
+# them before and after an edit, to say which answers the edit changed.
+[[tests]]
+name = "rain in Oslo"
+sentence = "weather in Oslo"
+fixture = "weather.fixture.json"
+expect = { status = "done", path = ["geocode", "found", "forecast", "have-temp", "sky", "reply"], say = "Oslo, Norway: 4.2°C, raining, humidity 80%, wind 12.3 km/h.", output = { sky = "raining", unit = "°C" } }
+
+[[tests]]
+name = "clear, in fahrenheit"
+inputs = { place = "Oslo", units = "fahrenheit" }
+fixture = "weather.fixture.json"
+expect = { status = "done", output = { temperature = 39.6, unit = "°F", sky = "clear" } }
+
+[[tests]]
+name = "a place that is not there"
+sentence = "how cold is it in Nowhereville"
+fixture = "weather.fixture.json"
+expect = { status = "failed", reason = "unknown-place", path = ["geocode", "found", "unknown-place"] }
 
 [nodes.geocode]
 kind = "observe"

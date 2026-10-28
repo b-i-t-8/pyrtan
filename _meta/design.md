@@ -117,12 +117,14 @@ sentence ──► nlp.py ──► intent.py ──► registry.py ──► ru
                                              └─ transport.py  urllib | recorded | recording
 
 grow.py     an unanswered sentence -> a proposed tree, a scaffold, a log
+cases.py    a tree's own [[tests]] against recordings; two versions diffed over them
 service.py  one process, one registry, HTTP endpoints, hot reload, gaps,
             unanswered
 hub.py      peers, link up/stale/down, routing by capability, forwarding
 federation.py  actor, inbox, Follow/Accept/Undo/Announce, signed; one hop
-cli.py      check · list · run · match · ask · serve · hub · follow · unfollow ·
-            peers · gaps · unanswered · new · search · pull · index · console
+cli.py      check · list · run · test · diff · match · ask · serve · hub · follow ·
+            unfollow · peers · gaps · unanswered · new · search · pull · index ·
+            console
 ```
 
 **Reading a sentence** (`nlp.py`, `intent.py`) is rules all the way down,
@@ -367,7 +369,15 @@ Five trees, all against real public APIs, all tested offline:
     with questions as well as a proposal: `pyrtan build --from "…"`, the
     same questions as `POST /build` and the console's Unanswered tab, each
     with a default by rules, and a file that passes `check` (`build.py`).
-13. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+13. **v0.23, built: a tree's own tests, and what an edit changes.** A tree
+    carries `[[tests]]`: a sentence or inputs, a recording beside the
+    file, and the status, answer, output and path the run must come to.
+    Invariant 1 makes the path a result worth asserting. `pyrtan test`
+    runs them (and the catalog tests job does, for every pull request
+    that touches a tree); `pyrtan diff` runs every test both versions of
+    a file carry on both, against the same recordings, and names each
+    run whose answer or path moved (`cases.py`).
+14. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

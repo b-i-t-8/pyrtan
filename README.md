@@ -164,6 +164,8 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
+| `pyrtan test DIR` | Runs each tree's own `[[tests]]` against their recordings: a sentence or inputs, and the status, answer, output and path the run must come to. Exit 1 if any misses. |
+| `pyrtan diff FILE` | What an edit changes: every test the file and its last committed version carry (`--against REF`, or `--old FILE`), run on both against the same recordings; names each run whose answer or path moved. Exit 1 if any did. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`, `/suggestions`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
@@ -796,7 +798,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.22.1. The core, the service, the hub, the command, the console (which
+0.23.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -811,7 +813,8 @@ behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
 `pyrtan build` (the tree an unanswered sentence asks for, through a few
-questions with defaults by rules), and the chat lobby (strangers on the hub and the
+questions with defaults by rules), a tree's own tests and the diff an edit
+makes to them (`pyrtan test`, `pyrtan diff`), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
