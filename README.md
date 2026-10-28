@@ -162,7 +162,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
-| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only). |
+| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network (built in), or the one an invite (`NAME:SECRET@HUB`) names. |
@@ -525,7 +525,13 @@ seconds without news.
 its hub follows with a signed `Meet`; the lines travel as `Say` and the
 end as `Part`, typing as `Typing`, hub to hub, signed with the pair's
 secret; the outbox logs a `Say` without its text and leaves `Typing` out. A hub answers a `Meet` only from a
-hub that follows it, and never passes one on.
+hub that follows it, and never passes one on. Following is trust (it
+routes sentences to the other hub's trees), so to reach more strangers
+without it, start an open lobby with `--chat-reach N`: the hub keeps up to
+N *chat links* with other open lobbies it hears of (on the LAN with
+`--lan`, or in its directory), for chat and nothing else; nothing is
+routed, announced or kept over a link, and a hub takes one only when its
+operator also gave `--chat-reach`.
 
 The lobby follows the hub's token: with one, only callers who have it
 chat, or a key the hub grants `chat` (a bot runs trees, so a lobby must
@@ -659,7 +665,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.16.0. The core, the service, the hub, the command, the console, the
+0.17.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; the default one is built
@@ -670,7 +676,7 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), and the chat lobby (strangers on the hub and the
-hubs it follows, bots made of trees, a typing indicator, and lobbies open to the public) are built and tested; a swarm can require a
+hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
 name claims, names at pyrtan.com and pins, grants on hubs, the console's
