@@ -34,7 +34,7 @@ def test_javascript_runtime_agrees_with_python():
     run = subprocess.run(["node", str(ROOT / "tests" / "conformance" / "run.cjs")], capture_output=True, text=True, cwd=str(ROOT))
     assert run.returncode == 0, run.stdout + run.stderr
     v = json.loads(VECTORS.read_text())
-    total = sum(len(v[k]) for k in ("runs", "readings", "nlp", "proposals", "hub"))
+    total = sum(len(v[k]) for k in ("runs", "readings", "nlp", "proposals", "hub", "drafts"))
     assert f"{total}/{total} agree" in run.stdout
 
 

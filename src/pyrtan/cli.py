@@ -124,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V")
     p.add_argument("--gaps", metavar="FILE", help="keep gaps in this file (JSON lines) so they survive a restart")
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file (JSON lines) so they survive a restart (default $PYRTAN_UNANSWERED)")
+    p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file (JSON lines) across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="'public' refuses private, loopback and link-local addresses (default $PYRTAN_EGRESS or any)")
     _access_args(p)
@@ -149,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from", dest="source", metavar="FILE", help="read gaps from a file: a --gaps JSON-lines file, a /gaps answer, or a reports.json")
     p.add_argument("--reports", nargs="?", const="", metavar="HUB_OR_FILE", help="read the federation's gap reports for your catalog trees (from a hub's URL, a baked reports.json, or pyrtan.com)")
     p.add_argument("--tree", action="append", default=[], help="only gaps of this tree (repeatable)")
+    p.add_argument("--suggestions", nargs="?", const="", metavar="HUB_OR_FILE", help="draft what agents suggested instead of gaps: from a hub's or service's URL (default --at), or a file the console saved")
+    p.add_argument("--dir", metavar="DIR", help="with --suggestions, where a suggested new tree is written (default: the first --trees directory)")
     p.add_argument("--apply", action="store_true", help="write each draft into its tree file (the file must load clean afterwards)")
     p.add_argument("--json", action="store_true")
     _token_arg(p, "the token the service or hub requires, if any")
@@ -162,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value the hub's own trees may read as {{ env.K }}")
     p.add_argument("--gaps", metavar="FILE", help="keep the hub's own trees' gaps in this file")
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file across restarts (default $PYRTAN_UNANSWERED)")
+    p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the hub's own trees' [[watches]] (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees: 'public' refuses private addresses")
     p.add_argument("--peer", action="append", default=[], help="a service URL to start with (repeatable; services may also register themselves)")
@@ -255,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--scaffold", metavar="DIR", help="write a tree file for each sentence into DIR (existing files are kept)")
     _token_arg(p, "the token the service or hub requires, if any")
 
+    p = sub.add_parser("suggestions", help="what agents beside the swarm suggested: a branch's meaning, a trigger, a tree")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="a running service or hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--json", action="store_true")
+    _token_arg(p, "the token the service or hub requires, if any")
+
     p = sub.add_parser("new", help="scaffold a tree file")
     p.add_argument("name", nargs="?", help="the tree's name (derived from --from when omitted)")
     p.add_argument("--from", dest="sentence", metavar="TEXT", help="the sentence the tree should answer; numbers and hosts in it become slots")
@@ -346,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     commands = {
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new,
-        "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
+        "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
@@ -700,7 +709,7 @@ def _report(outcome: Outcome, as_json: bool, with_trace: bool) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -784,6 +793,8 @@ def cmd_watches(args: argparse.Namespace) -> int:
 def cmd_grow(args: argparse.Namespace) -> int:
     from .grow import apply_draft, draft_branch
 
+    if args.suggestions is not None:
+        return _grow_suggestions(args)
     gaps: list[dict[str, Any]] = []
     if args.at:
         try:
@@ -874,6 +885,143 @@ def cmd_grow(args: argparse.Namespace) -> int:
     return worst
 
 
+def _load_suggestions(args: argparse.Namespace, source: str) -> list[dict[str, Any]] | None:
+    """Suggestions from a running service or hub, or a file: a /suggestions
+    answer, a list, or JSON lines."""
+    if source.startswith(("http://", "https://")):
+        try:
+            status, body = _call(args, "GET", f"{source.rstrip('/')}/suggestions")
+        except Exception as e:
+            print(f"pyrtan: {source}: {e}", file=sys.stderr)
+            return None
+        if status != 200 or not isinstance(body, dict):
+            print(f"pyrtan: {source} answered {status}" + (": pass --token, or --sign as an identity it grants operate" if status == 401 else ""), file=sys.stderr)
+            return None
+        return [s for s in body.get("suggestions", []) if isinstance(s, dict)]
+    text = Path(source).read_text(encoding="utf-8")
+    try:
+        data = json.loads(text)
+        rows = data.get("suggestions", [data]) if isinstance(data, dict) else data
+    except json.JSONDecodeError:
+        rows = [json.loads(l) for l in text.splitlines() if l.strip()]
+    return [s for s in rows if isinstance(s, dict)]
+
+
+def cmd_suggestions(args: argparse.Namespace) -> int:
+    rows = _load_suggestions(args, args.at)
+    if rows is None:
+        return 3
+    if args.json:
+        print(json.dumps({"suggestions": rows}, indent=2, ensure_ascii=False, default=str))
+        return 0
+    if not rows:
+        print("no suggestions: no agent has reported to this Pyrtan yet")
+        return 0
+    for s in rows:
+        by = s.get("by") or {}
+        who = by.get("agent", "an agent") + (f" ({by['model']})" if by.get("model") else "")
+        count = f"  x{s.get('count', 1)}"
+        if s.get("kind") == "branch":
+            m = s.get("meaning") or {}
+            print(f"branch  {s.get('tree')}.{s.get('node')}: {s.get('on')} = {json.dumps(s.get('observed'), ensure_ascii=False, default=str)} means {m.get('kind')}: {m.get('say')!r}{count}")
+        elif s.get("kind") == "trigger":
+            print(f"trigger {s.get('tree')}: {s.get('pattern')!r}, covering {', '.join(repr(c) for c in s.get('covers', []))}{count}")
+        else:
+            print(f"tree    {s.get('text')!r}: {s.get('description') or 'no description'}{count}")
+        print(f"        by {who}" + (f": {s['why']}" if s.get("why") else ""))
+    print("\nnow: pyrtan grow --suggestions " + args.at + " --trees DIR  (add --apply to write them)")
+    return 0
+
+
+def _grow_suggestions(args: argparse.Namespace) -> int:
+    """``pyrtan grow --suggestions``: each suggestion drafted by the rules
+    and checked, nothing trusted because an agent said it."""
+    from .grow import apply_draft
+    from . import suggestions as sg
+
+    say = (lambda *a, **k: None) if args.json else print
+    source = args.suggestions or args.at
+    if not source:
+        print("pyrtan grow --suggestions: say where they are: a hub's URL, a file, or --at URL", file=sys.stderr)
+        return 2
+    rows = _load_suggestions(args, source)
+    if rows is None:
+        return 3
+    if args.tree:
+        rows = [s for s in rows if s.get("tree") in args.tree]  # a new tree has none, so --tree leaves it out
+    reg = Registry.from_paths(_paths(args.trees))
+    for path, err in reg.errors.items():
+        print(f"pyrtan: {path}: {err}", file=sys.stderr)
+    out_dir = Path(args.dir) if args.dir else next((Path(t) for t in _paths(args.trees) if Path(t).is_dir()), Path("trees"))
+    worst, done, report = 0, 0, []
+    for s in rows:
+        why = sg.problem(s)
+        label = f"{s.get('kind')} {s.get('tree') or s.get('text')!r}"
+        if why:
+            say(f"refused {label}: {why}")
+            report.append({"suggestion": s, "refused": why})
+            continue
+        kind = s["kind"]
+        if kind == "tree":
+            name, text = sg.tree_text(s)
+            if reg.get(name):
+                say(f"skipped {label}: a tree named {name} is here already")
+                continue
+            say(f"\n# a new tree, {out_dir / (name + '.toml')}:\n{text}")
+            if args.apply:
+                try:
+                    path = sg.write_tree(out_dir, s)
+                    say(f"# written: {path}; now say what it observes and how it decides, then: pyrtan check {path}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+            report.append({"suggestion": s, "file": str(out_dir / (name + ".toml")), "text": text})
+            continue
+        tree = reg.get(s["tree"])
+        if tree is None:
+            say(f"skipped {label}: not among the trees here")
+            continue
+        if kind == "branch":
+            d = sg.draft(tree, s)
+            if d is None:
+                say(f"skipped {label}.{s.get('node')}: {s.get('on')} = {json.dumps(s.get('observed'), default=str)} is covered already, or names no decide node")
+                continue
+            say(f"\n{d.render()}")
+            say(f"# why: {d.reason}")
+            report.append({"suggestion": s, "file": str(tree.source), "draft": d.to_dict()})
+            if args.apply:
+                try:
+                    apply_draft(tree.source, d)
+                    say(f"# written into {tree.source}; read it, then: pyrtan check {tree.source}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+        else:
+            say(f"\n# {tree.name}: add after its last [[triggers]]:\n{sg.trigger_text(s)}")
+            report.append({"suggestion": s, "file": str(tree.source), "text": sg.trigger_text(s)})
+            if args.apply:
+                try:
+                    sg.apply_trigger(tree.source, tree, s, reg)
+                    say(f"# written into {tree.source}")
+                    done += 1
+                except TreeError as e:
+                    print(f"# {e}", file=sys.stderr)
+                    worst = 1
+        reg.reload()
+    if args.json:
+        print(json.dumps({"drafts": report}, indent=2, ensure_ascii=False, default=str))
+    if not rows:
+        say("nothing to draft: no suggestions")
+        return 1
+    if not args.apply:
+        say("\n# nothing written; --apply puts each into its file, checked, for you to read")
+    elif done:
+        say(f"\n# {done} written; bump each tree's version when you keep it")
+    return worst
+
+
 def _from_report(r: dict[str, Any]) -> dict[str, Any]:
     """A federation report (id namespace/name@version) as a gap (tree name)."""
     if "tree" in r:
@@ -895,7 +1043,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
             federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan or args.chat_reach > 0, advertise=args.advertise, federation_secret=args.federation_secret,
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
             trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
+            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
             allow=args.allow, grants=args.grants,
         )
     except IdentityError as e:
