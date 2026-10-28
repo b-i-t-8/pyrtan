@@ -24,11 +24,18 @@ bearer; the hub must allow the console's origin with ``--cors``.
 Forgetting the hub makes the browser its own hub again. No external
 assets, no build step.
 
-On a hub of 0.14 or later its Identity tab makes a key for this browser
-(``identity.js``, inlined: WebCrypto's Ed25519, non-extractable, kept in
-IndexedDB) and takes the device note ``pyrtan id device add`` prints;
-from then on it signs what it sends the hub with that key, and a member
-joined from here follows as it. A page served over plain ``http://`` to
+Its Identity tab does all of ``pyrtan id`` without a shell
+(``identity.js``, inlined: WebCrypto's Ed25519, PBKDF2 and AES-GCM). It
+makes your identity in this browser, hands you its backup at once
+(encrypted with your passphrase, to download or keep in your own private
+repository; the page then holds the key non-extractable), restores one,
+claims a name (pyrtan.com's, through GitHub's own new-file page, which
+opens the pull request from your account; or any network's names
+repository), and adds and revokes devices. A browser can instead be a
+device of an identity held elsewhere: it makes its own key and takes the
+note its root signs. On a hub of 0.14 or later the key signs what the
+console sends, and a member joined from here follows as it; the Access
+tab keeps the hub's grants. A page served over plain ``http://`` to
 anything but localhost has no WebCrypto, holds no key, and says so.
 """
 
@@ -78,6 +85,10 @@ PAGE = r"""<!doctype html>
   p.lede { color:var(--mute); margin:0 0 16px }
   form.row { display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap }
   form.row input[type=text], form.row input[type=url], form.row input[type=password] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  [hidden] { display:none !important }  /* even where an inline style sets display */
+  /* The identity and access tabs lay out their fields in div.row, inside forms and out. */
+  div.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  #tab-identity input[type=text], #tab-identity input[type=password], #tab-identity input[type=file], #tab-access input[type=text] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   button { font:inherit; padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-fg); cursor:pointer }
   button.quiet { background:var(--soft); color:var(--fg) }
   button:disabled { opacity:.6; cursor:wait }
@@ -146,6 +157,7 @@ PAGE = r"""<!doctype html>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
     <a href="#identity" data-tab="identity" id="identity-tab" hidden>Identity</a>
+    <a href="#access" data-tab="access" id="access-tab" hidden>Access</a>
     <a href="#chat" data-tab="chat" id="chat-tab" hidden>Chat</a>
     <a href="#api" data-tab="api">API</a>
   </nav>
@@ -239,25 +251,97 @@ PAGE = r"""<!doctype html>
   </section>
 
   <section id="tab-identity" hidden>
-    <h2>This browser's key</h2>
-    <p class="mute" style="font-size:14px;margin-top:0">A key made here, kept here (the browser holds it and will not hand it over, not even to this page), and used to sign what this console sends the hub. Pair it with your identity and the hub gives it what it grants you, capped by what the note lets this browser do; or grant the key itself, <code>pyrtan allow pyr:… --may chat</code>. A member joined from here follows as this key.</p>
-    <div class="card">
-      <div id="ident-none" class="notice" hidden>This page cannot hold a key: it needs a secure page (https, or localhost) in a browser with Ed25519 in WebCrypto. It still asks, chats and joins, without a key: with the hub's token, or as an anonymous member.</div>
-      <div id="ident-off" hidden>
-        <button type="button" id="ident-make">Make a key for this browser</button>
+    <h2>Your identity</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">An identity is a key, made here and held by this browser, which will not hand it over, not even to this page. No account anywhere: hubs grant your key what they choose, a name like <code>you@pyrtan.com</code> points at it, and your other devices speak for it with a note it signs. Lose the key and its backup and nobody can give it back.</p>
+    <div id="ident-none" class="notice" hidden>This page cannot hold a key: it needs a secure page (https, or localhost) in a browser with Ed25519 in WebCrypto. It still asks, chats and joins, without a key: with the hub's token, or as an anonymous member.</div>
+
+    <div class="card" id="ident-start" hidden>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="ident-new">Make my identity</button>
+        <button type="button" class="quiet" id="ident-restore-open">Restore from a backup</button>
+        <button type="button" class="quiet" id="ident-make">Use this browser as a device of an identity I have</button>
       </div>
-      <div id="ident-on" hidden>
-        <div><span class="status done">key</span> <code id="ident-id"></code></div>
-        <div class="mute" style="font-size:14px;margin:6px 0" id="ident-paired"></div>
-        <form id="ident-note-form" style="margin:10px 0">
-          <div class="mute" style="font-size:14px;margin-bottom:6px">On the machine with your identity: <code id="ident-howto"></code>, then paste what it prints here.</div>
-          <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
-        </form>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-          <label><input type="checkbox" id="ident-sign"> sign requests to this hub with it</label>
-          <button type="button" class="quiet" id="ident-forget">Forget this key</button>
+      <form id="ident-new-form" style="margin-top:12px" hidden>
+        <div class="mute" style="font-size:14px;margin-bottom:6px">Your key is made here, then sealed with a passphrase into a backup you keep. Choose a long sentence you will remember: nobody can reset it, and the backup is only as strong as it is.</div>
+        <div class="row"><input type="password" id="ident-pass" placeholder="passphrase (a long sentence)" autocomplete="new-password"><input type="password" id="ident-pass2" placeholder="the same again" autocomplete="new-password"><button type="submit">Make it</button></div>
+      </form>
+      <form id="ident-restore-form" style="margin-top:12px" hidden>
+        <div class="mute" style="font-size:14px;margin-bottom:6px">The backup file this console or <code>pyrtan id backup</code> wrote, and its passphrase.</div>
+        <div class="row"><input type="file" id="ident-file" accept="application/json,.json"><input type="password" id="ident-restore-pass" placeholder="passphrase" autocomplete="current-password"><button type="submit">Restore</button></div>
+      </form>
+    </div>
+
+    <div class="card" id="ident-root" hidden>
+      <div><span class="status done">identity</span> <code id="root-id"></code></div>
+      <div id="root-backup-state" style="margin:8px 0"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="root-download">Download my backup</button>
+        <input type="text" id="root-gh" placeholder="your GitHub login" autocomplete="off" style="max-width:220px">
+        <button type="button" class="quiet" id="root-gh-go">Keep it in a private GitHub repository</button>
+      </div>
+      <div id="root-gh-out" class="mute" style="font-size:14px;margin-top:8px"></div>
+    </div>
+
+    <div class="card" id="ident-claim" hidden>
+      <h2 style="font-size:15px;margin:0 0 8px">Claim a name</h2>
+      <form id="claim-form">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;font-size:14px">
+          <label><input type="radio" name="claim-where" value="pyrtan" checked> at pyrtan.com (your GitHub login)</label>
+          <label><input type="radio" name="claim-where" value="network"> at another network</label>
         </div>
+        <div class="row" id="claim-pyrtan"><input type="text" id="claim-login" placeholder="your GitHub login" autocomplete="off"><button type="submit">Make my claim</button></div>
+        <div id="claim-network" hidden>
+          <div class="row"><input type="text" id="claim-name" placeholder="name@network-domain, e.g. alice@names.example.org" autocomplete="off"></div>
+          <div class="row" style="margin-top:6px"><input type="text" id="claim-repo" placeholder="its names repository, e.g. https://github.com/example/names" autocomplete="off"><input type="text" id="claim-branch" value="main" style="max-width:120px" autocomplete="off"><button type="submit">Make my claim</button></div>
+        </div>
+      </form>
+      <div id="claim-out"></div>
+    </div>
+
+    <div class="card" id="ident-devices" hidden>
+      <h2 style="font-size:15px;margin:0 0 8px">Devices that speak for you</h2>
+      <table id="dev-table"><thead><tr><th>Device</th><th>May</th><th>Until</th><th></th></tr></thead><tbody></tbody></table>
+      <form id="dev-form" style="margin-top:10px">
+        <div class="mute" style="font-size:14px;margin-bottom:6px">On the other device, open this console's Identity tab, choose <em>Use this browser as a device</em>, and paste its code here.</div>
+        <div class="row"><input type="text" id="dev-code" placeholder="its code, pyr:…" autocomplete="off"><input type="text" id="dev-label" placeholder="what to call it: phone" style="max-width:200px" autocomplete="off"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;font-size:14px;align-items:center" id="dev-may"><span class="mute">it may</span>
+          <label><input type="checkbox" value="ask" checked> ask</label><label><input type="checkbox" value="chat" checked> chat</label><label><input type="checkbox" value="run"> run trees</label><label><input type="checkbox" value="operate"> operate hubs</label>
+          <button type="submit">Sign its note</button></div>
+      </form>
+      <div id="dev-out"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="quiet" id="doc-push" hidden>Give this hub my newest document</button>
+        <button type="button" class="quiet" id="doc-download">Download my identity document</button>
       </div>
+    </div>
+
+    <div class="card" id="ident-on" hidden>
+      <div><span class="status done">device</span> <code id="ident-id"></code> <button type="button" class="quiet" id="ident-copy">Copy its code</button></div>
+      <div class="mute" style="font-size:14px;margin:6px 0" id="ident-paired"></div>
+      <form id="ident-note-form" style="margin:10px 0">
+        <div class="mute" style="font-size:14px;margin-bottom:6px">Give this code to the browser that holds your identity (its Identity tab, <em>Devices</em>), or run <code id="ident-howto"></code>; then paste the note it gives back here.</div>
+        <div class="row"><input type="text" id="ident-note" placeholder='{"pyrtan-device": 1, "root": "pyr:…", ...}' autocomplete="off"><button type="submit">Use this note</button></div>
+      </form>
+    </div>
+
+    <div id="ident-common" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px" hidden>
+      <label><input type="checkbox" id="ident-sign"> sign requests to the hub with this key</label>
+      <button type="button" class="quiet" id="ident-forget">Forget it on this browser</button>
+    </div>
+  </section>
+
+  <section id="tab-access" hidden>
+    <h2>Who may do what here</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">The identities this hub grants anything, instead of handing out its token: <em>ask</em> (the trees), <em>chat</em> (the lobby, bots included), <em>run</em> (be a trusted member, running its trees) and <em>operate</em> (everything the token allows). A device gets what its identity is granted, capped by its note. A name is looked up once and pinned.</p>
+    <div id="access-note" class="notice" hidden></div>
+    <div class="card">
+      <table id="grant-table"><thead><tr><th>Who</th><th>May</th><th>Document</th><th></th></tr></thead><tbody></tbody></table>
+      <form id="grant-form" style="margin-top:10px">
+        <div class="row"><input type="text" id="grant-who" placeholder="name@domain or pyr:…" autocomplete="off"><button type="submit">Grant</button></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:14px" id="grant-may">
+          <label><input type="checkbox" value="ask" checked> ask</label><label><input type="checkbox" value="chat"> chat</label><label><input type="checkbox" value="run"> run</label><label><input type="checkbox" value="operate"> operate</label>
+        </div>
+      </form>
     </div>
   </section>
 
@@ -349,6 +433,17 @@ function problem(msg, bad) { $("#problem").innerHTML = msg ? `<div class="notice
 // This browser's key: made and held by crypto.subtle (non-extractable, in
 // IndexedDB), paired with a root by a device note, used to sign requests
 // for the hub's audience (named at /api). See identity.js.
+// pyrtan.com's names: files in this repository, added by pull request (site/names/README.md).
+const PYRTAN_NAMES = {repo: "b-i-t-8/pyrtan", branch: "main", dir: "site/names", domain: "pyrtan.com"};
+const githubNewFile = (repo, branch, dir, filename, text) => `https://github.com/${repo}/new/${encodeURIComponent(branch)}${dir ? "/" + dir : ""}?filename=${encodeURIComponent(filename)}&value=${encodeURIComponent(text)}`;
+const githubRepo = (url) => { const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(String(url || "").trim()); return m ? m[1] : null; };
+function saveFile(name, data) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + "\n"], {type: "application/json"}));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const pre = (data) => `<pre style="max-height:180px">${esc(JSON.stringify(data, null, 2))}</pre>`;
+
 const ident = {
   ok: null, key: null, audience: null, sign: true,
   async init() {
@@ -357,46 +452,206 @@ const ident = {
     try { this.sign = localStorage.getItem("pyrtan.identity.sign") !== "off"; } catch (e) {}
     this.render();
   },
+  isRoot() { return !!(this.key && this.key.role === "root"); },
   active() { return !!(this.ok && this.key && this.sign && this.audience); },
   async headers(method, path, body) {
     if (!this.active()) return {};
     return PyrtanIdentity.signRequest(this.key, this.audience, method, path, body, this.key.note || null);
   },
+  async keep() { await PyrtanIdentity.store.put(this.key); this.render(); },
+  // ---- a device of an identity held elsewhere
   async make() {
     const k = await PyrtanIdentity.generate();
-    this.key = {id: k.id, privateKey: k.privateKey, publicKey: k.publicKey, note: null, made: Date.now()};
-    await PyrtanIdentity.store.put(this.key);
-    this.render();
+    this.key = {role: "device", id: k.id, privateKey: k.privateKey, publicKey: k.publicKey, note: null, made: Date.now()};
+    await this.keep();
   },
   async useNote(text) {
-    let note; try { note = JSON.parse(text); } catch (e) { problem("The note is JSON: paste the line pyrtan id device add printed.", true); return; }
+    let note; try { note = JSON.parse(text); } catch (e) { problem("The note is JSON: paste what the browser holding your identity, or pyrtan id device add, gave you.", true); return; }
     const bad = PyrtanIdentity.noteProblem(note, this.key.id);
     if (bad) { problem(bad, true); return; }
-    this.key.note = note; await PyrtanIdentity.store.put(this.key); problem(""); this.render();
+    this.key.note = note; problem(""); await this.keep();
+  },
+  // ---- your identity, in this browser
+  async makeRoot(pass) {
+    const r = await PyrtanIdentity.createRoot();
+    const sealed = await PyrtanIdentity.makeBackup(r.seed, r.id, pass);
+    const key = await PyrtanIdentity.rootFromSeed(r.seed, r.id);  // non-extractable from here on; the seed is wiped
+    const document = await PyrtanIdentity.makeIdentity(key);
+    this.key = {role: "root", id: key.id, privateKey: key.privateKey, sealed, document, backedUp: false, note: null, made: Date.now()};
+    await this.keep();
+  },
+  async restore(file, pass) {
+    let b; try { b = JSON.parse(await file.text()); } catch (e) { throw new Error("that file is not a backup"); }
+    const seed = await PyrtanIdentity.openBackup(b, pass);
+    const key = await PyrtanIdentity.rootFromSeed(seed, b.id.toLowerCase());
+    const sealed = Object.fromEntries(Object.entries(b).filter(([k]) => k !== "document"));
+    const document = b.document || await PyrtanIdentity.makeIdentity(key);
+    this.key = {role: "root", id: key.id, privateKey: key.privateKey, sealed, document, backedUp: true, note: null, made: Date.now()};
+    await this.keep();
+  },
+  backup() { return Object.assign({}, this.key.sealed, {document: this.key.document}); },
+  async backedUp() { if (!this.key.backedUp) { this.key.backedUp = true; await this.keep(); } },
+  async addDevice(code, may, label) {
+    const note = await PyrtanIdentity.makeDevice(this.key, code.trim(), may, {label});
+    this.key.document = await PyrtanIdentity.withDevice(this.key.document, this.key, note);
+    await this.keep();
+    return note;
+  },
+  async revoke(device) {
+    this.key.document = await PyrtanIdentity.withRevoked(this.key.document, this.key, device);
+    await this.keep();
   },
   async forget() {
-    if (!confirm("Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.")) return;
+    const what = this.isRoot() ? "Forget your identity on this browser? Without its backup nobody can give it back." : "Forget this browser's key? A hub that granted it, or a member that joined as it, will not know this browser again.";
+    if (!confirm(what)) return;
     await PyrtanIdentity.store.put(null); this.key = null; this.render();
   },
   render() {
     if (!$("#tab-identity")) return;
+    const root = this.isRoot(), device = !!this.key && !root;
     $("#ident-none").hidden = this.ok !== false;
-    $("#ident-off").hidden = !this.ok || !!this.key;
-    $("#ident-on").hidden = !this.ok || !this.key;
+    $("#ident-start").hidden = !this.ok || !!this.key;
+    for (const id of ["#ident-root", "#ident-claim", "#ident-devices"]) $(id).hidden = !this.ok || !root;
+    $("#ident-on").hidden = !this.ok || !device;
+    $("#ident-common").hidden = !this.ok || !this.key;
     if (!this.key) return;
-    $("#ident-id").textContent = this.key.id;
-    const n = this.key.note;
-    $("#ident-paired").innerHTML = n
-      ? `speaks for <code>${esc(n.root)}</code> · may ${esc(n.may.join(", ") || "nothing")} · until ${esc(new Date(n.expires * 1000).toLocaleDateString())}${n.label ? " · " + esc(n.label) : ""}`
-      : "not paired: it signs as itself, so a hub grants this key, or nothing";
-    $("#ident-howto").textContent = `pyrtan id device add ${this.key.id} --may ask,chat,run --label browser`;
     $("#ident-sign").checked = this.sign;
+    $("#doc-push").hidden = !root || !this.audience;
+    if (device) {
+      $("#ident-id").textContent = this.key.id;
+      const n = this.key.note;
+      $("#ident-paired").innerHTML = n
+        ? `speaks for <code>${esc(n.root)}</code> · may ${esc(n.may.join(", ") || "nothing")} · until ${esc(new Date(n.expires * 1000).toLocaleDateString())}${n.label ? " · " + esc(n.label) : ""}`
+        : "not paired yet: it signs as itself, so a hub grants this key, or nothing";
+      $("#ident-howto").textContent = `pyrtan id device add ${this.key.id} --may ask,chat --label browser`;
+      return;
+    }
+    $("#root-id").textContent = this.key.id;
+    $("#root-backup-state").innerHTML = this.key.backedUp
+      ? `<span class="mute" style="font-size:14px">Backed up. Keep the file somewhere only you can read; never in a public repository.</span>`
+      : `<div class="notice bad" style="margin:0">Save your backup now. It is the only way back to this identity if this browser's data is cleared. It is encrypted with your passphrase; keep it where only you can read it.</div>`;
+    const tb = $("#dev-table tbody"); tb.innerHTML = "";
+    const doc = this.key.document;
+    for (const n of doc.devices) tb.insertAdjacentHTML("beforeend", `<tr><td>${esc(n.label || "-")}<div class="mute"><code>${esc(PyrtanIdentity.short(n.device))}</code></div></td><td>${esc(n.may.join(", "))}</td><td class="mute">${esc(new Date(n.expires * 1000).toLocaleDateString())}</td><td><button type="button" class="quiet" data-revoke="${esc(n.device)}">Revoke</button></td></tr>`);
+    for (const r of doc.revoked) tb.insertAdjacentHTML("beforeend", `<tr><td class="mute"><code>${esc(PyrtanIdentity.short(r))}</code></td><td class="mute" colspan="3">revoked</td></tr>`);
+    if (!doc.devices.length && !doc.revoked.length) tb.innerHTML = `<tr><td class="mute" colspan="4">none yet</td></tr>`;
   },
 };
+
+// ---- starting
 $("#ident-make").addEventListener("click", () => ident.make().catch((e) => problem("Could not make a key: " + e.message, true)));
+$("#ident-new").addEventListener("click", () => { $("#ident-new-form").hidden = false; $("#ident-restore-form").hidden = true; $("#ident-pass").focus(); });
+$("#ident-restore-open").addEventListener("click", () => { $("#ident-restore-form").hidden = false; $("#ident-new-form").hidden = true; });
+$("#ident-new-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const a = $("#ident-pass").value, b = $("#ident-pass2").value;
+  if (a !== b) { problem("The two passphrases differ.", true); return; }
+  if (a.length < 8) { problem("A passphrase is at least 8 characters; a long sentence is better.", true); return; }
+  const btn = e.submitter || e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Making it…";
+  try { await ident.makeRoot(a); problem(""); } catch (err) { problem("Could not make your identity: " + err.message, true); }
+  btn.disabled = false; btn.textContent = "Make it"; $("#ident-pass").value = $("#ident-pass2").value = "";
+});
+$("#ident-restore-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = $("#ident-file").files[0]; if (!f) { problem("Choose the backup file.", true); return; }
+  try { await ident.restore(f, $("#ident-restore-pass").value); problem(""); } catch (err) { problem(err.message, true); }
+  $("#ident-restore-pass").value = "";
+});
+// ---- a device
 $("#ident-note-form").addEventListener("submit", (e) => { e.preventDefault(); ident.useNote($("#ident-note").value.trim()); });
+$("#ident-copy").addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(ident.key.id); });
+// ---- backup
+$("#root-download").addEventListener("click", async () => { saveFile("pyrtan-identity-backup.json", ident.backup()); await ident.backedUp(); });
+$("#root-gh-go").addEventListener("click", async () => {
+  const login = $("#root-gh").value.trim();
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(login)) { problem("Enter your GitHub login.", true); return; }
+  const create = "https://github.com/new?name=pyrtan-identity&visibility=private&description=" + encodeURIComponent("My pyrtan identity backup (encrypted). Keep this repository private.");
+  const file = githubNewFile(`${login}/pyrtan-identity`, "main", "", "pyrtan-identity-backup.json", JSON.stringify(ident.backup(), null, 2) + "\n");
+  $("#root-gh-out").innerHTML = `1. <a href="${esc(create)}" target="_blank" rel="noopener">Make a <strong>private</strong> repository named pyrtan-identity</a> (check that it says Private). 2. <a href="${esc(file)}" target="_blank" rel="noopener" id="root-gh-file">Commit your backup to it</a>. GitHub keeps every version; the backup is only as strong as your passphrase, so never make that repository public.`;
+  $("#root-gh-file").addEventListener("click", () => ident.backedUp());
+});
+// ---- claiming a name
+for (const r of document.querySelectorAll('input[name="claim-where"]')) r.addEventListener("change", () => { const net = document.querySelector('input[name="claim-where"]:checked').value === "network"; $("#claim-pyrtan").hidden = net; $("#claim-network").hidden = !net; });
+$("#claim-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const out = $("#claim-out"); out.innerHTML = "";
+  try {
+    let claim, repo, branch, dir, gh = null;
+    if (document.querySelector('input[name="claim-where"]:checked').value === "pyrtan") {
+      const login = $("#claim-login").value.trim().toLowerCase();
+      if (!/^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/.test(login)) throw new Error("enter your GitHub login");
+      const r = await fetch(`https://api.github.com/users/${encodeURIComponent(login)}`, {headers: {"Accept": "application/json"}});
+      if (!r.ok) throw new Error(`GitHub does not know ${login} (${r.status})`);
+      gh = (await r.json()).id;
+      claim = await PyrtanIdentity.makeName(ident.key, `${login}@${PYRTAN_NAMES.domain}`, {extra: {github: gh}});
+      ({repo, branch, dir} = PYRTAN_NAMES);
+    } else {
+      claim = await PyrtanIdentity.makeName(ident.key, $("#claim-name").value);
+      repo = githubRepo($("#claim-repo").value); branch = $("#claim-branch").value.trim() || "main"; dir = "names";
+      if (!repo && $("#claim-repo").value.trim()) repo = null;
+    }
+    const file = `${claim.name}.json`, docFile = `${claim.name}.id.json`, text = JSON.stringify(claim, null, 2) + "\n", docText = JSON.stringify(ident.key.document, null, 2) + "\n";
+    let html = `<div style="margin-top:10px">Your claim to <code>${esc(claim.name)}@${esc(claim.domain)}</code>, signed by your key:</div>${pre(claim)}`;
+    if (repo) {
+      html += `<div>1. <a href="${esc(githubNewFile(repo, branch, dir, file, text))}" target="_blank" rel="noopener" id="claim-open">Propose it on GitHub</a>: GitHub opens <code>${esc(dir)}/${esc(file)}</code> filled in; choose <em>Propose changes</em>, then <em>Create pull request</em>${gh !== null ? `, from the GitHub account ${esc(claim.name)}` : ""}.</div>`;
+      html += `<div>2. Optional, once that is merged: <a href="${esc(githubNewFile(repo, branch, dir, docFile, docText))}" target="_blank" rel="noopener">propose your identity document</a> (<code>${esc(docFile)}</code>), so hubs find your devices there.</div>`;
+    } else {
+      html += `<div>Add it to the network's names repository as <code>names/${esc(file)}</code> (and your identity document as <code>names/${esc(docFile)}</code>), and open a merge request there.</div>`;
+    }
+    html += `<div style="margin-top:6px"><button type="button" class="quiet" id="claim-save">Download the claim</button> <button type="button" class="quiet" id="claim-copy">Copy it</button></div>`;
+    out.innerHTML = html;
+    $("#claim-save").addEventListener("click", () => saveFile(file, claim));
+    $("#claim-copy").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText(text));
+    problem("");
+  } catch (err) { problem("Could not make the claim: " + err.message, true); }
+});
+// ---- devices
+$("#dev-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const may = Array.from(document.querySelectorAll("#dev-may input:checked")).map((i) => i.value);
+  try {
+    const note = await ident.addDevice($("#dev-code").value, may, $("#dev-label").value.trim());
+    $("#dev-out").innerHTML = `<div style="margin-top:10px">Paste this on <code>${esc(note.label || PyrtanIdentity.short(note.device))}</code>, under <em>Use this note</em>:</div>${pre(note)}<button type="button" class="quiet" id="dev-copy">Copy it</button>`;
+    $("#dev-copy").addEventListener("click", () => navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(note)));
+    $("#dev-code").value = $("#dev-label").value = ""; problem("");
+  } catch (err) { problem("Could not sign the note: " + err.message, true); }
+});
+$("#dev-table").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-revoke]"); if (!b) return;
+  if (!confirm("Revoke this device? Hubs refuse it once they have your newer document.")) return;
+  await ident.revoke(b.dataset.revoke);
+  problem("Revoked. Give your newest document to the hubs you use, and to your name's repository, so they know now.");
+});
+$("#doc-push").addEventListener("click", async () => {
+  const r = await api("identity", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({document: ident.key.document})});
+  const b = await r.json().catch(() => ({}));
+  problem(r.ok ? "This hub holds your newest document." : `The hub did not take it: ${b.say || r.status}`, !r.ok);
+});
+$("#doc-download").addEventListener("click", () => saveFile(`${ident.key.id.slice(4, 12)}.id.json`, ident.key.document));
 $("#ident-forget").addEventListener("click", () => ident.forget());
 $("#ident-sign").addEventListener("change", (e) => { ident.sign = e.target.checked; try { localStorage.setItem("pyrtan.identity.sign", ident.sign ? "on" : "off"); } catch (err) {} });
+
+// ---------------------------------------------------------------- access: the hub's grants
+async function loadGrants() {
+  const tb = $("#grant-table tbody"), note = $("#access-note");
+  let r; try { r = await api("allow"); } catch (e) { note.hidden = false; note.textContent = String(e); return; }
+  if (r.status === 401 || r.status === 403) { note.hidden = false; note.textContent = "Only this hub's operator sees and changes its grants: connect with its token, or as an identity it grants operate."; tb.innerHTML = ""; return; }
+  note.hidden = true;
+  const body = await r.json().catch(() => ({grants: []}));
+  tb.innerHTML = (body.grants || []).map((g) => `<tr><td>${g.name ? `<code>${esc(g.name)}</code>` : ""}<div class="mute"><code>${esc(PyrtanIdentity.short(g.id))}</code></div></td><td>${esc(g.may.join(", "))}</td><td class="mute">${g.document ? `${esc(String(g.document.devices))} device(s), ${esc(String(g.document.revoked))} revoked` : "none yet"}</td><td><button type="button" class="quiet" data-disallow="${esc(g.id)}">Remove</button></td></tr>`).join("") || `<tr><td class="mute" colspan="4">nobody yet</td></tr>`;
+}
+async function grantPost(path, payload) {
+  const r = await api(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) problem(b.say || `the hub answered ${r.status}`, true); else problem("");
+  loadGrants();
+}
+$("#grant-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const may = Array.from(document.querySelectorAll("#grant-may input:checked")).map((i) => i.value);
+  grantPost("allow", {who: $("#grant-who").value.trim(), may}).then(() => { $("#grant-who").value = ""; });
+});
+$("#grant-table").addEventListener("click", (e) => { const b = e.target.closest("button[data-disallow]"); if (b) grantPost("disallow", {who: b.dataset.disallow}); });
 
 function showTab(name) {
   for (const a of document.querySelectorAll("#tabs a")) { if (a.dataset.tab === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
@@ -408,6 +663,7 @@ function showTab(name) {
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
   if (name === "identity") ident.render();
+  if (name === "access") loadGrants();
   if (name === "chat") chat.count();
 }
 
@@ -520,7 +776,8 @@ async function load() {
   $("#directory-tab").hidden = !(isHub && a.federation);
   $("#member-tab").hidden = !(isHub && a.federation);
   ident.audience = a.audience || null;
-  $("#identity-tab").hidden = !(isHub && a.audience);
+  $("#identity-tab").hidden = false;  // an identity needs no hub; signing does, when there is one
+  $("#access-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   if (a.chat && a.chat_bots === false && token) {
     try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
