@@ -33,6 +33,24 @@ const bytes = (h) => Uint8Array.from(h.match(/../g) || [], (x) => parseInt(x, 16
     const key = await Id.fromSeedAndPublic(bytes(r.seed), bytes(r.public));
     check(`headers ${label}`, r.headers, await Id.signRequest(key, r.audience, r.method, r.path, r.body, r.note, r.date));
   }
+  for (const d of v.documents) {
+    const key = await Id.fromSeedAndPublic(bytes(d.seed), bytes(d.public)), m = d.make;
+    let got;
+    if (d.kind === "identity") got = await Id.makeIdentity(key, m);
+    else if (d.kind === "device") got = await Id.makeDevice(key, m.device, m.may, m);
+    else if (d.kind === "name") got = await Id.makeName(key, m.name, m);
+    else if (d.kind === "handover") got = await Id.makeName(key, m.name, Object.assign({}, m, { handoverFrom: await Id.fromSeedAndPublic(bytes(d.from_seed), bytes(d.from_public)) }));
+    else if (d.kind === "release") got = await Id.makeRelease(key, m.name, m);
+    check(`signs a ${d.kind}`, d.expect, got);
+  }
+  for (const b of v.backups) {
+    const seed = await Id.openBackup(b.expect, b.passphrase);
+    check("opens a backup Python wrote", b.seed, Id.hex(seed));
+    check("writes the backup Python writes", b.expect, await Id.makeBackup(bytes(b.seed), b.expect.id, b.passphrase, { salt: bytes(b.salt), iv: bytes(b.iv), iterations: b.iterations, made: b.made, document: b.expect.document }));
+    let refused = null; try { await Id.openBackup(b.expect, b.passphrase + "x"); } catch (e) { refused = e.message; }
+    check("refuses a wrong passphrase", true, /does not open/.test(refused || ""));
+    check("refuses a weakened kdf", true, /at least/.test(Id.backupProblem(Object.assign({}, b.expect, { kdf: Object.assign({}, b.expect.kdf, { iterations: 1000 }) })) || ""));
+  }
   console.log(`${total - failed}/${total} agree`);
   process.exit(failed ? 1 : 0);
 })();
