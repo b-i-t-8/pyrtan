@@ -150,6 +150,17 @@ def test_a_branch_is_the_rules_draft_with_the_agents_words(trees):
     assert sg.draft(tree, {**BRANCH, "observed": 2}) is None  # covered already
 
 
+
+def test_a_branch_suggestion_does_not_fit_a_lookup():
+    from pyrtan.tree import load_tree_text
+
+    tree = load_tree_text('name = "lv"\ndescription = "x"\nstart = "which"\n[inputs.n]\ntype = "int"\n'
+                          '[nodes.which]\nkind = "lookup"\non = "inputs.n"\ninto = "w"\ntable = [{ lte = 3, value = "low" }]\nnext = "reply"\n'
+                          '[nodes.reply]\nkind = "done"\nsay = "{{ state.w }}"\n')
+    # A lookup's gap asks for a row; a branch suggestion's meaning is a node, which a row has nowhere to put.
+    assert sg.draft(tree, {**BRANCH, "tree": "lv", "node": "which", "on": "inputs.n", "observed": 5}) is None
+
+
 def test_a_trigger_is_kept_only_if_it_reads(trees):
     path = trees / "level.toml"
     tree = load_tree(path)

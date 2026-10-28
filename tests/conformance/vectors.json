@@ -4,6 +4,7 @@
   {
    "expect": {
     "branch": "{ when = { between = [4, 44] }, then = \"sky-4\" },",
+    "list": "branches",
     "node": "sky",
     "observed": 4,
     "on": "code",
@@ -27,6 +28,7 @@
   {
    "expect": {
     "branch": "{ when = { eq = 100 }, then = \"sky-100\" },",
+    "list": "branches",
     "node": "sky",
     "observed": 100,
     "on": "code",
@@ -56,6 +58,7 @@
   {
    "expect": {
     "branch": "{ when = { exists = false }, then = \"sky-missing\" },",
+    "list": "branches",
     "node": "sky",
     "observed": null,
     "on": "code",
@@ -76,6 +79,7 @@
   {
    "expect": {
     "branch": "{ when = { type = \"dict\" }, then = \"sky-dict\" },",
+    "list": "branches",
     "node": "sky",
     "observed": "<dict>",
     "on": "code",
@@ -96,6 +100,7 @@
   {
    "expect": {
     "branch": "{ when = { eq = \"Sunny Spells\" }, then = \"sky-sunny-spells\" },",
+    "list": "branches",
     "node": "sky",
     "observed": "Sunny Spells",
     "on": "code",
@@ -133,6 +138,7 @@
   {
    "expect": {
     "branch": "{ when = { eq = true }, then = \"status-true\" },",
+    "list": "branches",
     "node": "status",
     "observed": true,
     "on": "resp.status",
@@ -148,6 +154,78 @@
     "observed": true
    },
    "tree": "site-status"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = 20, value = 20 },",
+    "list": "table",
+    "node": "word",
+    "observed": 20,
+    "on": "inputs.score",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": 20
+    }
+   },
+   "gap": {
+    "node": "word",
+    "observed": 20,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = 120, value = 120 },",
+    "list": "table",
+    "node": "word",
+    "observed": 120,
+    "on": "inputs.score",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": 120
+    }
+   },
+   "gap": {
+    "node": "word",
+    "observed": 120,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": null,
+   "gap": {
+    "node": "word",
+    "observed": 95,
+    "on": "inputs.score"
+   },
+   "tree": "grade"
+  },
+  {
+   "expect": {
+    "branch": "{ eq = false, value = false },",
+    "list": "table",
+    "node": "mark",
+    "observed": false,
+    "on": "inputs.strict",
+    "reason": "the value itself",
+    "then": "",
+    "tree": "grade",
+    "when": {
+     "eq": false
+    }
+   },
+   "gap": {
+    "node": "mark",
+    "observed": false,
+    "on": "inputs.strict"
+   },
+   "tree": "grade"
   }
  ],
  "fixture": "tests/fixtures/examples.json",
@@ -639,6 +717,27 @@
       "triggers": [
        "[what's the] latest version of {module:word} on go",
        "go (module|version) {module:word}"
+      ],
+      "version": 1
+     },
+     {
+      "description": "a score, looked up",
+      "hosts": [],
+      "inputs": {
+       "score": {
+        "type": "int"
+       },
+       "strict": {
+        "type": "bool"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "grade",
+      "sources": [],
+      "tags": [],
+      "triggers": [
+       "grade {score:int}"
       ],
       "version": 1
      },
@@ -3082,6 +3181,248 @@
   },
   {
    "body": {
+    "text": "grade 95"
+   },
+   "expect": {
+    "inputs": {
+     "score": 95,
+     "strict": false
+    },
+    "output": {
+     "mark": "~",
+     "word": "excellent"
+    },
+    "say": "~",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "word",
+       "node": "intent",
+       "observed": {
+        "cleaned": "grade 95",
+        "inputs": {
+         "score": 95
+        },
+        "steps": [],
+        "trigger": "grade {score:int}"
+       },
+       "summary": "'grade 95'; grade via 'grade {score:int}' (5 literal chars)"
+      },
+      {
+       "chosen": "between [90, 100]",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "observed": 95,
+       "summary": "inputs.score = 95; word=excellent"
+      },
+      {
+       "chosen": "default",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": false,
+       "summary": "inputs.strict = False; mark=~"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "~"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "score": 60,
+     "strict": true
+    },
+    "tree": "grade"
+   },
+   "expect": {
+    "inputs": {
+     "score": 60,
+     "strict": true
+    },
+    "output": {
+     "mark": "strict",
+     "word": "a pass, 60"
+    },
+    "say": "strict",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "between [50, 89]",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "observed": 60,
+       "summary": "inputs.score = 60; word=a pass, 60"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": true,
+       "summary": "inputs.strict = True; mark=strict"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "strict"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "strict": true
+    },
+    "tree": "grade"
+   },
+   "expect": {
+    "inputs": {
+     "score": null,
+     "strict": true
+    },
+    "output": {
+     "mark": "strict",
+     "word": {
+      "points": 0,
+      "word": "absent"
+     }
+    },
+    "say": "strict",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "exists False",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "mark",
+       "node": "word",
+       "summary": "inputs.score = None; word={'word': 'absent', 'points': 0}"
+      },
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "lookup",
+       "next": "reply",
+       "node": "mark",
+       "observed": true,
+       "summary": "inputs.strict = True; mark=strict"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "strict"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "grade 10"
+   },
+   "expect": {
+    "inputs": {
+     "score": 10,
+     "strict": false
+    },
+    "output": {
+     "gap": {
+      "node": "word",
+      "observed": 10,
+      "on": "inputs.score",
+      "tree": "grade"
+     }
+    },
+    "reason": "gap",
+    "say": "word: no row for inputs.score = 10.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "node": "word",
+       "observed": 10,
+       "on": "inputs.score",
+       "tree": "grade"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "word",
+       "node": "intent",
+       "observed": {
+        "cleaned": "grade 10",
+        "inputs": {
+         "score": 10
+        },
+        "steps": [],
+        "trigger": "grade {score:int}"
+       },
+       "summary": "'grade 10'; grade via 'grade {score:int}' (5 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "lookup",
+       "next": null,
+       "node": "word",
+       "observed": 10,
+       "summary": "inputs.score = 10: no row"
+      }
+     ],
+     "tree": "grade"
+    },
+    "tree": "grade"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "temperature in the hall"
    },
    "expect": {
@@ -3244,6 +3585,13 @@
       "observed": null,
       "on": "state.q.json.temperature",
       "tree": "room-temperature"
+     },
+     {
+      "count": 1,
+      "node": "word",
+      "observed": 10,
+      "on": "inputs.score",
+      "tree": "grade"
      }
     ]
    },
@@ -3443,9 +3791,9 @@
    "body": null,
    "expect": {
     "errors": {},
-    "gaps": 1,
+    "gaps": 2,
     "name": "this browser",
-    "runs": 19,
+    "runs": 23,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -3466,6 +3814,7 @@
      "github-release",
      "github-repo",
      "go-module",
+     "grade",
      "hacker-news",
      "hacker-news-item",
      "hn-search",
@@ -3800,6 +4149,79 @@
    "start": "size",
    "triggers": [
     "order a {drink:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "a score, looked up",
+   "hosts": [],
+   "inputs": {
+    "score": {
+     "required": false,
+     "type": "int"
+    },
+    "strict": {
+     "default": false,
+     "type": "bool"
+    }
+   },
+   "name": "grade",
+   "nodes": {
+    "mark": {
+     "default": "~",
+     "into": "mark",
+     "kind": "lookup",
+     "next": "reply",
+     "on": "inputs.strict",
+     "table": [
+      {
+       "eq": true,
+       "value": "strict"
+      }
+     ]
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "mark": "{{ state.mark }}",
+      "word": "{{ state.word }}"
+     },
+     "say": "{{ state.mark }}"
+    },
+    "word": {
+     "into": "word",
+     "kind": "lookup",
+     "next": "mark",
+     "on": "inputs.score",
+     "table": [
+      {
+       "between": [
+        90,
+        100
+       ],
+       "value": "excellent"
+      },
+      {
+       "between": [
+        50,
+        89
+       ],
+       "value": "a pass, {{ inputs.score }}"
+      },
+      {
+       "exists": false,
+       "note": "a table value",
+       "value": {
+        "points": 0,
+        "word": "absent"
+       }
+      }
+     ]
+    }
+   },
+   "start": "word",
+   "triggers": [
+    "grade {score:int}"
    ],
    "version": 1
   }

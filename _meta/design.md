@@ -68,8 +68,10 @@ Four things a reader might expect, and will not find.
 - **Code in trees.** Templates are paths and filters. Conditions are
   comparisons. There is no expression language, no `if` in a template, no
   script node. Everything that branches is a `decide` node, which the trace
-  shows. The cost is verbosity (the weather tree spends seven `set` nodes
-  turning a code into a word); the benefit is that a tree can be audited by
+  shows, or a `lookup` node, which is the same plain conditions with a
+  value per row instead of a node per branch. The cost is verbosity (the
+  weather tree spends seven `set` nodes turning a code into a word, which
+  a `lookup` folds into one); the benefit is that a tree can be audited by
   someone who does not program.
 - **Reaching an endpoint the author did not list.** `hosts` is checked at
   load time for literal URLs and at run time for templated ones. A tree
@@ -234,6 +236,15 @@ after a table header, is caught by the loader with a hint.
 weather tree is longer for it; it is also readable by a non-programmer end
 to end.
 
+**A map filter, or a `set` that branches, for code-to-word tables.**
+The weather tree turns a weather code into a word with one `decide` and
+seven `set` nodes, one per word. A filter such as
+`{{ state.code | map(...) }}` would have been shorter and would have put a
+decision inside a template, where the trace cannot see it. `lookup` is
+the same conditions a `decide` uses, a value per row, the chosen row in
+the trace, and a gap when no row holds; it does not branch, so it adds no
+paths to the graph.
+
 **A model fallback for unmatched sentences.** The obvious feature, and the
 one that would quietly turn the product into the thing it is defined
 against. Not built. A sentence no tree answers returns `no-match`, is
@@ -333,7 +344,14 @@ Five trees, all against real public APIs, all tested offline:
     is checked by rules in the page, kept at `/suggestions`, and written
     by `pyrtan grow --suggestions` through the same rules. Design in
     [`agents.md`](agents.md).
-11. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+11. **v0.20, built: lookup tables.** A `lookup` node reads one value
+    against a table of rows (a condition and a value each), puts the
+    first row's value into state, and records a gap when no row holds
+    and there is no `default`; `pyrtan grow` drafts the missing row, so a
+    code-to-word table such as the weather tree's eight nodes can be one.
+    Both runtimes, with conformance vectors. The examples move to it once
+    main's runtime, which the catalog gate checks them with, knows it.
+12. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

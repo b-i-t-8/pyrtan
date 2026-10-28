@@ -68,7 +68,7 @@ function hubShape(d) {
     compare(`hub ${x.method} ${x.path} ${x.body ? JSON.stringify(x.body).slice(0, 60) : ""}`, { status: x.status, body: hubShape(x.expect) }, { status, body: hubShape(JSON.parse(JSON.stringify(payload))) });
   }
   // The branch a gap asks for, by the same rules.
-  for (const x of vectors.drafts) compare(`draft ${x.tree} ${JSON.stringify(x.gap)}`, x.expect, Pyrtan.grow.draftBranch(vectors.trees[x.tree], x.gap));
+  for (const x of vectors.drafts) compare(`draft ${x.tree} ${JSON.stringify(x.gap)}`, x.expect, Pyrtan.grow.draftBranch(vectors.trees[x.tree] || vectors.language_trees.find((t) => t.name === x.tree), x.gap));
   console.log(`${total - failed}/${total} agree`);
   process.exit(failed ? 1 : 0);
 })();
