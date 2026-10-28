@@ -6,6 +6,8 @@ const ROOT = path.resolve(__dirname, "..", "..");
 const Pyrtan = require(path.join(ROOT, "src", "pyrtan", "js", "pyrtan.js"));
 const vectors = JSON.parse(fs.readFileSync(path.join(__dirname, "vectors.json"), "utf8"));
 const fixture = JSON.parse(fs.readFileSync(path.join(ROOT, vectors.fixture), "utf8"));
+const fixtures = { [vectors.fixture]: fixture };
+const fixtureOf = (name) => fixtures[name] || (fixtures[name] = JSON.parse(fs.readFileSync(path.join(ROOT, name), "utf8")));
 const clock = () => new Date(vectors.clock);
 
 // What must agree: the outcome and the path, not the timings or the summaries' wording.
@@ -44,7 +46,7 @@ function hubShape(d) {
 
 (async () => {
   for (const run of vectors.runs) {
-    const runner = new Pyrtan.Runner({ trees: Object.values(vectors.trees), transport: new Pyrtan.RecordedTransport(fixture), clock });
+    const runner = new Pyrtan.Runner({ trees: Object.values(vectors.trees), transport: new Pyrtan.RecordedTransport(fixtureOf(run.fixture || vectors.fixture)), env: Object.assign({}, run.env || {}), clock });
     const got = Pyrtan.outcomeDict(run.intent ? await runner.runIntent(run.intent) : await runner.runTree(run.tree, run.inputs));
     compare(run.intent ? `run "${run.intent}"` : `run ${run.tree} ${JSON.stringify(run.inputs)}`, shape(run.expect), shape(got));
   }
@@ -68,7 +70,7 @@ function hubShape(d) {
     compare(`hub ${x.method} ${x.path} ${x.body ? JSON.stringify(x.body).slice(0, 60) : ""}`, { status: x.status, body: hubShape(x.expect) }, { status, body: hubShape(JSON.parse(JSON.stringify(payload))) });
   }
   // The branch a gap asks for, by the same rules.
-  for (const x of vectors.drafts) compare(`draft ${x.tree} ${JSON.stringify(x.gap)}`, x.expect, Pyrtan.grow.draftBranch(vectors.trees[x.tree], x.gap));
+  for (const x of vectors.drafts) compare(`draft ${x.tree} ${JSON.stringify(x.gap)}`, x.expect, Pyrtan.grow.draftBranch(vectors.trees[x.tree] || vectors.language_trees.find((t) => t.name === x.tree), x.gap));
   console.log(`${total - failed}/${total} agree`);
   process.exit(failed ? 1 : 0);
 })();

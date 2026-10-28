@@ -1,7 +1,7 @@
 /* pyrtan.js: the tree runtime, in JavaScript.
  *
  * The same tree files the Python runtime reads (as JSON, the TOML's own
- * table), walked the same way: observe, act, decide, set, each, delegate,
+ * table), walked the same way: observe, act, decide, set, lookup, each, delegate,
  * ask, done, fail; the same templates, conditions and extraction; the same
  * trace. tests/conformance holds the vectors both runtimes must agree on.
  *
@@ -1467,18 +1467,41 @@
     do_decide(tree, node, scope, trace, depth) {
       const on = statePath(node.get("on"));
       const value = resolve(on, scope);
+      // A value from env is the operator's (a token, a password): the trace says it is set, never what it is.
+      const shown = on.split(".")[0].split("[")[0] === "env" && !isMissing(value) && value !== null && value !== undefined ? "<set>" : value;
       for (const br of node.get("branches")) {
-        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: "else" }), br.else];
-        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(value)}`, { observed: plain(value), chosen: condText(br.when) }), br.then];
+        if ("else" in br) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: "else" }), br.else];
+        if (holds(br.when, value)) return [step(node.id, "decide", `${on} = ${brief(shown)}`, { observed: plain(shown), chosen: condText(br.when) }), br.then];
       }
-      trace.gap(node.id, on, plain(value));
-      trace.add(step(node.id, "decide", `${on} = ${brief(value)}: no branch`, { observed: plain(value), depth }));
-      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+      trace.gap(node.id, on, plain(shown));
+      trace.add(step(node.id, "decide", `${on} = ${brief(shown)}: no branch`, { observed: plain(shown), depth }));
+      return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no branch for ${on} = ${brief(shown)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
     }
     do_set(tree, node, scope) {
       const values = {};
       for (const [key, tmpl] of Object.entries(node.get("set"))) { const value = render(tmpl, scope); put(scope.state, key, value); values[key] = value; }
       return [step(node.id, "set", Object.keys(values).map((k) => `${k}=${brief(values[k])}`).join(", "), { observed: values }), node.next];
+    }
+    do_lookup(tree, node, scope, trace, depth) {
+      const on = statePath(node.get("on"));
+      const value = resolve(on, scope);
+      const into = node.get("into");
+      let found = MISSING, chosen = null;
+      for (const row of node.get("table")) {
+        const cond = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "value" && k !== "note"));
+        if (holds(cond, value)) { found = row.value; chosen = condText(cond); break; }
+      }
+      if (isMissing(found)) {
+        if (!("default" in node.spec)) {
+          trace.gap(node.id, on, plain(value));
+          trace.add(step(node.id, "lookup", `${on} = ${brief(value)}: no row`, { observed: plain(value), depth }));
+          return outcome("error", tree.name, { reason: "gap", say: `${node.id}: no row for ${on} = ${brief(value)}.`, output: { gap: trace.gaps[trace.gaps.length - 1] } });
+        }
+        found = node.spec.default; chosen = "default";
+      }
+      const result = render(found, scope);
+      put(scope.state, into, result);
+      return [step(node.id, "lookup", `${on} = ${brief(value)}; ${into}=${brief(result)}`, { observed: plain(value), chosen }), node.next];
     }
     async do_each(tree, node, scope, trace, depth) {
       const state = scope.state;
@@ -1580,19 +1603,26 @@
     }
     return [{ eq: observed }, "the value itself"];
   }
-  // raw: a tree's table (as trees.json carries it); gap: {node, on, observed}. null when the gap names no decide node or a branch covers the value.
+  // raw: a tree's table (as trees.json carries it); gap: {node, on, observed}. null when the gap names no decide or lookup node or a branch covers the value.
+  // For a lookup the draft is a row (list "table") whose value is the value seen, and there is no new node.
   function draftBranch(raw, gap) {
     const nodes = (raw && raw.nodes) || {};
     const id = String(gap.node === undefined ? "" : gap.node), node = nodes[id];
-    if (!isObj(node) || node.kind !== "decide") return null;
+    if (!isObj(node) || (node.kind !== "decide" && node.kind !== "lookup")) return null;
     const on = String(gap.on || node.on || ""), observed = gap.observed === undefined ? null : gap.observed;
-    const branches = (node.branches || []).filter(isObj);
+    const branches = node.kind === "lookup"
+      ? (node.table || []).filter(isObj).map((r) => ({ when: Object.fromEntries(Object.entries(r).filter(([k]) => k !== "value" && k !== "note")) }))
+      : (node.branches || []).filter(isObj);
     if (branches.some((b) => "when" in b && safeHolds(b.when, observed))) return null;
     const [when, reason] = conditionFor(observed, branches);
+    if (node.kind === "lookup") {
+      const row = "{ " + Object.keys(when).map((k) => `${k} = ${tomlValue(when[k])}`).join(", ") + `, value = ${tomlValue(observed === null ? "" : observed)} },`;
+      return { tree: raw.name, node: id, on, observed, when, then: "", branch: row, reason, list: "table" };
+    }
     const base = `${id}-${growSlug(observed)}`;
     let then = base, n = 2;
     while (has(nodes, then)) then = `${base}-${n++}`;
-    return { tree: raw.name, node: id, on, observed, when, then, branch: `{ when = ${tomlInline(when)}, then = "${then}" },`, reason };
+    return { tree: raw.name, node: id, on, observed, when, then, branch: `{ when = ${tomlInline(when)}, then = "${then}" },`, reason, list: "branches" };
   }
   // The tree a draft and a meaning make, as a new raw table: the branch before the else, the node after the rest. The caller loads it (new Tree) to see it holds.
   function growTree(raw, draft, meaning) {

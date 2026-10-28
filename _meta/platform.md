@@ -153,17 +153,23 @@ browser is the hub, for as long as the page is open: `pyrtan.js`'s
 `LocalHub` answers `/api`, `/health`, `/capabilities`, `/intent`, `/run`,
 `/resume`, `/gaps`, `/unanswered` and `/watches` inside the page, with the
 shapes a service answers them with, and the console calls it through the
-same function it calls a hub through. It holds the catalog's trees, read
-from the catalog's `trees.json` (`../catalog/` beside the console, else
-pyrtan.com's, else the copy the browser kept last time; `?catalog=URL`
-names another), reads sentences with the same rules as the Python
+same function it calls a hub through. It holds trees it needs no network
+for: every console carries the default trees (v0.21; the examples and the
+catalog, shipped inside the package, `pyrtan.defaults`), embedded in the
+page in `trees.json`'s shape, or what `pyrtan console --trees DIR` gave
+it. A fresher catalog is taken first when it is no further than the
+page's own site: `?catalog=URL`, or `../catalog/trees.json` beside the
+console. Only a page that carries no trees asks pyrtan.com's catalog,
+then the copy the browser kept last time. It reads sentences with the same rules as the Python
 runtime (the conformance vectors cover the reading, the value parsers,
 the proposals and a run of requests against a service), runs the trees,
 and keeps gaps and unanswered sentences in memory. What a page cannot
 reach it reports instead of attempting: a `file`, `shell`, `serial`,
 `queue` or `browser` node answers `source-unsupported`, and a site that
 does not let a page read it fails as `transport` with that reason; the
-Trees tab marks both, and "Try one" offers only trees that can answer.
+Trees tab marks both, and a tree that reads the operator's `env` (the
+Postfinite trees' credentials), and "Try one" offers only trees that can
+answer.
 Nothing in it is sent anywhere but the requests the trees make.
 
 Joining is explicit: a hub URL and a token in the connect box, kept in

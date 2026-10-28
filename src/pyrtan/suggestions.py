@@ -252,8 +252,8 @@ def draft(tree: Tree, s: dict[str, Any]) -> Draft | None:
     with the agent's meaning in place of the rules' placeholder; None when
     a branch already covers the value."""
     d = draft_branch(tree, {"node": s.get("node"), "on": s.get("on"), "observed": s.get("observed")})
-    if d is None:
-        return None
+    if d is None or d.list_key != "branches":
+        return None  # a lookup's gap asks for a row, which has no node for a meaning to go in
     d.node_text = meaning_text(d, s)
     d.reason = f"{d.reason}; meaning suggested by {(s.get('by') or {}).get('agent', 'an agent')}"
     return d

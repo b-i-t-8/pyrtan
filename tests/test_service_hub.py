@@ -223,6 +223,7 @@ def test_demo_page_is_served_by_service_and_hub(example_service):
         # The wordmark's two halves pick their own colours; the picker is inline, not another request.
         assert b'data-theme-part="pyr">pyr<' in page and b'data-theme-part="tan">tan<' in page
         assert b"__THEME__" not in page and b'localStorage.getItem(KEY)' in page
+        assert b'<script id="pyrtan-trees" type="application/json">{"pyrtan-trees":' in page and b'"postfinite/postfinite-overview"' in page
         assert b'role="combobox"' in page and b'id="suggestions"' in page and b'pyrtan.console.asked' in page  # the ask box suggests
     status, api = http_json("GET", f"{server.url}/api")
     assert status == 200 and api["pyrtan"] == "service"

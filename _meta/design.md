@@ -68,9 +68,9 @@ Four things a reader might expect, and will not find.
 - **Code in trees.** Templates are paths and filters. Conditions are
   comparisons. There is no expression language, no `if` in a template, no
   script node. Everything that branches is a `decide` node, which the trace
-  shows. The cost is verbosity (the weather tree spends seven `set` nodes
-  turning a code into a word); the benefit is that a tree can be audited by
-  someone who does not program.
+  shows, or a `lookup` node, which is the same plain conditions with a
+  value per row instead of a node per branch. The cost is verbosity; the
+  benefit is that a tree can be audited by someone who does not program.
 - **Reaching an endpoint the author did not list.** `hosts` is checked at
   load time for literal URLs and at run time for templated ones. A tree
   that takes a host from its input must say `hosts = ["*"]` out loud. The
@@ -234,6 +234,15 @@ after a table header, is caught by the loader with a hint.
 weather tree is longer for it; it is also readable by a non-programmer end
 to end.
 
+**A map filter, or a `set` that branches, for code-to-word tables.**
+Before 0.20 the weather tree turned a weather code into a word with one
+`decide` and seven `set` nodes, one per word. A filter such as
+`{{ state.code | map(...) }}` would have been shorter and would have put a
+decision inside a template, where the trace cannot see it. `lookup` is
+the same conditions a `decide` uses, a value per row, the chosen row in
+the trace, and a gap when no row holds; it does not branch, so it adds no
+paths to the graph.
+
 **A model fallback for unmatched sentences.** The obvious feature, and the
 one that would quietly turn the product into the thing it is defined
 against. Not built. A sentence no tree answers returns `no-match`, is
@@ -262,7 +271,7 @@ Five trees, all against real public APIs, all tested offline:
 | Tree | Shows |
 | :-- | :-- |
 | `hacker-news` + `hacker-news-item` | `each` over a list through a second tree; a decision on status before one on content; a self-post with no URL handled by `set` rather than by an empty string |
-| `weather` | Two hops where the second depends on the first; `exists` deciding on absence; a code-to-word table as seven decisions, not an expression |
+| `weather` | Two hops where the second depends on the first; `exists` deciding on absence; a code-to-word table as one `lookup`, not an expression |
 | `site-status` | A host from the sentence, so `hosts = ["*"]` and a run-time host check; `between` on status ranges; a client error reported as "up but refusing" rather than "down" |
 | `github-release` | Headers; a decision that names rate-limiting as its own branch |
 | `picnic` (in the tests) | One service delegating a sentence through the hub to another, and the other's steps returned inside its trace |
@@ -333,7 +342,13 @@ Five trees, all against real public APIs, all tested offline:
     is checked by rules in the page, kept at `/suggestions`, and written
     by `pyrtan grow --suggestions` through the same rules. Design in
     [`agents.md`](agents.md).
-11. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+11. **v0.20, built: lookup tables.** A `lookup` node reads one value
+    against a table of rows (a condition and a value each), puts the
+    first row's value into state, and records a gap when no row holds
+    and there is no `default`; `pyrtan grow` drafts the missing row. The
+    weather tree's code-to-word table went from eight nodes to one. Both
+    runtimes, with conformance vectors.
+12. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
@@ -364,7 +379,7 @@ Five trees, all against real public APIs, all tested offline:
 It does not claim to answer sentences nobody wrote a tree for; it claims
 to say which tree would, and to write that tree's first draft. It does not
 claim to reach anything beyond HTTP yet. It does not claim trees are quick
-to write: the weather tree is 15 nodes for a two-call
+to write: the weather tree is 8 nodes for a two-call
 API, and that is the price of leaving nothing implicit. It does not claim
 the swarm is secure across a network boundary (Section 7). It does not
 claim the examples will keep working as the sites they read change; it
