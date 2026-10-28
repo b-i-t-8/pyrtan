@@ -1552,5 +1552,25 @@
         "wave_direction": null
       }
     }
+  },
+  "memory add tally/ada": {
+    "key": "tally/ada",
+    "exists": true,
+    "value": 3,
+    "json": 3,
+    "body": "3",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": "2026-10-26T12:00:00Z",
+    "existed": true,
+    "previous": 2
+  },
+  "memory tally/count": {
+    "key": "tally/count",
+    "exists": false,
+    "value": null,
+    "json": null,
+    "body": "",
+    "written": null,
+    "expires": null
   }
 }

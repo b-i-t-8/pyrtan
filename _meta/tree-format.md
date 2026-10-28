@@ -14,6 +14,7 @@ A tree is one TOML file. This is the whole of it.
 | `commands` | if any node runs a program | Program names (`df`) or full paths (`/usr/bin/df`); `*` is everything. |
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
+| `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -197,6 +198,8 @@ serial = { device = "/dev/ttyUSB0", baud = 9600, write = "AT\r\n", read_until = 
 queue  = { url = "mqtt://broker.local", topic = "home/kitchen/temperature" }               # observe: received, message { topic, body, json }, body, json
 queue  = { url = "mqtt://broker.local", topic = "home/kitchen/light", publish = "on" }     # act: … plus published
 browser = { url = "https://app.example/", wait_for = "h1", actions = [{ click = "#more" }, { fill = { selector = "#q", value = "x" } }] }  # url, status, ok, title, body (rendered), elapsed_ms
+memory = { key = "disk-space/root" }                                        # observe: key, exists, value, json, body, written, expires
+memory = { key = "disk-space/root", write = "{{ state.percent }}", ttl = "1 day" }   # act: … plus previous, existed  (or add = 1, or delete = true)
 ```
 
 `shell` runs one program with its arguments as a list; no shell reads the
@@ -205,8 +208,19 @@ line. `serial` reads until `read_until`, `read` bytes or `timeout`.
 `password` if the broker wants them. `browser` needs Playwright
 (`pip install 'pyrtan[browser]'`); its actions are `click`, `fill`,
 `press`, `select`, `wait_for` and `wait` (ms), and a navigation to a host
-outside `hosts` fails the node. A service started with `--egress public`
-refuses `file`, `shell` and `serial` altogether.
+outside `hosts` fails the node. `memory` is what a tree keeps across
+runs on the box it runs on: an observe reads a key; an act `write`s any
+value, `add`s to a number (a missing key counts from 0) or forgets it
+(`delete = true`), and `ttl` lets a written value lapse on its own. What
+an act leaves says what was there before (`previous`, `existed`), so one
+node can remember a value and tell whether it changed. A service keeps
+memory in the file `--memory` names (in the process without one), and
+`pyrtan memory FILE` shows and forgets what it keeps. A key is up to 200
+letters, digits and `. _ : @ / -`; a value is at most 64 KB. A recording
+keeps memory reads like any other observation, so a fixture answers
+them and a run stays deterministic given its observations. A service
+started with `--egress public` refuses `file`, `shell`, `serial` and
+`memory` altogether.
 
 ### `act`: change
 
@@ -247,6 +261,18 @@ The first branch whose condition holds is taken. `else` must be last. A
 **gap** (`tree`, `node`, `on`, `observed`) and ends the run with reason
 `gap`. `pyrtan gaps --at URL` lists them.
 
+`pyrtan check` reads the order of the branches, too. A branch whose every
+value an earlier branch already takes is never taken (`between = [500,
+599]` after `gte = 400`), and a condition no value meets (`{ gt = 5, lt =
+3 }`, `between = [9, 1]`, `lt = true`) is never true; both are warnings.
+With no `else`, when every branch is a plain comparison of numbers, the
+note about gaps also names the numbers no branch takes (`no branch takes
+whole numbers below 0, 4 to 44, above 99`), so the holes show before a
+run falls into one. Only `eq`, `in`, `lt`, `lte`, `gt`, `gte` and
+`between` are read this way, the way the runtime reads them (numbers
+loosely, booleans strictly); a branch with any other test is left alone.
+The check can miss a dead branch; it never reports a live one.
+
 ### `set`: compute
 
 ```toml
@@ -281,7 +307,7 @@ placeholder that resolves to nothing fails the node. `default` is the value
 when no row holds; without one, such a value is recorded as a **gap**,
 exactly as a `decide` without `else` records one, and `pyrtan grow` drafts
 the row it asks for. The trace names the row's condition (or `default`) as
-the step's `chosen`, and the value read.
+the step's `chosen`, and the value read. `pyrtan check` reads the rows' order the way it reads a `decide`'s branches: a row an earlier one already covers is never read, and without a `default` the note names the numbers no row takes.
 
 A lookup does not branch. It is for the decision whose every outcome is a
 value rather than a different next step: a code into a word, a status into

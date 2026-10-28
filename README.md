@@ -148,24 +148,28 @@ extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
 | `serial = { device, baud, write, read_until }` | `devices` | [`modem-check`](examples/modem-check/modem-check.toml): does the modem answer AT |
 | `queue = { url, topic }` or `{ …, publish }` | `hosts`, `topics` | [`room-temperature`](examples/room-temperature/room-temperature.toml): a sensor's last reading over MQTT |
 | `browser = { url, wait_for, actions }` | `hosts` | [`rendered-headline`](examples/rendered-headline/rendered-headline.toml): the heading of a page that needs a script to render |
+| `memory = { key }` or `{ key, write / add / delete, ttl }` | `keys` | what a tree keeps across runs: the last reading, a count of checks in a row, whether it already said so |
 
 The trace reads the same whichever source a node used (`shell df -P / ->
 exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
 for all of them, so every example runs offline in the test suite and the
 same vectors hold in the JavaScript runtime. A service started with
-`--egress public` refuses files, programs and serial lines outright: a
-hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
+`--egress public` refuses files, programs, serial lines and memory
+outright: a hosted box is not lent out. Memory lives in the file a
+service's `--memory` names, and nowhere else: it is not served, not
+gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md).
 
 ## The command
 
 | Command | What it does |
 | :-- | :-- |
-| `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Exit 1 on any error. |
+| `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Warns about a branch an earlier one already covers and a condition no value meets, and names the numbers a decision without `else` leaves to a gap. Exit 1 on any error. |
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan test DIR` | Runs each tree's own `[[tests]]` against their recordings: a sentence or inputs, and the status, answer, output and path the run must come to. Exit 1 if any misses. |
 | `pyrtan diff FILE` | What an edit changes: every test the file and its last committed version carry (`--against REF`, or `--old FILE`), run on both against the same recordings; names each run whose answer or path moved. Exit 1 if any did. |
+| `pyrtan memory FILE` | What memory nodes keep in a `--memory` file (`serve`, `hub`, `watch` and `run` take `--memory FILE`, or `$PYRTAN_MEMORY`): every key, its value, when it was written and until when. `--forget KEY` drops one. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`, `/suggestions`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
 | `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
@@ -830,7 +834,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.27.0. The core, the service, the hub, the command, the console (which
+0.29.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -844,9 +848,12 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
+a check that reads a decision's order (dead branches, conditions nothing
+meets, the holes a gap will fall into),
 `pyrtan build` (the tree an unanswered sentence asks for, through a few
 questions with defaults by rules), a tree's own tests and the diff an edit
-makes to them (`pyrtan test`, `pyrtan diff`), and the chat lobby (strangers on the hub and the
+makes to them (`pyrtan test`, `pyrtan diff`), memory across runs (a
+`memory` source with its own `keys` list), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,

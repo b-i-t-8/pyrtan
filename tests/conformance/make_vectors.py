@@ -182,8 +182,9 @@ CASES: list[dict] = [
 
 
 # Trees that exercise what the examples do not: every slot kind, synonyms
-# (a word and a phrase), typos, fixed inputs, a tie, an ask, and a lookup
-# that meets a templated value, a table value, an absent value and a gap.
+# (a word and a phrase), typos, fixed inputs, a tie, an ask, a lookup that
+# meets a templated value, a table value, an absent value and a gap, and
+# memory: a count, a read, and a key outside the tree's keys.
 def _echo(name: str, triggers: list, inputs: dict, **extra) -> dict:
     return {"name": name, "version": 1, "description": f"echo for {name}", "hosts": [], "start": "reply", "triggers": triggers,
             "inputs": inputs, "nodes": {"reply": {"kind": "done", "say": "ok", "output": {k: f"{{{{ inputs.{k} }}}}" for k in inputs}}}, **extra}
@@ -203,6 +204,13 @@ LANGUAGE_TREES: list[dict] = [
      "nodes": {"size": {"kind": "ask", "prompt": "What size of {{ inputs.drink }}?", "into": "state.size", "next": "shots"},
                "shots": {"kind": "ask", "prompt": "How many shots?", "into": "inputs.shots", "next": "reply"},
                "reply": {"kind": "done", "say": "A {{ state.size }} {{ inputs.drink }}, {{ inputs.shots }} shot(s).", "output": {"size": "{{ state.size }}", "shots": "{{ inputs.shots }}"}}}},
+    {"name": "tally", "version": 1, "description": "counts, and reads what it counted", "hosts": [], "keys": ["tally/*"], "start": "which",
+     "triggers": ["tally {name:word}", "peek {where:word}"], "inputs": {"name": {"type": "str", "default": ""}, "where": {"type": "str", "default": ""}},
+     "nodes": {"which": {"kind": "decide", "on": "inputs.where", "branches": [{"when": {"empty": True}, "then": "bump"}, {"else": "peek"}]},
+               "bump": {"kind": "act", "memory": {"key": "tally/{{ inputs.name }}", "add": 1, "ttl": "1 day"}, "into": "n", "next": "reply"},
+               "peek": {"kind": "observe", "memory": {"key": "{{ inputs.where }}/count"}, "into": "seen", "next": "said"},
+               "reply": {"kind": "done", "say": "{{ inputs.name }}: {{ state.n.value }}", "output": {"count": "{{ state.n.value }}", "was": "{{ state.n.previous }}"}},
+               "said": {"kind": "done", "say": "kept", "output": {"exists": "{{ state.seen.exists }}", "value": "{{ state.seen.value }}"}}}},
     {"name": "grade", "version": 1, "description": "a score, looked up", "hosts": [], "start": "word",
      "triggers": ["grade {score:int}"], "inputs": {"score": {"type": "int", "required": False}, "strict": {"type": "bool", "default": False}},
      "nodes": {"word": {"kind": "lookup", "on": "inputs.score", "into": "word", "next": "mark",
@@ -297,6 +305,10 @@ HUB = [
     ("POST", "/intent", {"text": "order a mocha"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "small"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "many"}),
+    ("POST", "/intent", {"text": "tally ada"}),
+    ("POST", "/intent", {"text": "peek tally"}),
+    ("POST", "/intent", {"text": "peek other"}),
+    ("POST", "/intent", {"text": "tally bob"}),
     ("POST", "/intent", {"text": "grade 95"}),
     ("POST", "/run", {"tree": "grade", "inputs": {"score": 60, "strict": True}}),
     ("POST", "/run", {"tree": "grade", "inputs": {"strict": True}}),

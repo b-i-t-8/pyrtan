@@ -167,7 +167,7 @@ nothing else needed.
 While a person types, the client says so (`POST /chat/typing {seat,
 typing: true}`), again every two seconds while they go on, and `false`
 when the box empties, loses focus or the line is sent. `pyrtan chat`
-does the same at a terminal (v0.27): it reads keys one by one
+does the same at a terminal (v0.29): it reads keys one by one
 (`pyrtan.term`, cbreak mode through `termios`, the terminal restored on
 the way out), sends typing from a thread of its own so no key waits on
 the network, and draws lines that arrive above the one being typed; from
@@ -252,6 +252,6 @@ for that conversation.
   only (§1).
 - **v0.17, built:** chat links, `--chat-reach N`: open lobbies share
   their strangers without following each other (§3).
-- **v0.27, built:** `pyrtan chat` at a terminal shows your typing (§4).
+- **v0.29, built:** `pyrtan chat` at a terminal shows your typing (§4).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.
