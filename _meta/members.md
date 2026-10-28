@@ -108,6 +108,13 @@ it. The operator paths are behind the token; the keeper paths
 
 ## 5. Failure modes, honestly
 
+- A lost phone that joined as a trusted member keeps its own pair
+  secret, so a new token does not shut it out. The operator lets it go:
+  `pyrtan drop <its id>` (or *drop* in the console's Peers tab), `POST
+  /drop` behind the token. The hub forgets it, its mailbox, what it
+  handed it and what it keeps for it, and anything it signs afterwards is
+  from an actor it does not know. `pyrtan peers` marks members, and the
+  trusted ones, to find it by.
 - A hub with no members and no followers keeps its blobs for nobody.
   `pyrtan kept` says "held by 0 of 2" so the operator knows.
 - A member that never polls holds nothing new; after a day it is not a

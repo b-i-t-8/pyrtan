@@ -51,6 +51,7 @@ The server is the standard library's threading HTTP server.
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import sys
 import threading
@@ -328,6 +329,25 @@ class Service:
 
 
 Route = Callable[..., tuple[int, Any]]  # (method, path, body, headers) -> (status, payload)
+PEER_HEADER = "X-Pyrtan-Peer"  # the caller's address, set here and never taken from the request
+
+
+def peer_address(client: str, headers: Any) -> str:
+    """Where a request came from: the socket's address, or, when that is this
+    machine (a proxy in front, for TLS), the last address the proxy put in
+    ``X-Forwarded-For``. Only a proxy on this machine is believed."""
+    try:
+        local = ipaddress.ip_address(client).is_loopback
+    except ValueError:
+        local = False
+    forwarded = (headers.get("X-Forwarded-For") or "").split(",")[-1].strip() if local else ""
+    return forwarded or client
+
+
+def _with_peer(headers: Any, client: str) -> dict[str, str]:
+    out = {k: v for k, v in headers.items() if k.lower() != PEER_HEADER.lower()}
+    out[PEER_HEADER] = peer_address(client, headers)
+    return out
 
 
 def bearer_ok(header: str | None, token: str) -> bool:
@@ -423,7 +443,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             path = self.path.split("?", 1)[0]
             if not self._authorised(path):
                 return
-            status, payload = route("GET", path, None, dict(self.headers))
+            status, payload = route("GET", path, None, _with_peer(self.headers, self.client_address[0]))
             self._send(status, self._public_view(path, payload))
 
         def do_POST(self) -> None:
@@ -434,6 +454,11 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             if length > MAX_BODY:
                 self._send(413, {"status": "error", "reason": "too-large"})
                 return
+            if length and (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
+                # A page on another site may POST text/plain with no preflight; only JSON is read,
+                # so a hub with no token cannot be driven by a form or a simple request.
+                self._send(415, {"status": "error", "reason": "not-json", "say": "Send the body as Content-Type: application/json."})
+                return
             raw = self.rfile.read(length) if length else b""
             try:
                 body = json.loads(raw.decode("utf-8")) if raw else {}
@@ -443,7 +468,7 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             if not isinstance(body, dict):
                 self._send(400, {"status": "error", "reason": "bad-json", "say": "The body must be a JSON object."})
                 return
-            status, payload = route("POST", path, body, dict(self.headers))
+            status, payload = route("POST", path, body, _with_peer(self.headers, self.client_address[0]))
             self._send(status, payload)
 
     return Handler

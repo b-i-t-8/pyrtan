@@ -18,6 +18,7 @@
     pyrtan hub    --chat-public --chat-reach 8  and link its lobby with other open lobbies, for chat only
     pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: join the default network
     pyrtan unfollow URL --at HUB
+    pyrtan drop   FOLLOWER --at HUB          let a follower go: a lost phone, an unwanted hub
     pyrtan peers  --at HUB                   services, and hubs followed and following
     pyrtan directory [--at HUB]              every hub that asked to be found, as the swarm knows it
     pyrtan keep KEY [FILE] --at HUB          give your hub a blob to keep, and have its keepers keep it
@@ -55,6 +56,7 @@ from typing import Any
 
 from . import __version__
 from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_url
+from .chat import clean as clean_line
 from .federation import bootstrap_candidates
 from .build import BuildError, build
 from .grow import Proposal, _quote as shell_quote, propose
@@ -231,6 +233,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
     p.add_argument("--json", action="store_true")
     _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("drop", help="let a follower go: a lost phone, or a hub you no longer want following yours")
+    p.add_argument("follower", help="its id, as `pyrtan peers` shows it")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token")
 
     p = sub.add_parser("unfollow", help="stop following a hub")
     p.add_argument("url", help="the other hub's URL")
@@ -410,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
-        "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
+        "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "drop": cmd_drop, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
         "allow": cmd_allow, "allowed": cmd_allowed, "disallow": cmd_disallow, "names": cmd_names,
     }
@@ -744,15 +751,16 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 if e["n"] <= state["after"]:
                     continue
                 state["after"] = e["n"]
+                text = clean_line(str(e.get("text", "")))  # whatever a hub sends, no line steers this terminal
                 if e["kind"] == "system":
-                    print(f"  {e['text']}", flush=True)
+                    print(f"  {text}", flush=True)
                 elif e["kind"] == "bot":
-                    print(f"Bot: {e['text']}", flush=True)
+                    print(f"Bot: {text}", flush=True)
                     if args.trace and isinstance(e.get("trace"), dict):
                         print(outcome_from_dict({**e, "say": e["text"]}).trace.render(), flush=True)
                     state["owed"] = max(0, state["owed"] - 1)
                 elif e["kind"] == "stranger":
-                    print(f"Stranger: {e['text']}", flush=True)
+                    print(f"Stranger: {text}", flush=True)
             state["partner"] = answer.get("partner")
             typing = bool(answer.get("partner_typing"))
             if typing and not state["typing"]:
@@ -1435,6 +1443,10 @@ def cmd_directory(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_drop(args: argparse.Namespace) -> int:
+    return _hub_post(args, "/drop", {"follower": args.follower}, lambda b: f"{args.at} let {args.follower} go: its mailbox, what it was handed and what was kept for it are gone" if b.get("dropped") else f"{args.follower} does not follow {args.at}")
+
+
 def cmd_unfollow(args: argparse.Namespace) -> int:
     return _hub_post(args, "/unfollow", {"url": args.url}, lambda b: f"{args.at} no longer follows {args.url}" if b.get("removed") else f"{args.at} was not following {args.url}")
 
@@ -1481,7 +1493,8 @@ def cmd_peers(args: argparse.Namespace) -> int:
     for r in body.get("following", []):
         print(f"{r['link']:8} follows  {r['name'] or '-':12} {r['url']}  {', '.join(r.get('trees', []))}" + (f"  ({r['last_error']})" if r.get("last_error") else ""))
     for r in body.get("followers", []):
-        print(f"{r['link']:8} follower {r['name'] or '-':12} {r['url']}")
+        kind = "member  " if r.get("kind") == "member" else "follower"
+        print(f"{r['link']:8} {kind} {r['name'] or '-':12} {r['url']}" + ("  (trusted)" if r.get("trusted") else ""))
     if not any(body.get(k) for k in ("peers", "following", "followers")):
         print("no peers")
     return 0

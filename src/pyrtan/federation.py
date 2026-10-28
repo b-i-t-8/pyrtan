@@ -107,7 +107,8 @@ from typing import Any, Callable, Iterable
 
 from . import __version__
 from .service import http_json
-from .store import BlobStore, StoreError, check_key, digest as blob_digest
+from .identity import Replays
+from .store import BlobStore, StoreError, check_key, digest as blob_digest, write_private
 
 DEFAULT_HUB_LIST = "https://pyrtan.com/rendezvous/hubs.json"
 DEFAULT_SNAPSHOT = "https://pyrtan.com/rendezvous/directory.json"
@@ -133,6 +134,9 @@ ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to ans
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
 KEY_PREFIX = "pyr:"                    # a member may be its device key instead (_meta/identity.md §7)
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
+FOLLOWERS_MAX = 1000                   # followers an open hub takes; past it, only the trusted and those it has already
+FOLLOWS_PER_MINUTE = 30                # new followers an open hub takes in a minute, the trusted aside
+MEMBER_IDLE = 30 * 86400               # a member that has not polled or written in this long is let go, the trusted aside
 REPORT_TTL = 30 * 86400                # a gap report unheard of for this long is dropped
 REPORT_MAX = 2000
 REPORT_ID = re.compile(r"^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*@\d+$")  # namespace/name@version: a catalog tree
@@ -434,6 +438,8 @@ class Federation:
         self._announced: tuple[str, float] = ("", 0.0)       # digest and time of the last downward announce
         self._announced_up: tuple[str, float] = ("", 0.0)    # likewise upward
         self._lock = threading.RLock()
+        self.replays = Replays(SIGNATURE_WINDOW)  # signed POSTs taken: each once
+        self._follows: deque[float] = deque()     # when strangers' follows were taken, this last minute
         if self.state_path and self.state_path.exists():
             self._load()
             if listed:
@@ -463,8 +469,7 @@ class Federation:
                 "keeping": self.keeping,
                 "reports": list(self.reports.values()),
             }
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        write_private(self.state_path, json.dumps(data, indent=2) + "\n")  # pair and network secrets: the owner's only
 
     def _load(self) -> None:
         assert self.state_path
@@ -532,17 +537,20 @@ class Federation:
             raise ValueError(f"this hub is already in a network named {name!r}")
         return self.add_network(Network(name, _secrets.token_urlsafe(24), public))
 
-    def known_hubs(self, network: str) -> list[str]:
+    def known_hubs(self, network: str, *, heard: bool = True) -> list[str]:
         """The hubs this one already knows in a network (by id), to try
         before asking anyone: the ones it follows in it, then the ones it
-        heard on the LAN say they are in it (``--lan``), then the ones its
-        directory heard in it, most recently heard first."""
+        heard on the LAN say they are in it (``--lan``), then (with
+        ``heard``) the ones its directory heard in it, most recently heard
+        first. Directory entries are gossip, which any member may write:
+        joining follows none of them (``heard=False``)."""
         now = time.time()
         with self._lock:
             followed = [r.url for r in self.following.values() if r.kind == "hub" and r.network == network and r.state == "accepted"]
-            heard = sorted((e for e in self.directory_entries.values() if e.get("network") == network and e.get("kind", "hub") == "hub" and now - e["seen"] < DIRECTORY_TTL), key=lambda e: -e["seen"])
+            heard_of = sorted((e for e in self.directory_entries.values() if e.get("network") == network and e.get("kind", "hub") == "hub" and now - e["seen"] < DIRECTORY_TTL), key=lambda e: -e["seen"])
         nearby = self.lan.hubs(network) if self.lan is not None else []
-        return [u for u in dict.fromkeys(followed + nearby + [e["id"].rstrip("/") for e in heard]) if u != self.id]
+        gossip = [e["id"].rstrip("/") for e in heard_of] if heard else []
+        return [u for u in dict.fromkeys(followed + nearby + gossip) if u != self.id]
 
     def join(self, net: Network, hubs: Iterable[str]) -> Remote | None:
         """Be in ``net`` and follow the first of ``hubs`` that accepts a
@@ -939,6 +947,7 @@ class Federation:
     def refresh_all(self) -> None:
         for remote in list(self.following.values()):
             self.refresh(remote)
+        self.expire_members()
         self.auto()
         self.announce_up()
         self.announce()
@@ -1164,7 +1173,15 @@ class Federation:
         secret = self.secret_for(actor)
         if not actor or secret is None:
             return None
-        return actor if verify(secret, method, path, body, h) is None else None
+        if verify(secret, method, path, body, h) is not None:
+            return None
+        if method == "POST" and not self.replays.fresh(h.get("X-Pyrtan-Signature", ""), h.get("X-Pyrtan-Date")):
+            return None  # taken once already: a replay
+        return actor
+
+    def _fresh(self, h: dict[str, str]) -> bool:
+        """Whether a signed POST to the inbox is new here (see :class:`pyrtan.identity.Replays`)."""
+        return self.replays.fresh(h.get("X-Pyrtan-Signature", ""), h.get("X-Pyrtan-Date"))
 
     def handle_inbox(self, activity: Any, headers: dict[str, str] | None, trusted: bool = False, *, trusted_by: str | None = None, signer: Any = None) -> tuple[int, dict[str, Any]]:
         """``trusted`` says the request also carried the operator's token, or
@@ -1212,6 +1229,8 @@ class Federation:
                 remote, linked, problem = link, True, None
         if problem:
             return 401, {"status": "error", "reason": "unsigned", "say": problem}
+        if not self._fresh(h):
+            return 401, {"status": "error", "reason": "replayed", "say": "This activity was taken already."}
         if kind in CHAT_TYPES:
             if self.chat is None:
                 return 404, {"status": "error", "reason": "no-chat", "say": f"{self.id} keeps no lobby."}
@@ -1303,6 +1322,14 @@ class Federation:
             return 200, {"status": "ok"}
         return 400, {"status": "error", "reason": "bad-activity"}
 
+    def expire_members(self, *, now: float | None = None) -> int:
+        """Let go of members that have not polled or written in :data:`MEMBER_IDLE`,
+        the trusted aside: an open hub does not keep a mailbox forever for a
+        follow nobody uses. Returns how many went."""
+        now = time.time() if now is None else now
+        idle = [r.url for r in list(self.followers.values()) if r.kind == "member" and not r.trusted and now - r.last_ok > MEMBER_IDLE]
+        return sum(1 for url in idle if self.drop_follower(url))
+
     def drop_follower(self, actor: str) -> bool:
         """Forget a follower, its mailbox, what we handed it and what we keep for it."""
         with self._lock:
@@ -1359,6 +1386,19 @@ class Federation:
             problem = verify(pair, "POST", "/inbox", activity, h)
             if problem:
                 return 401, {"status": "error", "reason": "unsigned", "say": problem}
+        if not self._fresh(h):
+            return 401, {"status": "error", "reason": "replayed", "say": "This follow was taken already."}
+        if actor not in self.followers and not trusted:
+            # A stranger's follow costs a record, a mailbox and an /actor fetch: so many, so fast, and no more.
+            now = time.time()
+            with self._lock:
+                while self._follows and now - self._follows[0] > 60:
+                    self._follows.popleft()
+                if len(self.followers) >= FOLLOWERS_MAX:
+                    return 503, {"status": "error", "reason": "followers-full", "say": f"This hub takes no more followers ({FOLLOWERS_MAX})."}
+                if len(self._follows) >= FOLLOWS_PER_MINUTE:
+                    return 429, {"status": "error", "reason": "too-fast", "say": "This hub takes only so many new followers a minute; try again in one."}
+                self._follows.append(now)
         if inbox == "mailbox":
             # A member: a browser or a phone, with no address of its own. It
             # polls its mailbox here, signed, instead of being posted to.
