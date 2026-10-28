@@ -654,7 +654,8 @@ class TrustedMember(Member):
         self.answers = answers or {}
 
     def follow(self, secret: str | None = None, token: str | None = None):
-        activity = {"id": f"{self.id}/activities/follow", "actor": self.id, "published": "now", "type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}
+        self.sent = getattr(self, "sent", 0) + 1  # its own id each time, as a browser's: a second Follow alike in every byte would be a replay
+        activity = {"id": f"{self.id}/activities/follow-{self.sent}", "actor": self.id, "published": "now", "type": "Follow", "object": self.hub, "secret": self.secret, "inbox": "mailbox", "name": self.name}
         headers = sign(secret or self.secret, self.id, "POST", "/inbox", activity)
         if token:
             headers["Authorization"] = f"Bearer {token}"
