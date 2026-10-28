@@ -389,7 +389,10 @@ chosen, next, elapsed_ms, depth) and `gaps`.
 A `no-match` error also carries `output.proposal`: the tree that would
 answer the sentence, as `name`, `trigger` (slots where the sentence had
 numbers or hosts), `inputs`, and `scaffold`, the `pyrtan new … --from`
-command that writes it. The sentence is recorded at `/unanswered`.
+command that writes it. The sentence is recorded at `/unanswered`, and
+`pyrtan build --from "…"` (or `POST /build`, which the console's
+Unanswered tab uses) asks what the proposal cannot know, what the tree
+reads, decides and says, and writes the file those answers describe.
 
 ## Tests
 

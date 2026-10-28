@@ -1,0 +1,70 @@
+# The podium of the latest Formula 1 race, from the Jolpica F1 API (the
+# Ergast API's successor).
+
+name = "f1-results"
+version = 1
+namespace = "pyrtan"
+description = "Who finished first, second and third in the latest Formula 1 race."
+tags = ["sport", "read-only"]
+license = "MIT"
+hosts = ["api.jolpi.ca"]
+start = "fetch"
+
+[[triggers]]
+pattern = "who won the (last|latest) (f1|formula 1|grand prix) [race]"
+[[triggers]]
+pattern = "[latest|last] (f1|formula 1) (results|race)"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.jolpi.ca/ergast/f1/current/last/results.json?limit=3" }
+into = "resp"
+extract = [
+  { into = "race", json = "json.MRData.RaceTable.Races[0].raceName" },
+  { into = "day", json = "json.MRData.RaceTable.Races[0].date" },
+  { into = "p1", json = "json.MRData.RaceTable.Races[0].Results[0].Driver.familyName" },
+  { into = "p1first", json = "json.MRData.RaceTable.Races[0].Results[0].Driver.givenName" },
+  { into = "p1team", json = "json.MRData.RaceTable.Races[0].Results[0].Constructor.name" },
+  { into = "p2", json = "json.MRData.RaceTable.Races[0].Results[1].Driver.familyName" },
+  { into = "p2team", json = "json.MRData.RaceTable.Races[0].Results[1].Constructor.name" },
+  { into = "p3", json = "json.MRData.RaceTable.Races[0].Results[2].Driver.familyName" },
+  { into = "p3team", json = "json.MRData.RaceTable.Races[0].Results[2].Constructor.name" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "raced" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.raced]
+kind = "decide"
+on = "p1"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "no-race" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.race }} ({{ state.day }}): {{ state.p1first }} {{ state.p1 }} won for {{ state.p1team }}, then {{ state.p2 }} ({{ state.p2team }}) and {{ state.p3 }} ({{ state.p3team }})."
+output = { race = "{{ state.race }}", date = "{{ state.day }}", podium = [ { driver = "{{ state.p1first }} {{ state.p1 }}", team = "{{ state.p1team }}" }, { driver = "{{ state.p2 }}", team = "{{ state.p2team }}" }, { driver = "{{ state.p3 }}", team = "{{ state.p3team }}" } ] }
+
+[nodes.no-race]
+kind = "fail"
+reason = "no-race"
+say = "No Formula 1 race has finished this season yet."
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "The Jolpica F1 API is asking for fewer requests (429); try again in a minute."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The Jolpica F1 API answered {{ state.resp.status }}."

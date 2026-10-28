@@ -1,0 +1,50 @@
+# A quotation and who said it, from DummyJSON's quotes.
+
+name = "quote"
+version = 1
+namespace = "pyrtan"
+description = "A random quotation and who said it."
+tags = ["fun", "read-only"]
+license = "MIT"
+hosts = ["dummyjson.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "give me a quote"
+[[triggers]]
+pattern = "[a] random quote"
+[[triggers]]
+pattern = "inspire me"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://dummyjson.com/quotes/random" }
+into = "resp"
+extract = [{ into = "quote", json = "json.quote" }, { into = "author", json = "json.author" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-quote" },
+  { else = "unexpected" },
+]
+
+[nodes.has-quote]
+kind = "decide"
+on = "quote"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "“{{ state.quote }}” — {{ state.author }}"
+output = { quote = "{{ state.quote }}", author = "{{ state.author }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "DummyJSON answered {{ state.resp.status }}."

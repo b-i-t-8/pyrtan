@@ -1,0 +1,67 @@
+# Roughly where requests from here come from, by their IP address, from
+# ipinfo.io. In a browser that is the visitor; on a service, the service.
+
+name = "where-am-i"
+version = 1
+namespace = "pyrtan"
+description = "Roughly where you are, by your public IP address: city, region, country and network, from ipinfo.io."
+tags = ["network", "read-only"]
+license = "MIT"
+hosts = ["ipinfo.io"]
+start = "fetch"
+
+[[triggers]]
+pattern = "where am i"
+[[triggers]]
+pattern = "where is my ip [address] [from]"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://ipinfo.io/json" }
+into = "resp"
+extract = [
+  { into = "ip", json = "json.ip" },
+  { into = "city", json = "json.city" },
+  { into = "region", json = "json.region" },
+  { into = "country", json = "json.country" },
+  { into = "org", json = "json.org" },
+  { into = "zone", json = "json.timezone" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "located" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.located]
+kind = "decide"
+on = "city"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unknown" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "By your IP address ({{ state.ip }}) you are around {{ state.city }}, {{ state.region }}, {{ state.country }}, on {{ state.org }}."
+output = { ip = "{{ state.ip }}", city = "{{ state.city }}", region = "{{ state.region }}", country = "{{ state.country }}", network = "{{ state.org }}", timezone = "{{ state.zone }}" }
+
+[nodes.unknown]
+kind = "fail"
+reason = "unknown-location"
+say = "ipinfo.io does not know where {{ state.ip }} is."
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "ipinfo.io is asking for fewer requests (429); try again later."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "ipinfo.io answered {{ state.resp.status }}."

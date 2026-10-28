@@ -23,6 +23,11 @@ Endpoints, all JSON:
     What agents beside the swarm suggest (:mod:`pyrtan.suggestions`): a
     branch's meaning, a trigger, a tree. Kept, never applied;
     ``pyrtan grow --suggestions`` writes them, by rules, for a person.
+``POST /build``    ``{"text": "...", "answers": {...}}``
+    The builder (:mod:`pyrtan.build`): the questions that apply to the
+    sentence given the answers so far, each with its default, and the
+    tree file those answers describe, checked. Nothing is written here;
+    the console offers the file to save.
 ``GET /`` and ``GET /console``
     The console (:mod:`pyrtan.page`); ``GET /api`` is the JSON index.
 
@@ -59,6 +64,7 @@ from typing import Any, Callable
 from . import __version__
 from .gaps import GapStore
 from .page import MANIFEST, PYRTAN_JS, SERVICE_WORKER, default_page
+from .build import BuildError, build
 from .grow import Unanswered
 from .suggestions import Suggestions
 from .registry import Registry
@@ -232,6 +238,9 @@ class Service:
             return {"status": "error", "reason": "bad-request", "say": "Send {\"snapshot\": {...}, \"answer\": ...}."}
         return self._finish(self.runner.resume(snapshot, body.get("answer")), body)
 
+    def build(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return build_answer(body)
+
     def _finish(self, outcome: Outcome, body: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             self.runs += 1
@@ -275,13 +284,15 @@ class Service:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/suggestions", "/watches"]}
+            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":
             return 200, self.run(body)
         if method == "POST" and path == "/resume":
             return 200, self.resume(body)
+        if method == "POST" and path == "/build":
+            return self.build(body)
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
 
 
@@ -446,6 +457,26 @@ class Server:
     def stop(self) -> None:
         self.httpd.shutdown()
         self.httpd.server_close()
+
+
+def build_answer(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    """``POST /build``: the builder's questions and the file for a sentence
+    and the answers so far. A bad answer comes back as ``bad-answer`` with
+    the question's key, so a form can point at it."""
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\", \"answers\": {...}}."}
+    answers = body.get("answers") or {}
+    if not isinstance(answers, dict):
+        return 400, {"status": "error", "reason": "bad-request", "say": "answers is a table of question key to answer."}
+    name = body.get("name")
+    if name is not None and not isinstance(name, str):
+        return 400, {"status": "error", "reason": "bad-request", "say": "name is a string."}
+    try:
+        built = build(text, answers, name or None)
+    except BuildError as e:
+        return 200, {"status": "error", "reason": "bad-answer", "key": e.key, "say": str(e)}
+    return 200, {"status": "ok", **built.to_dict()}
 
 
 def serve(

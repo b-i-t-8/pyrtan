@@ -1018,5 +1018,539 @@
       "url": "https://apod.nasa.gov/apod/image/2610/example_1024.jpg",
       "explanation": "Sometimes it's night on the ground but day in the air."
     }
+  },
+  "GET https://dns.google/resolve?name=gmail.com&type=MX": {
+    "status": 200,
+    "body": {
+      "Status": 0,
+      "Answer": [
+        {
+          "name": "gmail.com.",
+          "type": 15,
+          "TTL": 1029,
+          "data": "30 alt3.gmail-smtp-in.l.google.com."
+        },
+        {
+          "name": "gmail.com.",
+          "type": 15,
+          "TTL": 1029,
+          "data": "5 gmail-smtp-in.l.google.com."
+        },
+        {
+          "name": "gmail.com.",
+          "type": 15,
+          "TTL": 1029,
+          "data": "40 alt4.gmail-smtp-in.l.google.com."
+        },
+        {
+          "name": "gmail.com.",
+          "type": 15,
+          "TTL": 1029,
+          "data": "20 alt2.gmail-smtp-in.l.google.com."
+        },
+        {
+          "name": "gmail.com.",
+          "type": 15,
+          "TTL": 1029,
+          "data": "10 alt1.gmail-smtp-in.l.google.com."
+        }
+      ]
+    }
+  },
+  "GET https://countriesnow.space/api/v0.1/countries/capital/q?country=Norway": {
+    "status": 200,
+    "body": {
+      "error": false,
+      "msg": "country and capitals retrieved",
+      "data": {
+        "name": "Norway",
+        "capital": "Oslo",
+        "iso2": "NO",
+        "iso3": "NOR"
+      }
+    }
+  },
+  "GET https://dns.google/resolve?name=nope-qqzz-empty.pyrtan.com&type=TXT": {
+    "status": 200,
+    "body": {
+      "Status": 0,
+      "Authority": [
+        {
+          "name": "pyrtan.com.",
+          "type": 6,
+          "TTL": 1800,
+          "data": "curitiba.ns.porkbun.com. dns.cloudflare.com. 2418595495 10000 2400 604800 1800"
+        }
+      ]
+    }
+  },
+  "GET https://api.nuget.org/v3-flatcontainer/newtonsoft.json/index.json": {
+    "status": 200,
+    "body": {
+      "versions": [
+        "13.0.5-beta1",
+        "14.0.1-beta1",
+        "14.0.1-beta2"
+      ]
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Lisbon&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Lisbon",
+          "country": "Portugal",
+          "latitude": 38.72509,
+          "longitude": -9.1498
+        }
+      ]
+    }
+  },
+  "GET https://marine-api.open-meteo.com/v1/marine?latitude=38.72509&longitude=-9.1498&current=wave_height,wave_period,wave_direction": {
+    "status": 200,
+    "body": {
+      "current": {
+        "wave_height": 1.42,
+        "wave_period": 11.7,
+        "wave_direction": 289
+      }
+    }
+  },
+  "GET https://api.coinbase.com/v2/prices/ETH-EUR/spot": {
+    "status": 200,
+    "body": {
+      "data": {
+        "amount": "2107.37",
+        "base": "ETH",
+        "currency": "EUR"
+      }
+    }
+  },
+  "GET https://api.jolpi.ca/ergast/f1/current/last/results.json?limit=3": {
+    "status": 200,
+    "body": {
+      "MRData": {
+        "RaceTable": {
+          "Races": [
+            {
+              "raceName": "United States Grand Prix",
+              "date": "2026-10-25",
+              "Results": [
+                {
+                  "Driver": {
+                    "givenName": "Andrea Kimi",
+                    "familyName": "Antonelli"
+                  },
+                  "Constructor": {
+                    "name": "Mercedes"
+                  }
+                },
+                {
+                  "Driver": {
+                    "givenName": "Charles",
+                    "familyName": "Leclerc"
+                  },
+                  "Constructor": {
+                    "name": "Ferrari"
+                  }
+                },
+                {
+                  "Driver": {
+                    "givenName": "Max",
+                    "familyName": "Verstappen"
+                  },
+                  "Constructor": {
+                    "name": "Red Bull"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "GET https://v2.jokeapi.dev/joke/Programming?safe-mode&type=single": {
+    "status": 200,
+    "body": {
+      "error": false,
+      "category": "Programming",
+      "type": "single",
+      "joke": "Algorithm: A word used by programmers when they don't want to explain how their code works.",
+      "flags": {
+        "nsfw": false,
+        "religious": false,
+        "political": false,
+        "racist": false,
+        "sexist": false,
+        "explicit": false
+      },
+      "id": 50,
+      "safe": true,
+      "lang": "en"
+    }
+  },
+  "GET https://dns.google/resolve?name=nope-qqzz.example&type=A": {
+    "status": 200,
+    "body": {
+      "Status": 3,
+      "Authority": [
+        {
+          "name": ".",
+          "type": 6,
+          "TTL": 86380,
+          "data": "a.root-servers.net. nstld.verisign-grs.com. 2026102702 1800 900 604800 86400"
+        }
+      ]
+    }
+  },
+  "GET https://api.npmjs.org/downloads/point/last-week/react": {
+    "status": 200,
+    "body": {
+      "downloads": 165732882,
+      "start": "2026-10-20",
+      "end": "2026-10-26",
+      "package": "react"
+    }
+  },
+  "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=-33.86785&longitude=151.20732&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen": {
+    "status": 200,
+    "body": {
+      "current": {
+        "grass_pollen": null,
+        "birch_pollen": null,
+        "alder_pollen": null,
+        "mugwort_pollen": null,
+        "olive_pollen": null,
+        "ragweed_pollen": null
+      }
+    }
+  },
+  "GET https://www.thecocktaildb.com/api/json/v1/1/search.php?s=qqzzx": {
+    "status": 200,
+    "body": {
+      "drinks": null
+    }
+  },
+  "GET https://dns.google/resolve?name=example.com&type=A": {
+    "status": 200,
+    "body": {
+      "Status": 0,
+      "Answer": [
+        {
+          "name": "example.com.",
+          "type": 1,
+          "TTL": 300,
+          "data": "172.66.147.243"
+        },
+        {
+          "name": "example.com.",
+          "type": 1,
+          "TTL": 300,
+          "data": "104.20.23.154"
+        }
+      ]
+    }
+  },
+  "GET https://api.npmjs.org/downloads/point/last-week/@types/node": {
+    "status": 200,
+    "body": {
+      "downloads": 404009479,
+      "start": "2026-10-20",
+      "end": "2026-10-26",
+      "package": "@types/node"
+    }
+  },
+  "GET https://api.datamuse.com/words?rel_ant=happy&max=8": {
+    "status": 200,
+    "body": [
+      {
+        "word": "sad"
+      },
+      {
+        "word": "distressed"
+      },
+      {
+        "word": "unhappy"
+      },
+      {
+        "word": "dysphoric"
+      }
+    ]
+  },
+  "GET https://www.themealdb.com/api/json/v1/1/search.php?s=lasagna": {
+    "status": 200,
+    "body": {
+      "meals": [
+        {
+          "idMeal": "52775"
+        }
+      ]
+    }
+  },
+  "GET https://www.themealdb.com/api/json/v1/1/lookup.php?i=52775": {
+    "status": 200,
+    "body": {
+      "meals": [
+        {
+          "strMeal": "Vegan Lasagna",
+          "strCategory": "Vegan",
+          "strArea": "Italian",
+          "strInstructions": "1) Preheat oven to 180 degrees celcius. \r\n2) Boil vegetables for 5-7 minutes, until soft. Add lentils and bring to a gentle simmer, adding a stock cube if desired. Continue cooking and stirring until the lentils are soft, which should take about 20 minutes. \r\n3) Blanch spinach leaves for a few minutes in a pan, before removing and setting aside. \r\n4) Top up the pan with water and cook the lasagne sheets. When cooked, drain and set aside.\r\n5) To make the sauce, melt the butter and add the flour, then gradually add the soya milk along with the mustard and the vinegar. Cook and stir until smooth and then assemble the lasagne as desired in a baking dish. \r\n6) Bake in the preheated oven for about 25 minutes.",
+          "strIngredient1": "green red lentils",
+          "strIngredient2": "Carrots",
+          "strIngredient3": "onion",
+          "strIngredient4": "zucchini",
+          "strIngredient5": "coriander",
+          "strIngredient6": "spinach",
+          "strIngredient7": "lasagne sheets",
+          "strIngredient8": "vegan butter",
+          "strIngredient9": "flour",
+          "strIngredient10": "soya milk",
+          "strIngredient11": "mustard",
+          "strIngredient12": "vinegar",
+          "strIngredient13": "",
+          "strIngredient14": "",
+          "strIngredient15": "",
+          "strIngredient16": null,
+          "strIngredient17": null,
+          "strIngredient18": null,
+          "strIngredient19": null,
+          "strIngredient20": null
+        }
+      ]
+    }
+  },
+  "GET https://api.datamuse.com/words?rel_ant=qqzzx&max=8": {
+    "status": 200,
+    "body": []
+  },
+  "GET https://corquaid.github.io/international-space-station-APIs/JSON/people-in-space.json": {
+    "status": 200,
+    "body": {
+      "number": 10,
+      "people": [
+        {
+          "name": "Zhu Yangzhu"
+        },
+        {
+          "name": "Zhang Zhiyuan"
+        },
+        {
+          "name": "Lai Ka-ying"
+        },
+        {
+          "name": "Pyotr Dubrov"
+        },
+        {
+          "name": "Anna Kikina"
+        },
+        {
+          "name": "Anil Menon"
+        },
+        {
+          "name": "Jessica Watkins"
+        },
+        {
+          "name": "Luke Delaney"
+        },
+        {
+          "name": "Joshua Kutryk"
+        },
+        {
+          "name": "Sergey Teteryatnikov"
+        }
+      ]
+    }
+  },
+  "GET https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5": {
+    "status": 200,
+    "body": {
+      "events": [
+        {
+          "title": "Tropical Cyclone Arnab"
+        },
+        {
+          "title": "Tropical Storm Olana"
+        },
+        {
+          "title": "Wildfire Range  47B, Forrest, Mississippi"
+        },
+        {
+          "title": "Typhoon In-fa"
+        },
+        {
+          "title": "Wildfire BEE HAVEN (2) (24-06), Hamilton, Florida"
+        }
+      ]
+    }
+  },
+  "GET https://world.openfoodfacts.org/api/v2/product/3017624010701.json?fields=product_name,brands,quantity,nutriscore_grade": {
+    "status": 200,
+    "body": {
+      "code": "3017624010701",
+      "product": {
+        "brands": "Ferrero",
+        "nutriscore_grade": "e",
+        "product_name": "Nutella",
+        "quantity": "400.0 g"
+      },
+      "status": 1,
+      "status_verbose": "product found"
+    }
+  },
+  "GET https://api.coinbase.com/v2/prices/BTC-USD/spot": {
+    "status": 200,
+    "body": {
+      "data": {
+        "amount": "80645.125",
+        "base": "BTC",
+        "currency": "USD"
+      }
+    }
+  },
+  "GET https://api.npmjs.org/downloads/point/last-week/nope-not-a-pkg-zz": {
+    "status": 404,
+    "body": {
+      "error": "package nope-not-a-pkg-zz not found"
+    }
+  },
+  "GET https://www.thecocktaildb.com/api/json/v1/1/search.php?s=margarita": {
+    "status": 200,
+    "body": {
+      "drinks": [
+        {
+          "idDrink": "11007"
+        }
+      ]
+    }
+  },
+  "GET https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i=11007": {
+    "status": 200,
+    "body": {
+      "drinks": [
+        {
+          "strDrink": "Margarita",
+          "strCategory": "Ordinary Drink",
+          "strGlass": "Cocktail glass",
+          "strInstructions": "Rub the rim of the glass with the lime slice to make the salt stick to it. Take care to moisten only the outer rim and sprinkle the salt on it. The salt should present to the lips of the imbiber and never mix into the cocktail. Shake the other ingredients with ice, then carefully pour into the glass.",
+          "strIngredient1": "Tequila",
+          "strIngredient2": "Triple sec",
+          "strIngredient3": "Lime juice",
+          "strIngredient4": "Salt",
+          "strIngredient5": null,
+          "strIngredient6": null,
+          "strIngredient7": null,
+          "strIngredient8": null,
+          "strIngredient9": null,
+          "strIngredient10": null,
+          "strIngredient11": null,
+          "strIngredient12": null,
+          "strIngredient13": null,
+          "strIngredient14": null,
+          "strIngredient15": null
+        }
+      ]
+    }
+  },
+  "GET https://api.nuget.org/v3-flatcontainer/nope-qqzz/index.json": {
+    "status": 404,
+    "body": "<Error><Code>BlobNotFound</Code></Error>"
+  },
+  "GET https://www.themealdb.com/api/json/v1/1/search.php?s=qqzzx": {
+    "status": 200,
+    "body": {
+      "meals": null
+    }
+  },
+  "GET https://ipinfo.io/json": {
+    "status": 200,
+    "body": {
+      "ip": "203.0.113.7",
+      "city": "Columbus",
+      "region": "Ohio",
+      "country": "US",
+      "org": "AS64496 Example Net",
+      "timezone": "America/New_York"
+    }
+  },
+  "GET https://countriesnow.space/api/v0.1/countries/capital/q?country=Narnia": {
+    "status": 404,
+    "body": {
+      "error": true,
+      "msg": "country not found"
+    }
+  },
+  "GET https://dummyjson.com/quotes/random": {
+    "status": 200,
+    "body": {
+      "id": 668,
+      "quote": "Live life as if its rigged in your favor.",
+      "author": "Rumi"
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Paris",
+          "country": "France",
+          "latitude": 48.85341,
+          "longitude": 2.3488
+        }
+      ]
+    }
+  },
+  "GET https://air-quality-api.open-meteo.com/v1/air-quality?latitude=48.85341&longitude=2.3488&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen": {
+    "status": 200,
+    "body": {
+      "current": {
+        "grass_pollen": 12.4,
+        "birch_pollen": 0.3,
+        "alder_pollen": 1.5,
+        "mugwort_pollen": 0.6,
+        "olive_pollen": 0.1,
+        "ragweed_pollen": 2.2
+      }
+    }
+  },
+  "GET https://world.openfoodfacts.org/api/v2/product/00000000.json?fields=product_name,brands,quantity,nutriscore_grade": {
+    "status": 200,
+    "body": {
+      "code": "00000000",
+      "status": 0,
+      "status_verbose": "no code or invalid code"
+    }
+  },
+  "GET https://api.coinbase.com/v2/prices/QQQ-USD/spot": {
+    "status": 404,
+    "body": {
+      "message": "not found"
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Munich&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Munich",
+          "country": "Germany",
+          "latitude": 48.13743,
+          "longitude": 11.57549
+        }
+      ]
+    }
+  },
+  "GET https://marine-api.open-meteo.com/v1/marine?latitude=48.13743&longitude=11.57549&current=wave_height,wave_period,wave_direction": {
+    "status": 200,
+    "body": {
+      "current": {
+        "wave_height": null,
+        "wave_period": null,
+        "wave_direction": null
+      }
+    }
   }
 }

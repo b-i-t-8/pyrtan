@@ -1,0 +1,56 @@
+# How often an npm package was downloaded last week, from npm's
+# download counts API.
+
+name = "npm-downloads"
+version = 1
+namespace = "pyrtan"
+description = "How many times an npm package was downloaded in the last week."
+tags = ["software", "javascript", "read-only"]
+license = "MIT"
+hosts = ["api.npmjs.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "how many downloads does {package:word} have [on npm]"
+[[triggers]]
+pattern = "npm downloads (for|of) {package:word}"
+
+[inputs.package]
+type = "str"
+pattern = "^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$"
+description = "A package name, as in: react or @types/node"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.npmjs.org/downloads/point/last-week/{{ inputs.package }}" }
+into = "resp"
+extract = [
+  { into = "count", json = "json.downloads" },
+  { into = "from", json = "json.start" },
+  { into = "to", json = "json.end" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-package" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.package }} was downloaded {{ state.count }} times on npm from {{ state.from }} to {{ state.to }}."
+output = { package = "{{ inputs.package }}", downloads = "{{ state.count }}", start = "{{ state.from }}", end = "{{ state.to }}" }
+
+[nodes.no-package]
+kind = "fail"
+reason = "no-package"
+say = "npm has no download counts for {{ inputs.package }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "npm's download counts answered {{ state.resp.status }}."

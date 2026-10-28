@@ -25,8 +25,9 @@ an API, a site, a device or any other source or sink of I/O. And they are
 live: a service reloads a tree the moment its file changes, a tree can hand
 part of its work to any other tree in the swarm, every decision that meets a
 value no branch covers is recorded as a **gap**, and every sentence nobody
-answers is recorded as **unanswered** with a proposed tree. That is how the
-swarm tells its authors where to grow next. An **agent**, an open-weights
+answers is recorded as **unanswered** with a proposed tree, and a builder
+that asks the few things the proposal cannot know. That is how the swarm
+tells its authors where to grow next. An **agent**, an open-weights
 model you start in the console, goes looking for both and suggests what
 to write; it sits beside the trees, never inside a run, and a person
 accepts what it suggests.
@@ -175,9 +176,10 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
 | `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
-| `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them. |
+| `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them; `--build DIR` asks you about each one first. |
 | `pyrtan suggestions --at URL` | What agents beside the swarm suggested: a branch's meaning, a trigger, a tree. `pyrtan grow --suggestions URL_OR_FILE --trees DIR --apply` writes them, through the rules. |
 | `pyrtan new --from "…"` | Scaffolds a tree file from a sentence: numbers and hosts in it become slots, and the file passes `pyrtan check`. `pyrtan new NAME` scaffolds from a name. |
+| `pyrtan build --from "…"` | The builder: asks what the tree reads (an API or page, a file, a program, a browser, another tree, or nothing), what to pull out, what it decides on and which branches, and what it says; every answer has a default drawn from the sentence by rules, and the file it writes passes `pyrtan check`. `--answer k=v` answers ahead, `--yes` takes the defaults, `--show` prints instead of writing. The console offers the same questions on any unanswered sentence. |
 | `pyrtan search WORDS` | Finds trees in a catalog (default: the one at pyrtan.com). |
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
@@ -214,10 +216,13 @@ sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
 while the page is open. Every example runs there but six: weather
 today and tomorrow, sunrise, UV and air quality, local time, elevation,
-postcodes, Wikipedia, words (definitions, synonyms, rhymes), exchange
-rates, Hacker News, GitHub, packages (npm, PyPI, Go, Homebrew), books,
-earthquakes, the ISS, launches, space news, NASA's picture of the day,
-holidays, the Wayback Machine, Pokémon, your IP, jokes, advice and cat
+postcodes, capitals, pollen, waves, Wikipedia, words (definitions,
+synonyms, antonyms, rhymes), exchange rates and crypto prices, Hacker
+News, GitHub, packages (npm versions and downloads, PyPI, Go, Homebrew,
+NuGet), DNS, books, recipes and cocktails, food barcodes, earthquakes,
+NASA's natural events, the ISS and who is in space, launches, space
+news, NASA's picture of the day, Formula 1, holidays, the Wayback
+Machine, Pokémon, your IP and where it is, quotes, jokes, advice and cat
 facts. The six that need a hub reach a box or any site at all:
 `disk-space`, `log-errors`, `modem-check`, `room-temperature`,
 `rendered-headline` and `site-status`. Trees that need a box (files, programs, serial
@@ -793,7 +798,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.22.0. The core, the service, the hub, the command, the console (which
+0.23.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -807,8 +812,9 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
-a tree's own tests and the diff an edit makes to them (`pyrtan test`, `pyrtan diff`),
-and the chat lobby (strangers on the hub and the
+`pyrtan build` (the tree an unanswered sentence asks for, through a few
+questions with defaults by rules), a tree's own tests and the diff an edit
+makes to them (`pyrtan test`, `pyrtan diff`), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
