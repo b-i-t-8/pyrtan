@@ -162,7 +162,7 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
-| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only). |
+| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers; `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network (built in), or the one an invite (`NAME:SECRET@HUB`) names. |
@@ -201,7 +201,11 @@ its `link`; and the gaps. The same console lives at
 join one, the browser is the hub. It holds the catalog's trees, reads the
 sentence and runs the tree in the page (`pyrtan.js`, the same runtime and
 the same reading as Python's), and keeps gaps and unanswered sentences
-while the page is open. Trees that need a box (files, programs, serial
+while the page is open. Seventeen of the examples run there: weather,
+sunrise and sunset, air quality, Wikipedia, a dictionary, Hacker News
+(top stories, an item, a search), books, npm and PyPI versions, GitHub
+releases, earthquakes, where the ISS is, public holidays, a dad joke,
+and small talk. Trees that need a box (files, programs, serial
 lines, brokers, a browser to drive) or a site that does not let a page
 read it say so; for those, join a hub started with
 `--cors https://pyrtan.com` by giving its URL and token. Forget it and the
@@ -284,7 +288,11 @@ the network once never needs pyrtan.com again; when nobody accepts, the
 hub is the network so far, and others join through it. `$PYRTAN_HUB_LIST`
 takes any number of sources (a hub list, any hub's `/directory`, a
 snapshot or a mirror of one), so pyrtan.com is one starting point among
-any others. pyrtan.com runs no hub: it is static files on GitHub Pages,
+any others. On one LAN not even that is needed: hubs started `--lan`
+(with `--advertise http://<LAN address>:PORT`) announce themselves over
+UDP multicast that never passes a router, and `pyrtan join` tries the
+hubs heard there right after the ones it follows, so two boxes in one
+house find each other with the internet unplugged. pyrtan.com runs no hub: it is static files on GitHub Pages,
 and publishes the default network's name and secret only as a mirror. Every
 hour its build asks every hub it knows of for its directory (the hub
 list, then everyone the last snapshot or a hub names), keeps the default
@@ -651,11 +659,11 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.16.0. The core, the service, the hub, the command, the console, the
+0.17.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; the default one is built
-in), the gossiped directory, members (a browser or a phone as
+in; hubs on one LAN find each other by multicast), the gossiped directory, members (a browser or a phone as
 part of the swarm), the blobs they keep and the trees they run
 (`pyrtan.js`, conformant with the Python runtime), six forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues), each

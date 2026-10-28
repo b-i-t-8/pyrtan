@@ -1,0 +1,65 @@
+# The next public holiday in a country, from Nager.Date. The country is its
+# two-letter ISO code; the API answers an unknown one with an error status.
+
+name = "holidays"
+version = 1
+namespace = "pyrtan"
+description = "The next public holiday in a country (by its two-letter code), from Nager.Date."
+tags = ["calendar", "read-only"]
+license = "MIT"
+hosts = ["date.nager.at"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[when is the] next [public|bank] holiday in {country:word}"
+[[triggers]]
+pattern = "[public|bank] holidays in {country:word}"
+
+[inputs.country]
+type = "str"
+pattern = "^[A-Za-z]{2}$"
+description = "A two-letter country code, as in: NO, US, DE"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://date.nager.at/api/v3/NextPublicHolidays/{{ inputs.country | upper }}" }
+into = "resp"
+extract = [
+  { into = "date", json = "json[0].date" },
+  { into = "name", json = "json[0].name" },
+  { into = "local", json = "json[0].localName" },
+  { into = "then", json = "json[1].name" },
+  { into = "then_date", json = "json[1].date" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unknown-country" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "date"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "none-listed" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "The next public holiday in {{ inputs.country | upper }} is {{ state.name }} ({{ state.local }}) on {{ state.date }}."
+output = { country = "{{ inputs.country | upper }}", date = "{{ state.date }}", name = "{{ state.name }}", local_name = "{{ state.local }}", after = { date = "{{ state.then_date }}", name = "{{ state.then }}" } }
+
+[nodes.unknown-country]
+kind = "fail"
+reason = "unknown-country"
+say = "Nager.Date knows no country {{ inputs.country | upper }} (it answered {{ state.resp.status }}); use a two-letter code such as NO, US or DE."
+
+[nodes.none-listed]
+kind = "fail"
+reason = "none-listed"
+say = "Nager.Date lists no coming public holidays for {{ inputs.country | upper }}."

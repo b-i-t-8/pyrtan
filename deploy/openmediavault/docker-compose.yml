@@ -38,6 +38,9 @@ x-pyrtan: &pyrtan
     # default network (built into pyrtan), follows a hub in it, and lists
     # itself in the directory. Needs the token, and PYRTAN_EGRESS: public
     # above: hubs that follow this one may ask it to run trees.
+    # PYRTAN_LAN: "true" finds the other hubs in the house by multicast,
+    # with nobody to ask; it needs `network_mode: host` on the hub and
+    # PYRTAN_ADVERTISE set to the box's LAN address (http://<nas-ip>:8700).
     # PYRTAN_JOIN may also hold invites to networks of your own
     # (NAME:SECRET@HUB, from `pyrtan network new`), space-separated.
     # PYRTAN_ADVERTISE: "https://hub.example.net"

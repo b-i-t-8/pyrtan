@@ -148,3 +148,93 @@ def test_capabilities_name_the_sources_and_lists(examples):
     assert caps["disk-space"]["sources"] == ["shell"] and caps["disk-space"]["commands"] == ["df"] and "paths" not in caps["disk-space"]
     assert caps["room-temperature"]["sources"] == ["queue"] and caps["room-temperature"]["topics"] == ["home/+/temperature"]
     assert caps["weather"]["sources"] == ["http"] and caps["modem-check"]["devices"] == ["/dev/ttyUSB*", "/dev/ttyACM*"]
+
+
+# ---------------------------------------------------------------- trees that run in a browser too
+# Each reaches only an API that lets a page on another origin read it (CORS),
+# so the console at pyrtan.com runs them in the page, with no hub.
+
+
+def _path(out):
+    return [s.node for s in out.trace.steps if s.kind != "intent"]
+
+
+def test_wikipedia_summary_and_its_refusals(runner):
+    out = runner.run_intent("tell me about Ursula K. Le Guin")
+    assert out.status == "done" and out.inputs == {"topic": "Ursula K Le Guin"}
+    assert out.say.startswith("Ursula K. Le Guin: Ursula Kroeber Le Guin was an American author.") and out.output["url"] == "https://en.wikipedia.org/wiki/Ursula_K._Le_Guin"
+    out = runner.run_intent("wiki Mercury")
+    assert out.reason == "ambiguous" and _path(out) == ["fetch", "status", "kind", "ambiguous"]
+    assert runner.run_intent("who is Xyzzyplugh Notaperson").reason == "no-article"
+    assert runner.run_intent("who was Alan Turing").reason == "rate-limited"
+
+
+def test_define(runner):
+    out = runner.run_intent("what does serendipity mean")
+    assert out.status == "done" and out.say.startswith("serendipity (noun): A combination of events")
+    assert out.output["phonetic"] == "/ˌsɛ.ɹən.ˈdɪ.pɪ.ti/"
+    assert runner.run_intent("define zzzqx").reason == "unknown-word"
+
+
+def test_sun_times_in_local_time(runner):
+    out = runner.run_intent("when is sunset in Oslo")
+    assert out.say == "Oslo, Norway, 2026-10-28: sunrise 07:28, sunset 16:32 (Europe/Oslo)."
+    out = runner.run_intent("sunrise in Longyearbyen")  # polar night: no sunrise at all
+    assert out.reason == "no-times" and _path(out)[-1] == "no-times"
+    assert runner.run_intent("sun times for Nowhereville").reason == "unknown-place"
+
+
+def test_air_quality_bands(runner):
+    out = runner.run_intent("air quality in Oslo")
+    assert out.say == "Oslo, Norway: air quality fair (European AQI 21), PM2.5 3.8 µg/m³, PM10 10.2 µg/m³."
+    out = runner.run_intent("how is the air in Delhi")
+    assert out.output["band"] == "very poor" and [s.chosen for s in out.trace.steps if s.node == "band"] == ["lte 100"]
+
+
+def test_package_versions(runner):
+    out = runner.run_intent("latest version of @types/node on npm")
+    assert out.status == "done" and out.output == {"package": "@types/node", "version": "26.6.5", "description": "TypeScript definitions for node", "url": "https://www.npmjs.com/package/@types/node"}
+    assert runner.run_intent("npm package nope-not-a-pkg-zz").reason == "no-package"
+    out = runner.run_intent("latest requests on pypi")
+    assert out.say == "requests 2.34.2 on PyPI: Python HTTP for Humans. https://pypi.org/project/requests/"
+    assert runner.run_intent("pip version nope-not-a-pkg-zz").reason == "no-package"
+
+
+def test_earthquakes(runner):
+    out = runner.run_intent("any earthquakes today")
+    assert out.output["count"] == 19 and out.output["latest"]["place"] == "7 km ENE of Pangyan, Philippines"
+    assert out.say.startswith("19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1")
+
+
+def test_iss_rounds_its_words_not_its_output(runner):
+    out = runner.run_intent("where is the iss")
+    assert out.say == "The ISS is over -26.62, -60.10, 422 km up, moving at 27577 km/h, in the Earth's shadow."
+    assert out.output["latitude"] == -26.625662371377 and _path(out)[-2:] == ["in-shadow", "reply"]
+
+
+def test_hn_search(runner):
+    out = runner.run_intent("search hacker news for sqlite")
+    assert out.output["total"] == 4632 and len(out.output["stories"]) == 3
+    assert out.output["stories"][0]["discussion"] == "https://news.ycombinator.com/item?id=27016630"
+    out = runner.run_intent("search hacker news for qqqzzzxxyyy")
+    assert out.status == "done" and out.output == {"query": "qqqzzzxxyyy", "total": 0, "stories": []}
+
+
+def test_books(runner):
+    out = runner.run_intent("who wrote The Left Hand of Darkness")
+    assert out.say == "The Left Hand of Darkness, by Ursula K. Le Guin (1969). https://openlibrary.org/works/OL59800W"
+    assert runner.run_intent("find the book qqqzzzxxyyy").reason == "no-book"
+
+
+def test_holidays_by_country_code(runner):
+    out = runner.run_intent("next holiday in no")
+    assert out.say == "The next public holiday in NO is Christmas Day (Første juledag) on 2026-12-25."
+    assert out.output["after"] == {"date": "2026-12-26", "name": "St. Stephen's Day"}
+    assert runner.run_intent("next holiday in XX").reason == "unknown-country"
+    assert runner.run_intent("next holiday in Norway").reason == "bad-input"
+
+
+def test_dad_joke_asks_for_json(runner, recorded):
+    out = runner.run_intent("tell me a joke")
+    assert out.status == "done" and out.say == "I am so good at sleeping I can do it with my eyes closed!"
+    assert runner.registry.get("dad-joke").nodes["fetch"].get("http")["headers"] == {"Accept": "application/json"}

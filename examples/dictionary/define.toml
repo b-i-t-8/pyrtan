@@ -1,0 +1,66 @@
+# The first definition of an English word, from the Free Dictionary API.
+
+name = "define"
+version = 1
+namespace = "pyrtan"
+description = "What an English word means: its first definition, part of speech and pronunciation."
+tags = ["reference", "language", "read-only"]
+license = "MIT"
+hosts = ["api.dictionaryapi.dev"]
+start = "fetch"
+
+[[triggers]]
+pattern = "define {word:word}"
+[[triggers]]
+pattern = "what does {word:word} mean"
+[[triggers]]
+pattern = "[the] (meaning|definition) of {word:word}"
+
+[inputs.word]
+type = "str"
+pattern = "^[A-Za-z][A-Za-z'\\-]*$"
+description = "One English word"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.dictionaryapi.dev/api/v2/entries/en/{{ inputs.word | lower | url }}" }
+into = "resp"
+extract = [
+  { into = "word", json = "json[0].word" },
+  { into = "phonetic", json = "json[0].phonetic" },
+  { into = "part", json = "json[0].meanings[0].partOfSpeech" },
+  { into = "definition", json = "json[0].meanings[0].definitions[0].definition" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-definition" },
+  { when = { eq = 404 }, then = "unknown-word" },
+  { else = "unexpected" },
+]
+
+[nodes.has-definition]
+kind = "decide"
+on = "definition"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unknown-word" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.word }} ({{ state.part }}): {{ state.definition }}"
+output = { word = "{{ state.word }}", phonetic = "{{ state.phonetic }}", part_of_speech = "{{ state.part }}", definition = "{{ state.definition }}" }
+
+[nodes.unknown-word]
+kind = "fail"
+reason = "unknown-word"
+say = "The dictionary has no entry for {{ inputs.word }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The dictionary answered {{ state.resp.status }}."

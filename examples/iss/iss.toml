@@ -1,0 +1,82 @@
+# Where the International Space Station is now, from wheretheiss.at
+# (25544 is its NORAD catalog number).
+
+name = "iss"
+version = 1
+namespace = "pyrtan"
+description = "Where the International Space Station is right now: latitude, longitude, altitude and speed."
+tags = ["science", "space", "read-only"]
+license = "MIT"
+hosts = ["api.wheretheiss.at"]
+start = "fetch"
+
+[[triggers]]
+pattern = "where is the (iss|space station) [now]"
+[[triggers]]
+pattern = "(iss|space station) (position|location)"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.wheretheiss.at/v1/satellites/25544" }
+into = "resp"
+# The API gives a dozen decimals; the words keep two (for a position, about a kilometre), the output all of them.
+extract = [
+  { into = "lat", json = "json.latitude" },
+  { into = "lon", json = "json.longitude" },
+  { into = "alt", json = "json.altitude" },
+  { into = "speed", json = "json.velocity" },
+  { into = "light", json = "json.visibility" },
+  { into = "lat2", regex = "\"latitude\":\\s*(-?\\d+(?:\\.\\d{1,2})?)" },
+  { into = "lon2", regex = "\"longitude\":\\s*(-?\\d+(?:\\.\\d{1,2})?)" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "have-position" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.have-position]
+kind = "decide"
+on = "lat"
+branches = [
+  { when = { type = "number" }, then = "light" },
+  { else = "unexpected" },
+]
+
+[nodes.light]
+kind = "decide"
+on = "light"
+branches = [
+  { when = { eq = "daylight" }, then = "in-sun" },
+  { when = { eq = "eclipsed" }, then = "in-shadow" },
+  { else = "in-sun" },
+]
+
+[nodes.in-sun]
+kind = "set"
+set = { where = "in sunlight" }
+next = "reply"
+[nodes.in-shadow]
+kind = "set"
+set = { where = "in the Earth's shadow" }
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "The ISS is over {{ state.lat2 }}, {{ state.lon2 }}, {{ state.alt | int }} km up, moving at {{ state.speed | int }} km/h, {{ state.where }}."
+output = { latitude = "{{ state.lat }}", longitude = "{{ state.lon }}", altitude_km = "{{ state.alt }}", speed_kmh = "{{ state.speed }}", visibility = "{{ state.light }}", map = "https://www.openstreetmap.org/?mlat={{ state.lat }}&mlon={{ state.lon }}&zoom=3" }
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "wheretheiss.at is asking for fewer requests (429); try again in a moment."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "wheretheiss.at answered {{ state.resp.status }}."

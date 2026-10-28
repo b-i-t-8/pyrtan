@@ -74,7 +74,12 @@ the default network (built in), follows the first hub in it that
 accepts (one it already knows, else from pyrtan.com's hub list, then
 its snapshot),
 routes to it, and is listed in the directory every hub gossips; `pyrtan
-follow URL --at <your hub> --token …` follows any other. For a network
+follow URL --at <your hub> --token …` follows any other. With other hubs
+in the same house (a second NAS, a laptop running `pyrtan hub`), set
+`PYRTAN_LAN: "true"` too, with `network_mode: host` on the hub service
+and `PYRTAN_ADVERTISE` at the box's LAN address: the hubs find each
+other by multicast, and join through each other before asking
+pyrtan.com anything. For a network
 of your own, `pyrtan network new home --at <your hub> --token …` prints
 an invite; a friend's hub joins with `pyrtan join <invite>`, or by
 adding it to its `PYRTAN_JOIN`. Following is one-directional trust: your

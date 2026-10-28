@@ -233,7 +233,7 @@ weather tree is longer for it; it is also readable by a non-programmer end
 to end.
 
 **A map filter, or a `set` that branches, for code-to-word tables.**
-Before 0.16 the weather tree turned a weather code into a word with one
+Before 0.17 the weather tree turned a weather code into a word with one
 `decide` and seven `set` nodes, one per word. A filter such as
 `{{ state.code | map(...) }}` would have been shorter and would have put a
 decision inside a template, where the trace cannot see it. `lookup` is
@@ -332,7 +332,7 @@ Five trees, all against real public APIs, all tested offline:
    (`grow.py`: a missing value, the hole between ranges, else the value),
    `--apply` writes it into the file, and a person says what it means.
    Unanswered sentences persist with `--unanswered FILE`.
-10. **v0.16, built: lookup tables.** A `lookup` node reads one value
+10. **v0.17, built: lookup tables.** A `lookup` node reads one value
     against a table of rows (a condition and a value each), puts the
     first row's value into state, and records a gap when no row holds
     and there is no `default`; `pyrtan grow` drafts the missing row. The
