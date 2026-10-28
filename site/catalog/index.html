@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pyrtan catalog</title>
-<meta name="description" content="Trees you can pull into your own Pyrtan swarm, checked and indexed from the repository.">
+<meta name="description" content="Ready-made Pyrtan trees you can download and run.">
 <meta name="theme-color" content="#c2410c">
 <script src="../theme.js"></script>
 <style>
@@ -32,10 +32,10 @@
 <body>
 <main>
   <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span> catalog</h1>
-  <p class="lede">Trees you can pull into your own swarm. Each is one TOML file, checked by the repository's tests, with the licence its author chose, under the namespace of whoever published it. <code>pyrtan pull NAMESPACE/NAME</code> verifies the file against <a href="index.json">index.json</a> before writing it. Where hubs that opted in have met a value a tree had no branch for, the <a href="../rendezvous/reports.json">gap reports</a> say so beside it.</p>
+  <p class="lede">Ready-made trees you can download and run. Each one is a single tested TOML file, under its author's licence. <code>pyrtan pull NAMESPACE/NAME</code> checks the file against <a href="index.json">index.json</a> before saving it. Where hubs have hit a case a tree doesn't cover, its <a href="../rendezvous/reports.json">gap reports</a> are shown beside it.</p>
   <input type="search" id="q" placeholder="filter: weather, github, read-only…" autocomplete="off">
   <div id="list"><p class="mute">Loading index.json…</p></div>
-  <footer>To publish a tree: <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code>, then open a pull request; the gate checks it, a maintainer merges, and it is here on the next build. <a href="../">pyrtan.com</a> · <a href="../source/blob/catalog/README.md.html">how</a> · <a href="../source/">source</a></footer>
+  <footer>To publish a tree, run <code>pyrtan publish my-tree.toml --into &lt;checkout&gt; --owner &lt;your GitHub login&gt;</code> and open a pull request. Once it passes the checks and is merged, it shows up here. <a href="../">pyrtan.com</a> · <a href="../source/blob/catalog/README.md.html">how</a> · <a href="../source/">source</a></footer>
 </main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -50,7 +50,7 @@ function render() {
     const reach = (t.hosts||[]).concat((t.sources||[]).filter(s => s !== "http"));
     const mine = reports.filter(r => String(r.id).split("@")[0] === id);
     const seen = mine.reduce((n, r) => n + (r.count||1), 0), hubs = Math.max(0, ...mine.map(r => r.reporters||1));
-    const gaps = mine.length ? `<details><summary class="mute">${seen} gap${seen === 1 ? "" : "s"} reported by ${hubs} hub${hubs === 1 ? "" : "s"}: a value no branch covered</summary>${mine.map(r => `<div><code>${esc(r.node)}</code> ${esc(r.on)} = <code>${esc(JSON.stringify(r.observed))}</code> <span class="mute">×${esc(r.count||1)}${r.id.includes("@") ? " · v" + esc(r.id.split("@")[1]) : ""}</span></div>`).join("")}</details>` : "";
+    const gaps = mine.length ? `<details><summary class="mute">${seen} gap${seen === 1 ? "" : "s"} reported by ${hubs} hub${hubs === 1 ? "" : "s"}: cases this tree doesn't cover</summary>${mine.map(r => `<div><code>${esc(r.node)}</code> ${esc(r.on)} = <code>${esc(JSON.stringify(r.observed))}</code> <span class="mute">×${esc(r.count||1)}${r.id.includes("@") ? " · v" + esc(r.id.split("@")[1]) : ""}</span></div>`).join("")}</details>` : "";
     const d = document.createElement("div"); d.className = "card";
     d.innerHTML = `<h2><code>${esc(id)}</code><small>v${esc(t.version)} · ${esc(t.license||"no licence")}${reach.length ? " · " + esc(reach.join(", ")) : ""}</small></h2><div class="mute">${esc(t.description||"")}</div>${(t.triggers||[]).map(p => `<div><code>${esc(p)}</code></div>`).join("")}<pre>pyrtan pull ${esc(id)}</pre>${gaps}<div class="mute"><a href="${esc(t.path)}">${esc(t.path)}</a> · sha256 ${esc((t.sha256||"").slice(0, 12))}…</div>`;
     list.appendChild(d);
