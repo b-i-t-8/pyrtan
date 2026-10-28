@@ -386,7 +386,7 @@ identifier such as `MIT`) and who publishes it in a `namespace` line.
 <checkout of this repository> --owner <your GitHub login>` puts the file
 under `catalog/<namespace>/`, writes the namespace's `OWNERS` if it is
 new, and runs the gate; push the branch and open a pull request. The
-`catalog` workflow runs the same gate (every tree loads clean with a
+`catalog-gate` workflow runs main's copy of the same gate (every tree loads clean with a
 licence and a namespace, sits where its namespace and name say, ids are
 unique, only a namespace's owners change it, a changed file bumps its
 `version`), a maintainer merges, and the next build serves it. No

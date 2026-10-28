@@ -46,8 +46,9 @@ The catalog is `examples/` (the `pyrtan` namespace) and `catalog/`
 (everyone else's, one directory per namespace with an `OWNERS` file),
 served as `/catalog/<namespace>/<name>.toml` beside `index.json`. A tree
 goes in by pull request: `pyrtan publish my-tree.toml --into <checkout>
---owner <login>` places it and runs the gate, the `catalog` workflow runs
-the same gate on the pull request (`site/gate.py`: clean, licensed,
+--owner <login>` places it and runs the gate, the `catalog-gate` workflow runs
+main's copy of the same gate on the pull request, reading the pull request's
+tree as data and running none of it (`site/gate.py`: clean, licensed,
 namespaced, in the right place, unique id, changed only by an owner,
 version bumped), and a maintainer merges. The `pages` workflow runs the
 gate and the tests again before it publishes, so what is at `/catalog/`

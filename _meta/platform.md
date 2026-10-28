@@ -113,8 +113,10 @@ shape whatever the sources look like.
 `pyrtan` namespace) and `catalog/<namespace>/<name>.toml`, each namespace
 with an `OWNERS` file of GitHub logins. `pyrtan publish FILE --into
 CHECKOUT --owner LOGIN` places the file, writes `OWNERS` for a new
-namespace, and runs the gate; the `catalog` workflow runs the same gate
-on every pull request with what git adds: the changed files, the
+namespace, and runs the gate; the `catalog-gate` workflow runs main's
+copy of the same gate (`pull_request_target`, the pull request's tree
+read as data and never run, so a pull request cannot change the gate
+that judges it) on every pull request with what git adds: the changed files, the
 author, the version each tree had on `main`. The gate (`catalog.gate`,
 `site/gate.py`) refuses a tree that does not load clean, lacks a licence
 or a namespace, sits under the wrong directory or file name, shares an id

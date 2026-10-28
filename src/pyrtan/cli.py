@@ -1293,7 +1293,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
     print(f"  git add {rel.parent}")
     print(f"  git commit -m \"catalog: {rel.parent.name}/{rel.stem}\"")
     print("  git push -u origin HEAD")
-    print("then open a pull request; the catalog workflow runs the same gate and a maintainer merges.")
+    print("then open a pull request; the catalog-gate workflow runs the same gate (main's copy) and a maintainer merges.")
     return 0
 
 

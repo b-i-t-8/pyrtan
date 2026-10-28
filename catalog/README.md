@@ -12,7 +12,8 @@ naming the GitHub logins that may change the namespace:
 
 `pyrtan publish my-tree.toml --into <this checkout> --owner <your login>`
 puts a tree in the right place and runs the gate; then open a pull
-request. The `catalog` workflow runs the same gate on the pull request:
+request. The `catalog-gate` workflow runs the same gate on the pull request,
+main's copy of it, so a pull request cannot change the gate that judges it:
 every tree loads clean, carries `license` and `namespace`, sits in its
 namespace's directory under its own name, ids are unique, only owners
 change a namespace, and a changed file bumps its `version`. A maintainer

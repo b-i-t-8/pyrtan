@@ -243,8 +243,8 @@ the identity's document:
 - the name is the author's **GitHub login**, lowercased. One person, one
   name, no disputes to judge, and GitHub has already checked it;
 - `"github": <numeric user id>`. GitHub frees a login when its owner
-  renames, so the gate (`site/gate.py`, run by the `catalog` workflow as
-  it is for namespaces) checks the pull request author's *numeric* id
+  renames, so the gate (`site/gate.py`, main's copy, run by the
+  `catalog-gate` workflow as it is for namespaces) checks the pull request author's *numeric* id
   (`github.event.pull_request.user.id`) against the file, not the login.
   A new name must be the author's own login carrying the author's id; a
   name, or its document, is changed or removed only by the account whose
@@ -429,8 +429,9 @@ hub that checks Alice with a shared secret can also forge Alice.
 - **Second, built: names.** `names.py`: resolving, pins, building
   `/.well-known/pyrtan/` from a directory of claims, and pyrtan.com's
   gate; `pyrtan id resolve`, `pins`, `wellknown`, `name --into`;
-  `site/names/` with its README, `site/gate.py --author-id`, the
-  `catalog` workflow passing the author's numeric id, and the `pages`
+  `site/names/` with its README, `site/gate.py --author-id` and
+  `--root`, the `catalog-gate` workflow running main's gate on the pull
+  request's tree with the author's numeric id, and the `pages`
   build serving the names. pyrtan.com hands out names; nothing yet
   grants by them.
 - **Third, built: hubs.** `identity.py` signs and verifies requests;

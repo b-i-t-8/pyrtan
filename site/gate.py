@@ -1,8 +1,9 @@
 """The catalog gate, as the workflows run it.
 
-    uv run python site/gate.py [--base origin/main] [--author LOGIN] [--author-id ID] [--changed FILE ...]
+    uv run python site/gate.py [--root CHECKOUT] [--base origin/main] [--author LOGIN] [--author-id ID] [--changed FILE ...]
 
-Runs :func:`pyrtan.catalog.gate` on this checkout: every tree under
+Runs :func:`pyrtan.catalog.gate` on a checkout (``--root``, default this
+one): every tree under
 ``examples/`` and ``catalog/`` loads clean with a licence and a namespace,
 sits where its namespace and name say, ids are unique, each namespace has
 owners. With ``--base`` it asks git which catalog files the pull request
@@ -15,6 +16,11 @@ identity document holds, a name is a GitHub login, one per account. With
 author's numeric id (``--author-id``), and a name may be changed or
 removed only by the account whose id it carried on the base branch.
 Exit 1 with the problems listed, 0 when the gate is open.
+
+The code that judges is always this file's own checkout (its ``src/``);
+``--root`` is only what is judged. The ``catalog-gate`` workflow runs
+main's copy of this file against a pull request's tree, so a pull request
+cannot change the gate that judges it.
 """
 
 from __future__ import annotations
@@ -32,26 +38,28 @@ from pyrtan.catalog import gate  # noqa: E402
 from pyrtan.names import NAMES_DIR, gate as names_gate  # noqa: E402
 
 
-def git(*args: str) -> str | None:
+def git(root: Path, *args: str) -> str | None:
     try:
-        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--root", type=Path, default=ROOT, help="the checkout to judge (default: this file's own); the gate's code is always this file's checkout")
     ap.add_argument("--base", help="the base ref of the pull request (e.g. origin/main); changes and prior versions come from git")
     ap.add_argument("--author", help="the pull request's GitHub login; must own any namespace it changes")
     ap.add_argument("--author-id", type=int, help="the pull request author's numeric GitHub id; must own any name it changes")
     ap.add_argument("--changed", nargs="*", default=None, help="changed paths, when not taken from git")
     args = ap.parse_args(argv)
+    root = args.root.resolve()
     changed = args.changed
     base: dict[str, tuple[int, bytes]] = {}
     names_base: dict[str, bytes] = {}
     if args.base:
         # --no-renames: a rename is a removal and an addition, and both are judged.
-        out = git("diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
+        out = git(root, "diff", "--name-only", "--no-renames", f"{args.base}...HEAD")
         if out is None:
             print(f"gate: cannot diff against {args.base}; checking the tree without change information", file=sys.stderr)
         else:
@@ -60,13 +68,13 @@ def main(argv: list[str] | None = None) -> int:
                 if path.startswith(f"{NAMES_DIR}/"):
                     # A name's claim on the base branch says whose it is, for its .id.json too.
                     claim = path[: -len(".id.json")] + ".json" if path.endswith(".id.json") else path
-                    prior = subprocess.run(["git", "show", f"{args.base}:{claim}"], cwd=ROOT, capture_output=True)
+                    prior = subprocess.run(["git", "show", f"{args.base}:{claim}"], cwd=root, capture_output=True)
                     if prior.returncode == 0:
                         names_base[claim] = prior.stdout
                     continue
                 if not (path.startswith(("catalog/", "examples/")) and path.endswith(".toml")):
                     continue
-                prior = subprocess.run(["git", "show", f"{args.base}:{path}"], cwd=ROOT, capture_output=True)
+                prior = subprocess.run(["git", "show", f"{args.base}:{path}"], cwd=root, capture_output=True)
                 if prior.returncode != 0:
                     continue  # new on this branch
                 try:
@@ -74,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception:
                     version = 1
                 base[path] = (version, prior.stdout)
-    problems = gate(ROOT, changed=changed, author=args.author, base=base)
-    problems += names_gate(ROOT, changed=changed, author=args.author, author_id=args.author_id, base=names_base)
+    problems = gate(root, changed=changed, author=args.author, base=base)
+    problems += names_gate(root, changed=changed, author=args.author, author_id=args.author_id, base=names_base)
     for p in problems:
         print(f"gate: {p}")
     scope = f"{len(changed)} changed file(s)" if changed is not None else "the whole checkout"

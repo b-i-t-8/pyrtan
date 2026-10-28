@@ -28,7 +28,8 @@ another.
 
 ## What the gate checks
 
-The `catalog` workflow runs `site/gate.py` on the pull request:
+The `catalog-gate` workflow runs main's `site/gate.py` on the pull request
+(a pull request that edits the gate is still judged by main's):
 
 - every claim is for `<its file's name>@pyrtan.com` and signed by the key
   it names; every identity document is signed by that same key;

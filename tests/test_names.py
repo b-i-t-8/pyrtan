@@ -1,5 +1,4 @@
 import json
-import shutil
 import subprocess
 import sys
 
@@ -184,11 +183,13 @@ def test_gate_a_change_or_removal(repo, alice, bob):
 
 
 def test_site_gate_reads_owners_from_git(tmp_path, alice, bob):
-    """site/gate.py, as the catalog workflow runs it, against a real base branch."""
+    """site/gate.py, as the catalog-gate workflow runs it: this checkout's gate, judging
+    another checkout (--root) against a real base branch."""
     repo = tmp_path / "repo"
     (repo / "site" / "names").mkdir(parents=True)
     (repo / "catalog").mkdir()
-    shutil.copy(ROOT / "site" / "gate.py", repo / "site" / "gate.py")
+    # The judged checkout's own gate would let anything through; it is never the one run.
+    (repo / "site" / "gate.py").write_text("import sys\nsys.exit(0)\n")
     (repo / "site" / "CNAME").write_text("pyrtan.com\n")
     put(repo, alice, "alice", 1)
     git = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=repo, check=True, capture_output=True)
@@ -198,7 +199,7 @@ def test_site_gate_reads_owners_from_git(tmp_path, alice, bob):
     git("checkout", "-q", "-b", "pr")
     put(repo, bob, "alice", 1)
     git("commit", "-q", "-am", "take alice")
-    gate = lambda *a: subprocess.run([sys.executable, "site/gate.py", "--base", "main", *a], cwd=repo, capture_output=True, text=True)
+    gate = lambda *a: subprocess.run([sys.executable, str(ROOT / "site" / "gate.py"), "--root", str(repo), "--base", "main", *a], cwd=tmp_path, capture_output=True, text=True)
     run = gate("--author", "alice", "--author-id", "2")
     assert run.returncode == 1 and "belongs to GitHub account 1" in run.stdout
     run = gate("--author", "alice", "--author-id", "1")
