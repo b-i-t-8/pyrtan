@@ -1,5 +1,155 @@
 {
  "clock": "2026-10-25T12:00:00+00:00",
+ "drafts": [
+  {
+   "expect": {
+    "branch": "{ when = { between = [4, 44] }, then = \"sky-4\" },",
+    "node": "sky",
+    "observed": 4,
+    "on": "code",
+    "reason": "the value falls in the hole between 3 and 45, which the ranges around it leave open",
+    "then": "sky-4",
+    "tree": "weather",
+    "when": {
+     "between": [
+      4,
+      44
+     ]
+    }
+   },
+   "gap": {
+    "node": "sky",
+    "observed": 4,
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "branch": "{ when = { eq = 100 }, then = \"sky-100\" },",
+    "node": "sky",
+    "observed": 100,
+    "on": "code",
+    "reason": "the value itself",
+    "then": "sky-100",
+    "tree": "weather",
+    "when": {
+     "eq": 100
+    }
+   },
+   "gap": {
+    "node": "sky",
+    "observed": 100,
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": null,
+   "gap": {
+    "node": "sky",
+    "observed": 61,
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "branch": "{ when = { exists = false }, then = \"sky-missing\" },",
+    "node": "sky",
+    "observed": null,
+    "on": "code",
+    "reason": "the value was missing",
+    "then": "sky-missing",
+    "tree": "weather",
+    "when": {
+     "exists": false
+    }
+   },
+   "gap": {
+    "node": "sky",
+    "observed": null,
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "branch": "{ when = { type = \"dict\" }, then = \"sky-dict\" },",
+    "node": "sky",
+    "observed": "<dict>",
+    "on": "code",
+    "reason": "a report carries a long or structured value as its type",
+    "then": "sky-dict",
+    "tree": "weather",
+    "when": {
+     "type": "dict"
+    }
+   },
+   "gap": {
+    "node": "sky",
+    "observed": "<dict>",
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": {
+    "branch": "{ when = { eq = \"Sunny Spells\" }, then = \"sky-sunny-spells\" },",
+    "node": "sky",
+    "observed": "Sunny Spells",
+    "on": "code",
+    "reason": "the value itself",
+    "then": "sky-sunny-spells",
+    "tree": "weather",
+    "when": {
+     "eq": "Sunny Spells"
+    }
+   },
+   "gap": {
+    "node": "sky",
+    "observed": "Sunny Spells",
+    "on": "code"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": null,
+   "gap": {
+    "node": "geocode",
+    "observed": 1,
+    "on": "x"
+   },
+   "tree": "weather"
+  },
+  {
+   "expect": null,
+   "gap": {
+    "node": "status",
+    "observed": 700
+   },
+   "tree": "site-status"
+  },
+  {
+   "expect": {
+    "branch": "{ when = { eq = true }, then = \"status-true\" },",
+    "node": "status",
+    "observed": true,
+    "on": "resp.status",
+    "reason": "the value itself",
+    "then": "status-true",
+    "tree": "site-status",
+    "when": {
+     "eq": true
+    }
+   },
+   "gap": {
+    "node": "status",
+    "observed": true
+   },
+   "tree": "site-status"
+  }
+ ],
  "fixture": "tests/fixtures/examples.json",
  "hub": [
   {
@@ -3120,6 +3270,224 @@
    },
    "method": "GET",
    "path": "/unanswered",
+   "status": 200
+  },
+  {
+   "body": {
+    "suggestions": [
+     {
+      "by": {
+       "agent": "scout",
+       "model": "test"
+      },
+      "extra": "dropped",
+      "kind": "branch",
+      "meaning": {
+       "kind": "fail",
+       "reason": "not-wmo",
+       "say": "{{ state.name }}: code 100 is not a WMO code."
+      },
+      "node": "sky",
+      "observed": 100,
+      "on": "code",
+      "tree": "weather",
+      "why": "WMO codes stop at 99."
+     },
+     {
+      "covers": [
+       "is it raining in Oslo"
+      ],
+      "kind": "trigger",
+      "pattern": "is it raining in {place}",
+      "tree": "weather"
+     },
+     {
+      "description": "Top stories from lobste.rs.",
+      "hosts_hint": [
+       "lobste.rs"
+      ],
+      "kind": "tree",
+      "text": "top 3 stories on lobsters"
+     },
+     {
+      "kind": "branch",
+      "meaning": {
+       "kind": "done",
+       "say": "{{ env.SECRET }}"
+      },
+      "node": "sky",
+      "observed": 1,
+      "tree": "weather"
+     },
+     {
+      "covers": [
+       "Oslo"
+      ],
+      "kind": "trigger",
+      "pattern": "{place}",
+      "tree": "weather"
+     },
+     {
+      "kind": "act",
+      "tree": "weather"
+     },
+     "not a table"
+    ]
+   },
+   "expect": {
+    "kept": 3,
+    "refused": [
+     {
+      "index": 3,
+      "why": "say may read inputs, state, tree, not env"
+     },
+     {
+      "index": 4,
+      "why": "pattern: trigger '{place}' has no literal words; it would match anything"
+     },
+     {
+      "index": 5,
+      "why": "kind is one of branch, trigger, tree"
+     },
+     {
+      "index": 6,
+      "why": "a suggestion is a table"
+     }
+    ],
+    "status": "ok"
+   },
+   "method": "POST",
+   "path": "/suggestions",
+   "status": 200
+  },
+  {
+   "body": {
+    "covers": [
+     "is it raining in Oslo",
+     "is it raining in Bergen"
+    ],
+    "kind": "trigger",
+    "pattern": "is it raining in {place}",
+    "tree": "weather"
+   },
+   "expect": {
+    "kept": 1,
+    "refused": [],
+    "status": "ok"
+   },
+   "method": "POST",
+   "path": "/suggestions",
+   "status": 200
+  },
+  {
+   "body": {
+    "nothing": true
+   },
+   "expect": {
+    "reason": "bad-request",
+    "say": "Send {\"suggestions\": [{\"kind\": \"branch\"|\"trigger\"|\"tree\", ...}]}.",
+    "status": "error"
+   },
+   "method": "POST",
+   "path": "/suggestions",
+   "status": 400
+  },
+  {
+   "body": null,
+   "expect": {
+    "suggestions": [
+     {
+      "count": 2,
+      "covers": [
+       "is it raining in Oslo",
+       "is it raining in Bergen"
+      ],
+      "kind": "trigger",
+      "pattern": "is it raining in {place}",
+      "tree": "weather"
+     },
+     {
+      "by": {
+       "agent": "scout",
+       "model": "test"
+      },
+      "count": 1,
+      "kind": "branch",
+      "meaning": {
+       "kind": "fail",
+       "reason": "not-wmo",
+       "say": "{{ state.name }}: code 100 is not a WMO code."
+      },
+      "node": "sky",
+      "observed": 100,
+      "on": "code",
+      "tree": "weather",
+      "why": "WMO codes stop at 99."
+     },
+     {
+      "count": 1,
+      "description": "Top stories from lobste.rs.",
+      "hosts_hint": [
+       "lobste.rs"
+      ],
+      "kind": "tree",
+      "text": "top 3 stories on lobsters"
+     }
+    ]
+   },
+   "method": "GET",
+   "path": "/suggestions",
+   "status": 200
+  },
+  {
+   "body": null,
+   "expect": {
+    "errors": {},
+    "gaps": 1,
+    "name": "this browser",
+    "runs": 19,
+    "status": "ok",
+    "suggestions": 3,
+    "trees": [
+     "air-quality",
+     "books",
+     "count",
+     "dad-joke",
+     "define",
+     "disk-space",
+     "earthquakes",
+     "exchange-rate",
+     "fixed",
+     "github-release",
+     "hacker-news",
+     "hacker-news-item",
+     "hn-search",
+     "holidays",
+     "iss",
+     "library",
+     "log-errors",
+     "modem-check",
+     "npm-package",
+     "order",
+     "ping",
+     "pypi-package",
+     "remind",
+     "rendered-headline",
+     "room-temperature",
+     "site-status",
+     "small-talk",
+     "sun",
+     "synonyms",
+     "tie-a",
+     "tie-b",
+     "weather",
+     "wikipedia"
+    ],
+    "unanswered": 1,
+    "watches": 0
+   },
+   "method": "GET",
+   "path": "/health",
    "status": 200
   },
   {

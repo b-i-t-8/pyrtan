@@ -30,6 +30,13 @@ IndexedDB) and takes the device note ``pyrtan id device add`` prints;
 from then on it signs what it sends the hub with that key, and a member
 joined from here follows as it. A page served over plain ``http://`` to
 anything but localhost has no WebCrypto, holds no key, and says so.
+
+Its Agents tab starts an agent beside the swarm (``agents.js``, inlined;
+see _meta/agents.md): an open-weights model in this browser (WebLLM,
+imported only when a person presses Start) or on a server of theirs. It
+calls the same endpoints this page does, its suggestions are checked by
+rules before they are shown, and accepting one grows the tree here when
+the browser is its own hub, and keeps it at the hub's ``/suggestions``.
 """
 
 from __future__ import annotations
@@ -46,6 +53,8 @@ PYRTAN_JS = (Path(__file__).parent / "js" / "pyrtan.js").read_text(encoding="utf
 THEME_JS = (Path(__file__).parent / "js" / "theme.js").read_text(encoding="utf-8")
 # Identifiers, canonical JSON and request signing, inlined into the console (_meta/identity.md).
 IDENTITY_JS = (Path(__file__).parent / "js" / "identity.js").read_text(encoding="utf-8")
+# Agents beside the swarm: open-weights models a person starts in the console (_meta/agents.md).
+AGENTS_JS = (Path(__file__).parent / "js" / "agents.js").read_text(encoding="utf-8")
 
 PAGE = r"""<!doctype html>
 <html lang="en">
@@ -59,6 +68,7 @@ PAGE = r"""<!doctype html>
 <meta name="theme-color" content="#c2410c">
 <script>__THEME__</script>
 <script>__IDENTITY__</script>
+<script>__AGENTS__</script>
 <style>
   :root { --bg:#fbfaf7; --fg:#1d1d1b; --mute:#6b6a64; --line:#e3e1da; --card:#ffffff; --ok:#1f7a4d; --bad:#a3382b; --ask:#8a6400; --pyr:#c2410c; --pyr-fg:#fff; --tan:#a8804f; --tan-fg:#fff; --soft:#f1efe9 }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#141513; --fg:#ecebe6; --mute:#9d9c95; --line:#2b2c29; --card:#1c1d1b; --ok:#5fcf93; --bad:#f08a7a; --ask:#e2b84a; --pyr:#fb8a4c; --pyr-fg:#101318; --tan:#d2b48c; --tan-fg:#101318; --soft:#222420 } }
@@ -77,7 +87,8 @@ PAGE = r"""<!doctype html>
   section[hidden] { display:none }
   p.lede { color:var(--mute); margin:0 0 16px }
   form.row { display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap }
-  form.row input[type=text], form.row input[type=url], form.row input[type=password] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
+  div.row { display:flex; gap:8px; flex-wrap:wrap }
+  form.row input[type=text], form.row input[type=url], form.row input[type=password], div.row input[type=text] { flex:1 1 180px; min-width:0; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg) }
   button { font:inherit; padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-fg); cursor:pointer }
   button.quiet { background:var(--soft); color:var(--fg) }
   button:disabled { opacity:.6; cursor:wait }
@@ -113,7 +124,7 @@ PAGE = r"""<!doctype html>
   .chat-log .line { margin:6px 0 }
   .chat-log .sys { color:var(--mute); font-size:14px }
   .chat-log .who { font-weight:600; margin-right:6px }
-  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) }
+  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) } .chat-log .tree .who { color:var(--tan) }
   .chat-log details { font-size:13px; margin-top:2px }
   .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
   #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
@@ -127,7 +138,7 @@ PAGE = r"""<!doctype html>
     <h1><span class="pyr" data-theme-part="pyr">pyr</span><span class="tan" data-theme-part="tan">tan</span> <small id="who">…</small></h1>
     <span class="mute" id="where"></span>
   </header>
-  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved.</p>
+  <p class="lede">A core set of expandable services that act on all forms of I/O through inspectable decision trees. Ask a sentence a tree answers to; the answer comes back with the exact path that produced it. If nothing answers, you get the tree that would. No model is involved in an answer; an agent you start sits beside the trees, never inside them.</p>
 
   <section id="connect" hidden>
     <div class="card">
@@ -152,6 +163,7 @@ PAGE = r"""<!doctype html>
     <a href="#watches" data-tab="watches" id="watches-tab">Watches</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
+    <a href="#agents" data-tab="agents">Agents</a>
     <a href="#directory" data-tab="directory" id="directory-tab" hidden>Directory</a>
     <a href="#member" data-tab="member" id="member-tab" hidden>Member</a>
     <a href="#identity" data-tab="identity" id="identity-tab" hidden>Identity</a>
@@ -208,6 +220,61 @@ PAGE = r"""<!doctype html>
     <h2>Waiting to be written</h2>
     <p class="mute" style="font-size:14px;margin-top:0" id="unanswered-lede">Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.</p>
     <div class="card"><table id="unanswered"><thead><tr><th>Nobody answered</th><th>Would be</th><th>To write it</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-agents" hidden>
+    <h2>Agents beside the swarm</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">An agent is an open-weights model you start here: in this browser, on its GPU, or on a server of your own (Ollama, llama.cpp). It tests the trees with sentences of its own, says what a gap's value means, finds the patterns a tree missed and the trees nobody has written, and talks with you. It never answers for a tree and never sits inside a run: what it suggests is checked by rules here, checked again by <code>pyrtan grow --suggestions</code> before it is written, and only you accept it. It remembers what it learns and follows its skills, in this browser only. Nothing is downloaded until you start one.</p>
+    <div class="card" id="agent-setup">
+      <form class="row" id="agent-start" style="margin:0 0 8px">
+        <input type="text" id="agent-name" placeholder="a name, e.g. scout" autocomplete="off" style="flex:0 1 140px">
+        <select id="agent-engine" aria-label="where the model runs"><option value="webllm">in this browser (WebGPU)</option><option value="openai">on a server of mine (OpenAI API)</option></select>
+        <select id="agent-model" aria-label="model"></select>
+        <input type="url" id="agent-url" placeholder="http://localhost:11434/v1" autocomplete="off" hidden>
+        <input type="text" id="agent-server-model" placeholder="model, e.g. qwen2.5:3b" autocomplete="off" hidden>
+        <button type="submit" id="agent-go">Start</button>
+      </form>
+      <div class="mute" style="font-size:14px" id="agent-help">In this browser: the weights download once (from Hugging Face, through WebLLM) and stay in the browser's cache. On a server of yours, it must let this page's origin call it (Ollama: <code>OLLAMA_ORIGINS=<span class="origin-here"></span></code>).</div>
+      <div class="notice" id="agent-gpu" hidden style="margin:8px 0 0">This browser has no WebGPU, so a model cannot run in it. Point it at a server of yours instead, or use a browser that has WebGPU.</div>
+      <div class="mute" style="font-size:14px;margin-top:6px" id="agent-progress"></div>
+    </div>
+    <div id="agent-on" hidden>
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+          <div><span class="status done" id="agent-who"></span> <span class="mute" id="agent-what"></span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" id="agent-patrol" title="probe every tree, then the gaps, then the unanswered">Patrol</button>
+            <button type="button" class="quiet" id="agent-stop" disabled>Stop</button>
+            <button type="button" class="quiet" id="agent-off">Put away</button>
+          </div>
+        </div>
+        <div class="chat-log" id="agent-log" aria-live="polite" style="height:min(50vh,420px);margin-top:8px"></div>
+        <div class="typing-line" id="agent-typing" aria-live="polite"></div>
+        <form class="row" id="agent-say" style="margin:8px 0 0;flex-wrap:nowrap">
+          <input type="text" id="agent-text" placeholder="talk to the agent, or /help" autocomplete="off" maxlength="1000" style="flex-basis:0">
+          <button type="submit">Send</button>
+        </form>
+      </div>
+      <h2>Suggestions</h2>
+      <p class="mute" style="font-size:14px;margin-top:0" id="agent-sug-lede">Each passed the rules in this page. Accept one and it is kept at the hub's <code>/suggestions</code>, for <code>pyrtan grow --suggestions <span class="at">URL</span> --trees DIR --apply</code>. Dismiss one and the agent remembers why.</p>
+      <div id="agent-sugs"><p class="mute">Nothing yet. Press Patrol, or ask it to <code>/probe</code> a tree.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px"><button type="button" class="quiet" id="agent-download">Download accepted</button></div>
+      <details class="card" id="agent-memory"><summary>Memory</summary>
+        <p class="mute" style="font-size:14px">What this agent keeps, for this hub, in this browser: your notes, its own, and what happened (refusals, your verdicts, patrols). The most relevant go into every prompt.</p>
+        <form class="row" id="agent-note-form"><input type="text" id="agent-note" placeholder="a note for the agent, e.g. Oslo's weather API is in Celsius" autocomplete="off"><button type="submit">Remember</button></form>
+        <table id="agent-notes"><tbody></tbody></table>
+        <div style="margin-top:8px"><button type="button" class="quiet" id="agent-forget-all">Forget everything</button></div>
+      </details>
+      <details class="card" id="agent-skills-box"><summary>Skills</summary>
+        <p class="mute" style="font-size:14px">Instructions for a job, the way a skill is for Claude: the built-in ones are the jobs, yours are added to the job you name (or to all of them). A chat skill of yours can be called as <code>/name</code>. Kept in this browser, shared by every agent; a skill file is Markdown with <code>name</code>, <code>description</code> and <code>when</code> in its front matter, or JSON.</p>
+        <table id="agent-skills"><thead><tr><th>Skill</th><th>For</th><th></th></tr></thead><tbody></tbody></table>
+        <form id="agent-skill-form" style="margin-top:10px">
+          <div class="row"><input type="text" id="skill-name" placeholder="name, e.g. tourist" autocomplete="off"><select id="skill-when" aria-label="for which job"><option value="chat">chat</option><option value="probe">probe</option><option value="meaning">meaning</option><option value="trigger">trigger</option><option value="tree">tree</option><option value="always">always</option></select><input type="text" id="skill-desc" placeholder="one line: what it is for" autocomplete="off"></div>
+          <textarea id="skill-body" rows="4" placeholder="the instructions, e.g. Write probe sentences the way a tourist would: short, a little misspelled, with place names in their own language." style="width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="submit">Add skill</button><label class="quiet" style="padding:10px 16px;border-radius:8px;background:var(--soft);cursor:pointer">Import…<input type="file" id="skill-import" accept=".md,.json,.txt" hidden></label><button type="button" class="quiet" id="skill-export">Export mine</button></div>
+        </form>
+      </details>
+    </div>
   </section>
 
   <section id="tab-directory" hidden>
@@ -444,6 +511,7 @@ function showTab(name) {
   if (name === "member") member.render();
   if (name === "identity") ident.render();
   if (name === "chat") chat.count();
+  if (name === "agents") agentsUI.render();
 }
 
 async function loadDirectory() {
@@ -589,6 +657,10 @@ async function load() {
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
+  renderCaps(c);
+  showTab((location.hash || "#ask").slice(1));
+}
+function renderCaps(c) {
   const body = $("#caps tbody"); const tries = $("#tries");
   body.innerHTML = ""; tries.innerHTML = "";
   suggest.from((c.trees || []).filter(t => !local || (runsHere(t) && !anySite(t))));
@@ -602,7 +674,6 @@ async function load() {
   // The greyed suggestion in the empty box (Tab takes it) is one this swarm answers.
   const first = tries.querySelector("a[data-q]"), offered = [...tries.querySelectorAll("a[data-q]")].map(a => a.dataset.q);
   if (first && !offered.includes($("#text").placeholder)) $("#text").placeholder = first.dataset.q;
-  showTab((location.hash || "#ask").slice(1));
 }
 
 async function loadPeers() {
@@ -814,6 +885,7 @@ window.addEventListener("resize", () => suggest.ghost());
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
 $("#connect-form").addEventListener("submit", (e) => {
   e.preventDefault();
+  agentsUI.putAway();
   token = $("#hub-token").value;
   store.set(remote ? {url: $("#hub-url").value.trim(), token} : {token});
   load();
@@ -1089,13 +1161,183 @@ $("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leav
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
 window.addEventListener("pagehide", () => chat.leave(true));
 
+// ---------------------------------------------------------------- agents
+// A model beside the swarm, never inside it (agents.js, _meta/agents.md).
+// It reaches the swarm only through this page's own calls, and what it
+// suggests is applied here only when you accept it, and only to the trees
+// this browser holds; a hub keeps it at /suggestions for pyrtan grow.
+const agentsUI = {
+  agent: null, config: {}, skills: null, busy: false,
+  init() {
+    try { this.config = JSON.parse(localStorage.getItem("pyrtan.agents.config") || "{}"); } catch (e) { this.config = {}; }
+    $("#agent-model").innerHTML = PyrtanAgents.MODELS.map(m => `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.licence)} · ${esc(m.size)}</option>`).join("");
+    $("#agent-name").value = this.config.name || "scout";
+    $("#agent-engine").value = this.config.engine || (PyrtanAgents.WebLLMEngine.available() ? "webllm" : "openai");
+    $("#agent-model").value = this.config.model || PyrtanAgents.DEFAULT_MODEL;
+    $("#agent-url").value = this.config.url || "http://localhost:11434/v1";
+    $("#agent-server-model").value = this.config.serverModel || "qwen2.5:3b";
+    for (const el of document.querySelectorAll(".origin-here")) el.textContent = location.origin;
+    this.skills = new PyrtanAgents.Skills(PyrtanAgents.browserStorage("pyrtan.agents:"));
+    this.engineChanged();
+  },
+  engineChanged() {
+    const web = $("#agent-engine").value === "webllm";
+    $("#agent-model").hidden = !web; $("#agent-url").hidden = web; $("#agent-server-model").hidden = web;
+    $("#agent-gpu").hidden = !web || PyrtanAgents.WebLLMEngine.available();
+  },
+  where() { return local ? "this browser" : (base || location.origin); },
+  hub(method, path, body) { return json(path, method === "GET" ? undefined : {method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})}); },
+  raw(name) { const t = local && local.runner.get(name); return t ? t.raw : null; },
+  async start() {
+    const engineKind = $("#agent-engine").value;
+    this.config = {name: $("#agent-name").value.trim() || "scout", engine: engineKind, model: $("#agent-model").value, url: $("#agent-url").value.trim(), serverModel: $("#agent-server-model").value.trim()};
+    try { localStorage.setItem("pyrtan.agents.config", JSON.stringify(this.config)); } catch (e) {}
+    const progress = (text) => { $("#agent-progress").textContent = text; };
+    const engine = engineKind === "webllm"
+      ? new PyrtanAgents.WebLLMEngine({model: this.config.model, onProgress: (text) => progress(text)})
+      : new PyrtanAgents.OpenAIEngine({url: this.config.url, model: this.config.serverModel});
+    $("#agent-go").disabled = true;
+    progress(engineKind === "webllm" ? "Loading WebLLM and the model; the first time, this is a download…" : `Asking ${this.config.url}…`);
+    try {
+      await engine.load();
+      if (engineKind === "openai") await engine.complete([{role: "user", content: "Say ok."}], {maxTokens: 4});
+    } catch (e) { progress(""); problem(`The agent could not start: ${e.message}`, true); $("#agent-go").disabled = false; return; }
+    progress("");
+    const hubKey = local ? "browser" : (base || location.origin);
+    this.agent = new PyrtanAgents.Agent({name: this.config.name, engine, hub: (m, p, b) => this.hub(m, p, b), raw: (n) => this.raw(n), storage: PyrtanAgents.browserStorage(`pyrtan.agents:${hubKey}:`), skills: this.skills, onEvent: (e) => this.event(e)});
+    $("#agent-go").disabled = false;
+    $("#agent-setup").hidden = true; $("#agent-on").hidden = false;
+    $("#agent-who").textContent = this.agent.name;
+    const m = PyrtanAgents.MODELS.find(x => x.id === engine.model);
+    $("#agent-what").textContent = `${m ? m.label : engine.model} · ${engineKind === "webllm" ? "in this browser" : "on " + this.config.url} · beside ${this.where()}`;
+    $("#agent-log").innerHTML = "";
+    for (const msg of this.agent.memory.chat.slice(-10)) this.line(msg.role === "you" ? "you" : "bot", msg.role === "you" ? "You" : this.agent.name, esc(msg.content));
+    this.sys(`${this.agent.name} is a model, not a tree: what it says is its own, and what a tree says comes with the tree's name and path. /help lists what it can do.`);
+    this.render();
+  },
+  putAway() {
+    if (!this.agent) return;
+    this.agent.stop();
+    if (this.agent.engine.unload) this.agent.engine.unload().catch(() => {});
+    this.agent = null; $("#agent-setup").hidden = false; $("#agent-on").hidden = true;
+  },
+  line(cls, who, html, extra) {
+    const log = $("#agent-log"), div = document.createElement("div");
+    div.className = "line " + cls;
+    div.innerHTML = (who ? `<span class="who">${esc(who)}:</span>` : "") + html + (extra || "");
+    log.appendChild(div); log.scrollTop = log.scrollHeight;
+  },
+  sys(text) { this.line("sys", "", esc(text)); },
+  event(e) {
+    if (e.type === "thinking") $("#agent-typing").textContent = `${e.agent} is thinking (${e.job})…`;
+    else if (e.type === "probe") { const r = e.result; this.sys(`probe ${e.tree}: “${r.text}” → ${r.read === null ? "no tree reads it" : r.read === "tie" ? "a tie" : r.read === e.tree ? (r.status ? `${r.status}${r.reason ? " (" + r.reason + ")" : ""}` : "reads, not run") : "reads as " + r.read}`); }
+    else if (e.type === "refused") this.sys(`refused by the rules: ${e.what}: ${e.why}`);
+    else if (e.type === "suggestion") { this.sys(`suggests a ${e.item.suggestion.kind} for ${e.item.suggestion.tree || "“" + e.item.suggestion.text + "”"}`); this.renderSuggestions(); }
+    else if (e.type === "patrol" && e.step !== "done") this.sys(e.step === "probe" ? `patrol: probing ${e.tree}` : `patrol: the ${e.step}`);
+    else if (e.type === "action") { const a = e.action; if (a.kind === "ask" && a.result) this.line("tree", a.result.tree || "no tree", esc(a.result.say || a.result.status), a.result.path && a.result.path.length ? `<details><summary>path</summary><code>${esc(a.result.path.join(" > "))}</code></details>` : ""); else if (a.kind === "remember") this.sys(`remembered: ${a.input}`); }
+  },
+  async run(fn) {
+    if (this.busy) return; this.busy = true; $("#agent-stop").disabled = false;
+    try { await fn(); } catch (e) { this.sys(`error: ${e.message}`); }
+    finally { this.busy = false; $("#agent-stop").disabled = true; $("#agent-typing").textContent = ""; this.renderMemory(); }
+  },
+  say(text) {
+    if (!this.agent || !text) return;
+    this.line("you", "You", esc(text));
+    return this.run(async () => {
+      const r = await this.agent.chat(text);
+      if (r.outcome) this.line("tree", r.outcome.tree || "no tree", esc(r.outcome.say || r.outcome.status), (r.outcome.trace ? `<details><summary>trace</summary><pre>${esc(renderTrace(r.outcome.trace))}</pre></details>` : ""));
+      else if (r.say) this.line("bot", this.agent.name, esc(r.say).replace(/\n/g, "<br>"));
+    });
+  },
+  patrol() { return this.run(async () => { const r = await this.agent.patrol(); this.line("bot", this.agent.name, esc(`Patrolled ${r.trees.length} trees: ${r.tally.sentences} sentences, ${r.tally.read} read, ${r.tally.unread} read to nothing, ${r.tally.misread} to another tree, ${r.tally.gaps} met a gap. ${r.suggestions.length} suggestions, ${r.refused.length} refused by the rules.${r.stopped ? " (stopped)" : ""}`)); }); },
+  // Accepting: in a browser that is its own hub, the tree grows here and now; any hub keeps the suggestion for pyrtan grow.
+  async accept(id) {
+    const item = this.agent.suggestions.find(x => x.id === id); if (!item) return;
+    const s = item.suggestion; let applied = "";
+    if (local && (s.kind === "branch" || s.kind === "trigger")) {
+      const raw = this.raw(s.tree);
+      try {
+        let grown = null;
+        if (raw && s.kind === "branch") { const d = Pyrtan.grow.draftBranch(raw, s); if (d) grown = Pyrtan.grow.growTree(raw, d, s.meaning); }
+        if (raw && s.kind === "trigger") { grown = JSON.parse(JSON.stringify(raw)); grown.triggers = (grown.triggers || []).concat([{pattern: s.pattern}]); }
+        if (grown) { new Pyrtan.Tree(grown); local.add(grown, local.held[s.tree]); applied = "grown in this page"; }
+      } catch (e) { this.sys(`could not grow ${s.tree} here: ${e.message}`); return; }
+    }
+    let kept = "";
+    try { const out = await this.agent.send([item]); kept = (out.refused || []).length ? `refused by the hub: ${out.refused[0].why}` : `kept at ${this.where()}'s /suggestions`; }
+    catch (e) { kept = `not kept: ${e.message}${/404/.test(e.message) ? " (a hub older than 0.18 has no /suggestions; download it instead)" : ""}`; }
+    this.agent.decide(id, "accepted");
+    item.note = [applied, kept].filter(Boolean).join(" · ");
+    if (applied) { try { renderCaps(await json("capabilities")); await this.agent.trees(true); } catch (e) {} }
+    this.renderSuggestions(); this.renderMemory();
+  },
+  dismiss(id) {
+    const why = prompt("Why not? The agent remembers. (optional)") || "";
+    this.agent.decide(id, "dismissed", why.trim()); this.renderSuggestions(); this.renderMemory();
+  },
+  download() {
+    const items = (this.agent ? this.agent.suggestions : []).filter(x => x.status === "accepted").map(x => x.suggestion);
+    if (!items.length) { this.sys("Nothing accepted yet."); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({"pyrtan-suggestions": 1, suggestions: items}, null, 2)], {type: "application/json"}));
+    a.download = "pyrtan-suggestions.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    this.sys("Saved. Then: pyrtan grow --suggestions pyrtan-suggestions.json --trees DIR --apply");
+  },
+  render() { if (!this.skills) this.init(); this.renderSuggestions(); this.renderMemory(); this.renderSkills(); },
+  renderSuggestions() {
+    const box = $("#agent-sugs"); if (!box) return;
+    const items = this.agent ? this.agent.suggestions.slice().reverse() : [];
+    if (!items.length) { box.innerHTML = '<p class="mute">Nothing yet. Press Patrol, or ask it to <code>/probe</code> a tree.</p>'; return; }
+    box.innerHTML = items.map(x => {
+      const s = x.suggestion, by = s.by || {};
+      const what = s.kind === "branch" ? `<code>${esc(s.tree)}</code> · <code>${esc(s.node)}</code>: <code>${esc(s.on || "")}</code> = <code class="gap">${esc(JSON.stringify(s.observed))}</code> means a <strong>${esc(s.meaning.kind)}</strong>${s.meaning.reason ? ` <span class="mute">(${esc(s.meaning.reason)})</span>` : ""}<div class="say">${esc(s.meaning.say)}</div>`
+        : s.kind === "trigger" ? `<code>${esc(s.tree)}</code> should answer to <code>${esc(s.pattern)}</code><div class="mute" style="font-size:14px">reads ${(s.covers || []).map(c => "“" + esc(c) + "”").join(", ")}</div>`
+        : `a new tree for “${esc(s.text)}”<div class="say">${esc(s.description || "")}</div>${(s.hosts_hint || []).length ? `<div class="mute" style="font-size:14px">hosts it guessed (a note, never a host): ${esc(s.hosts_hint.join(", "))}</div>` : ""}`;
+      const state = x.status === "new" ? `<div style="display:flex;gap:8px;margin-top:8px"><button type="button" data-accept="${x.id}">Accept</button><button type="button" class="quiet" data-dismiss="${x.id}">Dismiss</button></div>` : `<div class="mute sug-state" style="font-size:14px;margin-top:6px">${esc(x.status)}${x.note ? " · " + esc(x.note) : ""}</div>`;
+      return `<div class="card"><div><span class="status asked">${esc(s.kind)}</span> <span class="mute">by ${esc(by.agent || "")}${by.model ? " · " + esc(by.model) : ""}</span></div><div style="margin-top:4px">${what}</div>${s.why ? `<div class="mute" style="font-size:14px">${esc(s.why)}</div>` : ""}${x.preview && x.preview.text ? `<details><summary>what it would write</summary><pre>${esc(x.preview.text)}</pre></details>` : ""}${state}</div>`;
+    }).join("");
+  },
+  renderMemory() {
+    const body = $("#agent-notes tbody"); if (!body) return;
+    const notes = this.agent ? this.agent.memory.notes.slice().reverse() : [];
+    body.innerHTML = notes.length ? notes.map(n => `<tr><td class="mute">${esc(n.source)}</td><td>${esc(n.text)}</td><td><button type="button" class="quiet" data-forget="${n.id}">Forget</button></td></tr>`).join("") : `<tr><td class="mute">${this.agent ? "Nothing kept yet." : "Start an agent to see what it remembers."}</td></tr>`;
+  },
+  renderSkills() {
+    const body = $("#agent-skills tbody"); if (!body || !this.skills) return;
+    body.innerHTML = this.skills.list().map(s => `<tr><td><code>${esc(s.name)}</code><div class="mute">${esc(s.description || "")}</div></td><td>${esc(s.when)}</td><td>${s.builtin ? '<span class="mute">built in</span>' : `<label><input type="checkbox" data-skill-on="${esc(s.name)}"${s.on ? " checked" : ""}> on</label> <button type="button" class="quiet" data-skill-remove="${esc(s.name)}">Remove</button>`}</td></tr>`).join("");
+  },
+};
+$("#agent-engine").addEventListener("change", () => agentsUI.engineChanged());
+$("#agent-start").addEventListener("submit", (e) => { e.preventDefault(); agentsUI.start(); });
+$("#agent-say").addEventListener("submit", (e) => { e.preventDefault(); const t = $("#agent-text").value.trim(); $("#agent-text").value = ""; agentsUI.say(t); });
+$("#agent-patrol").addEventListener("click", () => agentsUI.patrol());
+$("#agent-stop").addEventListener("click", () => { if (agentsUI.agent) { agentsUI.agent.stop(); agentsUI.sys("stopping after this step…"); } });
+$("#agent-off").addEventListener("click", () => agentsUI.putAway());
+$("#agent-download").addEventListener("click", () => agentsUI.download());
+$("#agent-sugs").addEventListener("click", (e) => { const a = e.target.closest("[data-accept]"), d = e.target.closest("[data-dismiss]"); if (a) agentsUI.accept(Number(a.dataset.accept)); if (d) agentsUI.dismiss(Number(d.dataset.dismiss)); });
+$("#agent-note-form").addEventListener("submit", (e) => { e.preventDefault(); if (agentsUI.agent && $("#agent-note").value.trim()) { agentsUI.agent.memory.remember($("#agent-note").value, "you"); $("#agent-note").value = ""; agentsUI.renderMemory(); } });
+$("#agent-notes").addEventListener("click", (e) => { const f = e.target.closest("[data-forget]"); if (f && agentsUI.agent) { agentsUI.agent.memory.forget(f.dataset.forget); agentsUI.renderMemory(); } });
+$("#agent-forget-all").addEventListener("click", () => { if (agentsUI.agent && confirm("Forget everything this agent keeps for this hub: notes, probes, verdicts and the conversation?")) { agentsUI.agent.memory.clear(); agentsUI.renderMemory(); } });
+$("#agent-skill-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  try { agentsUI.skills.add({name: $("#skill-name").value, when: $("#skill-when").value, description: $("#skill-desc").value, instructions: $("#skill-body").value}); for (const id of ["#skill-name", "#skill-desc", "#skill-body"]) $(id).value = ""; problem(""); }
+  catch (err) { problem(err.message, true); }
+  agentsUI.renderSkills();
+});
+$("#agent-skills").addEventListener("change", (e) => { const t = e.target.closest("[data-skill-on]"); if (t) agentsUI.skills.toggle(t.dataset.skillOn, t.checked); });
+$("#agent-skills").addEventListener("click", (e) => { const r = e.target.closest("[data-skill-remove]"); if (r) { agentsUI.skills.remove(r.dataset.skillRemove); agentsUI.renderSkills(); } });
+$("#skill-import").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const got = agentsUI.skills.import(await f.text()); problem(""); if (agentsUI.agent) agentsUI.sys(`imported ${got.map(s => s.name).join(", ")}`); } catch (err) { problem(`${f.name}: ${err.message}`, true); } e.target.value = ""; agentsUI.renderSkills(); });
+$("#skill-export").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([agentsUI.skills.export()], {type: "application/json"})); a.download = "pyrtan-skills.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); });
+agentsUI.init();
+
 // Forgetting the hub makes this browser its own hub again.
-$("#forget").addEventListener("click", () => { chat.leave(true); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
+$("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
 ident.init().finally(load);
 </script>
 </body>
 </html>
-""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS)
+""".replace("__VERSION__", __version__).replace("__THEME__", THEME_JS).replace("__IDENTITY__", IDENTITY_JS).replace("__AGENTS__", AGENTS_JS)
 
 MANIFEST = json.dumps({
     "name": "Pyrtan",

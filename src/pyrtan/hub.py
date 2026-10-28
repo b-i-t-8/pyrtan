@@ -17,6 +17,7 @@ Endpoints:
 ``POST /resume``     forwarded to the peer named in the snapshot
 ``GET  /gaps``       every peer's gaps, with the peer that saw them
 ``GET  /unanswered`` sentences no peer answered, each with a proposed tree
+``GET  /suggestions`` what agents beside the swarm sent this hub (``POST`` to send)
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
 With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
@@ -69,6 +70,7 @@ from . import identity
 from .grants import Grants, ability_for, parse_may
 from .identity import IdentityError
 from .grow import Unanswered, no_match_outcome
+from .suggestions import Suggestions
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry
@@ -144,7 +146,7 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, chat_reach: int = 0) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, chat_reach: int = 0, suggestions: str | Path | None = None) -> None:
         self.name = name
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
@@ -161,6 +163,7 @@ class Hub:
             self.hold(local)
         self.federation: Federation | None = None
         self.unanswered = Unanswered(path=unanswered)
+        self.suggestions = Suggestions(path=suggestions)  # what agents sent this hub; a hub keeps its own, it does not collect its peers'
         self._reports: list[dict[str, Any]] = []
         self._reports_at = 0.0
         self.started = time.time()
@@ -398,6 +401,7 @@ class Hub:
             "trees": sum(len(p.trees) for p in peers) + (len(self.local.trees) if self.local else 0),
             "local": len(self.local.trees) if self.local else 0,
             "unanswered": len(self.unanswered),
+            "suggestions": len(self.suggestions),
             "uptime_s": int(time.time() - self.started),
         }
 
@@ -695,6 +699,8 @@ class Hub:
             return 200, self.gaps()
         if method == "GET" and path == "/unanswered":
             return 200, self.unanswered_all()
+        if method in ("GET", "POST") and path == "/suggestions":
+            return self.suggestions.route(method, body)
         if method == "GET" and path == "/watches":
             return 200, self.watches()
         if is_chat_path(path):
@@ -710,7 +716,7 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json"]
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
@@ -821,6 +827,7 @@ def serve_hub(
     lan: bool = False,
     chat_reach: int = 0,
     chat: bool = False,
+    suggestions: str | Path | None = None,
     allow: list[str] | None = None,
     grants: str | None = None,
     chat_typing: bool = True,
@@ -838,7 +845,7 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
     if federate or advertise or join or lan or chat_reach:
