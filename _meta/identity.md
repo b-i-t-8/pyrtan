@@ -400,9 +400,14 @@ the five-minute window is the same as HMAC's. The hub checks the
 signature, the device note (signed by its root, unexpired, not revoked),
 and then its grants.
 
-The audience is the hub's federation id, or the URL it was started at
-(`--advertise`, else its own address), and `GET /api` names it, so a
-client asks once and signs for it. The body is the canonical JSON the
+The audience is the URL the client calls, `scheme://host[:port]`, and
+the client names it in `X-Pyrtan-Audience`. The hub takes it when it is
+the hub's own id (its federation id, or the URL it was started at:
+`--advertise`, else its own address, which `GET /api` names) or, on a hub
+nobody named with `--advertise`, the host the request reached. A client
+never signs for an audience a hub names: a hub that said "sign for that
+other hub" would collect signatures good there, and the Follow a member
+sends carries its mailbox secret. The body is the canonical JSON the
 request carries; a `POST` with no body is signed as `{}`, which is what
 the hub reads it as. A bad signature is refused (401) on any hub. On a
 hub with a token, a good one may do what its root is granted and nothing

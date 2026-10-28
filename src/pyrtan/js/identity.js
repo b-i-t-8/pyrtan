@@ -156,7 +156,7 @@
   async function signRequest(key, audience, method, path, body, note, date) {
     const when = String(date !== undefined ? date : Math.floor(Date.now() / 1000));
     const sig = new Uint8Array(await subtle().sign({ name: "Ed25519" }, key.privateKey, requestMessage(audience, method, path, when, body)));
-    const headers = { "X-Pyrtan-Key": key.id, "X-Pyrtan-Date": when, "X-Pyrtan-Key-Signature": b64url(sig) };
+    const headers = { "X-Pyrtan-Key": key.id, "X-Pyrtan-Date": when, "X-Pyrtan-Audience": audience.replace(/\/+$/, ""), "X-Pyrtan-Key-Signature": b64url(sig) };
     if (note) {
       if (note.device !== key.id) throw new Error(`the note is for ${note.device}, not this key`);
       headers["X-Pyrtan-Device"] = b64url(enc.encode(canonical(note)));
