@@ -267,33 +267,44 @@ def test_a_console_keeps_its_gaps_across_a_reload(tmp_path):
     assert got["errors"] == []
 
 
+
 STUCK = r"""
 const { chromium } = require("playwright");
-const [file] = process.argv.slice(2);
+const [file, init] = process.argv.slice(2);
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.route(/^https?:\/\//, (route) => route.abort());
-  // IndexedDB that never answers, as Safari and private windows sometimes leave it: the key never comes.
-  await page.addInitScript(() => { IDBFactory.prototype.open = () => ({}); });
+  await page.addInitScript(init);
   await page.goto("file://" + file);
   await page.waitForFunction(() => document.querySelectorAll("#caps tbody tr").length > 0, null, { timeout: 10000 });
   console.log(JSON.stringify({ who: await page.textContent("#who"), errors }));
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
 """
+# What one browser does and another does not, each of which used to leave the console at "…" with no trees.
+BROKEN = {
+    # IndexedDB that never answers, as Safari and private windows sometimes leave it: the key never comes.
+    "the key store never answers": ("IDBFactory.prototype.open = () => ({});", 0),
+    # The agents cannot start here.
+    "the agents throw as they start": ("(() => { let v; Object.defineProperty(window, 'PyrtanAgents', { configurable: true, get() { return v; }, set(x) { x.Skills = class { constructor() { throw new TypeError('not here'); } }; v = x; } }); })();", 0),
+    # One tree fails with an error that is not the tree's own: that tree is lost, not all of them.
+    "one tree throws": ("(() => { let v; Object.defineProperty(window, 'Pyrtan', { configurable: true, get() { return v; }, set(x) { const add = x.LocalHub.prototype.add; x.LocalHub.prototype.add = function (raw, w) { if (raw && raw.name === 'weather') throw new TypeError('not here'); return add.call(this, raw, w); }; v = x; } }); })();", 1),
+}
 
 
 @pytest.mark.skipif(not _node_playwright(), reason="node with playwright is not installed")
-def test_a_console_holds_its_trees_when_the_key_store_never_answers(tmp_path):
+@pytest.mark.parametrize("case", list(BROKEN))
+def test_a_console_holds_its_trees_when_something_in_the_browser_fails(tmp_path, case):
+    init, lost = BROKEN[case]
     out = tmp_path / "console" / "index.html"
     assert main(["console", "--out", str(out)]) == 0
     script = tmp_path / "stuck.cjs"
     script.write_text(STUCK, encoding="utf-8")
-    run = subprocess.run(["node", str(script), str(out)], capture_output=True, text=True, timeout=120)
+    run = subprocess.run(["node", str(script), str(out), init], capture_output=True, text=True, timeout=120)
     assert run.returncode == 0, run.stderr
     got = json.loads(run.stdout)
-    assert f"{defaults.bundle()['count']} trees" in got["who"]
+    assert f"{defaults.bundle()['count'] - lost} trees" in got["who"]
     assert got["errors"] == []

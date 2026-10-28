@@ -984,7 +984,8 @@ async function startLocal() {
   local = new Pyrtan.LocalHub({name: "this browser", version: "__VERSION__", device, keep: keptFor(device)});
   local.onOwnChange = () => sync.changed();
   const trees = await catalogTrees();
-  for (const e of trees) local.add(e.tree, e.id);
+  // One tree this browser cannot take (an error that is not the tree's own) costs that tree, not all of them.
+  for (const e of trees) { try { local.add(e.tree, e.id); } catch (err) { local.errors[e.id] = String(err && err.message || err); } }
   showLocal(true);
   return (await local.route("GET", "/api"))[1];
 }
@@ -2114,7 +2115,8 @@ $("#agent-skills").addEventListener("change", (e) => { const t = e.target.closes
 $("#agent-skills").addEventListener("click", (e) => { const r = e.target.closest("[data-skill-remove]"); if (r) { agentsUI.skills.remove(r.dataset.skillRemove); agentsUI.renderSkills(); } });
 $("#skill-import").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const got = agentsUI.skills.import(await f.text()); problem(""); if (agentsUI.agent) agentsUI.sys(`imported ${got.map(s => s.name).join(", ")}`); } catch (err) { problem(`${f.name}: ${err.message}`, true); } e.target.value = ""; agentsUI.renderSkills(); });
 $("#skill-export").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([agentsUI.skills.export()], {type: "application/json"})); a.download = "pyrtan-skills.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); });
-agentsUI.init();
+// The agents are beside the trees: if they cannot start here, the trees still load.
+try { agentsUI.init(); } catch (e) { console.error("agents:", e); }
 
 // Forgetting the hub makes this browser its own hub again.
 $("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
