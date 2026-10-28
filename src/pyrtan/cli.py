@@ -4,6 +4,7 @@
     pyrtan list   [PATH ...]                 what is loaded and what it answers to
     pyrtan run    TEXT [--trees PATH]        answer a sentence, in this process
     pyrtan run    --tree NAME --input k=v    run a named tree
+    pyrtan run    TEXT --dry-run             read for real, stop before the first act and say what it would do
     pyrtan match  TEXT [--trees PATH]        how a sentence reads: the rewrites and every trigger's verdict
     pyrtan test   [PATH ...]                 run each tree's [[tests]] against their recordings
     pyrtan diff   FILE [--against REF]       what an edit changes: every test's run, before and after
@@ -103,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--input", action="append", default=[], metavar="K=V", help="an input for --tree (repeatable; JSON values accepted)")
     p.add_argument("--json", action="store_true", help="print the outcome as JSON")
     p.add_argument("--no-trace", action="store_true", help="do not print the trace")
+    p.add_argument("--dry-run", action="store_true", help="observe for real, but stop before the first act and say what it would do; nothing is changed")
     p.add_argument("--replay", help="answer HTTP from this fixture instead of the network")
     p.add_argument("--record", help="save every response (HTTP and the other sources) to this fixture")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
@@ -140,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="service or hub URL (default $PYRTAN_AT or the local hub)")
     p.add_argument("--json", action="store_true")
     p.add_argument("--no-trace", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="the service observes for real but stops before the first act and says what it would do")
     _token_arg(p, "the token the service or hub requires, if any")
 
     p = sub.add_parser("chat", help="talk to a random stranger or a bot, through a hub started with --chat")
@@ -573,9 +576,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         transport = adapters = recorder
     runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_kv(args.env), adapters=adapters)
     if args.tree:
-        outcome = runner.run_tree(args.tree, _kv(args.input))
+        outcome = runner.run_tree(args.tree, _kv(args.input), dry_run=args.dry_run)
     else:
-        outcome = runner.run_intent(args.text)
+        outcome = runner.run_intent(args.text, dry_run=args.dry_run)
+    if args.dry_run and outcome.status == "asked" and (outcome.snapshot or {}).get("confirm"):
+        # The point of a dry run: say what would happen, and do none of it.
+        if outcome.trace is not None and not args.no_trace and not args.json:
+            print(outcome.trace.render(), end="\n\n")
+        if args.json:
+            print(json.dumps(outcome.to_dict(with_trace=not args.no_trace), indent=2, ensure_ascii=False, default=str))
+        else:
+            print(f"dry run: {outcome.snapshot['node']} would {outcome.snapshot['would']}; nothing was changed")
+        return 0
     outcome = _answer_questions(outcome, runner.resume)
     if recorder is not None:
         recorder.save(args.record)
@@ -766,7 +778,7 @@ def _answer_questions(outcome: Outcome, resume) -> Outcome:
 def cmd_ask(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = _call(args, "POST", f"{at}/intent", {"text": args.text, "trace": not args.no_trace})
+        status, body = _call(args, "POST", f"{at}/intent", {"text": args.text, "trace": not args.no_trace, **({"dry_run": True} if args.dry_run else {})})
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3

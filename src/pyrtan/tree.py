@@ -503,6 +503,12 @@ def check(tree: Tree) -> list[Problem]:
                 err(where, "'from' must be a state path")
             if node.get("retries") is not None and node.kind == "act":
                 err(where, "an act is never retried; drop 'retries' or make it an observe")
+            confirm = node.get("confirm")
+            if confirm is not None:
+                if node.kind != "act":
+                    err(where, "'confirm' is for an act: an observe changes nothing, so there is nothing to agree to")
+                elif not isinstance(confirm, bool) and not (isinstance(confirm, str) and confirm.strip()):
+                    err(where, "'confirm' is true, or the question to ask before the act (a template)")
             for j, ex in enumerate(node.get("extract", []) or []):
                 try:
                     extractmod.validate(ex)

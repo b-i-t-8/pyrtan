@@ -237,6 +237,41 @@ next = "reply"
 An act is never retried. A GET with no body in an act is a warning: it is a
 read, and `observe` would retry it safely.
 
+An act may ask first. `confirm = true` pauses the run before the act with
+what it would do (`switch would POST https://lights.example/kitchen with
+{"on": "on"}. Go ahead?`); `confirm = "Turn the {{ inputs.room }} light
+{{ inputs.state }}?"` asks in the author's words, and the trace still
+records the request. The run returns `asked`, as an `ask` node's does,
+and `/resume` (or `pyrtan run` at a terminal) continues it: a plain yes
+(`yes`, `y`, `ok`, `go ahead`, `true`…) does the act once and walks on;
+anything else, a blank included, ends the run `failed` with reason
+`declined`, having changed nothing. Only a top-level run can stop to ask:
+an act with `confirm` inside a delegated tree or an `each` sub-flow ends
+that sub-run with `ask-in-subflow`.
+
+```toml
+[nodes.switch]
+kind = "act"
+http = { method = "POST", url = "https://lights.example/{{ inputs.room }}", body = { on = "{{ inputs.state }}" } }
+confirm = "Turn the {{ inputs.room }} light {{ inputs.state }}?"
+into = "set"
+next = "done"
+```
+
+A **dry run** (`pyrtan run … --dry-run`, `pyrtan ask … --dry-run`, or
+`"dry_run": true` on `/run` and `/intent`) treats every act as if it had
+`confirm`: it observes for real, and stops before the first act with
+what it would do (`dry run: switch would POST … with {"on": "on"};
+nothing was changed`). The request is rendered and held against the
+tree's lists first, so a dry run still says when an act would be
+refused. Resumed with a yes, it does that one act and stops before the
+next. Nothing in a dry run acts out of sight: an act inside a delegated
+tree or a sub-flow ends the whole run with reason `dry-run`, and a tree
+or sentence that would go to the swarm is not sent. A hub forwards a dry
+run only to its own trees and to services whose `/capabilities` says
+`"dry_run": true`; a member, a followed hub, or an older service gets
+`dry-run` instead of a run that might act.
+
 ### `decide`: branch
 
 ```toml
@@ -405,9 +440,9 @@ empty string into a URL.
 | `status` | Meaning | Carries |
 | :-- | :-- | :-- |
 | `done` | a `done` node was reached | `say`, `output` |
-| `failed` | a `fail` node was reached | `reason`, `say` |
-| `asked` | an `ask` node paused the run | `question`, `snapshot` |
-| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dead-end` |
+| `failed` | a `fail` node was reached, or an act was not confirmed (reason `declined`) | `reason`, `say` |
+| `asked` | an `ask` node paused the run, or an act waits for a yes (`confirm`, or a dry run) | `question`, `snapshot` |
+| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `dead-end` |
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.

@@ -165,7 +165,7 @@ gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md
 | :-- | :-- |
 | `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Warns about a branch an earlier one already covers and a condition no value meets, and names the numbers a decision without `else` leaves to a gap. Exit 1 on any error. |
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
-| `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. |
+| `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. `--dry-run` reads for real but stops before the first act and says what it would do. An act with `confirm` asks first, at the terminal. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
 | `pyrtan test DIR` | Runs each tree's own `[[tests]]` against their recordings: a sentence or inputs, and the status, answer, output and path the run must come to. Exit 1 if any misses. |
 | `pyrtan diff FILE` | What an edit changes: every test the file and its last committed version carry (`--against REF`, or `--old FILE`), run on both against the same recordings; names each run whose answer or path moved. Exit 1 if any did. |
@@ -177,7 +177,7 @@ gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers (members marked, the trusted ones too); `drop ID` lets a follower go (a lost phone); `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network (built in), or the one an invite (`NAME:SECRET@HUB`) names. |
 | `pyrtan network new NAME --at HUB` | Starts a network of your own, a network of one, and prints its invite. `network list` shows each network with its invite; `network leave NAME` cuts the links made in it. |
-| `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
+| `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. `--dry-run` asks it to stop before every act. |
 | `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them; `--build DIR` asks you about each one first. |
@@ -832,7 +832,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.28.0. The core, the service, the hub, the command, the console (which
+0.30.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -846,6 +846,7 @@ part of the swarm), the blobs they keep and the trees they run
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
+acts that ask first (`confirm`) and dry runs that change nothing,
 a check that reads a decision's order (dead branches, conditions nothing
 meets, the holes a gap will fall into),
 `pyrtan build` (the tree an unanswered sentence asks for, through a few

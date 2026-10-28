@@ -233,6 +233,7 @@
   {
    "body": null,
    "expect": {
+    "dry_run": true,
     "name": "this browser",
     "trees": [
      {
@@ -1177,6 +1178,34 @@
       "triggers": [
        "(find|search) books by {author}",
        "top story on book club"
+      ],
+      "version": 1
+     },
+     {
+      "description": "switches a light, after saying so",
+      "hosts": [
+       "lights.example"
+      ],
+      "inputs": {
+       "room": {
+        "required": true,
+        "type": "str"
+       },
+       "state": {
+        "default": "on",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "light",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [
+       "turn {state:word} the {room:word} light",
+       "dim the {room:word} light"
       ],
       "version": 1
      },
@@ -3934,6 +3963,575 @@
   },
   {
    "body": {
+    "text": "turn on the kitchen light"
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "on"
+    },
+    "question": "Turn the kitchen light on?",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "inputs": {
+      "room": "kitchen",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"on\"}"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "yes",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "inputs": {
+      "room": "kitchen",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"on\"}"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "on"
+    },
+    "output": {
+     "status": 204
+    },
+    "say": "The kitchen light is on (204).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "switch",
+       "node": "switch",
+       "summary": "answered: yes"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "switch",
+       "summary": "POST https://lights.example/kitchen -> 204"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "The kitchen light is on (204)."
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "turn off the kitchen light"
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "off"
+    },
+    "question": "Turn the kitchen light off?",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "inputs": {
+      "room": "kitchen",
+      "state": "off"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"off\"}"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "answer": "not now",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "inputs": {
+      "room": "kitchen",
+      "state": "off"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"off\"}"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "off"
+    },
+    "reason": "declined",
+    "say": "Not done: switch was not confirmed.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "answered: not now; not done"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
+    "dry_run": true,
+    "text": "turn on the kitchen light"
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "on"
+    },
+    "question": "Turn the kitchen light on?",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": true,
+     "inputs": {
+      "room": "kitchen",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"on\"}"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "dry_run": true,
+    "inputs": {
+     "room": "hall"
+    },
+    "tree": "light"
+   },
+   "expect": {
+    "inputs": {
+     "room": "hall",
+     "state": "on"
+    },
+    "question": "Turn the hall light on?",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": true,
+     "inputs": {
+      "room": "hall",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the hall light on? (would POST https://lights.example/hall with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/hall with {\"on\": \"on\"}"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the hall light on? (would POST https://lights.example/hall with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "room": "attic"
+    },
+    "tree": "light"
+   },
+   "expect": {
+    "inputs": {
+     "room": "attic",
+     "state": "on"
+    },
+    "question": "Turn the attic light on?",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "inputs": {
+      "room": "attic",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the attic light on? (would POST https://lights.example/attic with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/attic with {\"on\": \"on\"}"
+    },
+    "status": "asked",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the attic light on? (would POST https://lights.example/attic with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "tally ada"
    },
    "expect": {
@@ -4779,7 +5377,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 27,
+    "runs": 34,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -4815,6 +5413,7 @@
      "homebrew",
      "iss",
      "library",
+     "light",
      "local-time",
      "log-errors",
      "modem-check",
@@ -5235,6 +5834,51 @@
    "triggers": [
     "tally {name:word}",
     "peek {where:word}"
+   ],
+   "version": 1
+  },
+  {
+   "description": "switches a light, after saying so",
+   "hosts": [
+    "lights.example"
+   ],
+   "inputs": {
+    "room": {
+     "required": true,
+     "type": "str"
+    },
+    "state": {
+     "default": "on",
+     "type": "str"
+    }
+   },
+   "name": "light",
+   "nodes": {
+    "done": {
+     "kind": "done",
+     "output": {
+      "status": "{{ state.set.status }}"
+     },
+     "say": "The {{ inputs.room }} light is {{ inputs.state }} ({{ state.set.status }})."
+    },
+    "switch": {
+     "confirm": "Turn the {{ inputs.room }} light {{ inputs.state }}?",
+     "http": {
+      "body": {
+       "on": "{{ inputs.state }}"
+      },
+      "method": "POST",
+      "url": "https://lights.example/{{ inputs.room }}"
+     },
+     "into": "set",
+     "kind": "act",
+     "next": "done"
+    }
+   },
+   "start": "switch",
+   "triggers": [
+    "turn {state:word} the {room:word} light",
+    "dim the {room:word} light"
    ],
    "version": 1
   },

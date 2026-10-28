@@ -1572,5 +1572,9 @@
     "body": "",
     "written": null,
     "expires": null
+  },
+  "POST https://lights.example/kitchen": {
+    "status": 204,
+    "body": ""
   }
 }
