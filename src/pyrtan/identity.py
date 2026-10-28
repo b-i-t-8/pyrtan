@@ -67,6 +67,20 @@ class IdentityError(ValueError):
     pass
 
 
+# Ed25519 points of small order (the sign bit cleared, as libsodium's list has
+# them): a "public key" that is one verifies some signatures from nobody at all.
+# No real key is one; an identifier that names one is refused.
+SMALL_ORDER = frozenset(bytes.fromhex(h) for h in (
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+    "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+))
+
+
 # ---------------------------------------------------------------- identifiers
 
 
@@ -98,6 +112,8 @@ def decode(text: Any) -> bytes:
         raise IdentityError(f"{text!r} is version {version}, which this pyrtan does not know")
     if _checksum(key, version) != checksum:
         raise IdentityError(f"{text!r} is not an identity: the checksum does not match (a typo?)")
+    if key[:-1] + bytes([key[-1] & 0x7F]) in SMALL_ORDER:
+        raise IdentityError(f"{text!r} names a point of small order, which no key is")
     return key
 
 
@@ -339,8 +355,8 @@ def make_device(root: Key, device: str, may: list[str], *, label: str = "", issu
 def _check_device_fields(note: dict[str, Any]) -> None:
     if note.get("pyrtan-device") != 1:
         raise IdentityError("not a device note (pyrtan-device: 1)")
-    normal(note.get("root"))
-    normal(note.get("device"))
+    if normal(note.get("root")) == normal(note.get("device")):
+        raise IdentityError("a note's device is not its root: a root signs for itself, with no note")
     if not isinstance(note.get("label", ""), str) or len(note.get("label", "")) > 64:
         raise IdentityError("label is a string of at most 64 characters")
     _abilities(note.get("may"))

@@ -392,3 +392,15 @@ def test_replays_are_refused_while_a_signature_holds():
     for s in ("x", "y", "z", "w"):
         assert r.fresh(s, now, now=now)
     assert len(r._seen) == 3                       # remembering is bounded
+
+
+def test_points_of_small_order_and_self_notes_are_refused():
+    from pyrtan import identity
+
+    for point in identity.SMALL_ORDER:
+        for key in (point, point[:-1] + bytes([point[-1] | 0x80])):
+            with pytest.raises(identity.IdentityError, match="small order"):
+                identity.decode(identity.encode(key))
+    root = identity.Key.generate()
+    note = {"pyrtan-device": 1, "root": root.id, "device": root.id, "label": "", "may": ["ask"], "issued": 1, "expires": 2, "sig": "x"}
+    assert identity.check_device(note) == "a note's device is not its root: a root signs for itself, with no note"
