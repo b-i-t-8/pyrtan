@@ -314,14 +314,45 @@ OWNERS = "OWNERS"
 EXAMPLES_NAMESPACE = "pyrtan"
 
 
-def parse_owners(text: str) -> list[str]:
-    """The GitHub logins in an ``OWNERS`` file: one per line, ``#`` starts a comment."""
-    out = []
+Owner = tuple[str, "int | None"]  # (GitHub login, its numeric id when OWNERS gives it)
+
+
+def parse_owner_entries(text: str) -> list[Owner]:
+    """The owners in an ``OWNERS`` file: one per line, a GitHub login and, after it,
+    the account's numeric id (``alice 1234567``), which is what the gate compares
+    when it has it; a login can be given up and taken by someone else, an id
+    cannot. ``#`` starts a comment."""
+    out: list[Owner] = []
     for line in text.splitlines():
-        line = line.split("#", 1)[0].strip()
-        if line:
-            out.append(line.lstrip("@").lower())
+        words = line.split("#", 1)[0].split()
+        if not words:
+            continue
+        login = words[0].lstrip("@").lower()
+        ident = int(words[1]) if len(words) > 1 and words[1].isascii() and words[1].isdigit() else None
+        out.append((login, ident))
     return out
+
+
+def parse_owners(text: str) -> list[str]:
+    """The GitHub logins in an ``OWNERS`` file (see :func:`parse_owner_entries`)."""
+    return [login for login, _ in parse_owner_entries(text)]
+
+
+def _owner_entries(path: Path) -> list[Owner]:
+    return parse_owner_entries(path.read_text(encoding="utf-8")) if path.is_file() else []
+
+
+def _owns(entries: list[Any], login: str, author_id: int | None) -> bool:
+    """Whether the author is among ``entries`` (logins, or (login, id) pairs): by id
+    where both the entry and the gate have one, by login otherwise."""
+    for e in entries:
+        name, ident = (e, None) if isinstance(e, str) else e
+        if ident is not None and author_id is not None:
+            if ident == author_id:
+                return True
+        elif name == login:
+            return True
+    return False
 
 
 def owners(namespace_dir: str | Path) -> list[str]:
@@ -331,7 +362,7 @@ def owners(namespace_dir: str | Path) -> list[str]:
 
 
 def gate(root: str | Path, *, changed: list[str] | None = None, author: str | None = None, base: dict[str, tuple[int, bytes]] | None = None,
-         base_owners: dict[str, list[str]] | None = None) -> list[Problem]:
+         base_owners: dict[str, list[Any]] | None = None, author_id: int | None = None, base_examples: list[Any] | None = None) -> list[Problem]:
     """The checks a pull request to the catalog repository must pass. The
     repository is ``root``: its ``examples/`` are the ``pyrtan`` namespace,
     its ``catalog/<namespace>/<name>.toml`` files everyone else's, each
@@ -348,8 +379,13 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
     new, and its OWNERS in the checkout says whose it is. Without
     ``base_owners`` the checkout's OWNERS is all there is. Given ``base``
     (``path -> (version, bytes)`` on the base branch), a tree whose file
-    changed must have bumped its version. Returns the problems; none means
-    the gate is open.
+    changed must have bumped its version. ``examples/`` has an ``OWNERS``
+    of its own, judged the same way (``base_examples``: its owners on the
+    base branch): they are the trees every console carries. With
+    ``author_id`` (the author's numeric GitHub id) an owner whose OWNERS
+    line gives an id is matched by it, not by login, and a new namespace
+    that a name at pyrtan.com claims (``site/names/<namespace>.json``) is
+    that account's. Returns the problems; none means the gate is open.
     """
     import tempfile
 
@@ -363,6 +399,8 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
     with tempfile.TemporaryDirectory() as tmp:
         _, problems = build_index(roots, require_license=True, require_namespace=True, copy_to=tmp)
     if examples.is_dir():
+        if not owners(examples) and any(examples.rglob("*.toml")):
+            problems.append(Problem(f"examples/{OWNERS}", "examples/ needs an OWNERS file with at least one GitHub login: who may change the trees every console carries"))
         for path in sorted(examples.rglob("*.toml")):
             try:
                 tree = load_tree(path)
@@ -407,9 +445,19 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
                 if base_owners is not None and parts[1] in base_owners:
                     own, where = base_owners[parts[1]], f"catalog/{parts[1]}/{OWNERS} on the base branch"
                 else:
-                    own, where = owners(catalog / parts[1]), f"catalog/{parts[1]}/{OWNERS}"
-                if own and login not in own:
+                    own, where = _owner_entries(catalog / parts[1] / OWNERS), f"catalog/{parts[1]}/{OWNERS}"
+                    claimed = _claimed_by(root, parts[1]) if base_owners is not None else None
+                    if claimed is not None and claimed != author_id:
+                        problems.append(Problem(c, f"the name {parts[1]!r} is claimed at pyrtan.com by GitHub account {claimed}; only it may start that namespace"))
+                if own and not _owns(own, login, author_id):
                     problems.append(Problem(c, f"{author} is not in {where}; only a namespace's owners change it"))
+            elif len(parts) >= 2 and parts[0] == "examples":
+                if base_examples is not None:
+                    own, where = base_examples, f"examples/{OWNERS} on the base branch"
+                else:
+                    own, where = _owner_entries(examples / OWNERS), f"examples/{OWNERS}"
+                if own and not _owns(own, login, author_id):
+                    problems.append(Problem(c, f"{author} is not in {where}; only its owners change the trees every console carries"))
     for c, (base_version, base_bytes) in (base or {}).items():
         path = root / c
         if not path.is_file():
@@ -423,6 +471,16 @@ def gate(root: str | Path, *, changed: list[str] | None = None, author: str | No
         if tree.version <= base_version:
             problems.append(Problem(c, f"the file changed but version is still {tree.version}; bump it so pulls notice"))
     return problems
+
+
+def _claimed_by(root: Path, name: str) -> int | None:
+    """The GitHub id whose name claim at pyrtan.com is ``name``, if one is."""
+    path = root / "site" / "names" / f"{name}.json"
+    try:
+        github = json.loads(path.read_text(encoding="utf-8")).get("github")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return github if isinstance(github, int) and not isinstance(github, bool) else None
 
 
 def publish(file: str | Path, checkout: str | Path, *, owners: list[str] | None = None) -> tuple[Path, list[str]]:

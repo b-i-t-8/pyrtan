@@ -244,3 +244,18 @@ def test_service_with_public_egress_reports_it_and_refuses_a_lan_host(tmp_path):
         assert [s["node"] for s in out["trace"]["steps"]] == ["probe"]
     finally:
         server.stop()
+
+
+def test_a_body_must_say_it_is_json():
+    """A page on another site may POST text/plain with no preflight: a hub with no token
+    reads no body that does not say it is JSON, so such a page cannot drive it."""
+    svc = Service(Registry.from_paths([EXAMPLES]), transport=RecordedTransport.from_file(FIXTURES / "examples.json"))
+    server = Server(svc.route, port=0, quiet=True).start()
+    try:
+        body = b'{"text":"weather in Oslo"}'
+        status, _, out = _raw(f"{server.url}/intent", {"Content-Type": "text/plain"}, "POST", body)
+        assert status == 415 and json.loads(out)["reason"] == "not-json"
+        assert _raw(f"{server.url}/intent", {}, "POST", body)[0] == 415   # no type at all is not JSON either
+        assert _raw(f"{server.url}/intent", {"Content-Type": "application/json; charset=utf-8"}, "POST", body)[0] == 200
+    finally:
+        server.stop()

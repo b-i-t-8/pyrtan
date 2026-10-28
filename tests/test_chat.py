@@ -591,3 +591,102 @@ def test_a_link_that_stops_answering_is_dropped():
     finally:
         a.stop()
         b.stop()
+
+
+def test_lines_lose_control_characters():
+    hub = Hub(name="solo", chat=True)
+    try:
+        a, b = start(hub, "people"), start(hub, "people")
+        assert post(hub, "/chat/say", {"seat": b["seat"], "text": "hi\x1b[2J there\x07\x9b"})[0] == 200
+        events, _ = until(hub, a["seat"], lambda ev, v: texts(ev, "stranger"))
+        assert texts(events, "stranger") == ["hi[2J there"]
+        assert post(hub, "/chat/say", {"seat": b["seat"], "text": "\x1b\x07"})[0] == 400  # nothing left to say
+    finally:
+        hub.stop()
+
+
+def test_a_private_lobby_meets_strangers_only_from_hubs_it_follows():
+    a, b = Lobbyist("a"), Lobbyist("b", token="tok")   # b's lobby is behind its token
+    try:
+        a.fed.follow(b.url)
+        meet = lambda: a.fed.deliver(a.fed.following[b.url], a.fed._activity("Meet", {"ref": "x" * 16}))
+        ok, _, answer = meet()
+        assert not ok and answer["reason"] == "private-lobby"
+        b.fed.follow(a.url)  # b's operator chose a: now a may ask
+        ok, _, answer = meet()
+        assert ok and answer == {"status": "ok", "met": False}
+    finally:
+        a.stop()
+        b.stop()
+
+
+def test_a_stranger_on_another_hub_says_no_more_than_one_here(lobbies):
+    a, b = lobbies
+    there = start(b.hub, "people")
+    a.fed.follow(b.url)
+    _, here = a.call("/chat/start", {"want": "people"})
+    assert here["state"] == "talking"
+    far = a.hub.lobby.seats[here["seat"]].partner
+    say = lambda i: a.fed.deliver(a.fed.following[b.url], a.fed._activity("Say", {"to": far.ref, "from": a.hub.lobby.seats[here["seat"]].ref, "text": f"line {i}"}))
+    results = [say(i) for i in range(7)]
+    assert [ok for ok, _, _ in results] == [True] * 5 + [False] * 2   # the same burst a person here gets
+    assert results[-1][2]["reason"] == "too-fast"
+
+
+def test_one_place_holds_a_few_seats_and_strangers_leave_room_for_the_operator(tmp_path, monkeypatch):
+    from pyrtan import chat
+    from pyrtan.hub import serve_hub
+
+    hub, srv = serve_hub(port=0, quiet=True, name="pub", token="sekrit", chat_public=True)
+    call = lambda body, token=None: http_json("POST", f"{srv.url}/chat/start", body, token=token)
+    try:
+        for _ in range(chat.SEATS_PER_ADDRESS):
+            assert call({"want": "people"})[0] == 200
+        status, out = call({"want": "people"})
+        assert status == 429 and out["reason"] == "too-many-seats"
+        assert call({"want": "people"}, token="sekrit")[0] == 200   # the token is not one of the many
+    finally:
+        hub.stop()
+        srv.stop()
+    monkeypatch.setattr(chat, "SEATS_MAX", 5)
+    monkeypatch.setattr(chat, "SEATS_RESERVED", 2)
+    hub = Hub(name="solo", chat=True)
+    try:
+        for i in range(3):
+            assert hub.lobby.start({"want": "people"}, address=f"10.0.0.{i}")[0] == 200
+        status, out = hub.lobby.start({"want": "people"}, address="10.0.0.9")
+        assert status == 503 and out["reason"] == "lobby-full"
+        assert hub.lobby.start({"want": "people"})[0] == 200   # the operator's seats are kept
+    finally:
+        hub.stop()
+
+
+def test_a_newer_poll_lets_the_older_one_go():
+    import threading
+
+    hub = Hub(name="solo", chat=True)
+    try:
+        seat = start(hub, "people")["seat"]
+        took: list[float] = []
+        t0 = time.time()
+        waiting = threading.Thread(target=lambda: (post(hub, "/chat/poll", {"seat": seat, "after": 99, "wait": 10}), took.append(time.time() - t0)))
+        waiting.start()
+        time.sleep(0.3)
+        assert post(hub, "/chat/poll", {"seat": seat, "after": 99, "wait": 0})[0] == 200
+        waiting.join(3)
+        assert took and took[0] < 3   # one thread per seat, however many polls it sends
+    finally:
+        hub.stop()
+
+
+def test_waiting_seats_ask_other_hubs_less_often_as_the_lobby_fills():
+    from pyrtan import chat
+
+    hub = Hub(name="solo", chat=True)
+    try:
+        assert hub.lobby._meet_every() == hub.lobby.meet_every
+        for i in range(2 * chat.MEET_CROWD):
+            hub.lobby.seats[f"s{i}"] = chat.Seat(f"s{i}", f"ref-{i:08d}", "people", [])   # waiting, all of them
+        assert hub.lobby._meet_every() == 2 * hub.lobby.meet_every
+    finally:
+        hub.stop()

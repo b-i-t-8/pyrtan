@@ -379,3 +379,16 @@ def test_cli_backup_and_restore(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("PP", "correct horse battery staple")
     code, _, err = run(capsys, "id", "restore", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", other)
     assert code == 1 and "already holds" in err
+
+
+def test_replays_are_refused_while_a_signature_holds():
+    from pyrtan.identity import Replays
+
+    r = Replays(window=300, limit=3)
+    now = 1_000_000
+    assert r.fresh("sig-a", now, now=now) and not r.fresh("sig-a", now, now=now + 299)
+    assert r.fresh("sig-a", now, now=now + 302)   # its window is over: the date check refuses it now, not this
+    assert not r.fresh("sig-b", "soon", now=now)  # no date, no signature
+    for s in ("x", "y", "z", "w"):
+        assert r.fresh(s, now, now=now)
+    assert len(r._seen) == 3                       # remembering is bounded

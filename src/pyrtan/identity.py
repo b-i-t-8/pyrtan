@@ -30,7 +30,9 @@ import ipaddress
 import json
 import os
 import re
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -665,6 +667,38 @@ def verify_request(audience: str, method: str, path: str, body: Any, headers: di
     if note["device"] != key:
         raise IdentityError(f"the device note is for {short(note['device'])}, not the signing key")
     return Signer(key, note["root"], note)
+
+
+class Replays:
+    """The signatures a receiver has taken while they are still good, so that each
+    signed request is taken once. A signature holds for ``window`` seconds either
+    side of its date; one seen again in that time is a replay (someone on the path
+    sending it twice), and refused. Signing is deterministic, so two requests alike
+    in every byte within one second are one request: a client that means it twice
+    sends it a second later. At most ``limit`` are remembered; past that the oldest
+    go first, so a flood can shorten a signature's protection, never grow memory."""
+
+    def __init__(self, window: float = WINDOW, limit: int = 100_000) -> None:
+        self.window, self.limit = window, limit
+        self._seen: OrderedDict[str, float] = OrderedDict()  # signature -> until when it could be replayed
+        self._lock = threading.Lock()
+
+    def fresh(self, signature: str, date: Any, *, now: float | None = None) -> bool:
+        """True the first time ``signature`` (dated ``date``) is seen; False after."""
+        now = time.time() if now is None else now
+        try:
+            until = float(int(date)) + self.window + 1
+        except (TypeError, ValueError):
+            return False
+        with self._lock:
+            while self._seen and next(iter(self._seen.values())) < now:
+                self._seen.popitem(last=False)
+            if signature in self._seen:
+                return False
+            self._seen[signature] = until
+            while len(self._seen) > self.limit:
+                self._seen.popitem(last=False)
+        return True
 
 
 # ---------------------------------------------------------------- backups
