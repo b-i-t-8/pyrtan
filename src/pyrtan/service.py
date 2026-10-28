@@ -102,8 +102,17 @@ PUBLIC_PATHS = frozenset({"/", "/index.html", "/console", "/api", "/health", "/a
 
 
 def public_path(path: str) -> bool:
-    """What answers without a token: the paths above, and ``/.well-known/`` (identity documents, signed)."""
-    return path in PUBLIC_PATHS or path.startswith("/.well-known/")
+    """What answers without a token: the paths above, and the documents under
+    ``/.well-known/pyrtan/`` (identities, name claims and the names list: signed,
+    and public by design). Exactly those: a route added under ``/.well-known/``
+    later needs the token until it is named here."""
+    if path in PUBLIC_PATHS or path == "/.well-known/pyrtan/names.json":
+        return True
+    for prefix in ("/.well-known/pyrtan/id/", "/.well-known/pyrtan/name/"):
+        rest = path[len(prefix):]
+        if path.startswith(prefix) and rest.endswith(".json") and "/" not in rest:
+            return True
+    return False
 # On a federated hub, a request carrying a signature reaches the route,
 # which verifies it (see :mod:`pyrtan.federation`).
 SIGNED_PATHS = frozenset({"/inbox", "/run", "/intent", "/resume", "/capabilities", "/mailbox"})
@@ -203,6 +212,7 @@ class Service:
         unanswered: str | Path | None = None,
         watch: bool = False,
         suggestions: str | Path | None = None,
+        memory: Any = None,
     ) -> None:
         self.registry = registry
         self.name = name
@@ -211,7 +221,7 @@ class Service:
         self.token = token or None
         self.egress = egress
         self.started = time.time()
-        adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress)
+        adapters = transport if transport is not None and hasattr(transport, "perform") else LocalAdapters(egress=egress, memory=memory)
         self.runner = Runner(registry, transport or UrllibTransport(egress=egress), resolver=RemoteResolver(self.hub, self.token) if self.hub else None, env=env or {}, adapters=adapters)
         self.gaps = gaps if isinstance(gaps, GapStore) else GapStore(gaps)
         self.unanswered = Unanswered(path=unanswered)
@@ -423,6 +433,9 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
             elif isinstance(payload, str):
                 data = payload.encode("utf-8")
                 ctype = "text/html; charset=utf-8"
+                # The console: never in another site's frame (its buttons act with the token), no plugins, no <base>.
+                # Its scripts are inline and it calls hubs and model servers the person names, so no script-src or connect-src.
+                extra = {"Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'none'", "X-Frame-Options": "DENY", **(extra or {})}
             else:
                 data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 ctype = "application/json; charset=utf-8"
@@ -559,10 +572,11 @@ def serve(
     unanswered: str | Path | None = None,
     watch: bool = False,
     suggestions: str | Path | None = None,
+    memory: str | Path | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
     set_egress(egress)  # the service's own requests (its hub) under the same policy as its trees
-    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions)
+    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions, memory=memory)
     server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a

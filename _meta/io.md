@@ -1,8 +1,8 @@
-# Design — Forms of I/O: file, shell, serial, queue, browser
+# Design — Forms of I/O: file, shell, serial, queue, browser, memory
 
 | | |
 |---|---|
-| **Status** | **Built, v0.7.** Five sources beside `http`, each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
+| **Status** | **Built, v0.7; memory in v0.27.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
 | **Date** | 2026-10-25 |
 | **Decision** | A node names a *source* and what it wants from it; the tree lists what that source may reach; the runtime refuses anything outside the list before the adapter is asked; the adapter moves the bytes and leaves a plain table in state. Files, shells and serial lines are the box itself, and a hosted service keeps them closed. |
 | **Where** | `src/pyrtan/adapters.py` (the adapters, the allow-list matchers, the fixture keys), `src/pyrtan/tree.py` (the lists, `Tree.allowed`, the per-source checks), `src/pyrtan/runtime.py` (one path for every source), `src/pyrtan/transport.py` (fixtures answer for every source), `src/pyrtan/js/pyrtan.js` (the same on a member). |
@@ -36,6 +36,7 @@ trace line reads `source what -> brief`, the way an HTTP line reads
 | `shell` | `commands` | a program and `args` | `command`, `args`, `status` (exit code), `ok`, `stdout`, `stderr`, `body`, `json`, `lines` |
 | `serial` | `devices` | a device, `baud`, `write`, `read_until` or `read` | `device`, `baud`, `sent`, `body`, `bytes`, `complete`, `json`, `lines` |
 | `queue` | `hosts` and `topics` | a broker URL and a topic; `publish` | `received`, `message` (`topic`, `body`, `json`), `body`, `json`; `published` |
+| `memory` | `keys` | a key; `write`, `add` or `delete`, and `ttl` | `key`, `exists`, `value`, `json`, `body`, `written`, `expires`; `previous`, `existed` |
 
 ## 2. The allow-lists
 
@@ -55,6 +56,9 @@ tree that uses a source without its list does not load. The matchers:
 - `devices`: paths or globs (`/dev/ttyUSB*`).
 - `topics`: MQTT filters, `+` (or `*`) one level, `#` the rest; the
   broker's host must be in `hosts` as well.
+- `keys`: memory keys or globs (`disk-space/*`); `*` alone is every key.
+  Two trees that list the same key share it; a tree that lists `*` says
+  out loud that it reads everything the box remembers.
 
 ## 3. What this design refuses
 
@@ -84,8 +88,16 @@ tree that uses a source without its list does not load. The matchers:
   redirect or by a click in `actions`, is aborted and the node fails.
   `PYRTAN_BROWSER` points at a Chromium when Playwright's own is not
   installed.
+- **Memory that travels.** What a tree remembers is the box's own: a
+  JSON file a service's `--memory` names (or the process, without one).
+  No endpoint serves it, it is never a blob, never gossiped and never
+  handed to a member; `pyrtan memory FILE` is how a person reads it. A
+  delegated tree remembers where it runs. Memory is small on purpose
+  (a key up to 200 characters, a value up to 64 KB, 10,000 keys): a
+  tree's notes, not a database.
 - **Lending the box.** `--egress public` was "reach only public
-  addresses". It now also means "no files, no programs, no serial lines":
+  addresses". It now also means "no files, no programs, no serial lines,
+  no memory":
   an operator hosting other people's trees does not hand them the host.
   A queue or a browser under that policy goes through the same address
   check an HTTP request does.
@@ -100,7 +112,11 @@ tree that uses a source without its list does not load. The matchers:
 One fixture file answers for every source. An HTTP record is keyed `GET
 url`; the others by `adapter_key`: `shell df -P /`, `file /var/log/syslog`
 (or `file append …`), `serial /dev/ttyUSB0 "AT\r\n"`, `queue mqtt://broker
-home/kitchen/temperature` (or `queue publish …`), `browser https://…`.
+home/kitchen/temperature` (or `queue publish …`), `browser https://…`,
+`memory disk-space/root` (or `memory write …`, `memory add …`, `memory
+delete …`). A memory read is an observation like the others, so a run
+that remembers is still deterministic given what it observed, and its
+tests replay it.
 The record is the table the node would observe, or `{"error": "…"}` for
 a transport failure. `pyrtan run --record` writes them from real runs;
 the JavaScript runtime builds the same keys, so `tests/fixtures/
@@ -136,5 +152,9 @@ of them being present.
   or a serial line speaks, or on a clock (`watch.py`; the file is
   polled, the queue and the serial line are held open as streams,
   `adapters.mqtt_stream` and `adapters.serial_lines`).
+- **v0.27, built:** `memory`, what a tree keeps across runs, with `keys`
+  (`memory.py`): the last reading, a count of checks in a row, whether
+  it already said so. With `[[watches]]`, that is debouncing and
+  alerting once, decided by nodes a reader can follow.
 - **Later:** a serial line held open across the nodes of one run, for
   devices with a session.

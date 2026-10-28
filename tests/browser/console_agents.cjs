@@ -67,6 +67,19 @@ const [page_url, model_url] = process.argv.slice(2);
     console.log("KEPT " + (await page.$$eval("#agent-notes td", (els) => els.map((e) => e.textContent))).join(" | "));
     console.log("SKILL " + (await page.$$eval("#agent-skills code", (els) => els.map((e) => e.textContent))).join(","));
     console.log("TERSE " + await say("/terse what is the level"));
+    // A browser without WebGPU (Firefox on Linux, say) is offered the CPU, and told which browsers have a GPU.
+    const nogpu = await browser.newPage();
+    await nogpu.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { get: () => undefined }));
+    await nogpu.goto(page_url);
+    await nogpu.evaluate(() => localStorage.removeItem("pyrtan.agents.config"));
+    await nogpu.reload();
+    await nogpu.click('#tabs a[data-tab="agents"]');
+    const engineNow = await nogpu.inputValue("#agent-engine");
+    const models = await nogpu.$$eval("#agent-model option", (els) => els.map((e) => e.value));
+    await nogpu.selectOption("#agent-engine", "webllm");
+    const notice = await nogpu.isVisible("#agent-gpu") ? await nogpu.textContent("#agent-gpu") : "(hidden)";
+    console.log("NOGPU " + engineNow + " " + models.join(","));
+    console.log("NOTICE " + notice);
     console.log("DONE");
   } catch (e) {
     console.log("ERROR " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" ") : e));

@@ -76,7 +76,8 @@ def build() -> dict:
     return {
         "sha3_256": [{"in": s.hex(), "out": hashlib.sha3_256(s).hexdigest()} for s in samples],
         "ids": [{"key": p, "id": k.id} for p, k in zip(public, keys)],
-        "refuse": [good[:-1], good + "a", "pyx:" + good[4:], good[:10] + "1" + good[11:], good[:20] + ("b" if good[20] != "b" else "c") + good[21:], good[:-2] + "aa"],
+        "refuse": [good[:-1], good + "a", "pyx:" + good[4:], good[:10] + "1" + good[11:], good[:20] + ("b" if good[20] != "b" else "c") + good[21:], good[:-2] + "aa"]
+                  + [identity.encode(p) for p in sorted(identity.SMALL_ORDER)] + [identity.encode(p[:-1] + bytes([p[-1] | 0x80])) for p in sorted(identity.SMALL_ORDER)],
         "accept": [good, good.upper()],
         "canonical": [{"value": v, "canonical": canonical(v).decode("utf-8")} for v in VALUES],
         "requests": requests,
