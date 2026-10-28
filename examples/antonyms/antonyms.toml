@@ -1,0 +1,58 @@
+# Words that mean the opposite, from Datamuse.
+
+name = "antonyms"
+version = 1
+namespace = "pyrtan"
+description = "Antonyms for an English word, from Datamuse."
+tags = ["reference", "language", "read-only"]
+license = "MIT"
+hosts = ["api.datamuse.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what is the] opposite of {word:word}"
+[[triggers]]
+pattern = "antonyms (for|of) {word:word}"
+
+[inputs.word]
+type = "str"
+pattern = "^[A-Za-z][A-Za-z'\\-]*$"
+description = "One English word"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.datamuse.com/words?rel_ant={{ inputs.word | lower | url }}&max=8" }
+into = "resp"
+extract = [{ into = "words", regex = "\"word\":\\s*\"([^\"]+)\"", all = true }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "words"
+branches = [
+  { when = { empty = true }, then = "none" },
+  { else = "reply" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "The opposite of {{ inputs.word }}: {{ state.words | join }}."
+output = { word = "{{ inputs.word }}", antonyms = "{{ state.words }}" }
+
+[nodes.none]
+kind = "fail"
+reason = "no-antonyms"
+say = "Datamuse knows no opposite of {{ inputs.word }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Datamuse answered {{ state.resp.status }}."

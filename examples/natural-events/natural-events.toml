@@ -1,0 +1,66 @@
+# What NASA's Earth Observatory is tracking now (EONET): storms, wildfires,
+# volcanoes, icebergs. The five most recent open events.
+
+name = "natural-events"
+version = 1
+namespace = "pyrtan"
+description = "Natural events happening now, as NASA's EONET tracks them: storms, wildfires, volcanoes, ice."
+tags = ["science", "earth", "read-only"]
+license = "MIT"
+hosts = ["eonet.gsfc.nasa.gov"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[current] natural events"
+[[triggers]]
+pattern = "what natural (events|disasters) are happening [now]"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5" }
+into = "resp"
+extract = [{ into = "events", json = "json.events" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "events"
+branches = [
+  { when = { empty = true }, then = "none" },
+  { else = "each" },
+]
+
+[nodes.each]
+kind = "each"
+over = "events"
+limit = 5
+start = "one"
+into = "titles"
+next = "reply"
+
+[nodes.one]
+kind = "done"
+output = "{{ item.title }}"
+
+[nodes.reply]
+kind = "done"
+say = "NASA is tracking {{ state.titles | length }} open events. The latest: {{ state.titles | first }}."
+output = { events = "{{ state.titles }}", source = "https://eonet.gsfc.nasa.gov/" }
+
+[nodes.none]
+kind = "done"
+say = "NASA's EONET has no open natural events right now."
+output = { events = [] }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "NASA's EONET answered {{ state.resp.status }}."

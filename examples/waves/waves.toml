@@ -1,0 +1,76 @@
+# The sea off a place now: wave height, period and direction, from
+# Open-Meteo's marine model. Inland it has no reading.
+
+name = "waves"
+version = 1
+namespace = "pyrtan"
+description = "The waves off a coastal place now: height, period and direction, from Open-Meteo's marine model."
+tags = ["weather", "sea", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "marine-api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[how big are the] waves (in|at|off) {place}"
+[[triggers]]
+pattern = "[the] surf (in|at) {place}"
+
+[nodes.sea]
+kind = "observe"
+http = { method = "GET", url = "https://marine-api.open-meteo.com/v1/marine?latitude={{ state.lat }}&longitude={{ state.lon }}&current=wave_height,wave_period,wave_direction" }
+into = "sea"
+extract = [
+  { into = "height", json = "json.current.wave_height" },
+  { into = "period", json = "json.current.wave_period" },
+  { into = "from", json = "json.current.wave_direction" },
+]
+next = "at-sea"
+
+[nodes.at-sea]
+kind = "decide"
+on = "height"
+branches = [
+  { when = { type = "number" }, then = "reply" },
+  { else = "inland" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Off {{ state.name }}, {{ state.country }}: waves {{ state.height }} m every {{ state.period }} s, from {{ state.from }}°."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", wave_height_m = "{{ state.height }}", wave_period_s = "{{ state.period }}", wave_direction_deg = "{{ state.from }}" }
+
+[nodes.inland]
+kind = "fail"
+reason = "inland"
+say = "Open-Meteo has no sea at {{ state.name }}: it is too far from the coast for its marine model."
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "sea" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+

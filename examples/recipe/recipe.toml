@@ -1,0 +1,66 @@
+# A recipe, from TheMealDB: search for the dish, then read the first match
+# by its id, so the ingredients listed are that one recipe's.
+
+name = "recipe"
+version = 1
+namespace = "pyrtan"
+description = "A recipe for a dish: where it is from, its ingredients and how to make it, from TheMealDB."
+tags = ["food", "read-only"]
+license = "MIT"
+hosts = ["www.themealdb.com"]
+start = "search"
+
+[[triggers]]
+pattern = "[a] recipe for {dish}"
+[[triggers]]
+pattern = "how do i (cook|make) {dish}"
+
+[inputs.dish]
+type = "str"
+description = "A dish, as in: lasagna"
+
+[nodes.search]
+kind = "observe"
+http = { method = "GET", url = "https://www.themealdb.com/api/json/v1/1/search.php?s={{ inputs.dish | url }}" }
+into = "found"
+extract = [{ into = "id", json = "json.meals[0].idMeal" }]
+next = "any"
+
+[nodes.any]
+kind = "decide"
+on = "id"
+branches = [
+  { when = { exists = true }, then = "meal" },
+  { else = "no-recipe" },
+]
+
+[nodes.meal]
+kind = "observe"
+http = { method = "GET", url = "https://www.themealdb.com/api/json/v1/1/lookup.php?i={{ state.id }}" }
+into = "resp"
+extract = [
+  { into = "meal", json = "json.meals[0].strMeal" },
+  { into = "area", json = "json.meals[0].strArea" },
+  { into = "category", json = "json.meals[0].strCategory" },
+  { into = "how", json = "json.meals[0].strInstructions" },
+  { into = "ingredients", regex = "\"strIngredient\\d+\":\\s*\"([^\"]+)\"", all = true },
+]
+next = "has-meal"
+
+[nodes.has-meal]
+kind = "decide"
+on = "meal"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "no-recipe" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.meal }} ({{ state.area }}, {{ state.category }}): {{ state.ingredients | join }}. https://www.themealdb.com/meal/{{ state.id }}"
+output = { dish = "{{ state.meal }}", area = "{{ state.area }}", category = "{{ state.category }}", ingredients = "{{ state.ingredients }}", instructions = "{{ state.how }}", url = "https://www.themealdb.com/meal/{{ state.id }}" }
+
+[nodes.no-recipe]
+kind = "fail"
+reason = "no-recipe"
+say = "TheMealDB has no recipe for {{ inputs.dish }}."

@@ -1,0 +1,79 @@
+# Pollen in the air of a place now, from Open-Meteo's air quality model,
+# which covers Europe; elsewhere it has no reading.
+
+name = "pollen"
+version = 1
+namespace = "pyrtan"
+description = "Pollen counts for a place now (Europe): grass, birch, alder, mugwort, olive and ragweed, from Open-Meteo."
+tags = ["weather", "health", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "air-quality-api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[what's the] pollen [count] in {place}"
+[[triggers]]
+pattern = "is there pollen in {place}"
+
+[nodes.air]
+kind = "observe"
+http = { method = "GET", url = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude={{ state.lat }}&longitude={{ state.lon }}&current=grass_pollen,birch_pollen,alder_pollen,mugwort_pollen,olive_pollen,ragweed_pollen" }
+into = "aq"
+extract = [
+  { into = "grass", json = "json.current.grass_pollen" },
+  { into = "birch", json = "json.current.birch_pollen" },
+  { into = "alder", json = "json.current.alder_pollen" },
+  { into = "mugwort", json = "json.current.mugwort_pollen" },
+  { into = "olive", json = "json.current.olive_pollen" },
+  { into = "ragweed", json = "json.current.ragweed_pollen" },
+]
+next = "covered"
+
+[nodes.covered]
+kind = "decide"
+on = "grass"
+branches = [
+  { when = { type = "number" }, then = "reply" },
+  { else = "not-covered" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Pollen in {{ state.name }}, {{ state.country }} (grains/m³): grass {{ state.grass }}, birch {{ state.birch }}, alder {{ state.alder }}, mugwort {{ state.mugwort }}, olive {{ state.olive }}, ragweed {{ state.ragweed }}."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", grass = "{{ state.grass }}", birch = "{{ state.birch }}", alder = "{{ state.alder }}", mugwort = "{{ state.mugwort }}", olive = "{{ state.olive }}", ragweed = "{{ state.ragweed }}", unit = "grains/m³" }
+
+[nodes.not-covered]
+kind = "fail"
+reason = "not-covered"
+say = "Open-Meteo has no pollen reading for {{ state.name }}; its pollen model covers Europe."
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "air" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+

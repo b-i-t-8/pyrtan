@@ -330,3 +330,76 @@ def test_space(runner):
     assert len(out.output["stories"]) == 3 and out.output["stories"][0]["site"] == "SpaceNews"
     out = runner.run_intent("astronomy picture of the day")
     assert out.output["title"] == "Day and Night over the Clouds" and out.output["media_type"] == "image"
+
+
+# ---------------------------------------------------------------- a third batch for the browser
+
+
+def test_antonyms_and_capitals(runner):
+    assert runner.run_intent("opposite of happy").say == "The opposite of happy: sad, distressed, unhappy, dysphoric."
+    assert runner.run_intent("antonyms for qqzzx").reason == "no-antonyms"
+    out = runner.run_intent("what is the capital of Norway")
+    assert out.say == "The capital of Norway is Oslo." and out.output["iso2"] == "NO"
+    assert runner.run_intent("capital of Narnia").reason == "unknown-country"
+
+
+def test_pollen_and_waves_say_where_their_models_end(runner):
+    assert runner.run_intent("pollen in Paris").output["grass"] == 12.4
+    assert runner.run_intent("pollen in Sydney").reason == "not-covered"
+    assert runner.run_intent("waves in Lisbon").say == "Off Lisbon, Portugal: waves 1.42 m every 11.7 s, from 289°."
+    assert runner.run_intent("waves in Munich").reason == "inland"
+
+
+def test_crypto_price_by_name_or_ticker(runner):
+    out = runner.run_intent("bitcoin price")
+    assert out.inputs == {"coin": "BTC", "currency": "USD"} and out.output == {"coin": "BTC", "currency": "USD", "price": 80645.125}
+    assert runner.run_intent("ethereum price in eur").say == "1 ETH is 2107.37 EUR (Coinbase spot price)."
+    assert runner.run_intent("crypto price of QQQ").reason == "unknown-pair"
+
+
+def test_package_downloads_and_nuget(runner):
+    assert runner.run_intent("npm downloads for @types/node").output["downloads"] == 404009479
+    assert runner.run_intent("npm downloads for nope-not-a-pkg-zz").reason == "no-package"
+    assert runner.run_intent("latest version of Newtonsoft.Json on nuget").output["version"] == "14.0.1-beta2"
+    assert runner.run_intent("nuget package nope-qqzz").reason == "no-package"
+
+
+def test_dns_reads_the_answer_section_only(runner):
+    out = runner.run_intent("mx record for gmail.com")
+    assert out.output["type"] == "MX" and len(out.output["records"]) == 5 and "5 gmail-smtp-in.l.google.com." in out.output["records"]
+    assert runner.run_intent("dns for example.com").output["records"] == ["172.66.147.243", "104.20.23.154"]
+    assert runner.run_intent("dns for nope-qqzz.example").reason == "no-such-name"
+    out = runner.run_intent("txt record for nope-qqzz-empty.pyrtan.com")
+    assert out.status == "done" and out.output["records"] == []
+
+
+def test_where_am_i(runner):
+    assert runner.run_intent("where am i").output["city"] == "Columbus"
+
+
+def test_quote_and_programming_joke(runner):
+    assert runner.run_intent("give me a quote").output["author"] == "Rumi"
+    out = runner.run_intent("tell me a programming joke")
+    assert out.tree == "programming-joke" and out.say.startswith("Algorithm:")
+    assert runner.run_intent("tell me a joke").tree == "dad-joke"
+
+
+def test_food(runner):
+    assert runner.run_intent("what is barcode 3017624010701").say == "3017624010701 is Nutella by Ferrero (400.0 g), Nutri-Score E."
+    assert runner.run_intent("what is barcode 00000000").reason == "no-product"
+    out = runner.run_intent("recipe for lasagna")  # search, then the first match by id: one recipe's ingredients
+    assert out.output["dish"] == "Vegan Lasagna" and out.output["ingredients"][:2] == ["green red lentils", "Carrots"]
+    assert [s.node for s in out.trace.steps if s.kind == "observe"] == ["search", "meal"]
+    assert runner.run_intent("recipe for qqzzx").reason == "no-recipe"
+    out = runner.run_intent("cocktail margarita")
+    assert out.output["ingredients"] == ["Tequila", "Triple sec", "Lime juice", "Salt"] and out.output["glass"] == "Cocktail glass"
+    assert runner.run_intent("cocktail qqzzx").reason == "no-drink"
+
+
+def test_f1_events_and_people_in_space(runner):
+    out = runner.run_intent("who won the last f1 race")
+    assert out.say == "United States Grand Prix (2026-10-25): Andrea Kimi Antonelli won for Mercedes, then Leclerc (Ferrari) and Verstappen (Red Bull)."
+    out = runner.run_intent("natural events")
+    assert out.say == "NASA is tracking 5 open events. The latest: Tropical Cyclone Arnab." and len(out.output["events"]) == 5
+    out = runner.run_intent("how many people are in space")
+    assert out.output["count"] == 10 and out.output["people"][0] == "Zhu Yangzhu"

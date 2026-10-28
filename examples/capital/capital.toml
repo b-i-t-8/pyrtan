@@ -1,0 +1,65 @@
+# A country's capital, from CountriesNow.
+
+name = "capital"
+version = 1
+namespace = "pyrtan"
+description = "The capital city of a country, from CountriesNow."
+tags = ["geography", "read-only"]
+license = "MIT"
+hosts = ["countriesnow.space"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what is the] capital (of|city of) {country}"
+
+[inputs.country]
+type = "str"
+description = "A country's name in English, as in: Norway"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://countriesnow.space/api/v0.1/countries/capital/q?country={{ inputs.country | url }}" }
+into = "resp"
+extract = [
+  { into = "name", json = "json.data.name" },
+  { into = "capital", json = "json.data.capital" },
+  { into = "code", json = "json.data.iso2" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-capital" },
+  { when = { eq = 404 }, then = "unknown-country" },
+  { else = "unexpected" },
+]
+
+[nodes.has-capital]
+kind = "decide"
+on = "capital"
+branches = [
+  { when = { empty = false }, then = "reply" },
+  { else = "no-capital" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "The capital of {{ state.name }} is {{ state.capital }}."
+output = { country = "{{ state.name }}", capital = "{{ state.capital }}", iso2 = "{{ state.code }}" }
+
+[nodes.unknown-country]
+kind = "fail"
+reason = "unknown-country"
+say = "CountriesNow knows no country called {{ inputs.country }}."
+
+[nodes.no-capital]
+kind = "fail"
+reason = "no-capital"
+say = "CountriesNow lists no capital for {{ state.name }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "CountriesNow answered {{ state.resp.status }}."
