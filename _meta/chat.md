@@ -35,18 +35,24 @@ the hub's order. A seat nobody polls for a minute is let go and its
 partner told, which is how a closed tab ends a conversation.
 
 The lobby follows the hub's access rule: with a token, only callers with
-the token chat. That is deliberate. A bot runs trees, so a lobby open to
-callers the hub would refuse at `/intent` would be a way round the token.
+the token chat, or with a key the hub grants `chat` (`identity.md` §7).
+That is deliberate. A bot runs trees, so a lobby open to callers the hub
+would refuse at `/intent` would be a way round the token; for the same
+reason a `chat` grant reaches the bots too, and is to be given to whom
+the operator would let ask.
 
 **A public lobby (v0.13).** A hub that wants strangers from the
 internet in its lobby, and its token on everything else, starts
 `--chat-public` (`$PYRTAN_CHAT_PUBLIC`). `/chat` then answers without
-the token, and a caller without it is a *guest*: a guest meets people,
+the token, and a caller without it (or without a key granted `chat`)
+is a *guest*: a guest meets people,
 on this hub or on a hub it follows, and never a bot. `want: bot` from a
 guest is refused (`bots-need-token`), `anyone` is read as `people`, and
 `/chat` counts no bots for them. `/api` says `chat_public` and, for the
 caller asking, `chat_bots`; the console offers a guest "people only" and
-says why. The rest of the hub (`/intent`, `/run`, `/gaps`, `/follow`,
+says why. A request signed with a key the hub grants nothing is a
+guest too, not refused: a browser that holds a key is not shut out of a
+lobby open to everyone. The rest of the hub (`/intent`, `/run`, `/gaps`, `/follow`,
 `/keep`) still needs the token, so opening the lobby lends strangers
 nothing but each other. A hub with no token has no guests: there,
 anyone may meet a bot, as anyone may ask it at `/intent`.

@@ -1,6 +1,6 @@
 [project]
 name = "pyrtan"
-version = "0.13.0"
+version = "0.14.0"
 description = "Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -26,6 +26,7 @@ pyrtan = "pyrtan.cli:main"
 
 [project.optional-dependencies]
 browser = ["playwright>=1.45"]
+identity = ["cryptography>=42"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

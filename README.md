@@ -55,6 +55,8 @@ pyrtan --version
 Trees that drive a browser need the one optional extra, Playwright:
 `pip install 'pyrtan[browser]'` and `playwright install chromium` (or
 point `PYRTAN_BROWSER` at a Chromium you have).
+Signing and checking identities (`pyrtan id`) needs the other,
+`cryptography`: `pip install 'pyrtan[identity]'`.
 
 From a checkout, `uv sync` then `uv run pyrtan …`, and `uv run pytest`.
 
@@ -174,6 +176,9 @@ hosted box is not lent out. The design is in [`_meta/io.md`](_meta/io.md).
 | `pyrtan pull NAME[@VERSION]` | Fetches a tree from a catalog into your trees folder, verified against the catalog's index. |
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
 | `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. |
+| `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
+| `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
+| `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
 
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
 `Authorization: Bearer` on everything but `/health` and the console, and
@@ -314,6 +319,54 @@ sentence carries `via: [the hub it crossed]`, and the console's Peers tab
 shows who follows whom. The design is in
 [`_meta/federation.md`](_meta/federation.md).
 
+## Identity
+
+A person, a hub or a device is a key, and its identity is that key
+written out: `pyr:` and 56 characters, which anyone can check a
+signature against without asking anybody. `pyr:<key>@host` (a hub, an
+`.onion`) says where it can be reached; `alice@pyrtan.com` is a name a
+domain vouches for. No domain owns an identity, and none grants
+anything by it: each hub keeps its own list of who may do what.
+
+```
+pyrtan id new                                       # your root key, ~/.config/pyrtan/identity/
+pyrtan id device add pyr:… --may chat,run --label phone
+pyrtan id name alice@pyrtan.com --github <your numeric GitHub id>
+pyrtan id check pyr:…@hub.example
+```
+
+`pyrtan id resolve alice@pyrtan.com` fetches the claim the domain serves
+at `/.well-known/pyrtan/name/alice.json`, checks that the key signed it,
+and pins the answer: if the domain later names a different key, you are
+told rather than switched. Any domain can serve names (`pyrtan id
+wellknown DIR --domain D` builds the files). pyrtan.com hands out
+`<your GitHub login>@pyrtan.com` by pull request: `pyrtan id name
+<login>@pyrtan.com --into <checkout>`, then a pull request from that
+account, and the gate checks the account's numeric id
+([`site/names/README.md`](site/names/README.md)).
+
+**Grants** replace handing out the token. A hub grants identities
+abilities: `ask` (the routed paths), `chat` (the lobby), `run` (be a
+trusted member and run its trees) and `operate` (what the token allows);
+a device gets what its root is granted, capped by its note.
+
+```
+pyrtan hub --token … --allow alice@pyrtan.com=ask,run     # a name is resolved and pinned now
+pyrtan allow bob@example.org --may chat --at HUB           # or later, as the operator
+pyrtan ask "how full is the disk" --at HUB --sign          # signed with your key; no token
+pyrtan id push --at HUB                                    # your newest devices and revocations
+```
+
+A request signed with a key is checked against the hub's own id (`GET
+/api` names it), so it cannot be replayed at another hub. The console's
+**Identity** tab makes a key for the browser (WebCrypto, kept in the
+browser, never readable by the page), takes the note `pyrtan id device
+add` prints for it, and from then on signs what it sends; a member
+joined from there follows as that key, and is trusted when its root
+holds `run`. A revoked or expired device, or one whose grant is taken
+back, is dropped. The design is in
+[`_meta/identity.md`](_meta/identity.md).
+
 ## The catalog
 
 Trees other people wrote are at <https://pyrtan.com/catalog/>, a directory
@@ -340,7 +393,7 @@ identifier such as `MIT`) and who publishes it in a `namespace` line.
 <checkout of this repository> --owner <your GitHub login>` puts the file
 under `catalog/<namespace>/`, writes the namespace's `OWNERS` if it is
 new, and runs the gate; push the branch and open a pull request. The
-`catalog` workflow runs the same gate (every tree loads clean with a
+`catalog-gate` workflow runs main's copy of the same gate (every tree loads clean with a
 licence and a namespace, sits where its namespace and name say, ids are
 unique, only a namespace's owners change it, a changed file bumps its
 `version`), a maintainer merges, and the next build serves it. No
@@ -367,6 +420,8 @@ pyrtan serve trees --hub http://hub:8700 --token … --gaps /var/lib/pyrtan/gaps
 
 A swarm shares one token: a service presents it when it registers, the hub
 presents it when it forwards, and a stranger can neither join nor ask.
+People need not share it: grant their identities what each may do
+(`--allow`, `pyrtan allow`; see *Identity* above).
 `--egress public` makes a service refuse any host that resolves to a
 loopback, private, link-local or metadata address, on the first URL and on
 every redirect, so a tree whose host comes from its input cannot be
@@ -459,7 +514,8 @@ secret; the outbox logs a `Say` without its text and leaves `Typing` out. A hub 
 hub that follows it, and never passes one on.
 
 The lobby follows the hub's token: with one, only callers who have it
-chat (a bot runs trees, so a lobby must not be a way round it). To let
+chat, or a key the hub grants `chat` (a bot runs trees, so a lobby must
+not be a way round it, and a `chat` grant is as good as `ask`). To let
 strangers in and keep the token on everything else, start the hub
 `--chat-public`: callers without the token are guests, who meet people
 (here, or on a hub this one follows) and never a bot. There is no chat
@@ -573,7 +629,8 @@ slot refused. The whole set of rules is in
 ```
 src/pyrtan/     the package: tree, nlp, intent, template, conditions, extract,
                 html, transport, runtime, trace, registry, gaps, grow,
-                service, hub, federation, page (the console), catalog, cli
+                service, hub, federation, identity, names, grants, page (the console),
+                catalog, cli
 examples/       trees that run against real public APIs, and offline against
                 tests/fixtures/examples.json
 tests/          pytest; a swarm of two services behind a hub runs on localhost
@@ -588,7 +645,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.13.0. The core, the service, the hub, the command, the console, the
+0.14.0. The core, the service, the hub, the command, the console, the
 catalog (namespaces, publishing by pull request through the gate, gap
 reports gossiped back to authors), the language rules, federation
 between hubs, networks (any hub starts one; pyrtan.com publishes the
@@ -601,7 +658,9 @@ topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, a typing indicator, and lobbies open to the public) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
-and its own box, and follow other swarms. Not yet built: hosting.
+and its own box, and follow other swarms. Identities (keys, device notes,
+name claims, names at pyrtan.com and pins, grants on hubs, the console's
+key, `pyrtan id` and `pyrtan allow`) are built. Not yet built: hosting.
 See [`_meta/design.md`](_meta/design.md) for the runtime's design and
 [`_meta/platform.md`](_meta/platform.md) for pyrtan.com.
 

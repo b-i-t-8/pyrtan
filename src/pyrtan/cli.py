@@ -26,6 +26,9 @@
     pyrtan pull   NAME[@VERSION] [--dir]     fetch a tree from a catalog, verified
     pyrtan index  DIR [--out FILE]           build a catalog index from a directory
     pyrtan console --out FILE                write the console as one static HTML file
+    pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
+    pyrtan id     resolve NAME@DOMAIN        what identity a name is, pinned the first time
+    pyrtan allow  WHO --may ask,run --at HUB  grant an identity abilities on your hub; allowed, disallow
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
 bearer token, ``--cors ORIGIN`` to let a browser elsewhere call them, and
@@ -48,6 +51,7 @@ from . import __version__
 from .catalog import Catalog, CatalogError, build_bundle, build_index, catalog_url
 from .federation import bootstrap_candidates
 from .grow import Proposal, propose
+from .identity import ABILITIES, KINDS, IdentityError
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry, default_paths
 from .runtime import Outcome, Runner
@@ -83,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--hub", help="forward trees not held here to this hub or service")
     p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
-    _token_arg(p, "the token the hub (--hub) requires, if any")
+    _token_arg(p, "the token the hub (--hub) requires, if any", sign=False)
 
     p = sub.add_parser("match", help="how a sentence reads against the trees: the rewrites, every trigger's verdict, the winner")
     p.add_argument("text")
@@ -130,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"))
     p.add_argument("--hub", help="delegate to this hub what the trees here do not hold")
     p.add_argument("--json", action="store_true", help="one JSON outcome per line instead of prose")
-    _token_arg(p, "the hub's token, if any")
+    _token_arg(p, "the hub's token, if any", sign=False)
 
     p = sub.add_parser("watches", help="what a running service or hub is watching, and what each watch last did")
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="a running service or hub (default $PYRTAN_AT or the local hub)")
@@ -172,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", metavar="DIR", default=os.environ.get("PYRTAN_STORE"), help="where this hub keeps blobs, its own and others' (default $PYRTAN_STORE, else next to --state)")
     p.add_argument("--replicas", type=int, default=int(os.environ.get("PYRTAN_REPLICAS", "2")), help="how many members or hubs should keep each of this hub's blobs (default $PYRTAN_REPLICAS or 2)")
     p.add_argument("--chat", action="store_true", default=os.environ.get("PYRTAN_CHAT", "").lower() in ("1", "true", "yes"), help="keep a lobby at /chat where people meet a random stranger here or at a hub this one follows, or a bot made of the trees it routes to (default $PYRTAN_CHAT)")
+    p.add_argument("--allow", action="append", default=[a for a in os.environ.get("PYRTAN_ALLOW", "").split() if a], metavar="WHO=ABILITIES", help="grant an identity (pyr:… or name@domain, resolved and pinned now) abilities here: ask, chat, run, operate (repeatable; default $PYRTAN_ALLOW, space-separated)")
+    p.add_argument("--grants", metavar="FILE", default=os.environ.get("PYRTAN_GRANTS"), help="keep the grants in this file (default $PYRTAN_GRANTS, else grants.json beside --state, else in memory)")
     p.add_argument("--chat-public", action="store_true", default=os.environ.get("PYRTAN_CHAT_PUBLIC", "").lower() in ("1", "true", "yes"), help="open the lobby to callers without the token (implies --chat): they meet people only, never a bot, and everything else still needs the token (default $PYRTAN_CHAT_PUBLIC)")
     p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
@@ -273,8 +279,65 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--into", required=True, metavar="CHECKOUT", help="a checkout of github.com/b-i-t-8/pyrtan (or any repository with a catalog/ directory)")
     p.add_argument("--owner", action="append", default=[], metavar="LOGIN", help="GitHub login(s) that own the namespace; needed when the namespace is new")
 
+    p = sub.add_parser("allow", help="grant an identity abilities on your hub: ask, chat, run, operate")
+    p.add_argument("who", metavar="pyr:…|NAME@DOMAIN", help="an identity, or a name your hub resolves and pins now")
+    p.add_argument("--may", required=True, metavar="ABILITIES", help="comma-separated: ask (the routed paths), chat (the lobby), run (be a trusted member), operate (what the token allows)")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("allowed", help="the identities your hub grants anything, and what")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--json", action="store_true")
+    _token_arg(p, "your hub's token, if any")
+
+    p = sub.add_parser("disallow", help="take back everything your hub grants an identity")
+    p.add_argument("who", metavar="pyr:…|NAME@DOMAIN")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="your hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "your hub's token, if any")
+
     p = sub.add_parser("console", help="write the console as one static HTML file, to host anywhere")
     p.add_argument("--out", required=True, help="the file to write ('-' for stdout)")
+
+    p = sub.add_parser("id", help="your identity: a key, reachable at any domain, named by any domain (_meta/identity.md)")
+    ids = p.add_subparsers(dest="id_command", required=True)
+    q = ids.add_parser("new", help="make your root key and identity document")
+    q.add_argument("--kind", choices=KINDS, default="person", help="what the identity says it is (default person)")
+    q.add_argument("--route", action="append", default=[], metavar="HOST", help="a hub or .onion that takes messages for you (repeatable)")
+    q = ids.add_parser("show", help="your identity, its routes and devices")
+    q.add_argument("--json", action="store_true", help="print the signed identity document")
+    q = ids.add_parser("check", help="check an identity, address or name, or a document (a file, or - for stdin)")
+    q.add_argument("thing", help="pyr:…, pyr:…@host, name@domain, or a JSON file")
+    q = ids.add_parser("device", help="delegate to a device key: a phone, a browser, another machine")
+    q.add_argument("action", choices=["add"])
+    q.add_argument("device", metavar="pyr:…", help="the device's identity")
+    q.add_argument("--may", default="ask,chat", help=f"what the device may ever be granted, comma-separated from {','.join(ABILITIES)} (default ask,chat)")
+    q.add_argument("--label", default="", help="what to call it: phone, laptop")
+    q.add_argument("--days", type=int, default=365, help="how long the note lasts, at most 365 (default 365)")
+    q = ids.add_parser("revoke", help="revoke a device; hubs drop it when they next read your document")
+    q.add_argument("device", metavar="pyr:…")
+    q = ids.add_parser("route", help="add or remove a place you can be reached")
+    q.add_argument("action", choices=["add", "remove"])
+    q.add_argument("host", help="a host[:port] or <56>.onion")
+    q = ids.add_parser("name", help="sign a claim that you are name@domain, for the domain to serve")
+    q.add_argument("name", metavar="NAME@DOMAIN")
+    q.add_argument("--github", type=int, metavar="USER_ID", help="your numeric GitHub user id, for a name at pyrtan.com (with --into, looked up from the name when omitted)")
+    where = q.add_mutually_exclusive_group()
+    where.add_argument("--out", help="write the claim here (default: stdout)")
+    where.add_argument("--into", type=Path, metavar="CHECKOUT", help="put the claim and your identity document into a checkout of this repository's site/names/, ready for a pull request")
+    q = ids.add_parser("resolve", help="what identity a name@domain is, pinned the first time")
+    q.add_argument("name", metavar="NAME@DOMAIN")
+    q.add_argument("--repin", action="store_true", help="accept a different identity than the one pinned")
+    q.add_argument("--json", action="store_true", help="print the claim, and the identity document if the domain serves one")
+    q = ids.add_parser("pins", help="the names you have resolved, and the identity each is pinned to")
+    q.add_argument("--forget", metavar="NAME@DOMAIN", help="drop a pin, so the next resolve takes what the domain says")
+    q = ids.add_parser("push", help="give a hub your newest identity document, so it knows your devices and revocations now")
+    q.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the hub (default $PYRTAN_AT or the local hub)")
+    q = ids.add_parser("wellknown", help="build /.well-known/pyrtan/ from a directory of name claims, for any domain to serve")
+    q.add_argument("names", type=Path, metavar="DIR", help="<name>.json claims, and <name>.id.json identity documents")
+    q.add_argument("--domain", required=True, help="the domain that will serve them; every claim must be for it")
+    q.add_argument("--out", type=Path, required=True, help="the site's root; .well-known/pyrtan/ is written under it")
+    for q in ids.choices.values():
+        q.add_argument("--dir", type=Path, default=None, help="where your key and document live (default $PYRTAN_IDENTITY or ~/.config/pyrtan/identity)")
 
     args = parser.parse_args(argv)
     commands = {
@@ -282,17 +345,49 @@ def main(argv: list[str] | None = None) -> int:
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
-        "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch,
+        "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
+        "allow": cmd_allow, "allowed": cmd_allowed, "disallow": cmd_disallow,
     }
     return commands[args.command](args)
 
 
-def _token_arg(p: argparse.ArgumentParser, help_text: str) -> None:
+def _token_arg(p: argparse.ArgumentParser, help_text: str, *, sign: bool = True) -> None:
     p.add_argument("--token", default=os.environ.get("PYRTAN_TOKEN"), help=f"{help_text} (default $PYRTAN_TOKEN)")
+    if sign:
+        p.add_argument("--sign", action="store_true", default=os.environ.get("PYRTAN_SIGN", "").lower() in ("1", "true", "yes"),
+                       help="sign requests with your identity's key (pyrtan id new), for a hub that grants it (default $PYRTAN_SIGN)")
+
+
+_AUDIENCES: dict[str, str] = {}
+
+
+def _call(args: argparse.Namespace, method: str, url: str, payload: Any = None, **kw: Any) -> tuple[int, Any]:
+    """``http_json`` with the command's token, and with its key's signature under --sign."""
+    headers = _key_headers(args, method, url, payload) if getattr(args, "sign", False) else None
+    return http_json(method, url, payload, token=getattr(args, "token", None), headers=headers, **kw)
+
+
+def _key_headers(args: argparse.Namespace, method: str, url: str, payload: Any) -> dict[str, str]:
+    """Sign as the root key in $PYRTAN_IDENTITY (or ~/.config/pyrtan/identity), for the
+    audience the hub names at /api."""
+    from urllib.parse import urlsplit
+    from . import identity
+    parts = urlsplit(url)
+    base = f"{parts.scheme}://{parts.netloc}"
+    if base not in _AUDIENCES:
+        status, api = http_json("GET", f"{base}/api", timeout=10.0)
+        audience = api.get("audience") if status == 200 and isinstance(api, dict) else None
+        if not isinstance(audience, str):
+            raise SystemExit(f"pyrtan: {base} names no audience to sign for; is it a hub of pyrtan 0.14 or later?")
+        _AUDIENCES[base] = audience
+    key = identity.Key.load(identity.home() / "root.key")
+    if method == "POST" and payload is None:
+        payload = {}
+    return identity.sign_request(key, _AUDIENCES[base], method, parts.path or "/", payload)
 
 
 def _access_args(p: argparse.ArgumentParser) -> None:
-    _token_arg(p, "require this bearer token on every request but /health and the console")
+    _token_arg(p, "require this bearer token on every request but /health and the console", sign=False)
     p.add_argument("--cors", action="append", default=[], metavar="ORIGIN", help="let a browser at this origin call (repeatable; '*' for any; e.g. https://pyrtan.com)")
 
 
@@ -453,12 +548,12 @@ def _answer_questions(outcome: Outcome, resume) -> Outcome:
 def cmd_ask(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("POST", f"{at}/intent", {"text": args.text, "trace": not args.no_trace}, token=args.token)
+        status, body = _call(args, "POST", f"{at}/intent", {"text": args.text, "trace": not args.no_trace})
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict):
         print(f"pyrtan: {at} answered {status}: {body}", file=sys.stderr)
@@ -466,7 +561,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
     outcome = outcome_from_dict(body)
 
     def remote_resume(snapshot: dict[str, Any], answer: Any) -> Outcome:
-        st, bd = http_json("POST", f"{at}/resume", {"snapshot": snapshot, "answer": answer, "trace": not args.no_trace}, token=args.token)
+        st, bd = _call(args, "POST", f"{at}/resume", {"snapshot": snapshot, "answer": answer, "trace": not args.no_trace})
         return outcome_from_dict(bd) if isinstance(bd, dict) else Outcome("error", "", reason="remote", say=f"{at} answered {st}")
 
     outcome = _answer_questions(outcome, remote_resume)
@@ -478,7 +573,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
     want = "bot" if args.bot else "people" if args.people else "anyone"
 
     def post(path: str, body: dict[str, Any], timeout: float = 15.0) -> tuple[int, Any]:
-        return http_json("POST", f"{at}{path}", body, timeout=timeout, token=args.token)
+        return _call(args, "POST", f"{at}{path}", body, timeout=timeout)
 
     try:
         status, body = post("/chat/start", {"want": want, "interests": args.interests, "typing_indicator": not args.no_typing})
@@ -486,7 +581,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict) or "seat" not in body:
         print(f"pyrtan: {at}: {body.get('say') if isinstance(body, dict) else body or status}", file=sys.stderr)
@@ -652,12 +747,12 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
 def cmd_watches(args: argparse.Namespace) -> int:
     try:
-        status, body = http_json("GET", f"{args.at.rstrip('/')}/watches", token=args.token)
+        status, body = _call(args, "GET", f"{args.at.rstrip('/')}/watches")
     except Exception as e:
         print(f"pyrtan: {args.at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     watches = (body or {}).get("watches", []) if isinstance(body, dict) else []
     if args.json:
@@ -688,7 +783,7 @@ def cmd_grow(args: argparse.Namespace) -> int:
     gaps: list[dict[str, Any]] = []
     if args.at:
         try:
-            status, body = http_json("GET", f"{args.at.rstrip('/')}/gaps", token=args.token)
+            status, body = _call(args, "GET", f"{args.at.rstrip('/')}/gaps")
         except Exception as e:
             print(f"pyrtan: {args.at}: {e}", file=sys.stderr)
             return 3
@@ -786,16 +881,22 @@ def _from_report(r: dict[str, Any]) -> dict[str, Any]:
 
 def cmd_hub(args: argparse.Namespace) -> int:
     from .hub import serve_hub
+    from .identity import IdentityError
 
     follow = list(args.follow)
     join = list(args.join)
-    hub, server = serve_hub(
-        args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
-        federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
-        state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
-        trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-        store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public,
-    )
+    try:
+        hub, server = serve_hub(
+            args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
+            federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed, advertise=args.advertise, federation_secret=args.federation_secret,
+            state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
+            trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
+            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, watch=args.watch, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public,
+            allow=args.allow, grants=args.grants,
+        )
+    except IdentityError as e:
+        print(f"pyrtan hub: {e}", file=sys.stderr)
+        return 1
     fed = f", federated as {hub.federation.id}" + (f" following {len(hub.federation.following)}" if hub.federation.following else "") + (", listed" if hub.federation.listed else "") if hub.federation else ""
     local = f", holding {len(hub.local.trees)} tree(s)" if hub.local else ""
     if hub.local is not None and hub.local.service.watcher is not None:
@@ -804,6 +905,8 @@ def cmd_hub(args: argparse.Namespace) -> int:
         local += f", handing out {len(hub.handout_registry.trees())} tree(s) to trusted members"
     if hub.lobby is not None:
         local += ", chatting at /chat" + (" (open to callers without the token, people only)" if hub.chat_public and args.token else "")
+    if len(hub.grants):
+        local += f", granting {len(hub.grants)} identit{'y' if len(hub.grants) == 1 else 'ies'}"
     print(f"pyrtan hub at {server.url}: {len(hub.peers)} peer(s){local}{fed}" + _access_note(args), flush=True)
     try:
         server.wait()
@@ -820,12 +923,12 @@ def cmd_gaps(args: argparse.Namespace) -> int:
         print("pyrtan gaps: give --at URL of a running service or hub", file=sys.stderr)
         return 2
     try:
-        status, body = http_json("GET", f"{args.at.rstrip('/')}/gaps", token=args.token)
+        status, body = _call(args, "GET", f"{args.at.rstrip('/')}/gaps")
     except Exception as e:
         print(f"pyrtan: {args.at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     gaps = (body or {}).get("gaps", []) if isinstance(body, dict) else []
     if args.json:
@@ -907,12 +1010,12 @@ def cmd_network(args: argparse.Namespace) -> int:
         return _hub_post(args, "/leave", {"network": args.name}, lambda b: f"{args.at} left {args.name}" if b.get("left") else f"{args.at} was not in {args.name}")
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("GET", f"{at}/networks", token=args.token)
+        status, body = _call(args, "GET", f"{at}/networks")
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict):
         print(f"pyrtan: {at} is not a federated hub ({status})", file=sys.stderr)
@@ -940,12 +1043,12 @@ def cmd_keep(args: argparse.Namespace) -> int:
 def cmd_kept(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("GET", f"{at}/keep", token=args.token)
+        status, body = _call(args, "GET", f"{at}/keep")
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict):
         print(f"pyrtan: {at} is not a federated hub ({status})", file=sys.stderr)
@@ -964,12 +1067,12 @@ def cmd_kept(args: argparse.Namespace) -> int:
 def cmd_fetch(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("POST", f"{at}/fetch", {"key": args.key}, token=args.token)
+        status, body = _call(args, "POST", f"{at}/fetch", {"key": args.key})
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict):
         print(f"pyrtan: {at} answered {status}", file=sys.stderr)
@@ -1046,12 +1149,13 @@ def cmd_unfollow(args: argparse.Namespace) -> int:
 def _hub_post(args: argparse.Namespace, path: str, payload: dict[str, Any], said) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("POST", f"{at}{path}", payload, token=args.token)
+        status, body = _call(args, "POST", f"{at}{path}", payload)
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        said_401 = body.get("say") if isinstance(body, dict) and getattr(args, "sign", False) else None
+        print(f"pyrtan: {at}: {said_401}" if said_401 else f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status == 404:
         print(f"pyrtan: {at} is not a federated hub; start it with --federate", file=sys.stderr)
@@ -1066,12 +1170,12 @@ def _hub_post(args: argparse.Namespace, path: str, payload: dict[str, Any], said
 def cmd_peers(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
     try:
-        status, body = http_json("GET", f"{at}/peers", token=args.token)
+        status, body = _call(args, "GET", f"{at}/peers")
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     if status != 200 or not isinstance(body, dict):
         print(f"pyrtan: {at} answered {status}", file=sys.stderr)
@@ -1192,7 +1296,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
     print(f"  git add {rel.parent}")
     print(f"  git commit -m \"catalog: {rel.parent.name}/{rel.stem}\"")
     print("  git push -u origin HEAD")
-    print("then open a pull request; the catalog workflow runs the same gate and a maintainer merges.")
+    print("then open a pull request; the catalog-gate workflow runs the same gate (main's copy) and a maintainer merges.")
     return 0
 
 
@@ -1215,12 +1319,12 @@ def cmd_unanswered(args: argparse.Namespace) -> int:
         print("pyrtan unanswered: give --at URL of a running service or hub", file=sys.stderr)
         return 2
     try:
-        status, body = http_json("GET", f"{args.at.rstrip('/')}/unanswered", token=args.token)
+        status, body = _call(args, "GET", f"{args.at.rstrip('/')}/unanswered")
     except Exception as e:
         print(f"pyrtan: {args.at}: {e}", file=sys.stderr)
         return 3
     if status == 401:
-        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN", file=sys.stderr)
+        print(f"pyrtan: {args.at} needs a token: pass --token or set $PYRTAN_TOKEN, or --sign as an identity it grants", file=sys.stderr)
         return 3
     entries = (body or {}).get("unanswered", []) if isinstance(body, dict) else []
     if args.json:
@@ -1265,6 +1369,280 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 1
     _write_scaffold(proposal, Path(args.dir))
     print(f"wrote {path}: {proposal.name!r} answering {proposal.trigger!r}; edit it, then: pyrtan check {path}")
+    return 0
+
+
+# ---------------------------------------------------------------- pyrtan id
+
+
+def cmd_id(args: argparse.Namespace) -> int:
+    from . import identity
+    directory = args.dir or identity.home()
+    try:
+        return {
+            "new": _id_new, "show": _id_show, "check": _id_check, "device": _id_device,
+            "revoke": _id_revoke, "route": _id_route, "name": _id_name,
+            "resolve": _id_resolve, "pins": _id_pins, "wellknown": _id_wellknown, "push": _id_push,
+        }[args.id_command](args, directory)
+    except IdentityError as e:
+        print(f"pyrtan id: {e}", file=sys.stderr)
+        return 1
+
+
+def _id_load(directory: Path):
+    """Your root key and your current identity document."""
+    from . import identity
+    key_file, doc_file = directory / "root.key", directory / "identity.json"
+    if not key_file.exists():
+        raise IdentityError(f"no identity in {directory}: make one with `pyrtan id new`")
+    key = identity.Key.load(key_file)
+    try:
+        doc = json.loads(doc_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise IdentityError(f"{doc_file}: {e}") from None
+    problem = identity.check_identity(doc, ident=key.id)
+    if problem:
+        raise IdentityError(f"{doc_file}: {problem}")
+    return key, doc
+
+
+def _id_save(directory: Path, doc: dict[str, Any]) -> None:
+    path = directory / "identity.json"
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temp.replace(path)
+
+
+def _id_new(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key_file = directory / "root.key"
+    if key_file.exists():
+        print(f"pyrtan id: {key_file} exists; an identity is not replaced (move it away first, knowing that it is you)", file=sys.stderr)
+        return 1
+    key = identity.Key.generate()
+    doc = identity.make_identity(key, kind=args.kind, routes=args.route)
+    key.save(key_file)
+    _id_save(directory, doc)
+    print(f"you are {key.id}")
+    print(f"the key is {key_file} (readable only by you). It is the identity: lose it and nobody can give it back,")
+    print("copy it and whoever has the copy is you. Back it up somewhere offline.")
+    print(f"the document hubs and name providers hold is {directory / 'identity.json'}")
+    return 0
+
+
+def _id_show(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    _, doc = _id_load(directory)
+    if args.json:
+        print(json.dumps(doc, indent=2, ensure_ascii=False))
+        return 0
+    print(f"{doc['id']}  ({doc['kind']}, updated {time.strftime('%Y-%m-%d %H:%M', time.localtime(doc['updated']))})")
+    print("routes: " + (", ".join(doc["routes"]) if doc["routes"] else "none (add one with `pyrtan id route add HOST`)"))
+    print(f"devices: {len(doc['devices'])}" + ("" if doc["devices"] else " (add one with `pyrtan id device add pyr:…`)"))
+    for note in doc["devices"]:
+        status = identity.device_status(doc, note["device"])
+        until = time.strftime("%Y-%m-%d", time.localtime(note["expires"]))
+        print(f"  {note['device']}  {note['label'] or '-':10} may {','.join(note['may']) or 'nothing'}  {status} until {until}")
+    for device in doc["revoked"]:
+        print(f"  {device}  revoked")
+    return 0
+
+
+def _id_check(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    thing = args.thing
+    if thing != "-" and not Path(thing).is_file():
+        parsed = identity.parse(thing)
+        if parsed.form == "name":
+            print(f"{parsed}: a well-formed name; `pyrtan id resolve {parsed}` asks {parsed.domain} who it is")
+        else:
+            print(f"{parsed}: a well-formed {parsed.form}, key {identity.decode(parsed.id).hex()}")
+        return 0
+    try:
+        doc = json.loads(sys.stdin.read() if thing == "-" else Path(thing).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise IdentityError(f"{thing}: {e}") from None
+    kind, problem = identity.check_any(doc)
+    if problem:
+        print(f"{thing}: {kind}: refused: {problem}")
+        return 1
+    if kind == "identity":
+        print(f"{thing}: the identity document of {doc['id']}, signed by it; {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
+    elif kind == "device":
+        print(f"{thing}: {doc['device']} may {','.join(doc['may']) or 'nothing'} for {doc['root']}, until {time.strftime('%Y-%m-%d', time.localtime(doc['expires']))}")
+    else:
+        print(f"{thing}: {doc['id']} claims {doc['name']}@{doc['domain']}, signed by it")
+    return 0
+
+
+def _id_device(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    if not 0 < args.days <= 365:
+        raise IdentityError("--days is from 1 to 365")
+    key, doc = _id_load(directory)
+    may = [a for a in args.may.replace(" ", "").split(",") if a]
+    issued = int(time.time())
+    note = identity.make_device(key, args.device, may, label=args.label, issued=issued, expires=issued + args.days * 86400)
+    _id_save(directory, identity.with_device(doc, key, note))
+    print(json.dumps(note, ensure_ascii=False))
+    print(f"{note['device']} may {','.join(note['may']) or 'nothing'} for you until {time.strftime('%Y-%m-%d', time.localtime(note['expires']))}; give the device the note above", file=sys.stderr)
+    return 0
+
+
+def _id_revoke(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, doc = _id_load(directory)
+    device = identity.normal(args.device)
+    _id_save(directory, identity.with_revoked(doc, key, device))
+    print(f"revoked {device}; hubs drop it when they next read your document")
+    return 0
+
+
+def _id_route(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity
+    key, doc = _id_load(directory)
+    host = identity.check_locator(args.host)
+    routes = [r for r in doc["routes"] if r != host] + ([host] if args.action == "add" else [])
+    _id_save(directory, identity.with_routes(doc, key, routes))
+    print("routes: " + (", ".join(routes) or "none"))
+    return 0
+
+
+def _id_name(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity, names
+    key, doc = _id_load(directory)
+    github = args.github
+    if args.into and github is None:
+        local = identity.parse(args.name).name
+        github = names.github_id(local)
+        print(f"GitHub says {local} is user {github}", file=sys.stderr)
+    extra = {"github": github} if github is not None else {}
+    claim = identity.make_name(key, args.name, **extra)
+    text = json.dumps(claim, indent=2, ensure_ascii=False) + "\n"
+    if args.into:
+        written = names.place(args.into, claim, doc)
+        problems = names.gate(args.into)
+        for p in problems:
+            print(f"gate: {p}", file=sys.stderr)
+        if problems:
+            return 1
+        print("wrote " + " and ".join(str(w) for w in written))
+        print(f"now: git checkout -b names/{claim['name']} && git add {names.NAMES_DIR} && git commit && git push -u origin HEAD, and open a pull request from the GitHub account {claim['name']}")
+        return 0
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"wrote {args.out}: {claim['id']} claims {claim['name']}@{claim['domain']}; the domain serves it at /.well-known/pyrtan/name/{claim['name']}.json")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def _id_resolve(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity, names
+    claim = names.resolve(args.name)
+    name, ident = f"{claim['name']}@{claim['domain']}", claim["id"]
+    pins = names.Pins(directory / "pins.json")
+    verdict, pinned = pins.compare(name, ident), pins.get(name)
+    if verdict == "changed" and not args.repin:
+        print(f"pyrtan id: {name} now says it is {ident}", file=sys.stderr)
+        print(f"           but it was pinned to {pinned['id']} on {time.strftime('%Y-%m-%d', time.localtime(pinned['first']))}", file=sys.stderr)
+        print("           the domain changed its answer, or someone is answering for it. If you know why, pyrtan id resolve --repin", file=sys.stderr)
+        return 1
+    pins.pin(name, ident)
+    pins.save()
+    doc = names.fetch_identity(ident, claim["domain"])
+    if args.json:
+        print(json.dumps({"claim": claim, "identity": doc}, indent=2, ensure_ascii=False))
+        return 0
+    since = {"new": "pinned now", "same": f"as pinned since {time.strftime('%Y-%m-%d', time.localtime(pinned['first'])) if pinned else ''}", "changed": "re-pinned"}[verdict]
+    print(f"{name} is {ident} ({since})")
+    if doc:
+        print("routes: " + (", ".join(doc["routes"]) or "none") + f"; {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
+    return 0
+
+
+def _id_pins(args: argparse.Namespace, directory: Path) -> int:
+    from . import names
+    pins = names.Pins(directory / "pins.json")
+    if args.forget:
+        if not pins.forget(args.forget):
+            print(f"pyrtan id: {args.forget} is not pinned", file=sys.stderr)
+            return 1
+        pins.save()
+        print(f"forgot {args.forget}; the next resolve takes what its domain says")
+        return 0
+    if not pins.names:
+        print("no pins yet: pyrtan id resolve NAME@DOMAIN")
+    for name, pin in sorted(pins.names.items()):
+        print(f"{name:32} {pin['id']}  since {time.strftime('%Y-%m-%d', time.localtime(pin['first']))}")
+    return 0
+
+
+def _id_wellknown(args: argparse.Namespace, directory: Path) -> int:
+    from . import identity, names
+    domain = identity.check_host(args.domain.lower())
+    count, problems = names.build_wellknown(args.names, args.out, domain)
+    for p in problems:
+        print(f"wellknown: {p} (left out)", file=sys.stderr)
+    print(f"wrote {count} name(s) for {domain} under {args.out / names.WELL_KNOWN}")
+    return 1 if problems else 0
+
+
+def _id_push(args: argparse.Namespace, directory: Path) -> int:
+    _, doc = _id_load(directory)
+    at = args.at.rstrip("/")
+    try:
+        status, body = http_json("POST", f"{at}/identity", {"document": doc}, timeout=15.0)
+    except Exception as e:
+        print(f"pyrtan id: {at}: {e}", file=sys.stderr)
+        return 3
+    if status != 200:
+        print(f"pyrtan id: {at} refused the document: {(body or {}).get('say') if isinstance(body, dict) else status}", file=sys.stderr)
+        return 1
+    print(f"{at} holds your document of {time.strftime('%Y-%m-%d %H:%M', time.localtime(doc['updated']))}: {len(doc['devices'])} device(s), {len(doc['revoked'])} revoked")
+    return 0
+
+
+# ---------------------------------------------------------------- grants
+
+
+def cmd_allow(args: argparse.Namespace) -> int:
+    from .grants import parse_may
+    from .identity import IdentityError
+    try:
+        may = parse_may(args.may)
+    except IdentityError as e:
+        print(f"pyrtan allow: {e}", file=sys.stderr)
+        return 2
+    return _hub_post(args, "/allow", {"who": args.who, "may": may}, lambda b: f"{args.at} grants {b['grant']['name'] or b['grant']['id']} ({b['grant']['id']}): {', '.join(b['grant']['may'])}")
+
+
+def cmd_disallow(args: argparse.Namespace) -> int:
+    return _hub_post(args, "/disallow", {"who": args.who}, lambda b: f"{args.at} grants {args.who} nothing now" if b["removed"] else f"{args.at} granted {args.who} nothing")
+
+
+def cmd_allowed(args: argparse.Namespace) -> int:
+    at = args.at.rstrip("/")
+    try:
+        status, body = _call(args, "GET", f"{at}/allow")
+    except Exception as e:
+        print(f"pyrtan: {at}: {e}", file=sys.stderr)
+        return 3
+    if status in (401, 403):
+        print(f"pyrtan: {at}: {(body or {}).get('say') if isinstance(body, dict) else status}", file=sys.stderr)
+        return 3
+    if status != 200 or not isinstance(body, dict):
+        print(f"pyrtan: {at} answered {status}; is it a hub of pyrtan 0.14 or later?", file=sys.stderr)
+        return 3
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    grants = body.get("grants", [])
+    print(f"{at} (audience {body.get('audience')}) grants {len(grants)} identit{'y' if len(grants) == 1 else 'ies'}")
+    for g in grants:
+        doc = g.get("document")
+        held = f"document of {time.strftime('%Y-%m-%d', time.localtime(doc['updated']))}, {doc['devices']} device(s), {doc['revoked']} revoked" if doc else "no document yet (pyrtan id push)"
+        print(f"  {g['name'] or '-':28} {g['id']}  may {','.join(g['may'])}  {held}")
     return 0
 
 

@@ -158,7 +158,11 @@ browser that has joined no hub is a hub of its own
 decides whether the hub puts its trees, and the sentences they answer,
 on a device: a keeper holds copies, a trusted device acts. The console
 sends the token it was connected with, so joining from the hub's own
-console with the token entered is enough.
+console with the token entered is enough. Since 0.14 a member may
+instead follow as a key (`identity.md` §7): one whose root the hub
+grants `run` is trusted the same way (`trusted_by: key`), and is dropped
+when its note, its root's document or the grant says it may no longer
+be. The console's Identity tab holds such a key.
 
 **Hand-out.** On a trusted follow, and on every refresh after, the hub
 gives each trusted member every tree it should run as a `Keep` of

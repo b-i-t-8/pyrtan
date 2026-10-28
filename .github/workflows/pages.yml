@@ -34,9 +34,11 @@ jobs:
         with:
           fetch-depth: 0   # every branch and the whole history, for /source
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+      - run: uv sync --extra identity   # the identity tests sign and verify
       - run: uv run pytest -q
       - run: uv run site/build.sh out
+      # v3, not v4: v4 leaves out dot-directories, and the names are served
+      # from .well-known/pyrtan/.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

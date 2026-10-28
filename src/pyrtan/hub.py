@@ -36,6 +36,19 @@ answer the same requests, so a client need not know which it is talking to,
 and a swarm can start as one process and split later without the callers
 changing. A hub given a token requires it of callers (``/register``
 included, so a stranger cannot join the swarm) and presents it to peers.
+
+**Identities.** A request signed with a key (``X-Pyrtan-Key`` and its
+signature, ``_meta/identity.md`` §7) is checked against the hub's
+*audience*, its own id, which ``GET /api`` names. On a hub with a token,
+it may do what the hub's grants say its root may (``ask``, ``chat``,
+``run``, ``operate``; see :mod:`pyrtan.grants`) and nothing else; on a hub
+without one it only says who is asking. A member that follows with a key
+whose root holds ``run`` is trusted as one that joined with the token,
+and is dropped when its grant, its note or its root's document says it
+may no longer be. ``GET``/``POST /allow`` and ``POST /disallow`` (operator)
+keep the grants; ``POST /identity`` takes a granted root's newer identity
+document from anyone, since it is signed; ``GET
+/.well-known/pyrtan/id/<56>.json`` serves the documents the hub holds.
 """
 
 from __future__ import annotations
@@ -51,6 +64,9 @@ from typing import Any
 from . import __version__
 from .chat import Lobby, is_chat_path
 from .federation import MAX_HOPS, Federation, Remote, bootstrap_candidates, default_network, first_live_hub, parse_invite, sign
+from . import identity
+from .grants import Grants, ability_for, parse_may
+from .identity import IdentityError
 from .grow import Unanswered, no_match_outcome
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
@@ -127,8 +143,11 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None) -> None:
         self.name = name
+        self.grants = grants if grants is not None else Grants()
+        self.grants.on_change = self._grant_changed
+        self._audience = audience
         self.lobby = Lobby(self, typing=chat_typing) if chat or chat_public else None
         self.chat_public = chat_public  # callers without the token may chat, with people only
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
@@ -162,6 +181,44 @@ class Hub:
         self.federation.handout = self.handout_trees
         self.federation.chat = self.lobby
         return self.federation
+
+    # ------------------------------------------------------------ identities
+
+    @property
+    def audience(self) -> str | None:
+        """The id a key-signed request to this hub must be signed for."""
+        return self.federation.id if self.federation is not None else self._audience
+
+    def _signer(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str]) -> tuple[identity.Signer | None, set[str], tuple[int, Any] | None]:
+        """For a key-signed request: who signed it, what they may do here, or the refusal."""
+        if not identity.has_key_signature(headers):
+            return None, set(), None
+        if self.audience is None:
+            return None, set(), (401, {"status": "error", "reason": "unsigned", "say": "This hub has no id to check a key signature against; start it with --advertise."})
+        try:
+            signer = identity.verify_request(self.audience, method, path, body if method == "POST" else None, headers)
+        except IdentityError as e:
+            return None, set(), (401, {"status": "error", "reason": "unsigned", "say": f"The key signature does not hold: {e}."})
+        may = self.grants.may(signer)
+        needed = ability_for(method, path)
+        if needed == "chat" and self.chat_public:
+            needed = None  # a public lobby takes a key it grants nothing as a guest, as it takes a caller with no key
+        if self.token and needed is not None and needed not in may:
+            granted = f"it may {', '.join(sorted(may))}" if may else "this hub grants it nothing"
+            return signer, may, (403, {"status": "error", "reason": "not-granted", "say": f"{identity.short(signer.root)} may not {needed} here: {granted}."})
+        return signer, may, None
+
+    def _grant_changed(self, root: str) -> None:
+        """Drop the members that followed as ``root`` and may no longer be what they are."""
+        fed = self.federation
+        if fed is None:
+            return
+        for remote in [r for r in list(fed.followers.values()) if r.kind == "member" and r.identity == root]:
+            note_ok = remote.note is None or identity.check_device(remote.note, root=root) is None
+            revoked = remote.note is not None and (doc := self.grants.document(root)) is not None and identity.device_status(doc, remote.device or "") == "revoked"
+            lost_run = remote.trusted_by == "key" and not self.grants.still(root, remote.device or "", remote.note, "run")
+            if not note_ok or revoked or lost_run:
+                fed.drop_follower(remote.url)
 
     def handout_trees(self) -> dict[str, Tree]:
         """The trees a trusted member may run: the ones this hub holds itself,
@@ -239,6 +296,7 @@ class Hub:
     def refresh_all(self) -> None:
         for peer in list(self.peers.values()):
             self.refresh(peer)
+        self.grants.refresh()
         if self.federation is not None:
             self.federation.refresh_all()
             self.federation.announce()  # only when what we hold changed
@@ -480,27 +538,32 @@ class Hub:
                 out.extend({**u, "peer": peer.url} for u in body.get("unanswered", []))
         return {"unanswered": out}
 
-    def _trusted(self, headers: dict[str, str]) -> bool:
-        """Whether the caller holds this hub's token (always, when it has none)."""
-        return not self.token or bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)
+    def _trusted(self, headers: dict[str, str], may: set[str] | frozenset[str] = frozenset()) -> bool:
+        """Whether the caller holds this hub's token (always, when it has none), or a key it grants chat: who meets bots in the lobby."""
+        return not self.token or bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token) or "chat" in may
 
     def route(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str] | None = None) -> tuple[int, Any]:
         body = body or {}
         headers = headers or {}
         fed = self.federation
+        signer, may, refused = self._signer(method, path, body, headers)
+        if refused:
+            return refused
+        # The operator: the token, or a key whose root this hub grants operate.
+        operator = bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token or "") or "operate" in may
         signed = any(k.lower() == "x-pyrtan-signature" for k in headers)
-        if signed and not bearer_ok(headers.get("Authorization"), self.token or ""):
+        if signed and not operator:
             # A hub we federate with is asking. It may ask the routed paths
             # and the inbox; anything else needs the operator's token.
             if fed is None or not signed_path(path):
                 return 401, {"status": "error", "reason": "unauthorised", "say": "A signed request may only reach the inbox, the mailbox, the kept blobs and the routed paths."}
-            signer = fed.verify_request(method, path, body if method == "POST" else None, headers) if path != "/inbox" else None
-            if path != "/inbox" and signer is None:
+            actor = fed.verify_request(method, path, body if method == "POST" else None, headers) if path != "/inbox" else None
+            if path != "/inbox" and actor is None:
                 return 401, {"status": "error", "reason": "unsigned", "say": "The signature does not hold, or this hub does not know the actor."}
             if method == "GET" and path == "/mailbox":
-                return 200, {"activities": fed.mailbox(signer or "")}
+                return 200, {"activities": fed.mailbox(actor or "")}
             if method == "GET" and path.startswith("/kept/"):
-                blob = fed.kept_for(signer or "", path[len("/kept/"):])
+                blob = fed.kept_for(actor or "", path[len("/kept/"):])
                 return (200, blob) if blob else (404, {"status": "error", "reason": "not-kept", "say": f"Nothing kept here for you under {path[len('/kept/'):]!r}."})
         if method == "GET" and path == "/health":
             return 200, self.health()
@@ -515,11 +578,13 @@ class Hub:
                 return 200, fed.actor()
             if method == "GET" and path == "/directory":
                 # A private network's part only to the operator (or to anyone, on a hub with no token).
-                return 200, fed.directory(private=not self.token or bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token))
+                return 200, fed.directory(private=not self.token or operator)
             if method == "GET" and path == "/reports":
                 return 200, fed.reports_view()
             if method == "POST" and path == "/inbox":
-                return fed.handle_inbox(body, headers, trusted=bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token))
+                by_token = bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)
+                by_key = signer is not None and "run" in may
+                return fed.handle_inbox(body, headers, trusted=by_token or by_key, trusted_by="token" if by_token else "key" if by_key else None, signer=signer)
             if method == "GET" and path in ("/following", "/followers"):
                 return 200, {path[1:]: fed.to_dict()[path[1:]]}
             if method == "GET" and path == "/outbox":
@@ -581,6 +646,31 @@ class Hub:
                 if not isinstance(url, str):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"url\": \"https://hub.example\"}."}
                 return 200, {"status": "ok", "removed": fed.unfollow(url)}
+        if method == "GET" and path == "/allow":
+            return 200, {"grants": self.grants.view(), "audience": self.audience}
+        if method == "POST" and path in ("/allow", "/disallow"):
+            if not operator:
+                # Even on a hub with no token: a grant of run makes a trusted member, which an open hub never had.
+                return 403, {"status": "error", "reason": "not-granted", "say": "Grants change only with the operator's token or a key granted operate; a hub with no token takes them from --allow at start."}
+            who = body.get("who")
+            if not isinstance(who, str):
+                return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"who\": \"pyr:…\" or \"name@domain\"" + (", \"may\": [\"ask\", ...]}." if path == "/allow" else "}.")}
+            try:
+                if path == "/disallow":
+                    return 200, {"status": "ok", "removed": self.grants.disallow(who)}
+                grant = self.grants.allow(who, parse_may(body.get("may")))
+            except IdentityError as e:
+                return 400, {"status": "error", "reason": "bad-grant", "say": str(e)}
+            return 200, {"status": "ok", "grant": grant.view()}
+        if method == "POST" and path == "/identity":
+            problem = self.grants.take_document(body.get("document"))
+            if problem:
+                return 400, {"status": "error", "reason": "bad-identity", "say": problem}
+            return 200, {"status": "ok", "id": body["document"]["id"]}
+        if method == "GET" and path.startswith("/.well-known/pyrtan/id/") and path.endswith(".json"):
+            ident = identity.PREFIX + path[len("/.well-known/pyrtan/id/"):-len(".json")]
+            doc = self.grants.document(ident) if len(ident) == len(identity.PREFIX) + identity.ID_LENGTH else None
+            return (200, doc) if doc else (404, {"status": "error", "reason": "no-identity", "say": "This hub holds no document for that identity."})
         if method == "GET" and path == "/capabilities":
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
@@ -592,7 +682,7 @@ class Hub:
         if is_chat_path(path):
             if self.lobby is None:
                 return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
-            return self.lobby.route(method, path, body, guest=not self._trusted(headers))
+            return self.lobby.route(method, path, body, guest=not self._trusted(headers, may))
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, PAGE
         if method == "GET" and path == "/manifest.webmanifest":
@@ -602,12 +692,12 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json"]
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
-            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "chat_bots": self.lobby is not None and self._trusted(headers), "endpoints": endpoints}
+            return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
@@ -697,12 +787,26 @@ def serve_hub(
     unanswered: str | Path | None = None,
     watch: bool = False,
     chat: bool = False,
+    allow: list[str] | None = None,
+    grants: str | None = None,
     chat_typing: bool = True,
     chat_public: bool = False,
 ) -> tuple[Hub, Server]:
+    """Start a hub. ``allow`` holds ``WHO=ABILITIES`` grants, made before it answers
+    anything (a name is resolved now; IdentityError if it cannot be); ``grants`` is
+    where the list is kept (default: beside ``state``, else in memory)."""
+    from .grants import parse_spec
+    specs = [parse_spec(a) for a in allow or []]
+    if specs:
+        identity.require_signatures()  # a grant nobody could prove is refused at start, not at the first request
+    keep = grants or (str(Path(state).with_name("grants.json")) if state else None)
+    granted = Grants(keep)
+    for who, may in specs:
+        granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public)
-    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None).start()
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted)
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
+    hub._audience = (advertise or server.url).rstrip("/")
     if federate or advertise or join:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
