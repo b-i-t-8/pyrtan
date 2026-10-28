@@ -1,5 +1,5 @@
-# The catalog gate, run from main: every pull request that touches a tree
-# or a name is judged by main's site/gate.py, main's pyrtan and main's
+# The catalog gate, run from main: every pull request (what it changes in
+# trees, names and OWNERS above all) is judged by main's site/gate.py, main's pyrtan and main's
 # lockfile, against the pull request's tree read as data. Which files
 # changed, who opened the pull request and what each file was on main
 # come from git and the event: a change must come from a namespace's
@@ -16,16 +16,13 @@
 
 name: catalog-gate
 
+# Every pull request, whatever it touches, so that "catalog-gate / gate" can
+# be a required check (branch protection on main): a check that only some
+# pull requests run would leave the others waiting for it forever. On a pull
+# request that changes no tree or name it checks the trees as they stand and
+# is open in seconds.
 on:
   pull_request_target:
-    paths:
-      - "catalog/**"
-      - "examples/**"
-      - "site/gate.py"
-      - "src/pyrtan/catalog.py"
-      - "site/names/**"
-      - "src/pyrtan/names.py"
-      - "src/pyrtan/identity.py"
 
 permissions:
   contents: read

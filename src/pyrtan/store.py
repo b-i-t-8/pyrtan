@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -37,6 +38,23 @@ class StoreError(ValueError):
 
 def canonical(data: Any) -> bytes:
     return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def write_private(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` readable by its owner only (0600), whole or not at
+    all: a temporary file beside it, replaced in one step. For files that hold
+    secrets: federation state (pair and network secrets), grants."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(temp, 0o600)  # in case the file was there already, with other modes
+        os.replace(temp, path)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
 
 
 def digest(data: Any) -> tuple[str, int]:

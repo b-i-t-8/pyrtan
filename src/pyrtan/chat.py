@@ -111,10 +111,14 @@ POLL_MAX = 25.0
 LINE_MAX = 1000
 EVENTS_MAX = 200      # events a seat holds for a client that has not polled
 SEATS_MAX = 500
+SEATS_RESERVED = 100  # of those, kept for callers with the token or a key granted chat: strangers cannot fill the lobby on the operator
+SEATS_PER_ADDRESS = 8 # seats one address may hold, unless it has the token or a granted key
+MEET_CROWD = 20       # past this many waiting seats, each asks the hubs we follow less often: the lobby is not an amplifier
 INTERESTS_MAX = 5
 BURST, REFILL = 5.0, 1.0   # lines: a burst of five, then one a second
 TYPING_TTL = 5.0      # an indicator nobody refreshes goes out after this long
 TYPING_EVERY = 2.0    # how often "still typing" travels to another hub
+CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")  # C0 and C1 controls, but tab and newline: a line is text, not terminal commands
 REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 INTEREST = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 
@@ -222,6 +226,10 @@ class Seat:
     told: tuple[bool, float] = (False, 0.0)   # the typing last sent to a partner on another hub, and when
     allowance: float = BURST
     allowance_at: float = field(default_factory=time.time)
+    heard_allowance: float = BURST                              # the same limit on lines from a stranger on another hub
+    heard_allowance_at: float = field(default_factory=time.time)
+    address: str | None = None   # where it came from, unless the caller had the token or a granted key
+    polls: int = 0               # the newest poll's number: an older poll still waiting gives way to it
 
     def view(self) -> dict[str, Any]:
         p = self.partner
@@ -378,7 +386,7 @@ class Lobby:
                 self._pair(seat, other)
                 return
             now = time.time()
-            far = fed is not None and bool(fed.following or self.links) and now - seat.asked >= self.meet_every
+            far = fed is not None and bool(fed.following or self.links) and now - seat.asked >= self._meet_every()
             if far:
                 seat.busy, seat.asked = True, now
         if far:
@@ -392,6 +400,11 @@ class Lobby:
         with self.cond:
             if seat.state == "waiting" and not seat.busy and seat.want == "anyone" and time.time() - seat.since >= self.bot_after:
                 self._pair_bot(seat)
+
+    def _meet_every(self) -> float:
+        """How often a waiting seat asks the hubs we follow: less often as more wait."""
+        waiting = sum(1 for s in self.seats.values() if s.state == "waiting")
+        return self.meet_every * max(1.0, waiting / MEET_CROWD)
 
     def _meet_far(self, seat: Seat) -> bool:
         fed = self.hub.federation
@@ -464,7 +477,9 @@ class Lobby:
                 seat.seen = time.time()
             return seat
 
-    def start(self, body: dict[str, Any], guest: bool = False) -> tuple[int, dict[str, Any]]:
+    def start(self, body: dict[str, Any], guest: bool = False, *, address: str | None = None) -> tuple[int, dict[str, Any]]:
+        """``address``: where a caller without the token or a granted key came from; it
+        may hold a few seats, and strangers together all but the reserved ones."""
         want = body.get("want", "anyone")
         if want not in WANTS:
             return 400, {"status": "error", "reason": "bad-request", "say": f"want is one of {', '.join(WANTS)}."}
@@ -474,9 +489,12 @@ class Lobby:
             want = "people"
         with self.cond:
             self._sweep()
-            if len(self.seats) >= SEATS_MAX:
+            strangers = [s for s in self.seats.values() if s.address is not None]
+            if len(self.seats) >= SEATS_MAX or (address is not None and len(strangers) >= SEATS_MAX - SEATS_RESERVED):
                 return 503, {"status": "error", "reason": "lobby-full", "say": f"The lobby is full ({SEATS_MAX} seats); try again in a minute."}
-            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest)
+            if address is not None and sum(1 for s in strangers if s.address == address) >= SEATS_PER_ADDRESS:
+                return 429, {"status": "error", "reason": "too-many-seats", "say": f"{SEATS_PER_ADDRESS} seats from one place at once is the most; leave one first."}
+            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest, address=address)
             self.seats[seat.id] = seat
             self.refs[seat.ref] = seat
             self._add(seat, "system", "Looking for a bot…" if want == "bot" else "Looking for someone you can chat with…")
@@ -497,15 +515,21 @@ class Lobby:
         # would be answered at once, again and again, while the partner types.
         shown = bool(body["partner_typing"]) if "partner_typing" in body else None
         deadline = time.time() + wait
+        with self.cond:
+            seat.polls += 1  # one poll waits per seat: an older one answers now and lets its thread go
+            mine = seat.polls
+            self.cond.notify_all()
         while True:
             with self.cond:
                 seat.seen = time.time()  # polling is being here, before anyone is swept
+                if seat.polls != mine:
+                    return 200, self._view(seat, after)
             self._advance(seat)
             self._flush()
             with self.cond:
                 now = time.time()
                 # A seat that left while this poll waited gets its last view, state "left".
-                if seat.id not in self.seats or any(e["n"] > after for e in seat.events) or now >= deadline or (shown is not None and self._partner_typing(seat) != shown):
+                if seat.polls != mine or seat.id not in self.seats or any(e["n"] > after for e in seat.events) or now >= deadline or (shown is not None and self._partner_typing(seat) != shown):
                     return 200, self._view(seat, after)
                 nap = deadline - now
                 if shown and now < seat.heard < float("inf"):
@@ -513,7 +537,7 @@ class Lobby:
                 if seat.state == "waiting":
                     # Wake to ask the hubs we follow again, or to meet a bot.
                     if self.hub.federation is not None and (self.hub.federation.following or self.links):
-                        nap = min(nap, seat.asked + self.meet_every - now)
+                        nap = min(nap, seat.asked + self._meet_every() - now)
                     if seat.want == "anyone":
                         nap = min(nap, seat.since + self.bot_after - now)
                 self.cond.wait(max(0.05, nap))
@@ -525,7 +549,9 @@ class Lobby:
         text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"seat\": \"…\", \"text\": \"…\"}."}
-        text = text.strip()
+        text = clean(text)
+        if not text:
+            return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"seat\": \"…\", \"text\": \"…\"}."}
         if len(text) > LINE_MAX:
             return 413, {"status": "error", "reason": "too-long", "say": f"A line is at most {LINE_MAX} characters."}
         with self.cond:
@@ -668,6 +694,11 @@ class Lobby:
         """Whether strangers may chat here anyway: a public lobby, or a hub with no token."""
         return bool(self.hub.chat_public or not self.hub.token)
 
+    def _chosen(self, remote: "Remote") -> bool:
+        """Whether the operator chose this hub: this one follows it (a follow back counts)."""
+        fed = self.hub.federation
+        return fed is not None and remote.url in fed.following
+
     def link_for(self, hub: str) -> "Remote | None":
         return self.links.get(hub.rstrip("/"))
 
@@ -768,6 +799,9 @@ class Lobby:
             ref = obj.get("ref")
             if not follower:
                 return 403, {"status": "error", "reason": "not-a-follower", "say": "Only a hub that follows this one may ask it for a stranger."}
+            if not self.open() and not self._chosen(remote):
+                # A lobby behind a token meets strangers only from hubs its operator chose to follow.
+                return 403, {"status": "error", "reason": "private-lobby", "say": "This hub's lobby is not open to strangers, so it meets none from hubs it does not follow."}
             if not isinstance(ref, str) or not REF.match(ref):
                 return 400, {"status": "error", "reason": "bad-activity", "say": "A Meet carries the asking seat's ref."}
             interests = interests_of(obj.get("interests"))
@@ -795,16 +829,23 @@ class Lobby:
                 self._hear(seat, time.time() + self.typing_ttl if obj.get("typing") is True else 0.0)
                 return 200, {"status": "ok"}
             text = obj.get("text")
-            if not isinstance(text, str) or not text.strip() or len(text) > LINE_MAX:
+            if not isinstance(text, str) or not clean(text) or len(text) > LINE_MAX:
                 return 400, {"status": "error", "reason": "bad-activity", "say": f"A Say carries a line of at most {LINE_MAX} characters."}
+            now = time.time()
+            seat.heard_allowance = min(BURST, seat.heard_allowance + (now - seat.heard_allowance_at) * REFILL)
+            seat.heard_allowance_at = now
+            if seat.heard_allowance < 1:
+                return 429, {"status": "error", "reason": "too-fast", "say": "Slow down: five lines at once, then one a second."}
+            seat.heard_allowance -= 1
             seat.heard = 0.0
-            self._add(seat, "stranger", text.strip())
+            self._add(seat, "stranger", clean(text))
             return 200, {"status": "ok"}
 
     # ------------------------------------------------------------ routing
 
-    def route(self, method: str, path: str, body: dict[str, Any], *, guest: bool = False) -> tuple[int, dict[str, Any]]:
-        """``guest``: the caller lacks the hub's token, and came in because the lobby is public."""
+    def route(self, method: str, path: str, body: dict[str, Any], *, guest: bool = False, address: str | None = None) -> tuple[int, dict[str, Any]]:
+        """``guest``: the caller lacks the hub's token, and came in because the lobby is public.
+        ``address``: where the caller came from, when it has neither the token nor a granted key."""
         if method == "GET" and path == "/chat":
             try:
                 return 200, self.stats(guest)
@@ -813,10 +854,15 @@ class Lobby:
         handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/typing": self.typed, "/chat/settings": self.settings, "/chat/next": self.next, "/chat/leave": self.leave}
         if method == "POST" and path in handlers:
             try:
-                return self.start(body, guest) if path == "/chat/start" else handlers[path](body)
+                return self.start(body, guest, address=address) if path == "/chat/start" else handlers[path](body)
             finally:
                 self._flush()  # the Parts an ending owes another hub, sent once no lock is held
         return 404, {"status": "error", "reason": "not-found", "say": f"No {method} {path} here."}
+
+
+def clean(text: str) -> str:
+    """A chat line without control characters, so that no line steers a terminal."""
+    return CONTROLS.sub("", text).strip()
 
 
 def _int(value: Any) -> int:
