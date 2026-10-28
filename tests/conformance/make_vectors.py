@@ -101,6 +101,12 @@ CASES: list[dict] = [
     {"intent": "next holiday in no"},
     {"intent": "next holiday in XX"},
     {"intent": "tell me a joke"},
+    {"intent": "convert 100 usd to eur"},
+    {"intent": "convert 1,000 EUR into JPY"},
+    {"intent": "usd to xyz rate"},
+    {"intent": "exchange rate from usd to usd"},
+    {"intent": "synonyms for happy"},
+    {"intent": "another word for qqqzzz"},
 ]
 
 
@@ -148,6 +154,7 @@ NLP = [
     ("clean", "Hey, can you please tell me what's up?"), ("clean", "“Curly” quotes — and dashes"), ("clean", "ＦＵＬＬ width"),
     ("clean", "I'm sure it's a dozen"), ("clean", "one hundred and twenty three things"), ("clean", "a hundred and one"),
     ("clean", "Thanks"), ("clean", "well, um, okay pyrtan: weather."), ("clean", "St. Ives. Then Mr. Smith"),
+    ("clean", "convert 1,000.5 EUR, then 2, 3"), ("clean", "a,b and 1 ,2 and 3, 4"),
     ("singular", "stories"), ("singular", "boxes"), ("singular", "news"), ("singular", "glass"), ("singular", "cats"), ("singular", "bus"),
     ("plural", "story"), ("plural", "box"), ("plural", "day"), ("plural", "status"),
     ("parse_number", "twenty-one"), ("parse_number", "1,234"), ("parse_number", "-3.25"), ("parse_number", "lots"),

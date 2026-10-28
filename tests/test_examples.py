@@ -236,3 +236,21 @@ def test_dad_joke_asks_for_json(runner, recorded):
     out = runner.run_intent("tell me a joke")
     assert out.status == "done" and out.say == "I am so good at sleeping I can do it with my eyes closed!"
     assert runner.registry.get("dad-joke").nodes["fetch"].get("http")["headers"] == {"Accept": "application/json"}
+
+
+def test_exchange_rate_reads_one_rate_by_its_shape(runner):
+    out = runner.run_intent("convert 100 usd to eur")
+    assert out.say == "100 USD is 89.69 EUR at the ECB rate of 2026-10-27."
+    assert out.output == {"amount": 100.0, "from": "USD", "to": "EUR", "value": 89.69, "date": "2026-10-27"}
+    out = runner.run_intent("convert 1,000 EUR into JPY")  # the comma is the number's, not a pause
+    assert out.inputs["amount"] == "1000" and out.say == "1000 EUR is 175970 JPY at the ECB rate of 2026-10-27."
+    assert runner.run_intent("usd to xyz rate").reason == "unknown-currency"
+    assert runner.run_intent("exchange rate from usd to usd").reason == "same-currency"
+    assert runner.run_intent("convert -5 usd to eur").reason == "bad-input"
+
+
+def test_synonyms_join_into_a_sentence(runner):
+    out = runner.run_intent("synonyms for happy")
+    assert out.say == "Synonyms for happy: halcyon, content, bright, felicitous, riant, expansive, elysian, joyful."
+    assert out.output["synonyms"][:2] == ["halcyon", "content"]
+    assert runner.run_intent("another word for qqqzzz").reason == "no-synonyms"

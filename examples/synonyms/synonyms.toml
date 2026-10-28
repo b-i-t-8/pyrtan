@@ -1,0 +1,62 @@
+# Words that mean the same, from Datamuse, best first.
+
+name = "synonyms"
+version = 1
+namespace = "pyrtan"
+description = "Synonyms for an English word, best first, from Datamuse."
+tags = ["reference", "language", "read-only"]
+license = "MIT"
+hosts = ["api.datamuse.com"]
+start = "fetch"
+
+[[triggers]]
+pattern = "synonyms (for|of) {word:word}"
+[[triggers]]
+pattern = "(another|other) word for {word:word}"
+[[triggers]]
+pattern = "what is another word for {word:word}"
+
+[inputs.word]
+type = "str"
+pattern = "^[A-Za-z][A-Za-z'\\-]*$"
+description = "One English word"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://api.datamuse.com/words?rel_syn={{ inputs.word | lower | url }}&max=8" }
+into = "resp"
+extract = [
+  { into = "words", regex = "\"word\":\\s*\"([^\"]+)\"", all = true },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "any" },
+  { else = "unexpected" },
+]
+
+[nodes.any]
+kind = "decide"
+on = "words"
+branches = [
+  { when = { empty = true }, then = "none" },
+  { else = "reply" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "Synonyms for {{ inputs.word }}: {{ state.words | join }}."
+output = { word = "{{ inputs.word }}", synonyms = "{{ state.words }}" }
+
+[nodes.none]
+kind = "fail"
+reason = "no-synonyms"
+say = "Datamuse knows no synonyms for {{ inputs.word }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Datamuse answered {{ state.resp.status }}."
