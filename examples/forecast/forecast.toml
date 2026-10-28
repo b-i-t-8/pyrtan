@@ -1,0 +1,128 @@
+# Tomorrow's weather for a place, from Open-Meteo: the sky, the high and
+# low, and the chance of rain, in the place's own day.
+
+name = "forecast"
+version = 1
+namespace = "pyrtan"
+description = "Tomorrow's weather for a place: sky, high and low, and chance of rain, from Open-Meteo."
+tags = ["weather", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "api.open-meteo.com"]
+start = "geocode"
+
+[[triggers]]
+pattern = "[what's the] weather (in|for) {place} tomorrow"
+[[triggers]]
+pattern = "[what's the] weather tomorrow (in|for) {place}"
+[[triggers]]
+pattern = "will it rain tomorrow in {place}"
+
+[nodes.tomorrow]
+kind = "observe"
+http = { method = "GET", url = "https://api.open-meteo.com/v1/forecast?latitude={{ state.lat }}&longitude={{ state.lon }}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=2" }
+into = "fc"
+extract = [
+  { into = "day", json = "json.daily.time[1]" },
+  { into = "code", json = "json.daily.weather_code[1]" },
+  { into = "high", json = "json.daily.temperature_2m_max[1]" },
+  { into = "low", json = "json.daily.temperature_2m_min[1]" },
+  { into = "rain", json = "json.daily.precipitation_probability_max[1]" },
+  { into = "unit", json = "json.daily_units.temperature_2m_max" },
+]
+next = "have-day"
+
+[nodes.have-day]
+kind = "decide"
+on = "high"
+branches = [
+  { when = { type = "number" }, then = "sky" },
+  { else = "no-forecast" },
+]
+
+# WMO weather codes, folded into words, as the weather tree does.
+[nodes.sky]
+kind = "decide"
+on = "code"
+branches = [
+  { when = { eq = 0 }, then = "clear" },
+  { when = { between = [1, 3] }, then = "cloudy" },
+  { when = { between = [45, 48] }, then = "fog" },
+  { when = { between = [51, 67] }, then = "rain" },
+  { when = { between = [71, 77] }, then = "snow" },
+  { when = { between = [80, 82] }, then = "rain" },
+  { when = { between = [85, 86] }, then = "snow" },
+  { when = { between = [95, 99] }, then = "storm" },
+  { else = "unknown-sky" },
+]
+
+[nodes.clear]
+kind = "set"
+set = { sky = "clear" }
+next = "reply"
+[nodes.cloudy]
+kind = "set"
+set = { sky = "cloudy" }
+next = "reply"
+[nodes.fog]
+kind = "set"
+set = { sky = "foggy" }
+next = "reply"
+[nodes.rain]
+kind = "set"
+set = { sky = "rain" }
+next = "reply"
+[nodes.snow]
+kind = "set"
+set = { sky = "snow" }
+next = "reply"
+[nodes.storm]
+kind = "set"
+set = { sky = "storms" }
+next = "reply"
+[nodes.unknown-sky]
+kind = "set"
+set = { sky = "weather code {{ state.code }}" }
+next = "reply"
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.name }}, {{ state.country }}, tomorrow ({{ state.day }}): {{ state.sky }}, {{ state.low }} to {{ state.high }}{{ state.unit }}, {{ state.rain }}% chance of rain."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", date = "{{ state.day }}", sky = "{{ state.sky }}", low = "{{ state.low }}", high = "{{ state.high }}", unit = "{{ state.unit }}", rain_chance = "{{ state.rain }}" }
+
+[nodes.no-forecast]
+kind = "fail"
+reason = "no-forecast"
+say = "Open-Meteo found {{ state.name }} but gave no forecast for tomorrow (status {{ state.fc.status }})."
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+  { into = "zone", json = "json.results[0].timezone" },
+  { into = "height", json = "json.results[0].elevation" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "tomorrow" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+

@@ -37,6 +37,8 @@ function hubShape(d) {
   if (d && typeof d === "object" && "status" in d && "tree" in d) return Object.assign(shape(d), { snapshot: d.snapshot === undefined ? null : d.snapshot });
   if (d && Array.isArray(d.gaps)) return { gaps: d.gaps.map((g) => Object.assign({}, g, { first_seen: undefined, last_seen: undefined })) };
   if (d && Array.isArray(d.unanswered)) return { unanswered: d.unanswered.map((e) => Object.assign({}, e, { first: undefined, last: undefined })) };
+  if (d && Array.isArray(d.suggestions)) return { suggestions: d.suggestions.map((e) => Object.assign({}, e, { first: undefined, last: undefined })) };
+  if (d && "uptime_s" in d) return Object.assign({}, d, { uptime_s: undefined, egress: undefined });
   return d;
 }
 
@@ -65,6 +67,8 @@ function hubShape(d) {
     const [status, payload] = await hub.route(x.method, x.path, x.body === null ? undefined : JSON.parse(JSON.stringify(x.body)));
     compare(`hub ${x.method} ${x.path} ${x.body ? JSON.stringify(x.body).slice(0, 60) : ""}`, { status: x.status, body: hubShape(x.expect) }, { status, body: hubShape(JSON.parse(JSON.stringify(payload))) });
   }
+  // The branch a gap asks for, by the same rules.
+  for (const x of vectors.drafts) compare(`draft ${x.tree} ${JSON.stringify(x.gap)}`, x.expect, Pyrtan.grow.draftBranch(vectors.trees[x.tree] || vectors.language_trees.find((t) => t.name === x.tree), x.gap));
   console.log(`${total - failed}/${total} agree`);
   process.exit(failed ? 1 : 0);
 })();

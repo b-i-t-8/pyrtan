@@ -316,3 +316,66 @@ def test_cli_check_identifiers(tmp_path, capsys):
 def test_cli_without_an_identity(tmp_path, capsys):
     code, _, err = run(capsys, "id", "show", "--dir", str(tmp_path / "nobody"))
     assert code == 1 and "pyrtan id new" in err
+
+
+# ---------------------------------------------------------------- backups, releases, handovers
+
+
+@needs_crypto
+def test_backups(root, device):
+    doc = identity.make_identity(root, updated=int(time.time()) - 10)
+    b = identity.make_backup(root, "correct horse battery", document=doc, iterations=identity.MIN_ITERATIONS)
+    assert identity.backup_problem(b) is None and identity.check_any(b) == ("backup", None)
+    assert identity.open_backup(b, "correct horse battery").id == root.id
+    with pytest.raises(IdentityError, match="passphrase does not open"):
+        identity.open_backup(b, "wrong horse battery")
+    # The ciphertext is bound to the identity it names, and a weakened kdf is refused.
+    with pytest.raises(IdentityError, match="passphrase does not open"):
+        identity.open_backup({**b, "id": device.id, "document": None}, "correct horse battery")
+    assert "iterations" in identity.backup_problem({**b, "kdf": {**b["kdf"], "iterations": 1000}})
+    assert "document" in identity.backup_problem({**b, "document": identity.make_identity(device)})
+    with pytest.raises(IdentityError, match="at least 8"):
+        identity.make_backup(root, "short")
+    assert identity.make_backup(root, "correct horse battery", iterations=identity.MIN_ITERATIONS)["kdf"]["salt"] != b["kdf"]["salt"]
+
+
+@needs_crypto
+def test_releases_and_handovers(root, device):
+    release = identity.make_release(root, "alice@example.org", issued=NOW)
+    assert identity.check_release(release, name="alice@example.org") is None
+    assert "bob" in identity.check_release(release, name="bob@example.org")
+    assert "signature" in identity.check_release({**release, "id": device.id})
+    claim = identity.make_name(device, "alice@example.org", issued=NOW)
+    assert "without a handover" in identity.check_handover(claim, root.id)
+    moved = identity.make_name(device, "alice@example.org", issued=NOW, handover_from=root)
+    assert identity.check_name(moved) is None                        # still the new key's own claim
+    assert identity.check_handover(moved, root.id) is None
+    assert "not" in identity.check_handover(moved, device.id)
+    assert "not signed" in identity.check_handover({**moved, "issued": NOW + 1}, root.id)
+
+
+@needs_crypto
+def test_cli_backup_and_restore(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("PP", "correct horse battery staple")
+    a, c = str(tmp_path / "a"), str(tmp_path / "c")
+    run(capsys, "id", "new", "--dir", a)
+    phone = identity.Key.generate().id
+    run(capsys, "id", "device", "add", phone, "--dir", a)
+    code, out, _ = run(capsys, "id", "backup", "--out", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", a)
+    assert code == 0 and "never in a public one" in out
+    assert stat.S_IMODE(os.stat(tmp_path / "b.json").st_mode) == 0o600
+    assert run(capsys, "id", "backup", "--out", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", a)[0] == 1   # not overwritten
+    code, out, _ = run(capsys, "id", "check", str(tmp_path / "b.json"))
+    assert code == 0 and "a key backup of" in out
+    code, out, _ = run(capsys, "id", "restore", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", c)
+    assert code == 0 and "again" in out
+    code, out, _ = run(capsys, "id", "show", "--dir", c)
+    assert phone in out                                              # the document came back with the key
+    monkeypatch.setenv("PP", "not the passphrase")
+    code, _, err = run(capsys, "id", "restore", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", str(tmp_path / "d"))
+    assert code == 1 and "does not open" in err
+    other = str(tmp_path / "other")
+    run(capsys, "id", "new", "--dir", other)
+    monkeypatch.setenv("PP", "correct horse battery staple")
+    code, _, err = run(capsys, "id", "restore", str(tmp_path / "b.json"), "--passphrase-env", "PP", "--dir", other)
+    assert code == 1 and "already holds" in err

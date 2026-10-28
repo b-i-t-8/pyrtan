@@ -1,0 +1,48 @@
+# A fact about cats, from catfact.ninja.
+
+name = "cat-fact"
+version = 1
+namespace = "pyrtan"
+description = "A random fact about cats, from catfact.ninja."
+tags = ["fun", "animals", "read-only"]
+license = "MIT"
+hosts = ["catfact.ninja"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[tell me a] cat fact"
+[[triggers]]
+pattern = "tell me something about cats"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://catfact.ninja/fact" }
+into = "resp"
+extract = [{ into = "fact", json = "json.fact" }]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "has-fact" },
+  { else = "unexpected" },
+]
+
+[nodes.has-fact]
+kind = "decide"
+on = "fact"
+branches = [
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.fact }}"
+output = { fact = "{{ state.fact }}" }
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "catfact.ninja answered {{ state.resp.status }}."

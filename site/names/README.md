@@ -13,6 +13,14 @@ identity is the key, and works without a name.
 
 ## Getting one
 
+**In a browser:** open the console's Identity tab
+(<https://pyrtan.com/console/>), *Make my identity*, save your backup,
+then *Claim a name* with your GitHub login. GitHub's own new-file page
+opens with `site/names/<login>.json` filled in; choose *Propose changes*
+and *Create pull request*, from that GitHub account.
+
+**From a shell:**
+
     pip install 'pyrtan[identity]'
     pyrtan id new                                  # once; back up the key it names
     pyrtan id name <login>@pyrtan.com --into <a checkout of this repository>

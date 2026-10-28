@@ -1,0 +1,78 @@
+# The time now in a place: its time zone from Open-Meteo's geocoder, the
+# clock in that zone from timeapi.io.
+
+name = "local-time"
+version = 1
+namespace = "pyrtan"
+description = "What time it is now in a place, and its time zone."
+tags = ["time", "read-only"]
+license = "MIT"
+hosts = ["geocoding-api.open-meteo.com", "timeapi.io"]
+start = "geocode"
+
+[[triggers]]
+pattern = "what time is it in {place}"
+[[triggers]]
+pattern = "[the] (time|local time) in {place}"
+
+[nodes.clock]
+kind = "observe"
+http = { method = "GET", url = "https://timeapi.io/api/time/current/zone?timeZone={{ state.zone | url }}" }
+into = "resp"
+extract = [
+  { into = "time", json = "json.time" },
+  { into = "weekday", json = "json.dayOfWeek" },
+  { into = "date", regex = "^(\\d{4}-\\d\\d-\\d\\d)", from = "json.dateTime" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { else = "no-clock" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "It is {{ state.time }} on {{ state.weekday }} {{ state.date }} in {{ state.name }}, {{ state.country }} ({{ state.zone }})."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", time = "{{ state.time }}", date = "{{ state.date }}", weekday = "{{ state.weekday }}", timezone = "{{ state.zone }}" }
+
+[nodes.no-clock]
+kind = "fail"
+reason = "no-clock"
+say = "timeapi.io gave no time for {{ state.zone }} (status {{ state.resp.status }})."
+
+[nodes.geocode]
+kind = "observe"
+http = { method = "GET", url = "https://geocoding-api.open-meteo.com/v1/search?name={{ inputs.place | url }}&count=1&language=en&format=json" }
+into = "geo"
+extract = [
+  { into = "hit", json = "json.results[0]" },
+  { into = "lat", json = "json.results[0].latitude" },
+  { into = "lon", json = "json.results[0].longitude" },
+  { into = "name", json = "json.results[0].name" },
+  { into = "country", json = "json.results[0].country" },
+  { into = "zone", json = "json.results[0].timezone" },
+  { into = "height", json = "json.results[0].elevation" },
+]
+next = "found"
+
+[nodes.found]
+kind = "decide"
+on = "hit"
+branches = [
+  { when = { exists = true }, then = "clock" },
+  { else = "unknown-place" },
+]
+
+[nodes.unknown-place]
+kind = "fail"
+reason = "unknown-place"
+say = "I could not find a place called {{ inputs.place }}."
+
+[inputs.place]
+type = "str"
+description = "A town or city name"
+

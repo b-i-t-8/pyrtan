@@ -3,8 +3,11 @@
  * What the console needs of _meta/identity.md, and what Python's
  * src/pyrtan/identity.py does the same way: identifiers (`pyr:` and the
  * base32 of key, SHA3-256 checksum and version), canonical JSON, the
- * message a request signature is over, and signing it with a device key.
- * tests/conformance/identity.json holds the vectors both must agree on.
+ * message a request signature is over, and signing it; the documents a
+ * root signs (identity documents, device notes, name claims, releases,
+ * handovers); and the encrypted backup of a root key (PBKDF2-SHA256, then
+ * AES-256-GCM, all by crypto.subtle). tests/conformance/identity.json
+ * holds the vectors both must agree on.
  *
  * SHA-256 and SHA3-256 are written out here: crypto.subtle has no SHA3,
  * and none of crypto.subtle on a plain http:// LAN address. Ed25519 is
@@ -21,6 +24,9 @@
   "use strict";
 
   const PREFIX = "pyr:", ID_LENGTH = 56, VERSION_ED25519 = 1, REQUEST_TAG = "pyrtan-req-v1";
+  const DOC_TAG = "pyrtan-doc-v1\n", HANDOVER_TAG = "pyrtan-handover-v1\n", BACKUP_TAG = "pyrtan-key-backup-v1\n";
+  const ABILITIES = ["ask", "chat", "run", "operate"], YEAR = 365 * 24 * 3600, BACKUP_ITERATIONS = 600000, MIN_ITERATIONS = 100000;
+  const LOCAL = /^[a-z0-9][a-z0-9._-]{0,62}$/, LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
   const enc = new TextEncoder();
   const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   const concat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; };
@@ -167,6 +173,108 @@
     return null;
   }
 
+  // ------------------------------------------------------------ documents a root signs
+
+  const now = () => Math.floor(Date.now() / 1000);
+  const without = (doc, ...keys) => Object.fromEntries(Object.entries(doc).filter(([k]) => !keys.includes(k)));
+  async function sign(key, bytes) { return new Uint8Array(await subtle().sign({ name: "Ed25519" }, key.privateKey, bytes)); }
+  async function signDocument(key, doc) {
+    const body = without(doc, "sig");
+    return Object.assign({}, body, { sig: b64url(await sign(key, enc.encode(DOC_TAG + canonical(body)))) });
+  }
+  const abilities = (may) => { const bad = may.filter((a) => !ABILITIES.includes(a)); if (bad.length || new Set(may).size !== may.length) throw new Error(`may is some of ${ABILITIES.join(", ")}, each once`); return ABILITIES.filter((a) => may.includes(a)); };
+  function host(text) {
+    const h = String(text || "").toLowerCase(), labels = h.split(".");
+    if (h.length > 253 || !labels.every((l) => LABEL.test(l))) throw new Error(`${JSON.stringify(text)} is not a host name`);
+    if (labels[labels.length - 1] === "onion" && (labels.length < 2 || labels[labels.length - 2].length !== 56)) throw new Error("an onion address is 56 characters before .onion");
+    return h;
+  }
+  function parseName(text) {
+    const t = String(text || "").trim().toLowerCase(), at = t.lastIndexOf("@");
+    if (at < 1 || t.startsWith(PREFIX)) throw new Error(`${JSON.stringify(text)} is not a name (name@domain)`);
+    const name = t.slice(0, at);
+    if (!LOCAL.test(name)) throw new Error(`${JSON.stringify(name)} is not lowercase letters, digits, dot, dash, underscore, at most 63`);
+    return { name, domain: host(t.slice(at + 1)) };
+  }
+  async function makeDevice(root, device, may, opts) {
+    const o = opts || {}, issued = o.issued !== undefined ? o.issued : now();
+    decode(device);
+    if (device.toLowerCase() === root.id) throw new Error("a root does not delegate to itself; it signs for itself");
+    return signDocument(root, { "pyrtan-device": 1, root: root.id, device: device.toLowerCase(), label: o.label || "", may: abilities(may), issued, expires: o.expires !== undefined ? o.expires : issued + YEAR });
+  }
+  async function makeIdentity(root, opts) {
+    const o = opts || {};
+    return signDocument(root, { "pyrtan-identity": 1, id: root.id, kind: o.kind || "person", routes: o.routes || [], devices: o.devices || [], revoked: o.revoked || [], updated: o.updated !== undefined ? o.updated : now() });
+  }
+  // A new document, strictly newer than the one it replaces, or a holder would keep the old one.
+  const reissue = (doc, root, changes) => makeIdentity(root, Object.assign({ kind: doc.kind, routes: doc.routes, devices: doc.devices, revoked: doc.revoked }, changes, { updated: Math.max(now(), doc.updated + 1) }));
+  const withDevice = (doc, root, note) => reissue(doc, root, { devices: doc.devices.filter((n) => n.device !== note.device).concat([note]), revoked: doc.revoked.filter((r) => r !== note.device) });
+  const withRevoked = (doc, root, device) => reissue(doc, root, { devices: doc.devices.filter((n) => n.device !== device), revoked: doc.revoked.includes(device) ? doc.revoked : doc.revoked.concat([device]) });
+  async function makeName(key, name, opts) {
+    const o = opts || {}, n = parseName(name);
+    const claim = Object.assign({ "pyrtan-name": 1, name: n.name, domain: n.domain, id: key.id, issued: o.issued !== undefined ? o.issued : now() }, o.extra || {});
+    if (o.handoverFrom) claim.handover = { id: o.handoverFrom.id, sig: b64url(await sign(o.handoverFrom, enc.encode(HANDOVER_TAG + canonical(claim)))) };
+    return signDocument(key, claim);
+  }
+  async function makeRelease(key, name, opts) {
+    const o = opts || {}, n = parseName(name);
+    return signDocument(key, { "pyrtan-name-release": 1, name: n.name, domain: n.domain, id: key.id, issued: o.issued !== undefined ? o.issued : now() });
+  }
+
+  // ------------------------------------------------------------ roots and their backups
+  //
+  // A root made in a page is extractable exactly once: its seed is read out to
+  // be encrypted into the backup, then the key is imported again,
+  // non-extractable, and the seed is wiped. Restoring decrypts the seed and
+  // imports it non-extractable the same way.
+
+  async function createRoot() {
+    const pair = await subtle().generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const jwk = await subtle().exportKey("jwk", pair.privateKey);
+    const seed = unb64url(jwk.d), publicKey = unb64url(jwk.x);
+    return { id: encode(publicKey), seed, publicKey };
+  }
+  async function backupKey(passphrase, salt, iterations) {
+    const base = await subtle().importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    return subtle().deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+  async function makeBackup(seed, id, passphrase, opts) {
+    const o = opts || {};
+    if (String(passphrase).length < 8) throw new Error("a passphrase is at least 8 characters; a long sentence is better");
+    const salt = o.salt || crypto.getRandomValues(new Uint8Array(16)), iv = o.iv || crypto.getRandomValues(new Uint8Array(12)), iterations = o.iterations || BACKUP_ITERATIONS;
+    const data = new Uint8Array(await subtle().encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(BACKUP_TAG + id) }, await backupKey(passphrase, salt, iterations), seed));
+    const backup = { "pyrtan-key-backup": 1, id, made: o.made !== undefined ? o.made : now(), kdf: { name: "PBKDF2-SHA256", iterations, salt: b64url(salt) }, cipher: { name: "AES-256-GCM", iv: b64url(iv) }, data: b64url(data) };
+    if (o.document) backup.document = o.document;
+    return backup;
+  }
+  function backupProblem(b) {
+    if (!b || typeof b !== "object" || b["pyrtan-key-backup"] !== 1) return "not a key backup (pyrtan-key-backup: 1)";
+    if (!valid(b.id)) return "the backup names no identity";
+    if (!b.kdf || b.kdf.name !== "PBKDF2-SHA256" || !(b.kdf.iterations >= MIN_ITERATIONS && b.kdf.iterations <= 10000000) || typeof b.kdf.salt !== "string") return `the backup's kdf is not PBKDF2-SHA256 with at least ${MIN_ITERATIONS} iterations`;
+    if (!b.cipher || b.cipher.name !== "AES-256-GCM" || typeof b.cipher.iv !== "string" || typeof b.data !== "string") return "the backup's cipher is not AES-256-GCM with an iv and data";
+    if (b.document && b.document.id !== b.id.toLowerCase()) return "the document beside the key is another identity's";
+    return null;
+  }
+  /** The seed in a backup; throws for a wrong passphrase or a damaged file. */
+  async function openBackup(b, passphrase) {
+    const bad = backupProblem(b);
+    if (bad) throw new Error(bad);
+    let seed;
+    try {
+      seed = new Uint8Array(await subtle().decrypt({ name: "AES-GCM", iv: unb64url(b.cipher.iv), additionalData: enc.encode(BACKUP_TAG + b.id.toLowerCase()) }, await backupKey(passphrase, unb64url(b.kdf.salt), b.kdf.iterations), unb64url(b.data)));
+    } catch (e) { throw new Error("the passphrase does not open this backup (or the file is damaged)"); }
+    return seed;
+  }
+  /** A non-extractable key from a seed, checked against the identity it should be. */
+  async function rootFromSeed(seed, id) {
+    const key = await fromSeedAndPublic(seed, decode(id));
+    const probe = enc.encode("pyrtan-probe"), sig = await sign(key, probe);
+    const pub = await subtle().importKey("raw", decode(id), { name: "Ed25519" }, false, ["verify"]);
+    if (!(await subtle().verify({ name: "Ed25519" }, pub, sig, probe))) throw new Error("the backup's key is not the identity it names");
+    seed.fill(0);
+    return key;
+  }
+
   // ------------------------------------------------------------ the device key, in IndexedDB
 
   const store = {
@@ -180,5 +288,10 @@
     async put(v) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction("keys", "readwrite"); if (v) t.objectStore("keys").put(v, "device"); else t.objectStore("keys").delete("device"); t.oncomplete = () => res(); t.onerror = () => rej(t.error); }); },
   };
 
-  return { PREFIX, sha256, sha3_256, hex, b64url, unb64url, encode, decode, valid, short, canonical, requestMessage, available, generate, fromSeedAndPublic, signRequest, noteProblem, store };
+  return {
+    PREFIX, ABILITIES, sha256, sha3_256, hex, b64url, unb64url, encode, decode, valid, short, canonical, parseName, requestMessage,
+    available, generate, fromSeedAndPublic, signRequest, noteProblem, store,
+    signDocument, makeDevice, makeIdentity, withDevice, withRevoked, makeName, makeRelease,
+    createRoot, makeBackup, backupProblem, openBackup, rootFromSeed,
+  };
 });

@@ -17,6 +17,7 @@ Endpoints:
 ``POST /resume``     forwarded to the peer named in the snapshot
 ``GET  /gaps``       every peer's gaps, with the peer that saw them
 ``GET  /unanswered`` sentences no peer answered, each with a proposed tree
+``GET  /suggestions`` what agents beside the swarm sent this hub (``POST`` to send)
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
 With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
@@ -49,6 +50,10 @@ may no longer be. ``GET``/``POST /allow`` and ``POST /disallow`` (operator)
 keep the grants; ``POST /identity`` takes a granted root's newer identity
 document from anyone, since it is signed; ``GET
 /.well-known/pyrtan/id/<56>.json`` serves the documents the hub holds.
+With ``--names DIR`` a hub is also its network's name provider: it serves
+the claims in DIR (``pyrtan names init`` makes a repository of them) at
+``/.well-known/pyrtan/name/<name>.json``, ``names.json``, and their
+identity documents, for its own domain.
 """
 
 from __future__ import annotations
@@ -69,6 +74,7 @@ from . import identity
 from .grants import Grants, ability_for, parse_may
 from .identity import IdentityError
 from .grow import Unanswered, no_match_outcome
+from .suggestions import Suggestions
 from .intent import Trigger, read
 from .page import MANIFEST, PAGE, PYRTAN_JS, SERVICE_WORKER
 from .registry import Registry
@@ -144,12 +150,15 @@ class _HubResolver:
 
 
 class Hub:
-    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None) -> None:
+    def __init__(self, *, name: str = "hub", poll_every: float = 10.0, token: str | None = None, local: Service | None = None, handout: Registry | None = None, unanswered: str | Path | None = None, chat: bool = False, chat_typing: bool = True, chat_public: bool = False, grants: Grants | None = None, audience: str | None = None, chat_reach: int = 0, suggestions: str | Path | None = None, names: str | Path | None = None, names_domain: str | None = None) -> None:
         self.name = name
+        self.names_dir = Path(names) if names else None
+        self._names_domain = names_domain
+        self._names_cache: tuple[tuple, Any] | None = None
         self.grants = grants if grants is not None else Grants()
         self.grants.on_change = self._grant_changed
         self._audience = audience
-        self.lobby = Lobby(self, typing=chat_typing) if chat or chat_public else None
+        self.lobby = Lobby(self, typing=chat_typing, reach=chat_reach) if chat or chat_public else None
         self.chat_public = chat_public  # callers without the token may chat, with people only
         self.lan: Lan | None = None     # hubs heard on the local network (--lan)
         self.handout_registry = handout  # trees for trusted members only: this hub hands them out and does not run them
@@ -161,6 +170,7 @@ class Hub:
             self.hold(local)
         self.federation: Federation | None = None
         self.unanswered = Unanswered(path=unanswered)
+        self.suggestions = Suggestions(path=suggestions)  # what agents sent this hub; a hub keeps its own, it does not collect its peers'
         self._reports: list[dict[str, Any]] = []
         self._reports_at = 0.0
         self.started = time.time()
@@ -190,6 +200,27 @@ class Hub:
     def audience(self) -> str | None:
         """The id a key-signed request to this hub must be signed for."""
         return self.federation.id if self.federation is not None else self._audience
+
+    @property
+    def names_domain(self) -> str | None:
+        """The domain this hub's names are for: --names-domain, else its own host."""
+        if self._names_domain:
+            return self._names_domain
+        from urllib.parse import urlsplit
+        return urlsplit(self.audience).hostname if self.audience else None
+
+    def names(self) -> "Any":
+        """The directory of names this hub serves, read again whenever a file in it changes."""
+        from .names import load_directory
+        if self.names_dir is None or not self.names_domain:
+            return None
+        try:
+            stamp = tuple(sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size) for e in self.names_dir.iterdir()))
+        except OSError:
+            return None
+        if self._names_cache is None or self._names_cache[0] != stamp:
+            self._names_cache = (stamp, load_directory(self.names_dir, self.names_domain))
+        return self._names_cache[1]
 
     def _signer(self, method: str, path: str, body: dict[str, Any] | None, headers: dict[str, str]) -> tuple[identity.Signer | None, set[str], tuple[int, Any] | None]:
         """For a key-signed request: who signed it, what they may do here, or the refusal."""
@@ -302,6 +333,8 @@ class Hub:
         if self.federation is not None:
             self.federation.refresh_all()
             self.federation.announce()  # only when what we hold changed
+            if self.lobby is not None:
+                self.lobby.reach_out()  # chat links, for chat only (--chat-reach)
 
     def start_polling(self) -> None:
         def loop() -> None:
@@ -396,6 +429,7 @@ class Hub:
             "trees": sum(len(p.trees) for p in peers) + (len(self.local.trees) if self.local else 0),
             "local": len(self.local.trees) if self.local else 0,
             "unanswered": len(self.unanswered),
+            "suggestions": len(self.suggestions),
             "uptime_s": int(time.time() - self.started),
         }
 
@@ -584,6 +618,8 @@ class Hub:
                 out: dict[str, Any] = {"peers": ([self.local.to_dict()] if self.local else []) + [p.to_dict() for p in self.peers.values()]}
             if fed is not None:
                 out.update(fed.to_dict())
+            if self.lobby is not None and self.lobby.reach:
+                out["chat_links"] = self.lobby.links_view()
             return 200, out
         if fed is not None:
             if method == "GET" and path == "/actor":
@@ -684,13 +720,27 @@ class Hub:
         if method == "GET" and path.startswith("/.well-known/pyrtan/id/") and path.endswith(".json"):
             ident = identity.PREFIX + path[len("/.well-known/pyrtan/id/"):-len(".json")]
             doc = self.grants.document(ident) if len(ident) == len(identity.PREFIX) + identity.ID_LENGTH else None
+            named = self.names()
+            if named is not None:
+                held = [d for d in named.docs.values() if d["id"] == ident and (doc is None or d["updated"] > doc["updated"])]
+                doc = max(held, key=lambda d: d["updated"]) if held else doc
             return (200, doc) if doc else (404, {"status": "error", "reason": "no-identity", "say": "This hub holds no document for that identity."})
+        if method == "GET" and (path == "/.well-known/pyrtan/names.json" or (path.startswith("/.well-known/pyrtan/name/") and path.endswith(".json"))):
+            named = self.names()
+            if named is None:
+                return 404, {"status": "error", "reason": "no-names", "say": "This hub serves no names; start it with --names DIR."}
+            if path.endswith("/names.json"):
+                return 200, {"pyrtan-names": 1, "domain": self.names_domain, "names": named.claims}
+            claim = named.claims.get(path[len("/.well-known/pyrtan/name/"):-len(".json")])
+            return (200, claim) if claim else (404, {"status": "error", "reason": "no-name", "say": f"No such name at {self.names_domain}."})
         if method == "GET" and path == "/capabilities":
             return 200, self.capabilities()
         if method == "GET" and path == "/gaps":
             return 200, self.gaps()
         if method == "GET" and path == "/unanswered":
             return 200, self.unanswered_all()
+        if method in ("GET", "POST") and path == "/suggestions":
+            return self.suggestions.route(method, body)
         if method == "GET" and path == "/watches":
             return 200, self.watches()
         if is_chat_path(path):
@@ -706,7 +756,7 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
@@ -815,9 +865,13 @@ def serve_hub(
     unanswered: str | Path | None = None,
     watch: bool = False,
     lan: bool = False,
+    chat_reach: int = 0,
     chat: bool = False,
+    suggestions: str | Path | None = None,
     allow: list[str] | None = None,
     grants: str | None = None,
+    names: str | Path | None = None,
+    names_domain: str | None = None,
     chat_typing: bool = True,
     chat_public: bool = False,
 ) -> tuple[Hub, Server]:
@@ -833,10 +887,10 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch) if trees else None
-    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted)
+    hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
     hub._audience = (advertise or server.url).rstrip("/")
-    if federate or advertise or join or lan:
+    if federate or advertise or join or lan or chat_reach:
         hub.federate(advertise or server.url, secret=federation_secret, state=state, open_follows=open_follows, listed=listed, store=store or (str(Path(state).with_name("store")) if state else None), replicas=replicas, report_gaps=report_gaps)
     for url in peers or []:
         hub.add_peer(url)
