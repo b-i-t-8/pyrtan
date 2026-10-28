@@ -43,6 +43,10 @@ VERSIONS = {VERSION_ED25519: 32}
 CHECKSUM_TAG = b".pyrtan id"
 DOC_TAG = b"pyrtan-doc-v1\n"
 REQUEST_TAG = "pyrtan-req-v1"
+BACKUP_TAG = b"pyrtan-key-backup-v1\n"
+HANDOVER_TAG = b"pyrtan-handover-v1\n"
+BACKUP_ITERATIONS = 600_000       # PBKDF2-SHA256, as OWASP advises for it in 2023 and after
+MIN_ITERATIONS = 100_000          # what a backup may claim, at the least, and still be read
 ID_LENGTH = 56
 WINDOW = 300                      # seconds a document's time may run ahead of ours
 YEAR = 365 * 24 * 3600            # the longest a device note may last
@@ -477,14 +481,18 @@ def _reissue(doc: dict[str, Any], root: Key, **changes: Any) -> dict[str, Any]:
 # Name claims.
 
 
-def make_name(key: Key, name: str, *, issued: int | None = None, **extra: Any) -> dict[str, Any]:
-    """``key`` claiming ``name`` (``local@domain``). ``extra`` is a domain's own fields (pyrtan.com's ``github``)."""
+def make_name(key: Key, name: str, *, issued: int | None = None, handover_from: Key | None = None, **extra: Any) -> dict[str, Any]:
+    """``key`` claiming ``name`` (``local@domain``). ``extra`` is a domain's own fields (pyrtan.com's ``github``).
+    ``handover_from`` is the key that holds the name now: it signs the claim's body first, as
+    ``handover``, which is how a name moves to a new key where names are owned by their key."""
     parsed = parse(name)
     if parsed.form != "name":
         raise IdentityError(f"{name!r} is not a name (name@domain)")
     claim = {"pyrtan-name": 1, "name": parsed.name, "domain": parsed.domain, "id": key.id,
              "issued": int(time.time()) if issued is None else issued, **extra}
     _plain(claim)
+    if handover_from is not None:
+        claim["handover"] = {"id": handover_from.id, "sig": _b64(handover_from.sign(HANDOVER_TAG + canonical(claim)))}
     return sign_document(claim, key)
 
 
@@ -505,6 +513,47 @@ def check_name(claim: Any, *, name: str | None = None) -> str | None:
     return check_signature(claim, claim["id"])
 
 
+def check_handover(claim: dict[str, Any], old: str) -> str | None:
+    """None if ``claim`` carries ``old``'s handover; otherwise why not."""
+    h = claim.get("handover")
+    if not isinstance(h, dict) or not isinstance(h.get("sig"), str):
+        return f"the name moves from {short(old)} to {short(claim.get('id', '?'))} without a handover signed by {short(old)}"
+    if h.get("id") != old:
+        return f"the handover is {short(str(h.get('id')))}'s, not {short(old)}'s"
+    body = {k: v for k, v in claim.items() if k not in ("sig", "handover")}
+    try:
+        ok = verify(old, HANDOVER_TAG + canonical(body), _unb64(h["sig"]))
+    except (IdentityError, ValueError):
+        ok = False
+    return None if ok else f"the handover is not signed by {short(old)}"
+
+
+def make_release(key: Key, name: str, *, issued: int | None = None) -> dict[str, Any]:
+    """``key`` giving up ``name``: what replaces its claim, so the name is free again."""
+    parsed = parse(name)
+    if parsed.form != "name":
+        raise IdentityError(f"{name!r} is not a name (name@domain)")
+    release = {"pyrtan-name-release": 1, "name": parsed.name, "domain": parsed.domain, "id": key.id,
+               "issued": int(time.time()) if issued is None else issued}
+    return sign_document(release, key)
+
+
+def check_release(release: Any, *, name: str | None = None) -> str | None:
+    if not isinstance(release, dict) or release.get("pyrtan-name-release") != 1:
+        return "not a name release (pyrtan-name-release: 1)"
+    try:
+        normal(release.get("id"))
+        _int(release, "issued")
+        stated = parse(f"{release.get('name')}@{release.get('domain')}")
+    except IdentityError as e:
+        return str(e)
+    if stated.form != "name" or (stated.name, stated.domain) != (release["name"], release["domain"]):
+        return "name and domain are not a lowercase name@domain"
+    if name is not None and str(parse(name)) != str(stated):
+        return f"the release is for {stated}, not {name}"
+    return check_signature(release, release["id"])
+
+
 def check_any(doc: Any, *, now: float | None = None) -> tuple[str, str | None]:
     """Which kind of document this is, and None or what is wrong with it."""
     if isinstance(doc, dict):
@@ -514,7 +563,11 @@ def check_any(doc: Any, *, now: float | None = None) -> tuple[str, str | None]:
             return "device", check_device(doc, now=now)
         if "pyrtan-name" in doc:
             return "name", check_name(doc)
-    return "unknown", "not a pyrtan identity document, device note or name claim"
+        if "pyrtan-name-release" in doc:
+            return "release", check_release(doc)
+        if "pyrtan-key-backup" in doc:
+            return "backup", backup_problem(doc)
+    return "unknown", "not a pyrtan identity document, device note, name claim, release or key backup"
 
 
 # ---------------------------------------------------------------- signed requests
@@ -592,6 +645,93 @@ def verify_request(audience: str, method: str, path: str, body: Any, headers: di
     if note["device"] != key:
         raise IdentityError(f"the device note is for {short(note['device'])}, not the signing key")
     return Signer(key, note["root"], note)
+
+
+# ---------------------------------------------------------------- backups
+#
+# A root key, encrypted with a passphrase, beside the identity document it
+# signs, so that a person can keep it somewhere durable (a file, their own
+# private repository) and restore it on another machine or browser. The
+# console writes the same format with WebCrypto (identity.js). It is for
+# places only its owner can read: an encrypted key where anyone can copy
+# it can be guessed at offline, forever.
+
+
+def _aesgcm_kdf():
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    except ImportError:
+        raise IdentityError(INSTALL) from None
+    return hashes, AESGCM, PBKDF2HMAC
+
+
+def _backup_key(passphrase: str, salt: bytes, iterations: int) -> bytes:
+    hashes, _, PBKDF2HMAC = _aesgcm_kdf()
+    return PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iterations).derive(passphrase.encode("utf-8"))
+
+
+def make_backup(key: Key, passphrase: str, *, document: dict[str, Any] | None = None, salt: bytes | None = None,
+                iv: bytes | None = None, iterations: int = BACKUP_ITERATIONS, made: int | None = None) -> dict[str, Any]:
+    """``key`` encrypted with ``passphrase`` (PBKDF2-SHA256, then AES-256-GCM over the 32-byte
+    seed, the identifier as associated data), with its identity document beside it."""
+    if len(passphrase) < 8:
+        raise IdentityError("a passphrase is at least 8 characters; a long sentence is better")
+    _, AESGCM, _ = _aesgcm_kdf()
+    salt = os.urandom(16) if salt is None else salt
+    iv = os.urandom(12) if iv is None else iv
+    data = AESGCM(_backup_key(passphrase, salt, iterations)).encrypt(iv, key._seed, BACKUP_TAG + key.id.encode("ascii"))
+    backup = {
+        "pyrtan-key-backup": 1, "id": key.id, "made": int(time.time()) if made is None else made,
+        "kdf": {"name": "PBKDF2-SHA256", "iterations": iterations, "salt": _b64(salt)},
+        "cipher": {"name": "AES-256-GCM", "iv": _b64(iv)}, "data": _b64(data),
+    }
+    if document is not None:
+        if document.get("id") != key.id:
+            raise IdentityError("the document is another identity's")
+        backup["document"] = document
+    return backup
+
+
+def backup_problem(backup: Any) -> str | None:
+    """What is wrong with a backup's shape, before any passphrase is tried; None if nothing."""
+    if not isinstance(backup, dict) or backup.get("pyrtan-key-backup") != 1:
+        return "not a key backup (pyrtan-key-backup: 1)"
+    kdf, cipher = backup.get("kdf"), backup.get("cipher")
+    try:
+        normal(backup.get("id"))
+    except IdentityError as e:
+        return str(e)
+    if not isinstance(kdf, dict) or kdf.get("name") != "PBKDF2-SHA256" or not isinstance(kdf.get("iterations"), int) or not isinstance(kdf.get("salt"), str):
+        return "the backup's kdf is not PBKDF2-SHA256 with iterations and a salt"
+    if not MIN_ITERATIONS <= kdf["iterations"] <= 10_000_000:
+        return f"the backup's kdf claims {kdf['iterations']} iterations; at least {MIN_ITERATIONS} are read"
+    if not isinstance(cipher, dict) or cipher.get("name") != "AES-256-GCM" or not isinstance(cipher.get("iv"), str) or not isinstance(backup.get("data"), str):
+        return "the backup's cipher is not AES-256-GCM with an iv and data"
+    doc = backup.get("document")
+    if doc is not None:
+        problem = check_identity(doc, ident=backup["id"])
+        if problem:
+            return f"the document beside the key: {problem}"
+    return None
+
+
+def open_backup(backup: Any, passphrase: str) -> Key:
+    """The key in ``backup``; IdentityError for a wrong passphrase or a damaged file."""
+    problem = backup_problem(backup)
+    if problem:
+        raise IdentityError(problem)
+    _, AESGCM, _ = _aesgcm_kdf()
+    try:
+        salt, iv, data = _unb64(backup["kdf"]["salt"]), _unb64(backup["cipher"]["iv"]), _unb64(backup["data"])
+        seed = AESGCM(_backup_key(passphrase, salt, backup["kdf"]["iterations"])).decrypt(iv, data, BACKUP_TAG + backup["id"].lower().encode("ascii"))
+    except Exception:
+        raise IdentityError("the passphrase does not open this backup (or the file is damaged)") from None
+    key = Key(seed)
+    if key.id != backup["id"].lower():
+        raise IdentityError("the backup's key is not the identity it names")
+    return key
 
 
 # ---------------------------------------------------------------- where the CLI keeps them
