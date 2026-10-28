@@ -69,21 +69,23 @@ const model = (replies) => new A.ScriptedEngine((messages) => {
   // A gap: the rules draft the branch, the model says what it means, the tree still loads.
   {
     const { call } = swarm();
-    const engine = model([[/no branch covers/, { kind: "fail", say: "Code {{ state.code }} at {{ inputs.place }} is not a weather code we know.", reason: "Odd Code!", why: "WMO codes stop at 99" }]]);
+    const engine = model([[/no branch covers/, { kind: "fail", say: "{{ inputs.host }} answered {{ state.resp.status }}, which is not a final answer.", reason: "Odd Status!", why: "1xx is informational" }]]);
     const agent = new A.Agent({ engine, hub: call, clock, raw: (n) => vectors.trees[n], limits: { pause: 0 } });
     await agent.trees();
-    const item = await agent.meaning({ tree: "weather", node: "sky", on: "code", observed: 100 });
-    assert.strictEqual(item.suggestion.meaning.reason, "odd-code");
+    const item = await agent.meaning({ tree: "site-status", node: "status", on: "resp.status", observed: 100 });
+    assert.strictEqual(item.suggestion.meaning.reason, "odd-status");
     assert.deepStrictEqual(item.preview.draft.when, { eq: 100 });
-    assert.strictEqual(item.preview.draft.then, "sky-100");
-    const grown = Pyrtan.grow.growTree(vectors.trees.weather, item.preview.draft, item.suggestion.meaning);
-    const branches = grown.nodes.sky.branches;
-    assert.deepStrictEqual(branches[branches.length - 2], { when: { eq: 100 }, then: "sky-100" });
+    assert.strictEqual(item.preview.draft.then, "status-100");
+    const grown = Pyrtan.grow.growTree(vectors.trees["site-status"], item.preview.draft, item.suggestion.meaning);
+    const branches = grown.nodes.status.branches;
+    assert.deepStrictEqual(branches[branches.length - 2], { when: { eq: 100 }, then: "status-100" });
     assert.ok("else" in branches[branches.length - 1]);
-    assert.strictEqual(await agent.meaning({ tree: "weather", node: "sky", on: "code", observed: 61 }), null, "a covered value asks nothing");
+    assert.strictEqual(await agent.meaning({ tree: "site-status", node: "status", on: "resp.status", observed: 200 }), null, "a covered value asks nothing");
+    // A lookup's gap asks for a row, which has no node for a meaning to go in.
+    assert.strictEqual(await agent.meaning({ tree: "weather", node: "sky", on: "code", observed: 100 }), null, "a lookup asks nothing");
     // A model that reaches for env is refused by the rules, whatever it says.
     const sly = new A.Agent({ engine: model([[/no branch covers/, { kind: "done", say: "The key is {{ env.API_KEY }}" }]]), hub: call, clock, raw: (n) => vectors.trees[n] });
-    const r = await sly.meaning({ tree: "weather", node: "sky", on: "code", observed: 4 });
+    const r = await sly.meaning({ tree: "site-status", node: "status", on: "resp.status", observed: 150 });
     assert.ok(r.refused && /not env/.test(r.why), JSON.stringify(r));
     assert.strictEqual(sly.suggestions.length, 0);
   }

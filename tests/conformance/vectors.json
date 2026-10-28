@@ -3,13 +3,13 @@
  "drafts": [
   {
    "expect": {
-    "branch": "{ when = { between = [4, 44] }, then = \"sky-4\" },",
-    "list": "branches",
+    "branch": "{ between = [4, 44], value = 4 },",
+    "list": "table",
     "node": "sky",
     "observed": 4,
     "on": "code",
     "reason": "the value falls in the hole between 3 and 45, which the ranges around it leave open",
-    "then": "sky-4",
+    "then": "",
     "tree": "weather",
     "when": {
      "between": [
@@ -27,13 +27,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { eq = 100 }, then = \"sky-100\" },",
-    "list": "branches",
+    "branch": "{ eq = 100, value = 100 },",
+    "list": "table",
     "node": "sky",
     "observed": 100,
     "on": "code",
     "reason": "the value itself",
-    "then": "sky-100",
+    "then": "",
     "tree": "weather",
     "when": {
      "eq": 100
@@ -57,13 +57,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { exists = false }, then = \"sky-missing\" },",
-    "list": "branches",
+    "branch": "{ exists = false, value = \"\" },",
+    "list": "table",
     "node": "sky",
     "observed": null,
     "on": "code",
     "reason": "the value was missing",
-    "then": "sky-missing",
+    "then": "",
     "tree": "weather",
     "when": {
      "exists": false
@@ -78,13 +78,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { type = \"dict\" }, then = \"sky-dict\" },",
-    "list": "branches",
+    "branch": "{ type = \"dict\", value = \"<dict>\" },",
+    "list": "table",
     "node": "sky",
     "observed": "<dict>",
     "on": "code",
     "reason": "a report carries a long or structured value as its type",
-    "then": "sky-dict",
+    "then": "",
     "tree": "weather",
     "when": {
      "type": "dict"
@@ -99,13 +99,13 @@
   },
   {
    "expect": {
-    "branch": "{ when = { eq = \"Sunny Spells\" }, then = \"sky-sunny-spells\" },",
-    "list": "branches",
+    "branch": "{ eq = \"Sunny Spells\", value = \"Sunny Spells\" },",
+    "list": "table",
     "node": "sky",
     "observed": "Sunny Spells",
     "on": "code",
     "reason": "the value itself",
-    "then": "sky-sunny-spells",
+    "then": "",
     "tree": "weather",
     "when": {
      "eq": "Sunny Spells"
@@ -1696,7 +1696,7 @@
        "[what's the] weather for {place}",
        "how [hot|cold|warm] is it in {place}"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "description": "The summary of a Wikipedia article.",
@@ -7731,21 +7731,11 @@
       {
        "chosen": "between [51, 67]",
        "depth": 0,
-       "kind": "decide",
-       "next": "rain",
+       "kind": "lookup",
+       "next": "reply",
        "node": "sky",
        "observed": 61,
-       "summary": "state.code = 61"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "reply",
-       "node": "rain",
-       "observed": {
-        "sky": "raining"
-       },
-       "summary": "sky=raining"
+       "summary": "state.code = 61; sky=raining"
       },
       {
        "depth": 0,
@@ -7844,21 +7834,11 @@
       {
        "chosen": "eq 0",
        "depth": 0,
-       "kind": "decide",
-       "next": "clear",
+       "kind": "lookup",
+       "next": "reply",
        "node": "sky",
        "observed": 0,
-       "summary": "state.code = 0"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "reply",
-       "node": "clear",
-       "observed": {
-        "sky": "clear"
-       },
-       "summary": "sky=clear"
+       "summary": "state.code = 0; sky=clear"
       },
       {
        "depth": 0,
@@ -19726,27 +19706,6 @@
    "name": "weather",
    "namespace": "pyrtan",
    "nodes": {
-    "clear": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "clear"
-     }
-    },
-    "cloudy": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "cloudy"
-     }
-    },
-    "fog": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "foggy"
-     }
-    },
     "forecast": {
      "extract": [
       {
@@ -19844,13 +19803,6 @@
      "reason": "no-forecast",
      "say": "Open-Meteo found {{ state.name }} but returned no current temperature (status {{ state.fc.status }})."
     },
-    "rain": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "raining"
-     }
-    },
     "reply": {
      "kind": "done",
      "output": {
@@ -19865,108 +19817,71 @@
      "say": "{{ state.name }}, {{ state.country }}: {{ state.temp }}{{ state.unit }}, {{ state.sky }}, humidity {{ state.humidity }}%, wind {{ state.wind }} km/h."
     },
     "sky": {
-     "branches": [
+     "default": "weather code {{ state.code }}",
+     "into": "sky",
+     "kind": "lookup",
+     "next": "reply",
+     "on": "code",
+     "table": [
       {
-       "then": "clear",
-       "when": {
-        "eq": 0
-       }
+       "eq": 0,
+       "value": "clear"
       },
       {
-       "then": "cloudy",
-       "when": {
-        "between": [
-         1,
-         3
-        ]
-       }
+       "between": [
+        1,
+        3
+       ],
+       "value": "cloudy"
       },
       {
-       "then": "fog",
-       "when": {
-        "between": [
-         45,
-         48
-        ]
-       }
+       "between": [
+        45,
+        48
+       ],
+       "value": "foggy"
       },
       {
-       "then": "rain",
-       "when": {
-        "between": [
-         51,
-         67
-        ]
-       }
+       "between": [
+        51,
+        67
+       ],
+       "value": "raining"
       },
       {
-       "then": "snow",
-       "when": {
-        "between": [
-         71,
-         77
-        ]
-       }
+       "between": [
+        71,
+        77
+       ],
+       "value": "snowing"
       },
       {
-       "then": "rain",
-       "when": {
-        "between": [
-         80,
-         82
-        ]
-       }
+       "between": [
+        80,
+        82
+       ],
+       "value": "raining"
       },
       {
-       "then": "snow",
-       "when": {
-        "between": [
-         85,
-         86
-        ]
-       }
+       "between": [
+        85,
+        86
+       ],
+       "value": "snowing"
       },
       {
-       "then": "storm",
-       "when": {
-        "between": [
-         95,
-         99
-        ]
-       }
-      },
-      {
-       "else": "unknown-sky"
+       "between": [
+        95,
+        99
+       ],
+       "value": "stormy"
       }
-     ],
-     "kind": "decide",
-     "on": "code"
-    },
-    "snow": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "snowing"
-     }
-    },
-    "storm": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "stormy"
-     }
+     ]
     },
     "unknown-place": {
      "kind": "fail",
      "reason": "unknown-place",
      "say": "I could not find a place called {{ inputs.place }}."
-    },
-    "unknown-sky": {
-     "kind": "set",
-     "next": "reply",
-     "set": {
-      "sky": "weather code {{ state.code }}"
-     }
     }
    },
    "start": "geocode",
@@ -19985,7 +19900,7 @@
      "pattern": "how [hot|cold|warm] is it in {place}"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "wikipedia": {
    "description": "The summary of a Wikipedia article.",
