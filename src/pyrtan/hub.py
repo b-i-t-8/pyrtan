@@ -64,6 +64,7 @@ identity documents, for its own domain.
 from __future__ import annotations
 
 import datetime as _dt
+import ipaddress
 import json
 import threading
 from pathlib import Path
@@ -671,8 +672,8 @@ class Hub:
             if method == "GET" and path == "/lan":
                 return (200, self.lan.view()) if self.lan is not None else (404, {"status": "error", "reason": "no-lan", "say": "This hub is not on the LAN; start it with --lan."})
             if method == "GET" and path == "/directory":
-                # A private network's part only to the operator (or to anyone, on a hub with no token).
-                return 200, fed.directory(private=not self.token or operator)
+                # A private network's part only to the operator: on a hub with no token, a caller on this machine.
+                return 200, fed.directory(private=operator or (not self.token and _loopback(headers.get(PEER_HEADER))))
             if method == "GET" and path == "/reports":
                 return 200, fed.reports_view()
             if method == "POST" and path == "/inbox":
@@ -735,6 +736,14 @@ class Hub:
                 if not isinstance(key, str):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"key\": \"...\"}."}
                 return 200, fed.fetch(key)
+            if method == "POST" and path == "/drop":
+                # A follower the operator lets go: a lost phone, a hub no longer wanted.
+                # Its mailbox, what was handed to it and what is kept for it go too, and
+                # anything it signs afterwards is from nobody this hub knows.
+                who = body.get("follower")
+                if not isinstance(who, str) or not who.strip():
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"follower\": \"<its id, from /peers>\"}."}
+                return 200, {"status": "ok", "dropped": fed.drop_follower(who.strip().rstrip("/"))}
             if method == "POST" and path == "/unfollow":
                 url = body.get("url")
                 if not isinstance(url, str):
@@ -808,7 +817,7 @@ class Hub:
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/drop", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")
@@ -838,6 +847,13 @@ def _rank(peer: Local | Peer | Remote) -> int:
     # Our own trees, then a service of ours, then a hub we follow; the healthier of each.
     # Our own trees, then a service of ours, then our trusted members, then a hub we follow; the healthier of each.
     return {"up": 0, "pending": 1, "stale": 2, "down": 3}[peer.link] + (5 if isinstance(peer, Remote) and peer.kind == "member" else 10 if isinstance(peer, Remote) else 0) - (1 if isinstance(peer, Local) else 0)
+
+
+def _loopback(address: str | None) -> bool:
+    try:
+        return address is not None and ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
 
 
 def join_network(fed: Federation, invite: Any) -> tuple[int, dict[str, Any]]:

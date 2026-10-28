@@ -17,6 +17,10 @@ shows the live directory when a listed hub answers the visitor's browser
 and this snapshot, marked with its time, when none does; ``pyrtan join``
 with no invite tries the hubs in it after the listed ones.
 
+The hubs it asks are whoever a directory names, so it asks only hubs on
+public addresses (every redirect checked too; ``--any-address`` for tests
+or a build inside a private network) and reads at most 4 MiB from each.
+
 Standard library only; no pyrtan import, so it runs before anything is
 installed.
 
@@ -35,10 +39,13 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import hashlib
+import ipaddress
 import json
+import socket
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -48,13 +55,49 @@ REPORT_TTL = 30 * 86400
 TIMEOUT = 8.0
 MAX_ASK = 200      # hubs asked per run, listed ones included
 PARALLEL = 16
+MAX_BYTES = 4 * 1024 * 1024   # a directory or reports answer, at most
+ANY_ADDRESS = False           # --any-address: hubs on private addresses too (tests, a private build)
 
 
-def fetch(source: str) -> Any:
+def public(url: str) -> None:
+    """Refuse a URL whose host is, or resolves to, an address that is not on the
+    public internet: the hubs are whoever a directory names, and the runner
+    this crawls from is not theirs to point at its own network."""
+    if ANY_ADDRESS:
+        return
+    host = urllib.parse.urlsplit(url).hostname
+    if not host:
+        raise ValueError(f"{url}: no host")
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except OSError as e:
+        raise ValueError(f"{host}: {e}") from None
+    for a in addresses:
+        if not ipaddress.ip_address(a.split("%", 1)[0]).is_global:
+            raise ValueError(f"{host} is {a}, not a public address")
+
+
+class _Redirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        public(newurl)  # each hop, not only the first
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_hub_opener = urllib.request.build_opener(_Redirects())
+
+
+def fetch(source: str, *, hub: bool = False) -> Any:
+    """JSON from a URL or a file. ``hub``: a URL a directory named, so only on a
+    public address. Either way at most :data:`MAX_BYTES`."""
     if source.startswith(("http://", "https://")):
         req = urllib.request.Request(source, headers={"Accept": "application/json", "User-Agent": "pyrtan.com snapshot"})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        if hub:
+            public(source)
+        with (_hub_opener.open if hub else urllib.request.urlopen)(req, timeout=TIMEOUT) as resp:
+            data = resp.read(MAX_BYTES + 1)
+        if len(data) > MAX_BYTES:
+            raise ValueError(f"{source}: more than {MAX_BYTES} bytes")
+        return json.loads(data.decode("utf-8"))
     return json.loads(Path(source).read_text(encoding="utf-8"))
 
 
@@ -122,7 +165,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max", type=int, default=MAX_ASK, help=f"hubs to ask at most, listed ones included (default {MAX_ASK})")
     ap.add_argument("--reports", default=None, help="also write the gap reports the hubs carry to this reports.json")
     ap.add_argument("--previous-reports", action="append", default=[], help="an earlier reports.json to keep rows from (URL or path; repeatable, first that answers wins)")
+    ap.add_argument("--any-address", action="store_true", help="ask hubs on loopback and private addresses too (tests, a build inside a private network); by default only public ones")
     args = ap.parse_args(argv)
+    global ANY_ADDRESS
+    ANY_ADDRESS = args.any_address
     now = time.time()
     hubs: dict[str, dict[str, Any]] = {}
     report: dict[str, Any] = {"answered": [], "silent": [], "previous": None}
@@ -163,13 +209,13 @@ def main(argv: list[str] | None = None) -> int:
 
     def ask(hub: str) -> tuple[str, Any, Any, str | None]:
         try:
-            d = fetch(f"{hub}/directory")
+            d = fetch(f"{hub}/directory", hub=True)
         except Exception as e:
             return hub, None, None, str(e)[:120]
         r = None
         if args.reports and isinstance(d, dict):
             try:
-                r = fetch(f"{hub}/reports")
+                r = fetch(f"{hub}/reports", hub=True)
             except Exception:
                 pass
         return hub, d, r, None
