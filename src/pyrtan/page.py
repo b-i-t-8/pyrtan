@@ -77,6 +77,7 @@ TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'">
 <title>Pyrtan</title>
 <meta name="description" content="Pyrtan console: ask the swarm, read the trace, see what it can answer, find the gaps, and join a hub as a member that keeps its blobs.">
 <link rel="manifest" href="manifest.webmanifest">

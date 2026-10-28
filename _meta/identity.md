@@ -82,6 +82,10 @@ Rules:
   matches on that.
 - **Refuse on a bad checksum,** a version other than one it knows, or a
   length other than 56. A typo is caught before any network call.
+- **Refuse a point of small order.** Seven Ed25519 encodings (and their
+  sign-bit twins; libsodium's list) are points that some signatures from
+  nobody verify against. No real key is one, so an identifier naming one
+  is refused in both runtimes, before any signature is looked at.
 - **The key, not a hash of it.** For Ed25519 the two are the same length,
   and the key lets a verifier check a signature with nothing else in
   hand. Agility comes from the version byte: another algorithm is another
@@ -187,7 +191,11 @@ phone's console) gets its own key, and the root signs a note for it:
   newer one pushed to it (`pyrtan id push --at HUB`) at once; a revoked
   device's links are dropped and its requests refused.
 - **A root may also sign requests itself.** That is the simple case for
-  one machine; devices are for everything else.
+  one machine; devices are for everything else. A device note whose
+  device is its own root is refused: a root needs no note.
+- **Keys a document does not define are kept, not refused.** The
+  signature covers them, so only the signer can add one, and a newer
+  pyrtan's documents still verify on an older one; nothing reads them.
 
 The console's device key is a non-extractable `CryptoKey` in IndexedDB.
 Pairing a phone: on the phone, the console's Identity tab (*Use this
