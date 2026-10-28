@@ -313,6 +313,15 @@ const examples = {
   "site-status": "is example.com up",
   "github-release": "latest release of astral-sh/uv",
   "hacker-news-item": "hacker news item 1",
+  "wikipedia": "tell me about Ada Lovelace",
+  "define": "what does serendipity mean",
+  "sun": "when is sunset in Oslo",
+  "air-quality": "air quality in Delhi",
+  "npm-package": "latest version of react on npm",
+  "pypi-package": "latest requests on pypi",
+  "hn-search": "search hacker news for sqlite",
+  "books": "who wrote The Left Hand of Darkness",
+  "holidays": "next holiday in US",
 };
 // Served by a Pyrtan, only its token is kept, under its own origin; served elsewhere, the hub URL and token.
 const KEY = "pyrtan.console:" + location.origin;

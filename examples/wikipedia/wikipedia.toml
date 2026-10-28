@@ -1,0 +1,79 @@
+# The opening paragraph of a Wikipedia article, from its REST API. A title
+# that leads to several articles is a disambiguation page: the tree says so
+# rather than reading out a list of meanings.
+
+name = "wikipedia"
+version = 1
+namespace = "pyrtan"
+description = "The summary of a Wikipedia article."
+tags = ["reference", "read-only"]
+license = "MIT"
+hosts = ["en.wikipedia.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "tell me about {topic}"
+[[triggers]]
+pattern = "who (is|was) {topic}"
+[[triggers]]
+pattern = "(wikipedia|wiki) {topic}"
+
+[inputs.topic]
+type = "str"
+description = "An article title, as in: Ursula K. Le Guin"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://en.wikipedia.org/api/rest_v1/page/summary/{{ inputs.topic | url }}" }
+into = "resp"
+extract = [
+  { into = "kind", json = "json.type" },
+  { into = "title", json = "json.title" },
+  { into = "summary", json = "json.extract" },
+  { into = "url", json = "json.content_urls.desktop.page" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "kind" },
+  { when = { eq = 404 }, then = "no-article" },
+  { when = { eq = 429 }, then = "rate-limited" },
+  { else = "unexpected" },
+]
+
+[nodes.kind]
+kind = "decide"
+on = "kind"
+branches = [
+  { when = { eq = "disambiguation" }, then = "ambiguous" },
+  { when = { exists = true }, then = "reply" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ state.title }}: {{ state.summary }} {{ state.url }}"
+output = { title = "{{ state.title }}", summary = "{{ state.summary }}", url = "{{ state.url }}" }
+
+[nodes.ambiguous]
+kind = "fail"
+reason = "ambiguous"
+say = "{{ state.title }} could mean several things on Wikipedia; say which: {{ state.url }}"
+
+[nodes.no-article]
+kind = "fail"
+reason = "no-article"
+say = "Wikipedia has no article called {{ inputs.topic }}."
+
+[nodes.rate-limited]
+kind = "fail"
+reason = "rate-limited"
+say = "Wikipedia is asking for fewer requests (429); try again in a minute."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "Wikipedia answered {{ state.resp.status }}."

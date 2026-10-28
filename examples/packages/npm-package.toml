@@ -1,0 +1,57 @@
+# The latest published version of an npm package, from the registry.
+# Scoped names (@scope/name) are one path segment, so the slash is encoded.
+
+name = "npm-package"
+version = 1
+namespace = "pyrtan"
+description = "The latest version of an npm package, and what it says it is."
+tags = ["software", "javascript", "read-only"]
+license = "MIT"
+hosts = ["registry.npmjs.org"]
+start = "fetch"
+
+[[triggers]]
+pattern = "[what's the] latest version of {package:word} on npm"
+[[triggers]]
+pattern = "latest {package:word} on npm"
+[[triggers]]
+pattern = "npm (package|version) {package:word}"
+
+[inputs.package]
+type = "str"
+pattern = "^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$"
+description = "A package name, as in: react or @types/node"
+
+[nodes.fetch]
+kind = "observe"
+http = { method = "GET", url = "https://registry.npmjs.org/{{ inputs.package | url }}/latest" }
+into = "resp"
+extract = [
+  { into = "version", json = "json.version" },
+  { into = "about", json = "json.description" },
+]
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "resp.status"
+branches = [
+  { when = { eq = 200 }, then = "reply" },
+  { when = { eq = 404 }, then = "no-package" },
+  { else = "unexpected" },
+]
+
+[nodes.reply]
+kind = "done"
+say = "{{ inputs.package }} {{ state.version }} on npm: {{ state.about }} https://www.npmjs.com/package/{{ inputs.package }}"
+output = { package = "{{ inputs.package }}", version = "{{ state.version }}", description = "{{ state.about }}", url = "https://www.npmjs.com/package/{{ inputs.package }}" }
+
+[nodes.no-package]
+kind = "fail"
+reason = "no-package"
+say = "npm has no package called {{ inputs.package }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-status"
+say = "The npm registry answered {{ state.resp.status }}."
