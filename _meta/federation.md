@@ -291,7 +291,7 @@ naming its networks. The `directory` blob a hub's keepers hold is the
 public part only. `pyrtan network leave` unfollows the hubs followed in
 the network, drops those that followed in it and forgets its entries.
 
-**The default network** is built in (v0.14): the name `pyrtan` and a
+**The default network** is built in (v0.15): the name `pyrtan` and a
 secret that is public on purpose, so joining it reads nothing from
 anyone. pyrtan.com publishes the same two in `rendezvous/network.json`
 as a mirror, which a test holds equal to the built-in pair;

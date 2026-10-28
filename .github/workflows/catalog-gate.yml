@@ -1,0 +1,63 @@
+# The catalog gate, run from main: every pull request that touches a tree
+# or a name is judged by main's site/gate.py, main's pyrtan and main's
+# lockfile, against the pull request's tree read as data. Which files
+# changed, who opened the pull request and what each file was on main
+# come from git and the event: a change must come from a namespace's
+# owners and bump its version; a new name is the author's own login with
+# the author's numeric GitHub id, and only that account changes it.
+#
+# pull_request_target, because under pull_request the workflow itself is
+# the pull request's and could be edited to run its own gate. Nothing from
+# the pull request is ever executed here: it is checked out beside main,
+# read by main's code, with a read-only token, no secrets, no credentials
+# left in either checkout and no cache. Keep it that way: never add a step
+# that runs, installs or imports anything from pr/.
+# A maintainer merges when it is green; the pages workflow publishes on merge.
+
+name: catalog-gate
+
+on:
+  pull_request_target:
+    paths:
+      - "catalog/**"
+      - "examples/**"
+      - "site/gate.py"
+      - "src/pyrtan/catalog.py"
+      - "site/names/**"
+      - "src/pyrtan/names.py"
+      - "src/pyrtan/identity.py"
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+      AUTHOR_ID: ${{ github.event.pull_request.user.id }}
+    steps:
+      # The judge: main as the pull request found it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 0
+          persist-credentials: false
+      # What is judged: the pull request's tree, as data.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Give the pull request's checkout main's commit, to diff against
+        run: git -C pr fetch --no-tags "$GITHUB_WORKSPACE/base" "$BASE_SHA"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+      - run: uv sync --project base --frozen --extra identity
+      - run: uv run --project base --no-sync pyrtan check pr/examples pr/catalog --quiet
+      - run: uv run --project base --no-sync python base/site/gate.py --root pr --base "$BASE_SHA" --author "$AUTHOR" --author-id "$AUTHOR_ID"

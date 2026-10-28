@@ -128,6 +128,7 @@ CHAT_TYPES = ("Meet", "Say", "Typing", "Part")   # a lobby's: two strangers on t
 UNLOGGED = ("Typing",)                 # said every couple of seconds while someone types: not worth a log line
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
+KEY_PREFIX = "pyr:"                    # a member may be its device key instead (_meta/identity.md §7)
 MAILBOX_MAX = 200                      # activities a hub holds for a member that has not polled
 REPORT_TTL = 30 * 86400                # a gap report unheard of for this long is dropped
 REPORT_MAX = 2000
@@ -324,8 +325,12 @@ class Remote:
     last_error: str | None = None
     since: float = field(default_factory=time.time)
     kind: str = "hub"           # hub | member
-    trusted: bool = False       # a member that joined with the operator's token: it may run the hub's trees
+    trusted: bool = False       # a member that joined with the operator's token, or as an identity granted run: it may run the hub's trees
     network: str | None = None  # the id of the network the follow was made in; None for a follow outside any
+    trusted_by: str | None = None          # "token" or "key": how a trusted member came to be
+    identity: str | None = None            # the root a member followed as, if it signed the follow with a key
+    device: str | None = None              # the key that signed it
+    note: dict[str, Any] | None = None     # its device note, when the key is a device
 
     @property
     def link(self) -> str:
@@ -341,14 +346,17 @@ class Remote:
         return "down"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "trusted": self.trusted, "network": self.network}
+        return {"url": self.url, "name": self.name, "kind": self.kind, "state": self.state, "link": self.link, "trees": [t["name"] for t in self.trees], "last_ok": self.last_ok, "last_error": self.last_error, "trusted": self.trusted, "network": self.network, "identity": self.identity}
 
     def to_state(self) -> dict[str, Any]:
-        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind, "trusted": self.trusted, "network": self.network}
+        return {"url": self.url, "inbox": self.inbox, "secret": self.secret, "name": self.name, "state": self.state, "since": self.since, "kind": self.kind, "trusted": self.trusted, "network": self.network,
+                "trusted_by": self.trusted_by, "identity": self.identity, "device": self.device, "note": self.note}
 
     @classmethod
     def from_state(cls, d: dict[str, Any]) -> "Remote":
-        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)), network=d.get("network") if isinstance(d.get("network"), str) else None)
+        text = lambda k: d.get(k) if isinstance(d.get(k), str) else None  # noqa: E731
+        return cls(d["url"], d["inbox"], d["secret"], d.get("name", ""), d.get("state", "pending"), since=float(d.get("since", time.time())), kind=d.get("kind", "hub"), trusted=bool(d.get("trusted", False)), network=text("network"),
+                   trusted_by=text("trusted_by"), identity=text("identity"), device=text("device"), note=d.get("note") if isinstance(d.get("note"), dict) else None)
 
 
 def _shape_report(e: dict[str, Any], reporter: str, now: float) -> dict[str, Any] | None:
@@ -626,7 +634,7 @@ class Federation:
         with self._lock:
             known = {n.id for n in self.networks.values()}
             for e in entries:
-                if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://", MEMBER_PREFIX)):
+                if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"].startswith(("http://", "https://", MEMBER_PREFIX, KEY_PREFIX)):
                     continue
                 hub_id = e["id"].rstrip("/")
                 if hub_id == self.id:
@@ -649,7 +657,7 @@ class Federation:
                 self.directory_entries[key] = {
                     "id": hub_id,
                     "name": str(e.get("name") or "")[:80],
-                    "kind": "member" if hub_id.startswith(MEMBER_PREFIX) else "hub",
+                    "kind": "member" if hub_id.startswith((MEMBER_PREFIX, KEY_PREFIX)) else "hub",
                     "trees": [str(t)[:80] for t in e.get("trees", []) if isinstance(t, (str, int))][:200],
                     "seen": seen,
                     "via": via,
@@ -1149,9 +1157,11 @@ class Federation:
             return None
         return actor if verify(secret, method, path, body, h) is None else None
 
-    def handle_inbox(self, activity: Any, headers: dict[str, str] | None, trusted: bool = False) -> tuple[int, dict[str, Any]]:
-        """``trusted`` says the request also carried the operator's token: a
-        member that follows that way may run the hub's trees."""
+    def handle_inbox(self, activity: Any, headers: dict[str, str] | None, trusted: bool = False, *, trusted_by: str | None = None, signer: Any = None) -> tuple[int, dict[str, Any]]:
+        """``trusted`` says the request also carried the operator's token, or
+        a key whose root this hub grants ``run`` (``trusted_by`` says which):
+        a member that follows that way may run the hub's trees. ``signer`` is
+        the :class:`pyrtan.identity.Signer` of a key-signed request, if any."""
         h = _lower(headers)
         if not isinstance(activity, dict) or activity.get("type") not in ACTIVITY_TYPES or not isinstance(activity.get("actor"), str):
             return 400, {"status": "error", "reason": "bad-activity", "say": f"Send an activity of type {', '.join(ACTIVITY_TYPES)} with an actor."}
@@ -1162,7 +1172,7 @@ class Federation:
         if activity.get("type") not in UNLOGGED:
             self.inbox_log.append({**_logged(activity), "received": time.time()})
         if kind == "Follow":
-            return self._on_follow(actor, activity, h, trusted)
+            return self._on_follow(actor, activity, h, trusted, trusted_by=trusted_by, signer=signer)
         followed = self.following.get(actor)
         follower = self.followers.get(actor)
         if kind in ("Announce", "Keep", "Kept", "Fetch", "Answer", *CHAT_TYPES):
@@ -1268,16 +1278,21 @@ class Federation:
                 return 404, {"status": "error", "reason": "not-kept", "say": f"Nothing kept here for {actor} under {key!r}."}
             return 200, {"status": "ok", "blob": blob}
         if kind == "Undo":
-            with self._lock:
-                self.followers.pop(actor, None)
-                self.mailboxes.pop(actor, None)
-                self._handed.pop(actor, None)
-                self.store.drop_kept(actor)
-                self._save()
+            self.drop_follower(actor)
             return 200, {"status": "ok"}
         return 400, {"status": "error", "reason": "bad-activity"}
 
-    def _on_follow(self, actor: str, activity: dict[str, Any], h: dict[str, str], trusted: bool = False) -> tuple[int, dict[str, Any]]:
+    def drop_follower(self, actor: str) -> bool:
+        """Forget a follower, its mailbox, what we handed it and what we keep for it."""
+        with self._lock:
+            gone = self.followers.pop(actor, None) is not None
+            self.mailboxes.pop(actor, None)
+            self._handed.pop(actor, None)
+            self.store.drop_kept(actor)
+            self._save()
+        return gone
+
+    def _on_follow(self, actor: str, activity: dict[str, Any], h: dict[str, str], trusted: bool = False, *, trusted_by: str | None = None, signer: Any = None) -> tuple[int, dict[str, Any]]:
         pair = activity.get("secret")
         inbox = activity.get("inbox")
         if not isinstance(pair, str) or len(pair) < 16 or not isinstance(inbox, str):
@@ -1304,8 +1319,11 @@ class Federation:
         if inbox == "mailbox":
             # A member: a browser or a phone, with no address of its own. It
             # polls its mailbox here, signed, instead of being posted to.
-            if not actor.startswith(MEMBER_PREFIX) or len(actor) < len(MEMBER_PREFIX) + 16:
-                return 400, {"status": "error", "reason": "bad-activity", "say": f"A member's id is {MEMBER_PREFIX}<at least 16 characters>."}
+            if actor.startswith(KEY_PREFIX):
+                if signer is None or signer.key != actor:
+                    return 401, {"status": "error", "reason": "unsigned", "say": f"A member whose id is a key signs its follow with that key (X-Pyrtan-Key: {actor})."}
+            elif not actor.startswith(MEMBER_PREFIX) or len(actor) < len(MEMBER_PREFIX) + 16:
+                return 400, {"status": "error", "reason": "bad-activity", "say": f"A member's id is {MEMBER_PREFIX}<at least 16 characters>, or its key, pyr:…."}
             name = str(activity.get("name") or "")[:80]
             kind = "member"
         else:
@@ -1320,6 +1338,10 @@ class Federation:
             kind = "hub"
         with self._lock:
             remote = Remote(actor, inbox, pair, name, state="accepted", last_ok=time.time(), kind=kind, trusted=bool(trusted and kind == "member"), network=net.id if net else None)
+            if remote.trusted:
+                remote.trusted_by = trusted_by or "token"
+            if signer is not None and kind == "member":
+                remote.identity, remote.device, remote.note = signer.root, signer.key, signer.note
             self.followers[actor] = remote
             self._handed.pop(actor, None)
             self._save()
@@ -1327,7 +1349,7 @@ class Federation:
         self.deliver(remote, self._activity("Announce", self._announcement(remote)))
         if remote.trusted:
             self.hand_out()
-        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}.", "mailbox": f"{self.id}/mailbox" if kind == "member" else None, "trusted": remote.trusted}
+        return 202, {"status": "ok", "say": f"{self.id} accepts {actor}.", "mailbox": f"{self.id}/mailbox" if kind == "member" else None, "trusted": remote.trusted, "identity": remote.identity}
 
     # ------------------------------------------------------------ views
 

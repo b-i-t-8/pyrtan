@@ -7,13 +7,14 @@ static directory and publishes it.
 | Path | What | Built from |
 | :-- | :-- | :-- |
 | `/` | the landing page, with the live directory read from the listed hubs in the visitor's browser | `site/index.html` |
-| `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it). Until it joins a hub the browser is one: it holds the catalog's trees (`/catalog/trees.json`) and runs them in the page. To join any hub started with `--cors https://pyrtan.com`, give its URL and token; its Member tab then joins that hub, and runs its trees when joined with the token | `pyrtan console --out` |
+| `/console/` | the console (installable: manifest, service worker and `pyrtan.js`, the tree runtime, beside it). Until it joins a hub the browser is one: it holds the catalog's trees (`/catalog/trees.json`) and runs them in the page. To join any hub started with `--cors https://pyrtan.com`, give its URL and token; its Member tab then joins that hub, and runs its trees when joined with the token or as a key the hub grants `run`; its Identity tab holds that key | `pyrtan console --out` |
 | `/catalog/` | the trees people can `pyrtan pull`, as `namespace/name.toml`, `index.json` the command reads, and `trees.json`, the same trees as JSON for the console | `pyrtan index examples catalog --copy`, through `site/gate.py` |
 | `/theme.js` | the wordmark's colour picker the landing page and the catalog load (the console carries its own copy inline) | `src/pyrtan/js/theme.js` |
 | `/rendezvous/network.json` | the default network: its name, and a secret that is public on purpose; built into pyrtan, published here as a mirror (and for the snapshot) | `site/rendezvous/network.json` |
 | `/rendezvous/hubs.json` | the hub list: hubs operators added by pull request, which the snapshot asks first and `pyrtan join` tries first | `site/rendezvous/hubs.json` |
 | `/rendezvous/directory.json` | a snapshot of the default network's directory, from every hub the build can reach, refreshed hourly | `site/snapshot.py` |
 | `/rendezvous/reports.json` | the gap reports the hubs carry for catalog trees, refreshed hourly | `site/snapshot.py --reports` |
+| `/.well-known/pyrtan/` | names: `name/<login>.json` (a claim signed by the identity it names), `id/<56>.json` (identity documents), `names.json` (every claim), for `pyrtan id resolve <login>@pyrtan.com` | `pyrtan id wellknown site/names`, after `site/gate.py`; see [`names/README.md`](names/README.md) |
 
 `site/build.sh out` builds the same thing locally; open `out/index.html`.
 
@@ -45,8 +46,9 @@ The catalog is `examples/` (the `pyrtan` namespace) and `catalog/`
 (everyone else's, one directory per namespace with an `OWNERS` file),
 served as `/catalog/<namespace>/<name>.toml` beside `index.json`. A tree
 goes in by pull request: `pyrtan publish my-tree.toml --into <checkout>
---owner <login>` places it and runs the gate, the `catalog` workflow runs
-the same gate on the pull request (`site/gate.py`: clean, licensed,
+--owner <login>` places it and runs the gate, the `catalog-gate` workflow runs
+main's copy of the same gate on the pull request, reading the pull request's
+tree as data and running none of it (`site/gate.py`: clean, licensed,
 namespaced, in the right place, unique id, changed only by an owner,
 version bumped), and a maintainer merges. The `pages` workflow runs the
 gate and the tests again before it publishes, so what is at `/catalog/`

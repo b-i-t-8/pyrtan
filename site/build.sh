@@ -1,6 +1,7 @@
 #!/bin/sh
 # Assemble pyrtan.com into one static directory: the landing page, the
-# console, the catalog (built from examples/ and catalog/), the hub list, the source. Run from the
+# console, the catalog (built from examples/ and catalog/), the hub list, the source,
+# the names. Run from the
 # repository root with pyrtan installed (`uv run site/build.sh`); the Pages
 # workflow runs the same thing.
 set -eu
@@ -35,5 +36,8 @@ pyrtan check examples catalog --quiet
 python3 site/gate.py
 # The index and every tree file beside it, as <namespace>/<name>.toml.
 pyrtan index examples catalog --copy "$out/catalog" --require-namespace
+# Names: site/names/ served as /.well-known/pyrtan/ (name claims, identity
+# documents, and names.json listing them), for `pyrtan id resolve`.
+pyrtan id wellknown site/names --domain "$(cat site/CNAME)" --out "$out"
 touch "$out/.nojekyll"
 echo "built $out: $(find "$out" -type f | wc -l) files"

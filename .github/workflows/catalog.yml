@@ -1,8 +1,8 @@
-# The catalog gate: every pull request that touches a tree runs the same
-# checks `pyrtan publish` ran locally, with what git knows added: which
-# files changed, who opened the pull request, and what version each tree
-# had on main. A maintainer merges when it is green; the pages workflow
-# publishes on merge.
+# The catalog tests: every pull request that touches a tree, a name or the
+# gate runs the test suite and `pyrtan check` on its own code. The gate
+# itself, which decides whether the pull request may change what it
+# changes, runs from main in the catalog-gate workflow, so a pull request
+# cannot change the gate that judges it.
 
 name: catalog
 
@@ -13,19 +13,21 @@ on:
       - "examples/**"
       - "site/gate.py"
       - "src/pyrtan/catalog.py"
+      - "site/names/**"
+      - "src/pyrtan/names.py"
+      - "src/pyrtan/identity.py"
 
 permissions:
   contents: read
 
 jobs:
-  gate:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+      - run: uv sync --extra identity   # the identity tests sign and verify
       - run: uv run pytest -q
       - run: uv run pyrtan check examples catalog --quiet
-      - run: uv run python site/gate.py --base "origin/${{ github.base_ref }}" --author "${{ github.event.pull_request.user.login }}"

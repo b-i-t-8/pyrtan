@@ -33,8 +33,9 @@ namespace. Everyone else publishes under `catalog/<namespace>/`:
     pyrtan publish my-tree.toml --into . --owner <your GitHub login>
     git checkout -b catalog/<namespace>-my-tree && git add catalog && git commit && git push -u origin HEAD
 
-then open a pull request. The `catalog` workflow runs the gate
-(`site/gate.py`): the tree loads clean, has a licence and a namespace,
+then open a pull request. The `catalog-gate` workflow runs main's copy
+of the gate (`site/gate.py`), so a change to the gate is judged by the
+gate it changes only once it is merged: the tree loads clean, has a licence and a namespace,
 sits in its namespace's directory under its own name, no other tree has
 its id, only the namespace's `OWNERS` change it, and a changed file bumps
 its `version`. A test and a recording are welcome but not required for
