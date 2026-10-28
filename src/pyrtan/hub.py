@@ -736,6 +736,14 @@ class Hub:
                 if not isinstance(key, str):
                     return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"key\": \"...\"}."}
                 return 200, fed.fetch(key)
+            if method == "POST" and path == "/drop":
+                # A follower the operator lets go: a lost phone, a hub no longer wanted.
+                # Its mailbox, what was handed to it and what is kept for it go too, and
+                # anything it signs afterwards is from nobody this hub knows.
+                who = body.get("follower")
+                if not isinstance(who, str) or not who.strip():
+                    return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"follower\": \"<its id, from /peers>\"}."}
+                return 200, {"status": "ok", "dropped": fed.drop_follower(who.strip().rstrip("/"))}
             if method == "POST" and path == "/unfollow":
                 url = body.get("url")
                 if not isinstance(url, str):
@@ -809,7 +817,7 @@ class Hub:
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
             if fed is not None:
-                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
+                endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/drop", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}
         if method == "POST" and path == "/register":
             url = body.get("url")

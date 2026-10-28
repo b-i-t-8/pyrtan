@@ -1003,7 +1003,9 @@ async function loadPeers() {
     for (const [rel, list] of [["follows", p.following || []], ["follower", p.followers || []]]) {
       for (const r of list) {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td><span class="link ${esc(r.link)}"></span>${esc(r.link)}</td><td><code>${esc(r.name||"")}</code><div class="mute">${esc(r.url)}</div></td><td>${rel}${r.state && r.state !== "accepted" ? ` <span class="mute">(${esc(r.state)})</span>` : ""}</td><td>${(r.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}${r.last_error ? `<div class="failed">${esc(r.last_error)}</div>` : ""}</td>`;
+        const what = rel === "follower" && r.kind === "member" ? "member" + (r.trusted ? " (trusted)" : "") : rel;
+        const drop = rel === "follower" ? ` <a href="#" data-drop="${esc(r.url)}" data-name="${esc(r.name || r.url)}">drop</a>` : "";
+        tr.innerHTML = `<td><span class="link ${esc(r.link)}"></span>${esc(r.link)}</td><td><code>${esc(r.name||"")}</code><div class="mute">${esc(r.url)}</div></td><td>${what}${r.state && r.state !== "accepted" ? ` <span class="mute">(${esc(r.state)})</span>` : ""}${drop}</td><td>${(r.trees||[]).map(n => `<code>${esc(n)}</code>`).join(" ")}${r.last_error ? `<div class="failed">${esc(r.last_error)}</div>` : ""}</td>`;
         hb.appendChild(tr);
       }
     }
@@ -1261,6 +1263,16 @@ suggest.input.addEventListener("focus", () => suggest.ghost());
 suggest.input.addEventListener("blur", () => suggest.close());
 suggest.list.addEventListener("mousedown", (e) => e.preventDefault());  // keep the box focused, so the click lands
 window.addEventListener("resize", () => suggest.ghost());
+$("#hubs").addEventListener("click", async (e) => {
+  // A follower the operator lets go (a lost phone): it is no longer known here, and what was kept for it goes.
+  const a = e.target.closest("a[data-drop]"); if (!a) return; e.preventDefault();
+  if (!confirm(`Let ${a.dataset.name} go? It stops following this hub, and what the hub handed or kept for it is deleted.`)) return;
+  try {
+    const r = await (await api("drop", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({follower: a.dataset.drop})})).json();
+    problem(r.status === "ok" ? "" : (r.say || r.reason), r.status !== "ok");
+  } catch (err) { problem(err.message, true); }
+  loadPeers();
+});
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
 $("#connect-form").addEventListener("submit", (e) => {
   e.preventDefault();
