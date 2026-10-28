@@ -1115,3 +1115,35 @@ def test_an_open_hub_takes_so_many_strangers_and_lets_idle_ones_go(two, monkeypa
     # A member that never polls is let go after a while; the store and mailbox with it.
     a.fed.followers[members[1].id].last_ok = time.time() - fedmod.MEMBER_IDLE - 1
     assert a.fed.expire_members() == 1 and members[1].id not in a.fed.followers and members[0].id in a.fed.followers
+
+
+def test_a_lost_phone_is_let_go(tmp_path, capsys):
+    from pyrtan.hub import serve_hub
+
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "alpha.toml").write_text(ECHO.format(name="alpha", word="alpha"))
+    hub, srv = serve_hub(port=0, quiet=True, name="home", trees=[tmp_path / "t"], federate=True, token="tok", poll_every=60)
+    try:
+        phone = TrustedMember(srv.url, "Mum's phone")
+        assert phone.follow(token="tok")[1]["trusted"] is True
+        phone.poll()
+        # It signs with its own pair secret, not the token: a new token would not keep it out.
+        signed_run = lambda: http_json("POST", f"{srv.url}/run", {"tree": "alpha", "inputs": {"text": "hi"}}, headers=sign(phone.secret, phone.id, "POST", "/run", {"tree": "alpha", "inputs": {"text": "hi"}}))
+        assert signed_run()[1]["say"] == "alpha: hi"
+        # The operator finds it...
+        assert main(["peers", "--at", srv.url, "--token", "tok"]) == 0
+        line = next(l for l in capsys.readouterr().out.splitlines() if phone.id in l)
+        assert "member" in line and "Mum's phone" in line and line.endswith("(trusted)")
+        # ...and lets it go, with the token and only with it.
+        assert http_json("POST", f"{srv.url}/drop", {"follower": phone.id})[0] == 401
+        assert http_json("POST", f"{srv.url}/drop", {}, token="tok")[0] == 400
+        assert main(["drop", phone.id, "--at", srv.url, "--token", "tok"]) == 0
+        assert "let urn:pyrtan:member:" in capsys.readouterr().out
+        assert phone.id not in hub.federation.followers and phone.id not in hub.federation.mailboxes
+        # Whatever it signs now is from nobody this hub knows.
+        assert http_json("GET", f"{srv.url}/mailbox", headers=sign(phone.secret, phone.id, "GET", "/mailbox", None))[0] == 401
+        assert signed_run()[0] == 401
+        assert main(["drop", phone.id, "--at", srv.url, "--token", "tok"]) == 0 and "does not follow" in capsys.readouterr().out
+    finally:
+        hub.stop()
+        srv.stop()

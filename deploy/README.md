@@ -182,6 +182,32 @@ the app.
    screen from there (and join again in step 4, since it is a new
    address).
 
+#### If a phone is lost
+
+Changing the token alone does not cut it off: a phone that joined as a
+member signs with a key of its own, and a trusted one can still ask the
+hub to run its trees and receives what the hub hands it. Do all three:
+
+1. **Take it off the tailnet.** In the Tailscale admin console,
+   *Machines*, the phone, *Remove*. Away from home it can no longer reach
+   the NAS at all.
+2. **Let it go on the hub.** `pyrtan peers --at http://<nas-ip>:8700
+   --token <token>` lists each phone as `member  <name>  <id>  (trusted)`;
+   then `pyrtan drop <id> --at http://<nas-ip>:8700 --token <token>`. Or,
+   from another phone's console, the *Peers* tab, *Federation*, *drop* on
+   its row. The hub forgets it, its mailbox, and what it handed it or kept
+   for it, and refuses anything it signs after that.
+3. **Change the token.** Put a new `PYRTAN_TOKEN` in OMV's copy of the
+   compose file and press *Down*, then *Up*. The lost phone's browser held
+   the old one. Every other phone asks for the new token once; the ones
+   that joined as members stay members.
+
+If the phone could come back within range of the house Wi-Fi, change the
+Wi-Fi password too. On the LAN it can still reach the hub. Without the
+new token it cannot ask, chat or run anything there, but it could join
+again as an untrusted member, and the hub hands an untrusted member
+copies of its directory, gaps and unanswered sentences.
+
 `PYRTAN_ADVERTISE` is the address the other hubs reach this one at. If
 every family hub is in one house, that is the NAS's LAN address. If
 they are in different houses, keep it off the public internet and put
