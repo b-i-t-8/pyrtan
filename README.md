@@ -613,7 +613,9 @@ the bot answers it with who it is.
 while a bot's trees run, "Bot is thinking…". It works both ways or not
 at all: untick *Typing indicator* in the Chat tab (remembered in that
 browser), or `pyrtan chat --no-typing`, and you neither share your
-typing nor see anyone else's. An operator turns it off for the whole
+typing nor see anyone else's. `pyrtan chat` at a terminal reads keys as
+you type them, so it shows your typing too (from a pipe it reads whole
+lines and shows none). An operator turns it off for the whole
 hub with `pyrtan hub --chat --no-chat-typing` (`$PYRTAN_CHAT_TYPING=0`).
 It is never stored: it goes out with the next line, or after five
 seconds without news.
