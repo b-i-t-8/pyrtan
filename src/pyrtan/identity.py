@@ -43,6 +43,7 @@ VERSIONS = {VERSION_ED25519: 32}
 CHECKSUM_TAG = b".pyrtan id"
 DOC_TAG = b"pyrtan-doc-v1\n"
 REQUEST_TAG = "pyrtan-req-v1"
+AUDIENCE_HEADER = "X-Pyrtan-Audience"   # the audience a request was signed for: the URL the client called
 BACKUP_TAG = b"pyrtan-key-backup-v1\n"
 HANDOVER_TAG = b"pyrtan-handover-v1\n"
 BACKUP_ITERATIONS = 600_000       # PBKDF2-SHA256, as OWASP advises for it in 2023 and after
@@ -580,6 +581,25 @@ def check_any(doc: Any, *, now: float | None = None) -> tuple[str, str | None]:
 # hub cannot be replayed at another.
 
 
+def audience_of(url: str) -> str | None:
+    """The audience a URL names: ``scheme://host[:port]``, the host lowercased and
+    a default port dropped, so what a client called and what a hub is reached as
+    compare; None when ``url`` is not an http(s) URL with a host."""
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(url.strip())
+        host, port = parts.hostname, parts.port
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not host:
+        return None
+    if ":" in host:
+        host = f"[{host}]"
+    if port is None or port == (443 if parts.scheme == "https" else 80):
+        return f"{parts.scheme}://{host}"
+    return f"{parts.scheme}://{host}:{port}"
+
+
 def request_message(audience: str, method: str, path: str, date: str, body: Any) -> bytes:
     digest = hashlib.sha256(canonical(body) if body is not None else b"").hexdigest()
     return "\n".join([REQUEST_TAG, audience.rstrip("/"), method.upper(), path, date, digest]).encode("utf-8")
@@ -590,7 +610,7 @@ def sign_request(key: Key, audience: str, method: str, path: str, body: Any, *, 
     """The headers that make a request ``key``'s; ``note`` when ``key`` is a device."""
     date_text = str(int(time.time() if date is None else date))
     headers = {
-        "X-Pyrtan-Key": key.id, "X-Pyrtan-Date": date_text,
+        "X-Pyrtan-Key": key.id, "X-Pyrtan-Date": date_text, AUDIENCE_HEADER: audience.rstrip("/"),
         "X-Pyrtan-Key-Signature": _b64(key.sign(request_message(audience, method, path, date_text, body))),
     }
     if note is not None:

@@ -52,7 +52,7 @@ when you edit a file.
    http://<nas-ip>:8700 --token <token>` (from any machine with pyrtan, or
    `docker compose -p pyrtan exec hub pyrtan network new family --at
    http://127.0.0.1:8700`). Keep the invite it prints; the family section
-   below says what to do with it.
+   below says what to do with it, and how to set up the family's phones.
 
 To update: `git pull` in the checkout, then *Down* and *Up* with *Build*
 ticked (or `docker compose -p pyrtan up -d --build` over SSH). To check a
@@ -146,10 +146,41 @@ in the lobby, and for the NAS's people to meet theirs, the NAS follows
 it back: `pyrtan follow http://<that hub>:8700 --network family --at
 http://<nas-ip>:8700 --token <token>`.
 
-Phones and browsers do not need a hub of their own. Open the NAS's
-console at `http://<nas-ip>:8700/`, enter the token, and chat in the
-Chat tab; join in the Member tab to keep the hub's blobs and run its
-trees.
+Phones and browsers do not need a hub of their own: the NAS's console is
+the app.
+
+#### Setting up a phone
+
+1. **Reach the hub.** At home, on the house Wi-Fi, open
+   `http://<nas-ip>:8700/` in the phone's browser. Away from home, install
+   the Tailscale app, sign in to the family's tailnet (the NAS is on it
+   too: see below), and open the NAS's address there,
+   `http://<nas-name>.<tailnet>.ts.net:8700/`.
+2. **Enter the token.** The page says *This Pyrtan needs a token*: type it
+   in and press *Connect*. It is kept in that browser only, for that
+   address; a different address (Wi-Fi, then Tailscale) asks once more.
+3. **Chat.** Open the *Chat* tab and press *Start*. Whoever else in the
+   family presses *Start* is paired with you; with nobody waiting, *a
+   stranger, or a bot* gives you a bot after a few seconds, and *people
+   only* waits. Untick *Typing indicator* if you would rather not show it.
+4. **Join as a member** (optional). In the *Member* tab, give the phone a
+   name ("Mum's phone") and press *Join this hub*; leave the federation
+   secret empty. Joined with the token, the phone is *trusted*: it keeps
+   copies of the hub's blobs (so a dead NAS loses nothing) and runs the
+   hub's web trees when the hub asks it to. While the page is open it
+   checks in every four seconds, which costs some battery; *Leave* undoes
+   it.
+5. **Put it on the home screen.** In the browser's menu, *Add to Home
+   Screen* (Safari: the share button; Chrome: the ⋮ menu). On an `http://`
+   address that is a shortcut that needs the network. For the full app,
+   which opens offline, the page must come over `https://`: turn on
+   *HTTPS Certificates* in the Tailscale admin console (once, for the
+   tailnet), then on the NAS run `tailscale serve --bg 8700`, which serves
+   the console at
+   `https://<nas-name>.<tailnet>.ts.net/` to the tailnet and nobody else,
+   open that address on the phone, enter the token, and add it to the home
+   screen from there (and join again in step 4, since it is a new
+   address).
 
 `PYRTAN_ADVERTISE` is the address the other hubs reach this one at. If
 every family hub is in one house, that is the NAS's LAN address. If

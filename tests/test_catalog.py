@@ -274,6 +274,12 @@ def test_gate_and_publish(tmp_path, capsys):
     assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="alice", base={"catalog/barry/lan-printer.toml": (3, b"older bytes")}) != []
     assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="alice", base={"catalog/barry/lan-printer.toml": (2, b"older bytes")}) == []
     assert gate(repo, base={"catalog/barry/gone.toml": (1, b"x")}) == []  # a removal is fine
+    # Who owns a namespace is what the base branch says: the change may rewrite or remove OWNERS.
+    both = ["catalog/barry/OWNERS", "catalog/barry/lan-printer.toml"]
+    assert [str(p) for p in gate(repo, changed=both, author="mallory", base_owners={"barry": ["alice"]})] == [f"{c}: mallory is not in catalog/barry/OWNERS on the base branch; only a namespace's owners change it" for c in both]
+    assert gate(repo, changed=both, author="alice", base_owners={"barry": ["alice"]}) == []                  # an owner may add owners
+    assert gate(repo, changed=["catalog/new/OWNERS", "catalog/new/x.toml"], author="mallory", base_owners={}) == []  # a new namespace is the author's to name
+    assert gate(repo, changed=["catalog/barry/lan-printer.toml"], author="mallory", base_owners={}) != []  # not on base, so the checkout's OWNERS (barry) decides
     # The command, and the index the site serves.
     assert main(["publish", str(tree), "--into", str(repo)]) == 0
     out = capsys.readouterr().out
@@ -285,3 +291,52 @@ def test_gate_and_publish(tmp_path, capsys):
     assert main(["search", "lan", "--catalog", str(tmp_path / "site")]) == 0 and "barry/lan-printer@3" in capsys.readouterr().out
     assert main(["pull", "lan-printer", "--catalog", str(tmp_path / "site"), "--dir", str(tmp_path / "pulled")]) == 0
     assert "barry/lan-printer@3 ->" in capsys.readouterr().out
+
+
+def test_site_gate_judges_owners_by_the_base_branch(tmp_path):
+    """site/gate.py as the catalog-gate workflow runs it: a pull request that adds its
+    author to OWNERS, or removes the namespace, is judged by OWNERS as main has it."""
+    import subprocess
+    import sys
+    from conftest import ROOT
+
+    repo = tmp_path / "repo"
+    (repo / "catalog" / "barry").mkdir(parents=True)
+    (repo / "examples").mkdir()
+    (repo / "examples" / ".keep").write_text("")  # as in the repository, catalog/ is not the only directory the gate reads
+    (repo / "site" / "names").mkdir(parents=True)
+    (repo / "site" / "CNAME").write_text("pyrtan.com\n")
+    (repo / "site" / "gate.py").write_text("import sys\nsys.exit(0)\n")  # the judged checkout's own gate is never the one run
+    (repo / "catalog" / "barry" / "OWNERS").write_text("barry\n")
+    (repo / "catalog" / "barry" / "lan-printer.toml").write_text(OTHER.replace('name = "weather"', 'name = "lan-printer"'))
+    git = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=repo, check=True, capture_output=True)
+    gate = lambda *a: subprocess.run([sys.executable, str(ROOT / "site" / "gate.py"), "--root", str(repo), "--base", "main", *a], cwd=tmp_path, capture_output=True, text=True)
+    git("init", "-q", "-b", "main")
+    git("add", ".")
+    git("commit", "-q", "-m", "base")
+    # Mallory adds themself to OWNERS and changes the tree, version bumped and all.
+    git("checkout", "-q", "-b", "take")
+    (repo / "catalog" / "barry" / "OWNERS").write_text("barry\nmallory\n")
+    (repo / "catalog" / "barry" / "lan-printer.toml").write_text(OTHER.replace('name = "weather"', 'name = "lan-printer"').replace("version = 2", "version = 3").replace('say = "ok"', 'say = "mine"'))
+    git("commit", "-q", "-am", "take")
+    run = gate("--author", "mallory", "--author-id", "9")
+    assert run.returncode == 1 and "catalog/barry/OWNERS: mallory is not in catalog/barry/OWNERS on the base branch" in run.stdout, run.stdout
+    run = gate("--author", "barry", "--author-id", "1")
+    assert run.returncode == 0, run.stdout
+    # Mallory removes the namespace altogether.
+    git("checkout", "-q", "main")
+    git("checkout", "-q", "-b", "remove")
+    git("rm", "-q", "-r", "catalog/barry")
+    git("commit", "-q", "-m", "remove")
+    run = gate("--author", "mallory", "--author-id", "9")
+    assert run.returncode == 1 and "catalog/barry/lan-printer.toml: mallory is not in catalog/barry/OWNERS on the base branch" in run.stdout, run.stdout
+    # A new namespace is the author's to name.
+    git("checkout", "-q", "main")
+    git("checkout", "-q", "-b", "new")
+    (repo / "catalog" / "mallory").mkdir()
+    (repo / "catalog" / "mallory" / "OWNERS").write_text("mallory\n")
+    (repo / "catalog" / "mallory" / "lamp.toml").write_text(OTHER.replace('name = "weather"', 'name = "lamp"').replace('namespace = "barry"', 'namespace = "mallory"'))
+    git("add", ".")
+    git("commit", "-q", "-m", "new")
+    run = gate("--author", "mallory", "--author-id", "9")
+    assert run.returncode == 0, run.stdout
