@@ -413,7 +413,15 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+19. **v0.34, built: list and number filters.** `sum`, `average`, `min`,
+    `max`, `sort` (`sort:key` for tables), `reverse`, `pluck:key`,
+    `round:n`, `percent:n`, `bytes`, and unit conversions from a fixed
+    table (`c_to_f`, `km_to_mi`…). Still no expression language: each
+    filter is fixed, and the one argument a few take is a literal, never
+    a path. Rounding works on a float's shortest decimal form and sums
+    add left to right, so the browser agrees digit for digit
+    (`template.py`).
+20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

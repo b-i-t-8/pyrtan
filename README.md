@@ -166,6 +166,12 @@ finds the words in what was observed and reads the slot with its kind's
 parser (`number`, `date`, `duration`, `host`…); a pattern with several
 slots gives a table of them.
 
+What was read can be summed, sorted and rounded on the way into a
+sentence, with fixed filters rather than an expression language:
+`{{ state.rows | pluck:qty | sum }}`, `{{ state.temp | c_to_f | round:1 }}`,
+`{{ state.used | percent:1 }}`, `{{ state.size | bytes }}`. The list is
+in [`_meta/tree-format.md`](_meta/tree-format.md#templates).
+
 ## The command
 
 | Command | What it does |
@@ -842,7 +848,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.33.0. The core, the service, the hub, the command, the console (which
+0.34.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
