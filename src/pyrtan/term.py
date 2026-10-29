@@ -12,10 +12,12 @@ part: cbreak mode on the way in, the old settings restored on the way out,
 whatever happens. Standard library only; where ``termios`` is missing
 (Windows) :func:`interactive` says no and the chat reads lines as before.
 
-What it refuses: being a readline. No history, no cursor movement, no
-completion: Backspace, Ctrl-U (clear the line), Ctrl-W (a word), Enter,
-Ctrl-D on an empty line (leave), Ctrl-C (leave). Arrow keys and other
-escape sequences are swallowed rather than printed.
+What it refuses: being a readline. No cursor movement, no completion:
+Backspace, Ctrl-U (clear the line), Ctrl-W (a word), Enter, Ctrl-D on an
+empty line (leave), Ctrl-C (leave), and Up and Down for the lines sent
+before. That history is kept in memory for this one chat and is gone when
+it ends; nothing is written to disk. Other arrow keys and escape sequences
+are swallowed rather than printed.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ except ImportError:  # Windows: no termios; the chat reads lines
     tty = None  # type: ignore[assignment]
 
 EOF = object()   # what feed() yields for Ctrl-D on an empty line
+HISTORY = 100    # lines Up can go back through
 
 
 def interactive(stream=None) -> bool:
@@ -54,7 +57,10 @@ class LineEditor:
         self.changed = changed
         self.prompt = prompt
         self.buffer = ""
-        self._escape = ""   # an escape sequence being swallowed
+        self.history: list[str] = []   # lines sent, oldest first
+        self._at = 0         # where Up and Down are in the history; len(history) is the line being typed
+        self._draft = ""     # the line being typed, kept while Up looks back
+        self._escape = ""    # an escape sequence being read
 
     def feed(self, text: str) -> list[object]:
         """Keys in; the lines they finished out (and :data:`EOF` for Ctrl-D on an empty line)."""
@@ -62,10 +68,16 @@ class LineEditor:
         before = self.buffer
         for ch in text:
             if self._escape:
-                # ESC [ … final byte, or ESC and one more: swallowed whole.
+                # ESC [ … final byte, ESC O and one more, or ESC and one more:
+                # read whole; Up and Down move through the history, the rest is swallowed.
                 self._escape += ch
-                if (len(self._escape) == 2 and ch != "[") or (len(self._escape) > 2 and "@" <= ch <= "~"):
+                seq = self._escape
+                if (len(seq) == 2 and ch not in "[O") or (seq[1] == "O" and len(seq) == 3) or (seq[1] == "[" and len(seq) > 2 and "@" <= ch <= "~"):
                     self._escape = ""
+                    if seq in ("\x1b[A", "\x1bOA"):
+                        self.recall(-1)
+                    elif seq in ("\x1b[B", "\x1bOB"):
+                        self.recall(+1)
                 continue
             if ch == "\x1b":
                 self._escape = ch
@@ -73,6 +85,9 @@ class LineEditor:
                 line, self.buffer = self.buffer, ""
                 self.write("\r\x1b[K")
                 done.append(line)
+                if line.strip() and (not self.history or self.history[-1] != line):
+                    self.history = (self.history + [line])[-HISTORY:]
+                self._at, self._draft = len(self.history), ""
                 self.write(self.prompt)
             elif ch in ("\x7f", "\x08"):
                 if self.buffer:
@@ -95,6 +110,18 @@ class LineEditor:
         if self.buffer != before:
             self.changed(self.buffer)
         return done
+
+    def recall(self, step: int) -> None:
+        """Up (-1) or Down (+1) through the lines sent; Down past the newest
+        gives back what was being typed."""
+        at = min(max(self._at + step, 0), len(self.history))
+        if at == self._at:
+            return
+        if self._at == len(self.history):
+            self._draft = self.buffer
+        self._at = at
+        self.buffer = self.history[at] if at < len(self.history) else self._draft
+        self.redraw()
 
     def redraw(self) -> None:
         self.write("\r\x1b[K" + self.prompt + self.buffer)
