@@ -32,7 +32,9 @@ does not exist, write it; if one gives a wrong answer, the trace shows where.
 6. `uv run pytest`.
 
 A tree that reads a page should prefer an API or a feed when the site offers
-one, and should decide on the status code before it decides on the body.
+one, should decide on the status code before it decides on the body, and
+should say with `expect` what a good answer looks like, so that the day
+the site changes, the run says drift and names the field.
 
 A tree whose every node is `http` against an API that lets other origins
 read it (it answers with `Access-Control-Allow-Origin`) also runs in a

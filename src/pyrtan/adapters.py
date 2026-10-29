@@ -210,6 +210,34 @@ def what(source: str, spec: dict[str, Any]) -> str:
     return str(spec.get("url"))
 
 
+def would(source: str, spec: dict[str, Any]) -> str:
+    """What an act is about to do, in the words a confirmation asks with:
+    the request and what it carries (``POST https://… with {"on": true}``,
+    ``publish "on" to home/kitchen/light at mqtt://…``)."""
+    def carried(value: Any) -> str:
+        text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+        short = text if len(text) <= 120 else text[:119] + "…"
+        return json.dumps(short, ensure_ascii=False) if isinstance(value, str) else short
+
+    if source == "http":
+        body = spec.get("body")
+        return f"{str(spec.get('method', 'GET')).upper()} {spec.get('url')}" + (f" with {carried(body)}" if body is not None else "")
+    if source == "file":
+        if "write" in spec:
+            return f"write {carried(spec['write'])} to {spec.get('path')}"
+        if "append" in spec:
+            return f"append {carried(spec['append'])} to {spec.get('path')}"
+    if source == "queue" and "publish" in spec:
+        return f"publish {carried(spec['publish'])} to {spec.get('topic')} at {spec.get('url')}"
+    if source == "serial" and spec.get("write") not in (None, ""):
+        return f"send {carried(spec['write'])} to {spec.get('device')}"
+    if source == "memory":
+        for mode in ("write", "add", "delete"):
+            if mode in spec:
+                return f"forget {spec.get('key')}" if mode == "delete" else f"{mode} {carried(spec[mode])} {'to' if mode == 'add' else 'at'} {spec.get('key')}"
+    return f"{source} {what(source, spec)}"
+
+
 def brief_result(source: str, observed: dict[str, Any]) -> str:
     """The words a trace uses for what came back."""
     if source in ("http", "browser"):
@@ -231,6 +259,18 @@ def brief_result(source: str, observed: dict[str, Any]) -> str:
             return f"now {json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}, was {json.dumps(observed.get('previous'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "forgotten"
         return f"{json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "nothing kept"
     return "ok"
+
+
+GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists"}
+
+
+def good(source: str | None, observed: dict[str, Any]) -> bool:
+    """Whether an observation is a good answer, the one a node's ``expect``
+    describes: a 2xx page, a program that exited 0, a file that is there, a
+    message that came, a line that ended, a key that is kept. A bad answer is a decide's business;
+    what it says is not drift. An observation from state is always checked."""
+    key = GOOD.get(source or "")
+    return True if key is None else observed.get(key) is True
 
 
 def _json(text: str | None) -> Any:

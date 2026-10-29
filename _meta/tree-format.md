@@ -167,6 +167,7 @@ extract = [
   { into = "heading", css = "h1" },
   { into = "links", css = "a.story", attr = "href", all = true },
   { into = "rows", css = "table tr", all = true, fields = { name = "td:nth-child(1)", href = { css = "a", attr = "href" } } },
+  { into = "temp", pattern = "temperature: {t:number}°C" },
 ]
 timeout = 10              # seconds
 retries = 1               # on transport failure only; never on a status code
@@ -176,6 +177,43 @@ next = "status"
 `method` must be GET, HEAD or OPTIONS. Instead of `http`, `from = "resp"`
 extracts from state already held. An extraction that finds nothing sets
 nothing; decide on absence with `{ exists = false }`.
+
+`pattern` reads text with a trigger's pattern rather than a regex: the
+same slots and kinds, `[optional]` words and `(a|b)` choices, case
+ignored, a word matching its plural or singular. It is searched for in
+the text (`body`, or `from`), not matched whole, and each slot is read
+by its kind's parser, so `{t:number}` gives a number, `{d:date}` an ISO
+date and `{w:duration}` seconds. One slot gives its value; several give
+a table (`pattern = "wind {speed:number} km/h from the {dir:word}"` →
+`{ speed = 12, dir = "NW" }`); `all = true` gives a list of every
+occurrence. Literal words match whole words (`temperature` is not found
+in `maxtemperature`). A slot of a lazy kind (`{name}`, `text`, `date`,
+`duration`) that ends the pattern reads to the end of its line, and an
+occurrence whose slots do not read (a `date` that is not one) is passed
+over for the next. The text is folded as a sentence is (curly quotes,
+dashes, runs of spaces), line by line. A pattern needs a literal word
+and a slot; `pyrtan check` refuses it otherwise.
+
+`expect` says what a good answer looks like: a path into what the node
+observed (the same paths as `extract`'s `json`) and a condition, the same
+tests a `decide` branch uses.
+
+```toml
+expect = { "json.tag_name" = { type = "str" }, "json.html_url" = { startswith = "https://" } }
+```
+
+It is checked on a good answer only: a 2xx page, a program that exited
+0, a file that is there, a message that came, a line that ended, a
+memory key that is kept (an observation `from` state is always checked). A bad answer is the tree's
+to `decide` on. A good answer that misses its `expect` means the source
+changed under the tree, and the run stops with reason `drift` before
+anything is extracted from it. The trace names each field and what was
+expected (`drift: fetch saw state.resp.json.tag_name = null, where it
+expects type 'str'`), and each one is recorded as a gap on that node
+and path, so `/gaps` and a catalog tree's reports show its author which
+property changed and where. `pyrtan grow` drafts nothing for a drift:
+what changed is for a person to read. `expect` works on an `act` as well,
+but not on an `emit`, which has no answer.
 
 Selectors support tag, `#id`, `.class`, `[attr]`, `[attr=v]`, `[attr^=v]`,
 `[attr$=v]`, `[attr*=v]`, `:first-child`, `:last-child`, `:nth-child(n)`,
@@ -236,6 +274,41 @@ next = "reply"
 
 An act is never retried. A GET with no body in an act is a warning: it is a
 read, and `observe` would retry it safely.
+
+An act may ask first. `confirm = true` pauses the run before the act with
+what it would do (`switch would POST https://lights.example/kitchen with
+{"on": "on"}. Go ahead?`); `confirm = "Turn the {{ inputs.room }} light
+{{ inputs.state }}?"` asks in the author's words, and the trace still
+records the request. The run returns `asked`, as an `ask` node's does,
+and `/resume` (or `pyrtan run` at a terminal) continues it: a plain yes
+(`yes`, `y`, `ok`, `go ahead`, `true`…) does the act once and walks on;
+anything else, a blank included, ends the run `failed` with reason
+`declined`, having changed nothing. Only a top-level run can stop to ask:
+an act with `confirm` inside a delegated tree or an `each` sub-flow ends
+that sub-run with `ask-in-subflow`.
+
+```toml
+[nodes.switch]
+kind = "act"
+http = { method = "POST", url = "https://lights.example/{{ inputs.room }}", body = { on = "{{ inputs.state }}" } }
+confirm = "Turn the {{ inputs.room }} light {{ inputs.state }}?"
+into = "set"
+next = "done"
+```
+
+A **dry run** (`pyrtan run … --dry-run`, `pyrtan ask … --dry-run`, or
+`"dry_run": true` on `/run` and `/intent`) treats every act as if it had
+`confirm`: it observes for real, and stops before the first act with
+what it would do (`dry run: switch would POST … with {"on": "on"};
+nothing was changed`). The request is rendered and held against the
+tree's lists first, so a dry run still says when an act would be
+refused. Resumed with a yes, it does that one act and stops before the
+next. Nothing in a dry run acts out of sight: an act inside a delegated
+tree or a sub-flow ends the whole run with reason `dry-run`, and a tree
+or sentence that would go to the swarm is not sent. A hub forwards a dry
+run only to its own trees and to services whose `/capabilities` says
+`"dry_run": true`; a member, a followed hub, or an older service gets
+`dry-run` instead of a run that might act.
 
 ### `decide`: branch
 
@@ -405,9 +478,9 @@ empty string into a URL.
 | `status` | Meaning | Carries |
 | :-- | :-- | :-- |
 | `done` | a `done` node was reached | `say`, `output` |
-| `failed` | a `fail` node was reached | `reason`, `say` |
-| `asked` | an `ask` node paused the run | `question`, `snapshot` |
-| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dead-end` |
+| `failed` | a `fail` node was reached, or an act was not confirmed (reason `declined`) | `reason`, `say` |
+| `asked` | an `ask` node paused the run, or an act waits for a yes (`confirm`, or a dry run) | `question`, `snapshot` |
+| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `dead-end` |
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.

@@ -254,14 +254,14 @@ class Service:
 
     def capabilities(self) -> dict[str, Any]:
         self.registry.reload()
-        return {"name": self.name, "trees": self.registry.capabilities()}
+        return {"name": self.name, "trees": self.registry.capabilities(), "dry_run": True}
 
     def intent(self, body: dict[str, Any]) -> dict[str, Any]:
         text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             return {"status": "error", "reason": "bad-request", "say": "Send {\"text\": \"...\"}."}
         self.registry.reload()
-        outcome = self.runner.run_intent(text, int(body.get("depth", 0)))
+        outcome = self.runner.run_intent(text, int(body.get("depth", 0)), dry_run=body.get("dry_run") is True)
         if outcome.reason == "no-match" and self.hub is None:
             # With a hub, the hub saw the sentence and keeps the record.
             self.unanswered.record(text)
@@ -272,7 +272,7 @@ class Service:
         if not isinstance(tree, str):
             return {"status": "error", "reason": "bad-request", "say": "Send {\"tree\": \"...\", \"inputs\": {...}}."}
         self.registry.reload()
-        return self._finish(self.runner.run_tree(tree, body.get("inputs") or {}, int(body.get("depth", 0))), body)
+        return self._finish(self.runner.run_tree(tree, body.get("inputs") or {}, int(body.get("depth", 0)), dry_run=body.get("dry_run") is True), body)
 
     def resume(self, body: dict[str, Any]) -> dict[str, Any]:
         snapshot = body.get("snapshot")

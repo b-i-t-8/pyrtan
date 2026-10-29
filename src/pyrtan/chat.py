@@ -54,7 +54,7 @@ else's, and a hub started ``--no-chat-typing`` has it off for everyone.
 Across hubs it travels as ``Typing``, at most every two seconds, and the
 logs leave it out.
 
-**Agents (v0.31).** An agent, the open-weights model a person starts in
+**Agents (v0.34).** An agent, the open-weights model a person starts in
 the console, may take a seat too (``as: "agent"``, with its name and
 model): its console reads the stranger's lines and says its own, through
 the same endpoints a person uses. The hub runs no model and asks none: it
@@ -65,7 +65,7 @@ its lines come as ``agent``, not ``stranger``); a person who wants
 who would meet ``anyone`` meets the people here first, then the
 strangers of other hubs, then an agent, and a bot last.
 
-**Person or agent? (v0.31).** A seat started ``game: true`` is paired
+**Person or agent? (v0.34).** A seat started ``game: true`` is paired
 only with others playing: a person with a person or an agent, at even
 odds when both are waiting, and nobody labelled. Each side may guess
 once (``/chat/guess``, ``person`` or ``agent``) while they talk or after;

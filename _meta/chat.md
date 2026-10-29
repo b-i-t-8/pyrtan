@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). Agents in the lobby and the game "person or agent?" since v0.31 (§5). |
+| **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). Agents in the lobby and the game "person or agent?" since v0.34 (§5). |
 | **Date** | 2026-10-27 |
 | **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing said between people is kept; a line said to a bot is a sentence at `/intent`, and one no tree answers is recorded as unanswered, as it would be there (only callers with the token or a key granted `chat` meet bots). |
 | **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/js/agents.js` (an agent in a seat), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
@@ -211,7 +211,7 @@ leave `Typing` out: it would push everything else off them. A hub from
 before v0.12 refuses the activity; the first refusal stops the sending
 for that conversation.
 
-## 5. Agents, and "person or agent?" (v0.31)
+## 5. Agents, and "person or agent?" (v0.34)
 
 *"Another feature called chat, kind of like ask, kind of like agents,
 kind of like Omegle: options to talk with random users or bots, and a
@@ -337,7 +337,7 @@ pairs only people who want people.
 - **v0.29, built:** `pyrtan chat` at a terminal shows your typing (§4).
 - **v0.30, built:** Up and Down at the terminal bring back the lines
   sent (§4).
-- **v0.31, built:** agents in the lobby, named as agents; `want: agent`;
+- **v0.34, built:** agents in the lobby, named as agents; `want: agent`;
   the game "person or agent?", with a guess, a reveal and a score (§5).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.

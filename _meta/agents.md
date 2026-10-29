@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.18.** Agents in the console (`agents.js`): WebLLM in the browser or a server of the person's own, probing, meanings for gaps, triggers for missed sentences, trees for unanswered ones, chat, memory and skills. `/suggestions` on services and hubs, `pyrtan suggestions`, `pyrtan grow --suggestions`. Tested with a scripted model in node and in Chromium. Since v0.31 an agent can sit in a hub's chat lobby, named as an agent, or play "person or agent?" there (`chat.md` §5). |
+| **Status** | **Built, v0.18.** Agents in the console (`agents.js`): WebLLM in the browser or a server of the person's own, probing, meanings for gaps, triggers for missed sentences, trees for unanswered ones, chat, memory and skills. `/suggestions` on services and hubs, `pyrtan suggestions`, `pyrtan grow --suggestions`. Tested with a scripted model in node and in Chromium. Since v0.34 an agent can sit in a hub's chat lobby, named as an agent, or play "person or agent?" there (`chat.md` §5). |
 | **Date** | 2026-10-28 |
 | **Decision** | A model may sit **beside** the swarm, never inside it. A person starts it in the console; it is a client of the public API like any caller; everything it proposes is data, checked by rules where it is made and again where it is written, and only a person accepts it. The trees stay deterministic; the model helps them grow. |
 | **Where** | `src/pyrtan/js/agents.js` (the agent), `src/pyrtan/js/pyrtan.js` (`grow`: the rule drafts and the checks), `src/pyrtan/suggestions.py` (the checks, the store, writing a suggestion into a file), `src/pyrtan/page.py` (the Agents tab), `tests/agents.cjs`, `tests/test_agents.py`, `tests/browser/console_agents.cjs`. |
@@ -132,7 +132,7 @@ operator's.
   suggestion is not made again), and the last forty lines of the
   conversation. Recall is by shared words, the person's notes and the
   newest first; it is not a model's choice either.
-- **In the lobby** (v0.31), when the person seats it from the Chat tab:
+- **In the lobby** (v0.34), when the person seats it from the Chat tab:
   it meets strangers through the hub's `/chat` like anyone, says only
   its own words (no `ASK`, no swarm, nothing remembered), and is named
   as an agent, unless both sides chose the game "person or agent?",

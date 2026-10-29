@@ -503,11 +503,29 @@ def check(tree: Tree) -> list[Problem]:
                 err(where, "'from' must be a state path")
             if node.get("retries") is not None and node.kind == "act":
                 err(where, "an act is never retried; drop 'retries' or make it an observe")
+            confirm = node.get("confirm")
+            if confirm is not None:
+                if node.kind != "act":
+                    err(where, "'confirm' is for an act: an observe changes nothing, so there is nothing to agree to")
+                elif not isinstance(confirm, bool) and not (isinstance(confirm, str) and confirm.strip()):
+                    err(where, "'confirm' is true, or the question to ask before the act (a template)")
             for j, ex in enumerate(node.get("extract", []) or []):
                 try:
                     extractmod.validate(ex)
                 except extractmod.ExtractError as e:
                     err(f"{where}.extract[{j}]", str(e))
+            expect = node.get("expect")
+            if expect is not None:
+                if emit is not None:
+                    err(where, "'expect' says what a good answer looks like; an emit has no answer")
+                elif not isinstance(expect, dict) or not expect:
+                    err(where, "'expect' is a table of path = condition, the shape of a good answer: { \"json.tag_name\" = { type = \"str\" } }")
+                else:
+                    for path, cond in expect.items():
+                        try:
+                            conditions.validate(cond)
+                        except conditions.ConditionError as e:
+                            err(f"{where}.expect.{path}", str(e))
 
         elif node.kind == "decide":
             on = node.get("on")

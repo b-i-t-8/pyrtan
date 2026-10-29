@@ -44,10 +44,15 @@ class Trace:
         self.steps.append(step)
         return step
 
-    def gap(self, node: str, on: str, observed: Any) -> None:
+    def gap(self, node: str, on: str, observed: Any, *, expected: dict[str, Any] | None = None) -> None:
         """Record a decision whose observed value matched no branch. Gaps are
-        how a tree grows: each one is a branch an author has not written yet."""
-        self.gaps.append({"tree": self.tree, "node": node, "on": on, "observed": _short(observed)})
+        how a tree grows: each one is a branch an author has not written yet.
+        With ``expected``, a *drift*: a good answer that no longer has the
+        shape the node's ``expect`` says, so the source changed under the tree."""
+        gap: dict[str, Any] = {"tree": self.tree, "node": node, "on": on, "observed": _short(observed)}
+        if expected is not None:
+            gap.update(kind="drift", expected=expected)
+        self.gaps.append(gap)
 
     def to_dict(self) -> dict[str, Any]:
         return {"tree": self.tree, "started": self.started, "steps": [s.to_dict() for s in self.steps], "gaps": self.gaps}
@@ -60,8 +65,16 @@ class Trace:
             chosen = f" [{s.chosen}]" if s.chosen else ""
             lines.append(f"{pad}{s.node} ({s.kind}){chosen}: {s.summary}{arrow}")
         for g in self.gaps:
-            lines.append(f"  gap: {g['node']} saw {g['on']} = {json.dumps(g['observed'], ensure_ascii=False)} and had no branch for it")
+            if g.get("kind") == "drift":
+                lines.append(f"  drift: {g['node']} saw {g['on']} = {json.dumps(g['observed'], ensure_ascii=False)}, where it expects {cond_words(g['expected'])}")
+            else:
+                lines.append(f"  gap: {g['node']} saw {g['on']} = {json.dumps(g['observed'], ensure_ascii=False)} and had no branch for it")
         return "\n".join(lines)
+
+
+def cond_words(cond: dict[str, Any]) -> str:
+    """A condition the way a trace names one: ``type 'str' and startswith 'https://'``."""
+    return " and ".join(f"{k} {v!r}" for k, v in cond.items())
 
 
 def _short(value: Any, limit: int = 200) -> Any:
