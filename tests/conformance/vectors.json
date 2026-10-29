@@ -1489,6 +1489,23 @@
       "version": 1
      },
      {
+      "description": "reads a status panel with patterns",
+      "hosts": [],
+      "inputs": {
+       "text": {
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "panel",
+      "sources": [],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
       "description": "How many people are in space right now, and who.",
       "hosts": [
        "corquaid.github.io"
@@ -5007,6 +5024,201 @@
   },
   {
    "body": {
+    "inputs": {
+     "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
+    },
+    "tree": "panel"
+   },
+   "expect": {
+    "inputs": {
+     "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
+    },
+    "output": {
+     "edge": null,
+     "updated": "2026-10-25",
+     "used": [
+      {
+       "n": 1234,
+       "of": 5000
+      },
+      {
+       "n": 7,
+       "of": 8
+      }
+     ],
+     "wind": "12 NW"
+    },
+    "say": "21.5, all systems go",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "temp",
+       "node": "read",
+       "observed": {
+        "edge": null,
+        "status": "all systems go",
+        "temp": 21.5,
+        "updated": "2026-10-25",
+        "used": [
+         {
+          "n": 1234,
+          "of": 5000
+         },
+         {
+          "n": 7,
+          "of": 8
+         }
+        ],
+        "wind": {
+         "dir": "NW",
+         "speed": 12
+        }
+       },
+       "summary": "from inputs.text; temp=21.5, wind={'speed': 12, 'dir': 'NW'}, status=all systems go, updated=2026-10-25, used=[{'n': 1234, 'of': 5000}, {'n': 7, 'of': 8}], edge=None"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "temp",
+       "observed": 21.5,
+       "summary": "state.temp = 21.5"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "21.5, all systems go"
+      }
+     ],
+     "tree": "panel"
+    },
+    "tree": "panel"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "text": "TEMPERATURE: 35°C"
+    },
+    "tree": "panel"
+   },
+   "expect": {
+    "inputs": {
+     "text": "TEMPERATURE: 35°C"
+    },
+    "say": "hot: 35",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "temp",
+       "node": "read",
+       "observed": {
+        "edge": null,
+        "status": null,
+        "temp": 35,
+        "updated": null,
+        "used": [],
+        "wind": null
+       },
+       "summary": "from inputs.text; temp=35, wind=None, status=None, updated=None, used=[], edge=None"
+      },
+      {
+       "chosen": "gt 30",
+       "depth": 0,
+       "kind": "decide",
+       "next": "hot",
+       "node": "temp",
+       "observed": 35,
+       "summary": "state.temp = 35"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "hot",
+       "summary": "hot: 35"
+      }
+     ],
+     "tree": "panel"
+    },
+    "tree": "panel"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "text": "nothing here"
+    },
+    "tree": "panel"
+   },
+   "expect": {
+    "inputs": {
+     "text": "nothing here"
+    },
+    "reason": "no-temperature",
+    "say": "no temperature on the panel",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "temp",
+       "node": "read",
+       "observed": {
+        "edge": null,
+        "status": null,
+        "temp": null,
+        "updated": null,
+        "used": [],
+        "wind": null
+       },
+       "summary": "from inputs.text; temp=None, wind=None, status=None, updated=None, used=[], edge=None"
+      },
+      {
+       "chosen": "exists False",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "temp",
+       "summary": "state.temp = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "fail",
+       "next": null,
+       "node": "none",
+       "summary": "no-temperature: no temperature on the panel"
+      }
+     ],
+     "tree": "panel"
+    },
+    "tree": "panel"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "temperature in the hall"
    },
    "expect": {
@@ -5377,7 +5589,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 34,
+    "runs": 37,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5424,6 +5636,7 @@
      "npm-package",
      "nuget",
      "order",
+     "panel",
      "people-in-space",
      "ping",
      "pokemon",
@@ -5953,6 +6166,93 @@
    "triggers": [
     "grade {score:int}"
    ],
+   "version": 1
+  },
+  {
+   "description": "reads a status panel with patterns",
+   "hosts": [],
+   "inputs": {
+    "text": {
+     "required": true,
+     "type": "str"
+    }
+   },
+   "name": "panel",
+   "nodes": {
+    "hot": {
+     "kind": "done",
+     "say": "hot: {{ state.temp }}"
+    },
+    "none": {
+     "kind": "fail",
+     "reason": "no-temperature",
+     "say": "no temperature on the panel"
+    },
+    "read": {
+     "extract": [
+      {
+       "into": "temp",
+       "pattern": "temperature: {t:number}°C"
+      },
+      {
+       "into": "wind",
+       "pattern": "wind {speed:number} km/h [from the] {dir:word}"
+      },
+      {
+       "into": "status",
+       "pattern": "status: {s}"
+      },
+      {
+       "into": "updated",
+       "pattern": "(updated|checked) {d:date}"
+      },
+      {
+       "all": true,
+       "into": "used",
+       "pattern": "used {n:number} of {of:number} MB"
+      },
+      {
+       "into": "edge",
+       "pattern": "ature {n:int}"
+      }
+     ],
+     "from": "inputs.text",
+     "kind": "observe",
+     "next": "temp"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "edge": "{{ state.edge }}",
+      "updated": "{{ state.updated }}",
+      "used": "{{ state.used }}",
+      "wind": "{{ state.wind.speed }} {{ state.wind.dir }}"
+     },
+     "say": "{{ state.temp }}, {{ state.status }}"
+    },
+    "temp": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "exists": false
+       }
+      },
+      {
+       "then": "hot",
+       "when": {
+        "gt": 30
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "state.temp"
+    }
+   },
+   "start": "read",
    "version": 1
   }
  ],

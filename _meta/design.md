@@ -405,7 +405,15 @@ Five trees, all against real public APIs, all tested offline:
     A dry run treats every act that way, observes for real, and never
     acts out of sight: not in a delegated tree, not through the swarm,
     and through a hub only to services that say they keep a dry run.
-18. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+18. **v0.33, built: reading text with the trigger syntax.** An `extract`
+    entry may take a `pattern` instead of a regex: the trigger syntax,
+    searched for in what was observed, each slot read by its kind's fixed
+    parser (`number`, `date`, `duration`, `host`…). One slot gives its
+    value, several a table. The friendlier way to read a status page, a
+    program's output or a serial reply, for people who do not write
+    regexes, and `pyrtan build` takes one where it took a regex
+    (`extract.py`, `intent.py`).
+19. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
