@@ -11,8 +11,11 @@ An outcome's ``status`` is one of:
 ``failed``
     A ``fail`` node was reached; ``reason`` names which, and ``say`` explains.
 ``asked``
-    An ``ask`` node paused the run; ``question`` holds the prompt and
-    ``snapshot`` what :meth:`Runner.resume` needs to continue.
+    An ``ask`` node paused the run, or an ``act`` that must be confirmed
+    (``confirm``, or any act in a dry run) is waiting for a yes; ``question``
+    holds the prompt and ``snapshot`` what :meth:`Runner.resume` needs to
+    continue. An act that is not confirmed ends the run ``failed``, with
+    reason ``declined``.
 ``error``
     The run could not proceed: a transport failure, an unhandled observation
     (a ``decide`` with no matching branch or a ``lookup`` with no matching
@@ -32,7 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from . import conditions
-from .adapters import SOURCES, LocalAdapters, brief_result, good, what
+from .adapters import SOURCES, LocalAdapters, brief_result, good, what, would
 from .extract import extract
 from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
@@ -111,13 +114,16 @@ class Runner:
 
     # ------------------------------------------------------------ entry points
 
-    def run_intent(self, text: str, depth: int = 0) -> Outcome:
+    def run_intent(self, text: str, depth: int = 0, *, dry_run: bool = False) -> Outcome:
         """Read a sentence and run the tree it names. The trace begins with an
         ``intent`` step: what the sentence was rewritten to, which rules
-        fired, and which trigger took it."""
+        fired, and which trigger took it. A dry run stops before every act
+        (see :meth:`run`)."""
         reading = self.registry.read(text, self.clock())
         if not reading.matches:
             if self.resolver is not None:
+                if dry_run:
+                    return _not_in_a_dry_run("", f"would ask the swarm for {text!r}")
                 return self.resolver.run_intent(text, depth)
             out = Outcome("error", "", reason="no-match", **no_match_outcome(text, "Nothing here"))
             out.output = {**(out.output or {}), "reading": {"cleaned": reading.cleaned, "steps": reading.steps, "considered": [m.trigger.pattern for m in reading.considered]}}
@@ -128,21 +134,27 @@ class Runner:
         match = reading.matches[0]
         tree = self.registry.get(match.tree)
         if tree is None:
-            return self.run_tree(match.tree, match.inputs, depth)
+            return self.run_tree(match.tree, match.inputs, depth, dry_run=dry_run)
         trace = Trace(tree.name)
         step = reading.step()
         trace.add(Step(step["node"], step["kind"], step["summary"], observed=step["observed"], next=tree.start, depth=depth))
-        return self.run(tree, match.inputs, depth=depth, trace=trace)
+        return self.run(tree, match.inputs, depth=depth, trace=trace, dry_run=dry_run)
 
-    def run_tree(self, name: str, inputs: dict[str, Any] | None = None, depth: int = 0) -> Outcome:
+    def run_tree(self, name: str, inputs: dict[str, Any] | None = None, depth: int = 0, *, dry_run: bool = False) -> Outcome:
         tree = self.registry.get(name)
         if tree is None:
             if self.resolver is not None:
+                if dry_run:
+                    return _not_in_a_dry_run(name, f"would run {name} where the swarm keeps it")
                 return self.resolver.run_tree(name, inputs or {}, depth)
             return Outcome("error", name, reason="no-such-tree", say=f"No tree named {name!r}.")
-        return self.run(tree, inputs or {}, depth=depth)
+        return self.run(tree, inputs or {}, depth=depth, dry_run=dry_run)
 
-    def run(self, tree: Tree, inputs: dict[str, Any] | None = None, *, depth: int = 0, start: str | None = None, state: dict[str, Any] | None = None, scope_extra: dict[str, Any] | None = None, trace: Trace | None = None) -> Outcome:
+    def run(self, tree: Tree, inputs: dict[str, Any] | None = None, *, depth: int = 0, start: str | None = None, state: dict[str, Any] | None = None, scope_extra: dict[str, Any] | None = None, trace: Trace | None = None, dry_run: bool = False, confirmed: str | None = None) -> Outcome:
+        """Walk ``tree``. In a dry run every act is a question first: the run
+        stops before it changes anything and says what it would do, at any
+        depth, and nothing is handed to the swarm. ``confirmed`` names the
+        act a person just said yes to, which then runs once without asking."""
         trace = trace or Trace(tree.name)
         if depth > self.max_depth:
             return Outcome("error", tree.name, reason="too-deep", say=f"Delegation deeper than {self.max_depth} levels.", trace=trace)
@@ -154,6 +166,7 @@ class Runner:
         scope: dict[str, Any] = {"inputs": bound, "state": state, "tree": {"name": tree.name, "version": tree.version}, "now": _now(self.clock()), "env": self.env}
         if scope_extra:
             scope.update(scope_extra)
+        scope[FLAGS] = {"dry_run": dry_run, "confirmed": confirmed}  # no template can name it: check() allows only the roots above
         try:
             return self._walk(tree, start or tree.start, scope, trace, depth)
         except _Halt as h:
@@ -168,6 +181,8 @@ class Runner:
         if tree is None:
             return Outcome("error", snapshot.get("tree", ""), reason="no-such-tree")
         node = tree.node(snapshot["node"])
+        if snapshot.get("confirm"):
+            return self._resume_confirm(tree, node, snapshot, answer)
         into: str = node.get("into")
         inputs = dict(snapshot["inputs"])
         state = dict(snapshot["state"])
@@ -182,7 +197,18 @@ class Runner:
         trace = Trace(tree.name)
         trace.steps = [Step(**s) for s in snapshot.get("trace", [])]
         trace.add(Step(node.id, "ask", f"answered: {_brief(answer)}", next=node.next))
-        return self.run(tree, inputs, start=node.next, state=state, trace=trace)
+        return self.run(tree, inputs, start=node.next, state=state, trace=trace, dry_run=bool(snapshot.get("dry_run")))
+
+    def _resume_confirm(self, tree: Tree, node: Node, snapshot: dict[str, Any], answer: Any) -> Outcome:
+        """An act waiting for a yes: yes runs it (once) and walks on; anything else ends the run."""
+        trace = Trace(tree.name)
+        trace.steps = [Step(**s) for s in snapshot.get("trace", [])]
+        inputs = dict(snapshot["inputs"])
+        if not yes(answer):
+            trace.add(Step(node.id, "act", f"answered: {_brief(answer)}; not done"))
+            return Outcome("failed", tree.name, reason="declined", say=f"Not done: {node.id} was not confirmed.", trace=trace, inputs=inputs)
+        trace.add(Step(node.id, "act", f"answered: {_brief(answer)}", next=node.id))
+        return self.run(tree, inputs, start=node.id, state=dict(snapshot["state"]), trace=trace, dry_run=bool(snapshot.get("dry_run")), confirmed=node.id)
 
     # ------------------------------------------------------------ the walk
 
@@ -220,6 +246,10 @@ class Runner:
         return self._observe_or_act(tree, node, scope, trace, retry=True)
 
     def _do_act(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
+        flags = scope[FLAGS]
+        if (node.get("confirm") or flags["dry_run"]) and flags["confirmed"] != node.id:
+            return self._ask_first(tree, node, scope, trace, depth)
+        flags["confirmed"] = None  # a yes is for one act, once
         emit = node.get("emit")
         if emit is not None:
             event = {"event": render(emit["event"], scope), "data": render(emit.get("data", {}), scope), "tree": tree.name}
@@ -366,9 +396,12 @@ class Runner:
         for index, item in enumerate(items):
             with_inputs = render(node.get("with", {}), {**scope, "item": item, "index": index})
             if "tree" in node.spec:
-                sub = self.run_tree(node.get("tree"), with_inputs, depth + 1)
+                sub = self.run_tree(node.get("tree"), with_inputs, depth + 1, dry_run=scope[FLAGS]["dry_run"])
             else:
-                sub = self.run(tree, scope["inputs"], depth=depth + 1, start=node.get("start"), state=state, scope_extra={"item": item, "index": index}, trace=trace)
+                sub = self.run(tree, scope["inputs"], depth=depth + 1, start=node.get("start"), state=state, scope_extra={"item": item, "index": index}, trace=trace, dry_run=scope[FLAGS]["dry_run"])
+            if sub.reason == "dry-run":  # an act it would have done: the whole run stops there
+                _merge_sub(trace, sub, depth)
+                return Outcome("error", tree.name, reason="dry-run", say=sub.say)
             if sub.status == "done":
                 results.append(sub.output if sub.output is not None else sub.say)
             else:
@@ -390,10 +423,10 @@ class Runner:
         with_inputs = render(node.get("with", {}), scope)
         if "intent" in node.spec:
             text = render(node.get("intent"), scope)
-            sub = self.run_intent(str(text), depth + 1)
+            sub = self.run_intent(str(text), depth + 1, dry_run=scope[FLAGS]["dry_run"])
             summary = f"intent {text!r} -> {sub.tree or '?'}: {sub.status}"
         else:
-            sub = self.run_tree(node.get("tree"), with_inputs, depth + 1)
+            sub = self.run_tree(node.get("tree"), with_inputs, depth + 1, dry_run=scope[FLAGS]["dry_run"])
             summary = f"tree {node.get('tree')}: {sub.status}"
         if sub.trace is not None and sub.trace is not trace:
             for s in sub.trace.steps:
@@ -403,7 +436,39 @@ class Runner:
         _put(state, node.get("into"), {"status": sub.status, "say": sub.say, "output": sub.output, "reason": sub.reason, "tree": sub.tree})
         if sub.status == "asked":
             return Outcome("error", tree.name, reason="ask-in-delegate", say=f"{node.id}: {sub.tree} asked a question; delegated trees cannot pause.")
+        if sub.reason == "dry-run":
+            return Outcome("error", tree.name, reason="dry-run", say=sub.say)
         return Step(node.id, "delegate", summary), node.next
+
+    def _ask_first(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
+        """Before an act that must be confirmed: what it would do, as a
+        question, with the run paused where :meth:`resume` can take it up.
+        The request is rendered and held against the tree's lists first, so
+        a dry run still says when an act would be refused."""
+        flags = scope[FLAGS]
+        if node.get("emit") is not None:
+            doing = f"emit {render(node.get('emit')['event'], scope)}"
+        else:
+            source_name = next(s for s in SOURCES if node.get(s) is not None)
+            spec = render(node.get(source_name), scope)
+            problem = tree.allowed(source_name, spec)
+            if problem is not None:
+                return Outcome("error", tree.name, reason=problem[0], say=f"{node.id}: {problem[1]}")
+            doing = would(source_name, spec)
+        if depth > 0:
+            reason = "dry-run" if flags["dry_run"] else "ask-in-subflow"
+            trace.add(Step(node.id, "act", f"would {doing}", depth=depth))
+            return Outcome("error", tree.name, reason=reason, say=f"{node.id}: would {doing}, but only a top-level run can stop to ask.")
+        confirm = node.get("confirm")
+        if isinstance(confirm, str):
+            question = str(render(confirm, scope))
+        elif flags["dry_run"] and not confirm:
+            question = f"Dry run: {node.id} would {doing}. Go ahead?"
+        else:
+            question = f"{node.id} would {doing}. Go ahead?"
+        trace.add(Step(node.id, "act", f"asked: {question}" + ("" if doing in question else f" (would {doing})"), depth=depth))
+        snapshot = {"tree": tree.name, "node": node.id, "inputs": scope["inputs"], "state": scope["state"], "trace": [s.to_dict() for s in trace.steps], "confirm": True, "dry_run": flags["dry_run"], "would": doing}
+        return Outcome("asked", tree.name, question=question, snapshot=snapshot)
 
     def _do_ask(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         if depth > 0:
@@ -430,6 +495,30 @@ class Runner:
 
 
 # ---------------------------------------------------------------- helpers
+
+
+FLAGS = "_run"  # the scope's own: whether this is a dry run, and which act was just confirmed
+YES = {"yes", "y", "true", "1", "on", "ok", "okay", "go", "go ahead", "sure", "do it", "confirm"}
+
+
+def yes(answer: Any) -> bool:
+    """Whether an answer to a confirmation is a yes: only the plain words for
+    one. Anything else, a blank included, is a no; an act is never done on a guess."""
+    if isinstance(answer, bool):
+        return answer
+    return isinstance(answer, str) and answer.strip().lower().rstrip(".!") in YES
+
+
+def _merge_sub(trace: Trace, sub: Outcome, depth: int) -> None:
+    if sub.trace is not None and sub.trace is not trace:
+        for st in sub.trace.steps:
+            st.depth = depth + 1
+            trace.steps.append(st)
+        trace.gaps.extend(sub.trace.gaps)
+
+
+def _not_in_a_dry_run(tree: str, doing: str) -> Outcome:
+    return Outcome("error", tree, reason="dry-run", say=f"Dry run: {doing}, which could act out of sight, so it stops here.")
 
 
 def _state_path(path: str) -> str:

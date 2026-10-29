@@ -524,6 +524,18 @@
   // A good answer is the one a node's expect describes (adapters.good).
   const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists" };
   const good = (source, observed) => { const key = GOOD[source || ""]; return key === undefined ? true : observed[key] === true; };
+  // What an act is about to do, in the words a confirmation asks with (adapters.would).
+  function would(source, spec) {
+    const carried = (v) => { const text = typeof v === "string" ? v : pyJson(v); const short = [...text].length <= 120 ? text : [...text].slice(0, 119).join("") + "…"; return typeof v === "string" ? pyJson(short) : short; };
+    if (source === "http") return `${String(spec.method === undefined ? "GET" : spec.method).toUpperCase()} ${spec.url}` + (spec.body !== undefined && spec.body !== null ? ` with ${carried(spec.body)}` : "");
+    if (source === "file") { if ("write" in spec) return `write ${carried(spec.write)} to ${spec.path}`; if ("append" in spec) return `append ${carried(spec.append)} to ${spec.path}`; }
+    if (source === "queue" && "publish" in spec) return `publish ${carried(spec.publish)} to ${spec.topic} at ${spec.url}`;
+    if (source === "serial" && spec.write !== undefined && spec.write !== null && spec.write !== "") return `send ${carried(spec.write)} to ${spec.device}`;
+    if (source === "memory") for (const mode of ["write", "add", "delete"]) if (mode in spec) return mode === "delete" ? `forget ${spec.key}` : `${mode} ${carried(spec[mode])} ${mode === "add" ? "to" : "at"} ${spec.key}`;
+    return `${source} ${what(source, spec)}`;
+  }
+  const YES = new Set(["yes", "y", "true", "1", "on", "ok", "okay", "go", "go ahead", "sure", "do it", "confirm"]);
+  const yes = (a) => (typeof a === "boolean" ? a : typeof a === "string" && YES.has(a.trim().toLowerCase().replace(/[.!]+$/, "")));
   function briefResult(source, observed) {
     if (source === "http" || source === "browser") return pyStr(observed.status === undefined ? null : observed.status);
     if (source === "file") return "written" in observed ? `wrote ${observed.written} B` : observed.exists ? `${observed.size} B` : "missing";
@@ -1278,6 +1290,8 @@
 
   // ------------------------------------------------------------ runtime
   class Halt { constructor(outcome) { this.outcome = outcome; } }
+  const FLAGS = "_run";  // the scope's own: whether this is a dry run, and which act was just confirmed
+  const notInADryRun = (tree, doing) => outcome("error", tree, { reason: "dry-run", say: `Dry run: ${doing}, which could act out of sight, so it stops here.` });
   const statePath = (path) => { path = String(path).trim(); const head = path.split(".")[0].split("[")[0]; return ["inputs", "state", "item", "index", "tree", "now", "env"].includes(head) ? path : "state." + path; };
   function put(state, path, value) {
     if (path.startsWith("state.")) path = path.slice(6);
@@ -1332,13 +1346,16 @@
     add(treeOrRaw) { const t = treeOrRaw instanceof Tree ? treeOrRaw : new Tree(treeOrRaw); this.trees[t.name] = t; return t; }
     get(name) { return this.trees[name] || null; }
 
-    async runTree(name, inputs, depth = 0) {
+    async runTree(name, inputs, depth = 0, dryRun = false) {
       const tree = this.get(name);
       if (!tree) {
-        if (this.resolver) return fromDict(await this.resolver.runTree(name, inputs || {}, depth), name);
+        if (this.resolver) {
+          if (dryRun) return notInADryRun(name, `would run ${name} where the swarm keeps it`);
+          return fromDict(await this.resolver.runTree(name, inputs || {}, depth), name);
+        }
         return outcome("error", name, { reason: "no-such-tree", say: `No tree named ${pyrepr(name)}.` });
       }
-      return this.run(tree, inputs || {}, { depth });
+      return this.run(tree, inputs || {}, { depth, dryRun });
     }
     candidates() {
       const out = [];
@@ -1347,10 +1364,13 @@
     }
     read(text) { return read(text, this.candidates(), this.clock()); }
     // Read a sentence and run the tree it names; the trace begins with the intent step.
-    async runIntent(text, depth = 0) {
+    async runIntent(text, depth = 0, dryRun = false) {
       const reading = this.read(text);
       if (!reading.matches.length) {
-        if (this.resolver) return fromDict(await this.resolver.runIntent(text, depth), "");
+        if (this.resolver) {
+          if (dryRun) return notInADryRun("", `would ask the swarm for ${pyrepr(text)}`);
+          return fromDict(await this.resolver.runIntent(text, depth), "");
+        }
         const nm = noMatchOutcome(text, "Nothing here");
         nm.output.reading = { cleaned: reading.cleaned, steps: reading.steps, considered: reading.considered.map((m) => m.trigger.pattern) };
         return outcome("error", "", Object.assign({ reason: "no-match" }, nm));
@@ -1360,12 +1380,13 @@
       const match = reading.matches[0], tree = this.get(match.tree);
       const trace = new Trace(tree.name), st = reading.step();
       trace.add(step(st.node, st.kind, st.summary, { observed: st.observed, next: tree.start, depth }));
-      return this.run(tree, match.inputs, { depth, trace });
+      return this.run(tree, match.inputs, { depth, trace, dryRun });
     }
     // Continue a run paused by ask: the answer goes where the ask node said.
     async resume(snapshot, answer) {
       const tree = this.get(snapshot.tree);
       if (!tree) return outcome("error", snapshot.tree || "", { reason: "no-such-tree" });
+      if (snapshot.confirm) return this.resumeConfirm(tree, tree.node(snapshot.node), snapshot, answer);
       const node = tree.node(snapshot.node), into = String(node.get("into"));
       const inputs = Object.assign({}, snapshot.inputs), state = Object.assign({}, snapshot.state);
       if (into.startsWith("inputs.")) {
@@ -1375,7 +1396,19 @@
       const trace = new Trace(tree.name);
       trace.steps = (snapshot.trace || []).map((x) => step(x.node, x.kind, x.summary, { observed: x.observed === undefined ? null : x.observed, chosen: x.chosen === undefined ? null : x.chosen, next: x.next === undefined ? null : x.next, elapsed_ms: x.elapsed_ms || 0, depth: x.depth || 0 }));
       trace.add(step(node.id, "ask", `answered: ${brief(answer)}`, { next: node.next }));
-      return this.run(tree, inputs, { start: node.next, state, trace });
+      return this.run(tree, inputs, { start: node.next, state, trace, dryRun: !!snapshot.dry_run });
+    }
+    // An act waiting for a yes: yes runs it (once) and walks on; anything else ends the run.
+    async resumeConfirm(tree, node, snapshot, answer) {
+      const trace = new Trace(tree.name);
+      trace.steps = (snapshot.trace || []).map((x) => step(x.node, x.kind, x.summary, { observed: x.observed === undefined ? null : x.observed, chosen: x.chosen === undefined ? null : x.chosen, next: x.next === undefined ? null : x.next, elapsed_ms: x.elapsed_ms || 0, depth: x.depth || 0 }));
+      const inputs = Object.assign({}, snapshot.inputs);
+      if (!yes(answer)) {
+        trace.add(step(node.id, "act", `answered: ${brief(answer)}; not done`));
+        return outcome("failed", tree.name, { reason: "declined", say: `Not done: ${node.id} was not confirmed.`, trace, inputs });
+      }
+      trace.add(step(node.id, "act", `answered: ${brief(answer)}`, { next: node.id }));
+      return this.run(tree, inputs, { start: node.id, state: Object.assign({}, snapshot.state), trace, dryRun: !!snapshot.dry_run, confirmed: node.id });
     }
     async run(tree, inputs, opts) {
       opts = opts || {};
@@ -1386,6 +1419,7 @@
       try { bound = tree.bindInputs(inputs); } catch (e) { if (e instanceof TreeError) return outcome("error", tree.name, { reason: "bad-input", say: e.message, trace }); throw e; }
       const state = opts.state ? opts.state : {};
       const scope = Object.assign({ inputs: bound, state, tree: { name: tree.name, version: tree.version }, now: nowScope(this.clock()), env: this.env }, opts.scopeExtra || {});
+      scope[FLAGS] = { dryRun: !!opts.dryRun, confirmed: opts.confirmed || null };  // no template can name it
       try {
         return await this.walk(tree, opts.start || tree.start, scope, trace, depth);
       } catch (h) {
@@ -1419,6 +1453,9 @@
     }
     do_observe(tree, node, scope, trace, depth) { return this.observeOrAct(tree, node, scope, trace, true); }
     async do_act(tree, node, scope, trace, depth) {
+      const flags = scope[FLAGS];
+      if ((node.get("confirm") || flags.dryRun) && flags.confirmed !== node.id) return this.askFirst(tree, node, scope, trace, depth);
+      flags.confirmed = null;  // a yes is for one act, once
       const emit = node.get("emit");
       if (emit !== undefined && emit !== null) {
         const event = { event: render(emit.event, scope), data: render(emit.data !== undefined ? emit.data : {}, scope), tree: tree.name };
@@ -1531,6 +1568,27 @@
       put(scope.state, into, result);
       return [step(node.id, "lookup", `${on} = ${brief(value)}; ${into}=${brief(result)}`, { observed: plain(value), chosen }), node.next];
     }
+    askFirst(tree, node, scope, trace, depth) {
+      const flags = scope[FLAGS];
+      let doing;
+      if (node.get("emit") !== undefined && node.get("emit") !== null) doing = `emit ${render(node.get("emit").event, scope)}`;
+      else {
+        const sourceName = SOURCES.find((s) => node.spec[s] !== undefined && node.spec[s] !== null);
+        const spec = render(node.get(sourceName), scope);
+        const problem = tree.allowed(sourceName, spec);
+        if (problem) return outcome("error", tree.name, { reason: problem[0], say: `${node.id}: ${problem[1]}` });
+        doing = would(sourceName, spec);
+      }
+      if (depth > 0) {
+        trace.add(step(node.id, "act", `would ${doing}`, { depth }));
+        return outcome("error", tree.name, { reason: flags.dryRun ? "dry-run" : "ask-in-subflow", say: `${node.id}: would ${doing}, but only a top-level run can stop to ask.` });
+      }
+      const confirm = node.get("confirm");
+      const question = typeof confirm === "string" ? pyStr(render(confirm, scope)) : flags.dryRun && !confirm ? `Dry run: ${node.id} would ${doing}. Go ahead?` : `${node.id} would ${doing}. Go ahead?`;
+      trace.add(step(node.id, "act", `asked: ${question}` + (question.includes(doing) ? "" : ` (would ${doing})`), { depth }));
+      const snapshot = { tree: tree.name, node: node.id, inputs: scope.inputs, state: scope.state, trace: trace.steps.map(stepDict), confirm: true, dry_run: flags.dryRun, would: doing };
+      return outcome("asked", tree.name, { question, snapshot });
+    }
     async do_each(tree, node, scope, trace, depth) {
       const state = scope.state;
       let items = resolve(statePath(node.get("over")), scope);
@@ -1543,8 +1601,12 @@
         const item = items[index];
         const withInputs = render(node.get("with", {}), Object.assign({}, scope, { item, index }));
         let sub;
-        if ("tree" in node.spec) sub = await this.runTree(node.get("tree"), withInputs, depth + 1);
-        else sub = await this.run(tree, scope.inputs, { depth: depth + 1, start: node.get("start"), state, scopeExtra: { item, index }, trace });
+        if ("tree" in node.spec) sub = await this.runTree(node.get("tree"), withInputs, depth + 1, scope[FLAGS].dryRun);
+        else sub = await this.run(tree, scope.inputs, { depth: depth + 1, start: node.get("start"), state, scopeExtra: { item, index }, trace, dryRun: scope[FLAGS].dryRun });
+        if (sub.reason === "dry-run") {  // an act it would have done: the whole run stops there
+          if (sub.trace && sub.trace !== trace) { for (const s of sub.trace.steps) { s.depth = depth + 1; trace.steps.push(s); } trace.gaps.push(...sub.trace.gaps); }
+          return outcome("error", tree.name, { reason: "dry-run", say: sub.say });
+        }
         if (sub.status === "done") results.push(sub.output !== null && sub.output !== undefined ? sub.output : sub.say);
         else { failures++; results.push(null); if (node.get("stop_on_fail", false)) return outcome("error", tree.name, { reason: "each-failed", say: `${node.id}: item ${index} failed: ${sub.say || sub.reason}` }); }
         if (sub.trace && sub.trace !== trace) { for (const s of sub.trace.steps) { s.depth = depth + 1; trace.steps.push(s); } trace.gaps.push(...sub.trace.gaps); }
@@ -1555,11 +1617,12 @@
     async do_delegate(tree, node, scope, trace, depth) {
       const withInputs = render(node.get("with", {}), scope);
       let sub, summary;
-      if ("intent" in node.spec) { const text = render(node.get("intent"), scope); sub = await this.runIntent(pyStr(text), depth + 1); summary = `intent ${pyrepr(pyStr(text))} -> ${sub.tree || "?"}: ${sub.status}`; }
-      else { sub = await this.runTree(node.get("tree"), withInputs, depth + 1); summary = `tree ${node.get("tree")}: ${sub.status}`; }
+      if ("intent" in node.spec) { const text = render(node.get("intent"), scope); sub = await this.runIntent(pyStr(text), depth + 1, scope[FLAGS].dryRun); summary = `intent ${pyrepr(pyStr(text))} -> ${sub.tree || "?"}: ${sub.status}`; }
+      else { sub = await this.runTree(node.get("tree"), withInputs, depth + 1, scope[FLAGS].dryRun); summary = `tree ${node.get("tree")}: ${sub.status}`; }
       if (sub.trace && sub.trace !== trace) { for (const s of sub.trace.steps) { s.depth = depth + 1; trace.steps.push(s); } trace.gaps.push(...sub.trace.gaps); }
       put(scope.state, node.get("into"), { status: sub.status, say: sub.say, output: sub.output, reason: sub.reason, tree: sub.tree });
       if (sub.status === "asked") return outcome("error", tree.name, { reason: "ask-in-delegate", say: `${node.id}: ${sub.tree} asked a question; delegated trees cannot pause.` });
+      if (sub.reason === "dry-run") return outcome("error", tree.name, { reason: "dry-run", say: sub.say });
       return [step(node.id, "delegate", summary), node.next];
     }
     do_ask(tree, node, scope, trace, depth) {
@@ -1856,7 +1919,7 @@
     health() {
       return { status: "ok", name: this.name, trees: this.trees().map((t) => t.name), errors: this.errors, runs: this.runs, gaps: this.gaps.size, unanswered: this.unanswered.size, suggestions: this.suggestions.size, uptime_s: Math.floor(this.wall() - this.started), watches: 0 };
     }
-    capabilities() { return { name: this.name, trees: this.trees().map((t) => t.capability()) }; }
+    capabilities() { return { name: this.name, trees: this.trees().map((t) => t.capability()), dry_run: true }; }
     noteGaps(gaps) {
       const now = this.wall();
       for (const g of gaps) {
@@ -1900,13 +1963,13 @@
     async intent(body) {
       const text = body.text;
       if (typeof text !== "string" || !text.trim()) return { status: "error", reason: "bad-request", say: 'Send {"text": "..."}.' };
-      const o = await this.runner.runIntent(text, Math.trunc(Number(body.depth || 0)));
+      const o = await this.runner.runIntent(text, Math.trunc(Number(body.depth || 0)), body.dry_run === true);
       if (o.reason === "no-match") this.noteUnanswered(text);
       return this.finish(o, body);
     }
     async run(body) {
       if (typeof body.tree !== "string") return { status: "error", reason: "bad-request", say: 'Send {"tree": "...", "inputs": {...}}.' };
-      return this.finish(await this.runner.runTree(body.tree, body.inputs || {}, Math.trunc(Number(body.depth || 0))), body);
+      return this.finish(await this.runner.runTree(body.tree, body.inputs || {}, Math.trunc(Number(body.depth || 0)), body.dry_run === true), body);
     }
     async resume(body) {
       const snap = body.snapshot;

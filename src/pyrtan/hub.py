@@ -104,6 +104,7 @@ class Peer:
     last_error: str | None = None
     registered: float = field(default_factory=time.time)
     kind: str = "service"
+    dry_run: bool = False  # says, in its /capabilities, that it stops before every act in a dry run
 
     @property
     def link(self) -> str:
@@ -362,6 +363,7 @@ class Hub:
         if status == 200 and isinstance(caps, dict):
             with self._lock:
                 peer.trees = list(caps.get("trees", []))
+                peer.dry_run = caps.get("dry_run") is True
                 peer.name = caps.get("name") or peer.name
                 peer.last_ok = time.time()
                 peer.last_error = None
@@ -510,7 +512,7 @@ class Hub:
         for m in matches:
             m.tree = tree_name  # the step names the tree, not the (peer, tree) pair
         peer = next((h for h in self.holders() if h.url == only), None) if only is not None else self.holder(tree_name) or self.peers.get(peer_url)
-        status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True), "hops": body.get("hops", [])})
+        status, answer = self.forward(peer, "/run", {"tree": tree_name, "inputs": matches[0].inputs, "depth": body.get("depth", 0), "trace": body.get("trace", True), "hops": body.get("hops", []), **({"dry_run": True} if body.get("dry_run") else {})})
         if isinstance(answer.get("trace"), dict) and isinstance(answer["trace"].get("steps"), list):
             # The hub read the sentence; the peer only ran the tree. Put the
             # reading where a caller expects it, at the top of the trace.
@@ -536,6 +538,12 @@ class Hub:
     def forward(self, peer: Local | Peer | Remote | None, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         if peer is None:
             return 200, {"status": "error", "reason": "no-peer"}
+        dry = body.get("dry_run") or (isinstance(body.get("snapshot"), dict) and body["snapshot"].get("dry_run"))
+        if dry and not (isinstance(peer, Local) or (isinstance(peer, Peer) and peer.dry_run)):
+            # A dry run must not act anywhere. A member, a followed hub or a service
+            # that does not say it stops before its acts might run it for real.
+            where = getattr(peer, "name", "") or getattr(peer, "url", "a peer")
+            return 200, {"status": "error", "reason": "dry-run", "tree": str(body.get("tree") or ""), "say": f"Dry run: this would run on {where}, which does not say it stops before its acts, so it stops here."}
         if isinstance(peer, Local):
             handler = {"/run": peer.service.run, "/intent": peer.service.intent, "/resume": peer.service.resume}[path]
             answer = handler({k: v for k, v in body.items() if k != "hops"})

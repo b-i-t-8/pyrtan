@@ -1581,5 +1581,9 @@
       },
       "html_url": "https://github.com/b-i-t-8/drifted/releases/tag/v1.0.0"
     }
+  },
+  "POST https://lights.example/kitchen": {
+    "status": 204,
+    "body": ""
   }
 }

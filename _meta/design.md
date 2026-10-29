@@ -399,7 +399,13 @@ Five trees, all against real public APIs, all tested offline:
     tell a catalog tree's author which property changed. Section 8's
     "when they stop, the trace will say exactly where" now holds for a
     page that changed shape, not only for a value no branch covers.
-17. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+17. **v0.32, built: acts that ask first, and dry runs.** An `act` may carry
+    `confirm` (true, or its own question): the run pauses as an `ask`
+    does, with the request it would send, and only a plain yes does it.
+    A dry run treats every act that way, observes for real, and never
+    acts out of sight: not in a delegated tree, not through the swarm,
+    and through a hub only to services that say they keep a dry run.
+18. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
