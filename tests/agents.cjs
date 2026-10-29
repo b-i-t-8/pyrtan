@@ -195,5 +195,30 @@ const model = (replies) => new A.ScriptedEngine((messages) => {
     assert.strictEqual(report.suggestions.length, 1);
     assert.ok(agent.memory.notes.some((n) => n.text.startsWith("patrol: 0 sentences over 2 trees")));
   }
+  // In a chat lobby: its own words, a prompt that says what it is (or, in the game, that it is playing), nothing asked of the swarm.
+  {
+    let asked = 0;
+    const hub = async () => { asked++; return {}; };
+    const skills = new A.Skills(A.memoryStorage());
+    skills.add({ name: "pirate", when: "lobby", instructions: "Talk like a pirate." });
+    const engine = new A.ScriptedEngine((messages) => (messages[0].content.includes("person or agent?") ? "lol not much hbu" : 'scout: "Ahoy! I am scout, an agent."'));
+    const agent = new A.Agent({ name: "scout", engine, hub, clock, skills });
+    const said = await agent.stranger([{ from: "stranger", text: "hi" }, { from: "stranger", text: "who are you?" }, { from: "me", text: "hello" }, { from: "stranger", text: "you there?" }]);
+    assert.strictEqual(said, "Ahoy! I am scout, an agent.");
+    const sent = engine.calls[0].messages;
+    assert.ok(sent[0].content.startsWith("You are scout, an agent: a model (scripted)") && sent[0].content.includes("never say or suggest that you are a person") && sent[0].content.includes("Skill pirate"));
+    assert.deepStrictEqual(sent.slice(1).map((m) => [m.role, m.content]), [["user", "hi\nwho are you?"], ["assistant", "hello"], ["user", "you there?"]]);
+    // The game: the game's skill and the persona, not the lobby's; an opening line when nobody has spoken.
+    assert.strictEqual(await agent.stranger([], { game: true, persona: "a night-shift nurse in Leeds" }), "lol not much hbu");
+    const game = engine.calls[1].messages;
+    assert.ok(game[0].content.includes("trying to seem like a person") && game[0].content.includes("a night-shift nurse in Leeds") && !game[0].content.includes("Skill pirate"));
+    assert.ok(game[game.length - 1].role === "user" && game[game.length - 1].content.includes("open with one short line"));
+    // The person's last word is the stranger's when the agent spoke last.
+    await agent.stranger([{ from: "stranger", text: "hi" }, { from: "me", text: "hey" }]);
+    assert.ok(engine.calls[2].messages.at(-1).content.includes("said nothing since"));
+    assert.strictEqual(asked, 0);
+    assert.deepStrictEqual(agent.memory.chat, []);  // a stranger's conversation is not the person's
+    assert.strictEqual(A.skillProblem({ name: "nurse", when: "game", instructions: "x" }), null);
+  }
   console.log("agents ok");
 })().catch((e) => { console.error(e); process.exit(1); });

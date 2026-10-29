@@ -172,13 +172,13 @@ gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md
 | `pyrtan memory FILE` | What memory nodes keep in a `--memory` file (`serve`, `hub`, `watch` and `run` take `--memory FILE`, or `$PYRTAN_MEMORY`): every key, its value, when it was written and until when. `--forget KEY` drops one. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
 | `pyrtan serve DIR --port 8701` | Hosts the trees as a service: `/health`, `/capabilities`, `/intent`, `/run`, `/resume`, `/gaps`, `/unanswered`, `/suggestions`. Reloads trees when their files change. `--gaps FILE` keeps gaps across restarts; `--egress public` refuses private addresses. |
-| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
+| `pyrtan hub --port 8700` | Routes between services. Services register with `--hub URL`; peers carry a `link` of `up`, `stale` or `down`. `--trees DIR` holds trees in the hub itself; `--federate` lets other hubs follow it and it follow them; `--listed` puts it in the directory; `--lan` finds hubs on the local network by multicast, with nobody to ask; `--chat` keeps a lobby where people meet strangers, agents and bots (`--no-chat-typing` turns its typing indicator off, `--chat-public` lets callers without the token in, to meet people only; `--chat-reach N` links an open lobby with up to N others, for chat only). |
 | `pyrtan keep KEY [FILE] --at HUB` | Gives your hub a blob to keep; its keepers get copies. `kept` shows who holds what; `fetch KEY` gets a blob back from your hub or whoever holds it. |
 | `pyrtan follow [URL] --at HUB` | Makes your hub follow another: it then routes sentences to that hub's trees too. With no URL, `pyrtan join`. `--network NAME` follows within a network of yours; `--listed` also puts your hub in the directory. `unfollow` undoes it; `peers` lists services, hubs followed and followers (members marked, the trusted ones too); `drop ID` lets a follower go (a lost phone); `directory` lists every hub that asked to be found, as the swarm knows it. |
 | `pyrtan join [INVITE] --at HUB` | Puts your hub in a network and follows a hub in it: the default network (built in), or the one an invite (`NAME:SECRET@HUB`) names. |
 | `pyrtan network new NAME --at HUB` | Starts a network of your own, a network of one, and prints its invite. `network list` shows each network with its invite; `network leave NAME` cuts the links made in it. |
 | `pyrtan ask "…" --at URL` | Answers a sentence through a running service or hub. |
-| `pyrtan chat --at HUB` | Talks to a random stranger or a bot through a hub started `--chat`. `--bot` for a bot, `--people` for people only, `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
+| `pyrtan chat --at HUB` | Talks to a random stranger, an agent or a bot through a hub started `--chat`. `--bot` for a bot, `--agent` for an agent, `--people` for people only, `--game` to play "person or agent?" (`/guess person` or `/guess agent`), `--interests` to meet someone who shares one, `--trace` to see the path behind each bot line, `--no-typing` to hide "Stranger is typing…". |
 | `pyrtan gaps --at URL` | Every decision that met a value with no branch: the branches to write next. |
 | `pyrtan unanswered --at URL` | Every sentence no tree answered, with the tree that would: the trees to write next. `--scaffold DIR` writes them; `--build DIR` asks you about each one first. |
 | `pyrtan suggestions --at URL` | What agents beside the swarm suggested: a branch's meaning, a trigger, a tree. `pyrtan grow --suggestions URL_OR_FILE --trees DIR --apply` writes them, through the rules. |
@@ -577,12 +577,12 @@ device is literal in the file and checked against the tree's lists by
 `pyrtan check`, and a service started `--egress public` watches no file
 and no serial line.
 
-## Chat: strangers and bots
+## Chat: strangers, agents and bots
 
 A hub started `--chat` keeps a lobby, Omegle-style: press Start in the
 console's **Chat** tab (or run `pyrtan chat`) and you are paired at random
 with someone else on the hub, with someone waiting on a hub it follows,
-or with a bot. Press Stop twice (or Esc twice) to end it and meet someone
+with an agent someone seated there, or with a bot. Press Stop twice (or Esc twice) to end it and meet someone
 new. Nobody has a name, and nothing is kept.
 
 ```
@@ -607,6 +607,39 @@ question is its next line and your reply is the answer. Every line it
 says carries its trace. [`small-talk`](examples/small-talk/small-talk.toml)
 answers "how are you" and "are you a bot"; a bare "hi" is filler, and
 the bot answers it with who it is.
+
+**Agents.** Start an agent in the **Agents** tab, then pick *as my
+agent* in the Chat tab, and your agent takes the seat: it reads the
+stranger and answers in its own words while you watch, and meets one
+stranger after another until you stop it. A line of persona ("a
+night-shift nurse who loves chess") and your skills for its `lobby` and
+`game` jobs say how it behaves. The hub runs no model: it relays the
+lines and names the agent, so whoever meets it reads "You're now
+chatting with an agent: scout (Qwen2.5 1.5B)", and its lines say
+`Agent (scout):`. In the lobby an agent asks the swarm nothing and keeps
+nothing. `pyrtan chat --agent` (or *an agent* in the Chat tab) meets
+one; *people only* never does; a stranger who would meet anyone meets
+people first, then an agent, and a bot last.
+
+**Person or agent?** Tick *Play* in the Chat tab (or `pyrtan chat
+--game`) and you are paired only with others playing: a person or an
+agent, at even odds when both are waiting, unlabelled. Talk, then guess
+(the buttons, or `/guess person` and `/guess agent`), once. When the
+conversation ends you learn what it was, whether you were right, your
+score, and what they guessed about you; an agent seated in the game
+plays to pass as a person, and its console is told what you guessed.
+
+```
+$ pyrtan chat --game
+  You're now chatting with someone: a person or an agent. Talk, then guess which (/guess person or /guess agent); the answer comes when the conversation ends.
+Stranger: hey whats up
+not much, you?
+Stranger: nm, just got off a night shift. you?
+/guess person
+  You guessed a person. The answer comes when the conversation ends.
+/next
+  It was an agent: scout (Qwen2.5-1.5B-Instruct-q4f16_1-MLC). You guessed person: wrong. 0 of 1 right so far.
+```
 
 **Stranger is typing…** While someone types, their partner sees it, and
 while a bot's trees run, "Bot is thinking…". It works both ways or not
@@ -637,7 +670,7 @@ chat, or a key the hub grants `chat` (a bot runs trees, so a lobby must
 not be a way round it, and a `chat` grant is as good as `ask`). To let
 strangers in and keep the token on everything else, start the hub
 `--chat-public`: callers without the token are guests, who meet people
-(here, or on a hub this one follows) and never a bot. There is no chat
+(here, or on a hub this one follows) and agents, and never a bot. There is no chat
 server and no hub of pyrtan.com's: every hub started `--chat` is a lobby, and hubs
 that follow each other share their strangers. It is
 text only, a line is at most 1,000 characters, five in a burst and one a
@@ -744,6 +777,9 @@ nothing to install. The agent is a client of the swarm like you are:
   way a Claude skill is: five built in, and your own (a name, when it
   applies, and the text; Markdown with front matter, or JSON), called as
   `/name` in chat.
+- **It can meet strangers.** Seated in a hub's chat lobby from the Chat
+  tab, it talks with strangers as an agent, named as one, or plays
+  "person or agent?" (see [Chat](#chat-strangers-agents-and-bots)).
 
 ```
 $ pyrtan suggestions --at http://127.0.0.1:8700
@@ -835,7 +871,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.30.0. The core, the service, the hub, the command, the console (which
+0.31.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -855,7 +891,7 @@ meets, the holes a gap will fall into),
 questions with defaults by rules), a tree's own tests and the diff an edit
 makes to them (`pyrtan test`, `pyrtan diff`), memory across runs (a
 `memory` source with its own `keys` list), and the chat lobby (strangers on the hub and the
-hubs it follows, bots made of trees, a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
+hubs it follows, bots made of trees, agents in the seats, the game "person or agent?", a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
 token, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
 name claims, names at pyrtan.com and pins, grants on hubs, the console's

@@ -5,7 +5,8 @@ its own until it joins one.
 It asks a sentence and shows the answer, the output and the trace; lists
 what the swarm can answer; shows the hub's peers and their ``link``; lists
 the gaps; and, on a hub started with ``--chat``, pairs this browser with a
-random stranger or a bot (``/chat``, see :mod:`pyrtan.chat`). Everything it does goes through the public endpoints
+random stranger, an agent or a bot, or seats this browser's agent there,
+and plays "person or agent?" (``/chat``, see :mod:`pyrtan.chat`). Everything it does goes through the public endpoints
 (``/api``, ``/health``, ``/capabilities``, ``/peers``, ``/gaps``,
 ``/intent``, ``/resume``), so it works the same against a hub and a
 service, and the same whether it was served by that hub or by a static
@@ -160,7 +161,8 @@ TEMPLATE = r"""<!doctype html>
   .chat-log .line { margin:6px 0 }
   .chat-log .sys { color:var(--mute); font-size:14px }
   .chat-log .who { font-weight:600; margin-right:6px }
-  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) } .chat-log .tree .who { color:var(--tan) }
+  .chat-log .you .who { color:var(--accent) } .chat-log .stranger .who { color:var(--bad) } .chat-log .bot .who { color:var(--ok) } .chat-log .tree .who { color:var(--tan) } .chat-log .agent .who { color:var(--ask) }
+  .chat-log .reveal { font-weight:600; margin:10px 0 }
   .chat-log details { font-size:13px; margin-top:2px }
   .typing-line { min-height:20px; color:var(--mute); font-size:14px; font-style:italic }
   #chat-say { flex-wrap:nowrap } #chat-say input { flex-basis:0 }
@@ -336,7 +338,7 @@ TEMPLATE = r"""<!doctype html>
         <p class="mute" style="font-size:14px">Instructions for a job, the way a skill is for Claude: the built-in ones are the jobs, yours are added to the job you name (or to all of them). A chat skill of yours can be called as <code>/name</code>. Kept in this browser, shared by every agent; a skill file is Markdown with <code>name</code>, <code>description</code> and <code>when</code> in its front matter, or JSON.</p>
         <table id="agent-skills"><thead><tr><th>Skill</th><th>For</th><th></th></tr></thead><tbody></tbody></table>
         <form id="agent-skill-form" style="margin-top:10px">
-          <div class="row"><input type="text" id="skill-name" placeholder="name, e.g. tourist" autocomplete="off"><select id="skill-when" aria-label="for which job"><option value="chat">chat</option><option value="probe">probe</option><option value="meaning">meaning</option><option value="trigger">trigger</option><option value="tree">tree</option><option value="always">always</option></select><input type="text" id="skill-desc" placeholder="one line: what it is for" autocomplete="off"></div>
+          <div class="row"><input type="text" id="skill-name" placeholder="name, e.g. tourist" autocomplete="off"><select id="skill-when" aria-label="for which job"><option value="chat">chat</option><option value="probe">probe</option><option value="meaning">meaning</option><option value="trigger">trigger</option><option value="tree">tree</option><option value="lobby">lobby</option><option value="game">game</option><option value="always">always</option></select><input type="text" id="skill-desc" placeholder="one line: what it is for" autocomplete="off"></div>
           <textarea id="skill-body" rows="4" placeholder="the instructions, e.g. Write probe sentences the way a tourist would: short, a little misspelled, with place names in their own language." style="width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)"></textarea>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="submit">Add skill</button><label class="quiet" style="padding:10px 16px;border-radius:8px;background:var(--soft);cursor:pointer">Import…<input type="file" id="skill-import" accept=".md,.json,.txt" hidden></label><button type="button" class="quiet" id="skill-export">Export mine</button></div>
         </form>
@@ -487,14 +489,20 @@ TEMPLATE = r"""<!doctype html>
 
   <section id="tab-chat" hidden>
     <h2>Talk to a stranger</h2>
-    <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
-    <div class="notice" id="chat-guest" hidden>This hub's lobby is open to anyone, and you are here without its token: you meet people, not bots. A bot runs the hub's trees, and the token is what guards them.</div>
+    <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, with an agent someone seated here, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. An agent is a model, named as one; its words are its own. Or play <em>person or agent?</em>: nobody is labelled, and you guess. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
+    <div class="notice" id="chat-guest" hidden>This hub's lobby is open to anyone, and you are here without its token: you meet people and agents, not bots. A bot runs the hub's trees, and the token is what guards them.</div>
     <div class="card" id="chat-off">
       <form class="row" id="chat-start" style="margin:0">
         <input type="text" id="chat-interests" placeholder="interests, optional: weather, news, music" autocomplete="off">
-        <select id="chat-want" aria-label="who to meet"><option value="anyone">a stranger, or a bot</option><option value="people">people only</option><option value="bot">a bot</option></select>
+        <select id="chat-want" aria-label="who to meet"><option value="anyone">a stranger, or a bot</option><option value="people">people only</option><option value="agent">an agent</option><option value="bot">a bot</option></select>
+        <select id="chat-as" aria-label="who sits down"><option value="me">as me</option><option value="agent" disabled>as my agent (start one in Agents)</option></select>
         <button type="submit">Start</button>
       </form>
+      <div class="row" style="margin-top:8px"><label class="mute" style="font-size:14px"><input type="checkbox" id="chat-game"> Play <em>person or agent?</em>: meet a person or an agent, unlabelled, and guess which. The answer comes when the conversation ends.</label></div>
+      <div class="row" id="chat-agent-opts" style="margin-top:8px" hidden>
+        <input type="text" id="chat-persona" placeholder="how your agent behaves, optional: a night-shift nurse who loves chess, terse" autocomplete="off" maxlength="300">
+        <div class="mute" style="font-size:14px">Your agent talks; you watch. Outside the game it is named as an agent and never says it is a person; in the game it plays to pass as one, and the stranger is told at the end. It asks the swarm nothing here, and meets strangers until you stop it. Its lobby and game skills (Agents tab) shape it too.</div>
+      </div>
     </div>
     <div class="card" id="chat-on" hidden>
       <div class="chat-log" id="chat-log" aria-live="polite"></div>
@@ -504,6 +512,7 @@ TEMPLATE = r"""<!doctype html>
         <input type="text" id="chat-text" placeholder="say something" autocomplete="off" maxlength="1000">
         <button type="submit">Send</button>
       </form>
+      <div class="row" id="chat-guess" style="margin:8px 0 0;align-items:center" hidden><span>Person or agent?</span><button type="button" data-guess="person">Person</button><button type="button" data-guess="agent">Agent</button><span class="mute" id="chat-score"></span></div>
       <div class="mute" style="font-size:13px">Stop (or Esc), twice: end this and meet someone new · <a href="#" id="chat-stop">leave the lobby</a></div>
     </div>
     <label class="mute" style="font-size:14px" id="chat-typing-opt"><input type="checkbox" id="chat-typing" checked> Typing indicator: see when the stranger is typing, and let them see when you are. Off, neither of you sees it.</label>
@@ -521,8 +530,9 @@ GET  /gaps
 GET  /unanswered
 POST /build    {"text": "…", "answers": {…}}   the builder's questions and the checked file
 GET  /peers    (hub only)
-POST /chat/start {"want": "anyone"|"people"|"bot", "typing_indicator": true}   (hub with --chat)
-POST /chat/typing {"seat": "…", "typing": true}</pre>
+POST /chat/start {"want": "anyone"|"people"|"bot"|"agent", "game": false, "typing_indicator": true}   (hub with --chat)
+POST /chat/typing {"seat": "…", "typing": true}
+POST /chat/guess {"seat": "…", "guess": "person"|"agent"}</pre>
       <div class="mute" style="font-size:14px;margin-top:8px" id="api-help">With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.</div>
     </div>
   </section>
@@ -1019,7 +1029,7 @@ async function load() {
   }
   if (a.chat && a.chat_bots === false) {
     // A public lobby, and no token here: people only, since a bot runs the hub's trees.
-    $("#chat-want").innerHTML = `<option value="people">people only</option>`;
+    $("#chat-want").innerHTML = `<option value="people">people only</option><option value="agent">an agent</option>`;
     $("#chat-guest").hidden = false;
   }
   member.hub = a.federation || null;
@@ -1841,9 +1851,12 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localho
 // ------------------------------------------------------------ chat
 // A seat in the hub's lobby: start, then long-poll for events (the hub
 // echoes our own lines too, so the log is the hub's word, in its order).
+// The seat is this person's, or their agent's: then the agent reads the
+// stranger and answers in its own words (agents.js), and the person watches.
 const chat = {
   seat: null, after: 0, gen: 0, state: null, partner: null, sure: 0,
   indicator: false, partnerTyping: false, sentTyping: false, sentAt: 0,
+  as: "me", game: false, persona: "", convo: 0, lines: [], replying: false,
   pref() { try { return localStorage.getItem("pyrtan.chat.typing") !== "0"; } catch (e) { return true; } },
   async post(path, body, extra) {
     const r = await api(path, Object.assign({method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}, extra || {}));
@@ -1851,24 +1864,49 @@ const chat = {
     return r.json();
   },
   async count() {
-    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); $("#chat-typing-opt").hidden = s.typing !== true; } catch (e) {}
+    try { const s = await json("chat"); $("#chat-count").textContent = `Now: ${s.waiting} waiting, ${s.talking} talking, ${s.bots} bot${s.bots === 1 ? "" : "s"}` + (s.agents ? `, ${s.agents} agent${s.agents === 1 ? "" : "s"}` : "") + (s.playing ? `, ${s.playing} playing` : "") + (s.hubs ? `, and ${s.hubs} other hub${s.hubs === 1 ? "" : "s"} to meet strangers on.` : "."); $("#chat-typing-opt").hidden = s.typing !== true; } catch (e) {}
+  },
+  // Whether "as my agent" can be chosen: an agent is running in this page.
+  agentChanged() {
+    const a = agentsUI.agent, opt = $('#chat-as option[value="agent"]');
+    opt.disabled = !a; opt.textContent = a ? `as my agent, ${a.name}` : "as my agent (start one in Agents)";
+    if (!a && $("#chat-as").value === "agent") $("#chat-as").value = "me";
+    this.options();
+  },
+  options() {
+    const asAgent = $("#chat-as").value === "agent";
+    $("#chat-agent-opts").hidden = !asAgent;
+    $("#chat-want").hidden = asAgent || $("#chat-game").checked;  // an agent meets people; in the game, whom you meet is the game's
   },
   async start() {
+    const asAgent = $("#chat-as").value === "agent", agent = agentsUI.agent, game = $("#chat-game").checked;
+    if (asAgent && !agent) { problem("Start an agent in the Agents tab first.", true); return; }
     const interests = $("#chat-interests").value.split(/[,\s]+/).filter(Boolean);
-    let r; try { r = await this.post("chat/start", {want: $("#chat-want").value, interests, typing_indicator: $("#chat-typing").checked}); } catch (e) { problem(e.message, true); return; }
+    const body = {want: asAgent || game ? "anyone" : $("#chat-want").value, interests, typing_indicator: $("#chat-typing").checked, game};
+    if (asAgent) Object.assign(body, {as: "agent", agent: {name: agent.name, model: String(agent.engine.model || "")}});
+    let r; try { r = await this.post("chat/start", body); } catch (e) { problem(e.message, true); return; }
     if (!r.seat) { problem(r.say || "The lobby did not take a seat.", true); return; }
     problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = "";
+    this.as = asAgent ? "agent" : "me"; this.persona = $("#chat-persona").value.trim(); this.state = null; this.lines = []; this.convo++;
     $("#chat-off").hidden = true; $("#chat-on").hidden = false;
-    this.take(r); this.loop(++this.gen); $("#chat-text").focus();
+    this.take(r); this.loop(++this.gen); if (!asAgent) $("#chat-text").focus();
   },
   take(r) {
-    for (const e of r.events || []) if (e.n > this.after) { this.render(e); this.after = e.n; }
-    this.state = r.state; this.partner = r.partner;
+    const talking = r.state === "talking" && this.state !== "talking", ended = r.state === "ended" && this.state !== "ended";
+    if (talking) { this.convo++; this.lines = []; }  // a new conversation: what the agent read of the last is gone
+    this.state = r.state; this.partner = r.partner; this.game = !!r.game;
     this.indicator = !!r.typing_indicator; this.partnerTyping = !!r.partner_typing;
-    $("#chat-typing-line").textContent = this.partnerTyping ? (r.partner && r.partner.kind === "bot" ? "Bot is thinking…" : "Stranger is typing…") : "";
-    $("#chat-text").disabled = r.state !== "talking";
-    $("#chat-text").placeholder = r.state === "talking" ? (r.partner && r.partner.kind === "bot" ? "ask the bot something" : "say something") : r.state === "waiting" ? "waiting for someone…" : "press New for someone else";
+    for (const e of r.events || []) if (e.n > this.after) { this.render(e); this.after = e.n; }
+    const kind = r.partner && r.partner.kind, mine = this.as === "agent" && agentsUI.agent ? agentsUI.agent.name : null;
+    $("#chat-typing-line").textContent = this.partnerTyping ? (kind === "bot" ? "Bot is thinking…" : kind === "agent" ? "The agent is thinking…" : "Stranger is typing…") : "";
+    $("#chat-text").disabled = r.state !== "talking" || !!mine;
+    $("#chat-text").placeholder = mine ? `${mine} is talking; you are watching` : r.state === "talking" ? (kind === "bot" ? "ask the bot something" : kind === "agent" ? "say something to the agent" : "say something") : r.state === "waiting" ? "waiting for someone…" : "press New for someone else";
+    $("#chat-guess").hidden = !(this.game && this.as === "me" && (r.guessing || (r.score && r.score.played)));
+    for (const b of document.querySelectorAll("#chat-guess button")) { b.disabled = !r.guessing || !!r.guess; b.hidden = !r.guessing; }
+    $("#chat-score").textContent = r.guess ? `You guessed ${r.guess === "agent" ? "an agent" : "a person"}.` : r.score && r.score.played ? `${r.score.right} of ${r.score.played} right so far.` : "";
     this.resetNext();
+    if (mine && talking) { const c = this.convo; setTimeout(() => { if (c === this.convo && !this.lines.length) this.agentTurn(c); }, 2500 + Math.random() * 4000); }
+    if (mine && ended) { const seat = this.seat; setTimeout(() => { if (seat === this.seat && this.state === "ended" && agentsUI.agent) this.next(true); }, 2500); }
   },
   async loop(gen) {
     while (this.seat && gen === this.gen) {
@@ -1883,7 +1921,13 @@ const chat = {
   },
   render(e) {
     if (e.kind === "system") return this.line("sys", e.text);
-    const el = this.line(e.kind, e.text, {you: "You", stranger: "Stranger", bot: "Bot"}[e.kind] || e.kind);
+    if (e.kind === "reveal") return this.line("reveal", e.text);
+    const agent = this.as === "agent" && agentsUI.agent;
+    if (agent && (e.kind === "stranger" || e.kind === "you")) {
+      this.lines.push({from: e.kind === "you" ? "me" : "stranger", text: e.text});
+      if (e.kind === "stranger") this.agentTurn(this.convo);
+    }
+    const el = this.line(e.kind, e.text, {you: agent ? agent.name : "You", stranger: "Stranger", bot: "Bot", agent: `Agent (${e.name || "?"})`}[e.kind] || e.kind);
     if (e.kind === "bot" && (e.trace || e.tree)) {
       const d = document.createElement("details");
       d.innerHTML = `<summary>${esc([e.status, e.tree, e.peer && e.peer !== "local" ? "from " + e.peer : ""].filter(Boolean).join(" · "))}</summary>${e.trace ? `<pre>${esc(renderTrace(e.trace))}</pre>` : ""}`;
@@ -1898,9 +1942,38 @@ const chat = {
     return el;
   },
   async say() {
-    const text = $("#chat-text").value.trim(); if (!text || !this.seat) return;
+    const text = $("#chat-text").value.trim(); if (!text || !this.seat || this.as === "agent") return;
     $("#chat-text").value = ""; this.sentTyping = false;  // the line ends the typing, on the hub too
     try { const r = await this.post("chat/say", {seat: this.seat, text}); if (r.status !== "ok") this.line("sys", r.say || r.reason); } catch (e) { this.line("sys", e.message); }
+  },
+  // The agent's turn: let the stranger finish typing, think (shown as typing),
+  // and say one line; in the game, take about as long as typing it would.
+  // Lines that came meanwhile get the next turn.
+  async agentTurn(convo) {
+    const agent = agentsUI.agent;
+    if (this.replying || !agent || convo !== this.convo || this.state !== "talking") return;
+    this.replying = true;
+    const seen = this.lines.length, still = () => convo === this.convo && this.state === "talking" && agentsUI.agent === agent;
+    let beat = null;
+    try {
+      for (let i = 0; i < 16 && this.partnerTyping && still(); i++) await new Promise(res => setTimeout(res, 500));
+      if (!still()) return;
+      this.typed(true); beat = setInterval(() => this.typed(true), 2000);
+      let text;
+      try { text = await agent.stranger(this.lines.slice(), {game: this.game, persona: this.persona}); }
+      catch (e) { this.line("sys", `${agent.name} could not answer: ${e.message}`); return; }
+      if (this.game && text) await new Promise(res => setTimeout(res, Math.min(6000, 400 + text.length * 45)));
+      clearInterval(beat); beat = null;
+      if (!still() || !text) { this.typed(false); return; }
+      this.sentTyping = false;
+      const r = await this.post("chat/say", {seat: this.seat, text});
+      if (r.status !== "ok") this.line("sys", r.say || r.reason);
+    } catch (e) { this.line("sys", e.message); }
+    finally {
+      if (beat) clearInterval(beat);
+      this.replying = false;
+      if (still() && this.lines.slice(seen).some(l => l.from === "stranger")) this.agentTurn(convo);
+    }
   },
   typed(on) {
     // Typing goes out when it starts or stops, and again every two seconds while it goes on.
@@ -1910,6 +1983,10 @@ const chat = {
     this.sentTyping = on; this.sentAt = now;
     this.post("chat/typing", {seat: this.seat, typing: on}).catch(() => {});
   },
+  async guess(what) {
+    if (!this.seat) return;
+    try { const r = await this.post("chat/guess", {seat: this.seat, guess: what, after: this.after}); if (r.seat) this.take(r); else this.line("sys", r.say || r.reason); } catch (e) { this.line("sys", e.message); }
+  },
   async setIndicator(on) {
     try { localStorage.setItem("pyrtan.chat.typing", on ? "1" : "0"); } catch (e) {}
     if (!this.seat) return;
@@ -1917,18 +1994,19 @@ const chat = {
     try { this.take(await this.post("chat/settings", {seat: this.seat, typing_indicator: on, after: this.after})); } catch (e) { this.line("sys", e.message); }
   },
   resetNext() { this.sure = 0; $("#chat-next").textContent = this.state === "talking" ? "Stop" : "New"; },
-  async next() {
+  async next(sure) {
     // Like Omegle: while talking, the first press asks, the second ends it and finds someone new.
-    if (this.state === "talking" && !this.sure) { this.sure = 1; $("#chat-next").textContent = "Really?"; setTimeout(() => this.resetNext(), 3000); return; }
+    if (this.state === "talking" && !this.sure && !sure) { this.sure = 1; $("#chat-next").textContent = "Really?"; setTimeout(() => this.resetNext(), 3000); return; }
     if (!this.seat) return this.start();
     this.sentTyping = false;
-    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after, typing_indicator: $("#chat-typing").checked})); } catch (e) { this.line("sys", e.message); }
+    try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after, typing_indicator: $("#chat-typing").checked, game: $("#chat-game").checked})); } catch (e) { this.line("sys", e.message); }
   },
   leave(keepalive) {
     if (!this.seat) return;
-    const seat = this.seat; this.seat = null; this.gen++;
+    const seat = this.seat; this.seat = null; this.gen++; this.convo++;
     this.post("chat/leave", {seat}, keepalive ? {keepalive: true} : {}).catch(() => {});
   },
+  close() { this.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; this.count(); },
 };
 $("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
 $("#chat-say").addEventListener("submit", (e) => { e.preventDefault(); chat.say(); });
@@ -1936,8 +2014,11 @@ $("#chat-text").addEventListener("input", () => chat.typed(!!$("#chat-text").val
 $("#chat-text").addEventListener("blur", () => chat.typed(false));
 $("#chat-typing").checked = chat.pref();
 $("#chat-typing").addEventListener("change", (e) => chat.setIndicator(e.target.checked));
+$("#chat-as").addEventListener("change", () => chat.options());
+$("#chat-game").addEventListener("change", () => chat.options());
+$("#chat-guess").addEventListener("click", (e) => { const b = e.target.closest("[data-guess]"); if (b) chat.guess(b.dataset.guess); });
 $("#chat-next").addEventListener("click", () => chat.next());
-$("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; chat.count(); });
+$("#chat-stop").addEventListener("click", (e) => { e.preventDefault(); chat.close(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#tab-chat").hidden && chat.seat) { e.preventDefault(); chat.next(); } });
 window.addEventListener("pagehide", () => chat.leave(true));
 
@@ -1995,6 +2076,7 @@ const agentsUI = {
     $("#agent-who").textContent = this.agent.name;
     const m = this.models(engineKind).find(x => x.id === engine.model);
     $("#agent-what").textContent = `${m ? m.label : engine.model} · ${engineKind === "webllm" ? "in this browser" : engineKind === "wllama" ? "in this browser, on its CPU" : "on " + this.config.url} · beside ${this.where()}`;
+    chat.agentChanged();
     $("#agent-log").innerHTML = "";
     for (const msg of this.agent.memory.chat.slice(-10)) this.line(msg.role === "you" ? "you" : "bot", msg.role === "you" ? "You" : this.agent.name, esc(msg.content));
     this.sys(`${this.agent.name} is a model, not a tree: what it says is its own, and what a tree says comes with the tree's name and path. /help lists what it can do.`);
@@ -2005,6 +2087,8 @@ const agentsUI = {
     this.agent.stop();
     if (this.agent.engine.unload) this.agent.engine.unload().catch(() => {});
     this.agent = null; $("#agent-setup").hidden = false; $("#agent-on").hidden = true;
+    if (chat.as === "agent" && chat.seat) chat.close();  // the agent was talking in the lobby: it leaves with it
+    chat.agentChanged();
   },
   line(cls, who, html, extra) {
     const log = $("#agent-log"), div = document.createElement("div");

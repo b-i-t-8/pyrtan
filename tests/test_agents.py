@@ -228,6 +228,10 @@ def test_agents_js():
 
 def _reply(task: str, system: str) -> str:
     """What the scripted model says to each of the agent's jobs."""
+    if "person or agent?" in system:
+        return "nm, just got off a night shift. you?" if "you a bot" in task else "hey whats up"
+    if "chat lobby" in system:
+        return "Hello, I'm scout, an agent."
     if "Use the skill terse now" in task:
         return "Zero to ten, it says."
     if "new sentences" in task:
@@ -341,3 +345,21 @@ def test_the_console_grows_its_own_trees_when_it_is_the_hub(tmp_path, trees, mod
         assert said["LEVEL"] == "Level 5 is in the middle."
     finally:
         srv.shutdown()
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="needs node with playwright, and a Chromium")
+def test_the_console_seats_its_agent_in_the_lobby_to_play(trees, model_server):
+    h, srv = serve_hub(port=0, quiet=True, trees=[trees], poll_every=60, chat=True)
+    try:
+        run = subprocess.run(["node", str(ROOT / "tests" / "browser" / "console_chat.cjs"), srv.url, model_server], capture_output=True, text=True, cwd=str(ROOT), timeout=180)
+        said = dict(line.partition(" ")[::2] for line in run.stdout.splitlines())
+        assert "ERROR" not in said and "PAGEERROR" not in said and "DONE" in said, run.stdout + run.stderr
+        assert said["SEATED"] == "scout is talking; you are watching"
+        assert said["OPENED"] == "hey whats up" and said["ANSWERED"] == "nm, just got off a night shift. you?"
+        assert said["REVEAL"] == "It was an agent: scout (scripted). You guessed agent: right. 1 of 1 right so far."
+        assert said["TOLD"] == "They guessed you were an agent."
+        assert said["AGAIN"] == "scout:hey whats up | scout:nm, just got off a night shift. you?"
+        assert h.lobby.seats and all(s.agent == {"name": "scout", "model": "scripted"} and s.state == "waiting" for s in h.lobby.seats.values())
+    finally:
+        h.stop()
+        srv.stop()

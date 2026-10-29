@@ -22,8 +22,9 @@ Endpoints:
 ``GET  /``           the console; ``GET /api`` is the JSON index
 
 With ``--chat``, a hub also keeps a lobby at ``/chat``, where people meet a
-stranger here or at a hub it follows, or a bot made of the trees it routes
-to; see :mod:`pyrtan.chat`. ``--chat-public`` opens the lobby to callers
+stranger here or at a hub it follows, an agent someone seated from a
+console, or a bot made of the trees it routes to, and may play "person or
+agent?"; see :mod:`pyrtan.chat`. ``--chat-public`` opens the lobby to callers
 without the hub's token, who meet people only: a bot runs trees, and the
 token is what guards them.
 
@@ -815,7 +816,7 @@ class Hub:
         if method == "GET" and path == "/api":
             endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
             if self.lobby is not None:
-                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/next", "/chat/leave"]
+                endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/guess", "/chat/next", "/chat/leave"]
             if fed is not None:
                 endpoints += ["/actor", "/inbox", "/mailbox", "/directory", "/lan", "/reports", "/follow", "/unfollow", "/drop", "/networks", "/join", "/leave", "/listed", "/following", "/followers", "/outbox", "/keep", "/fetch", "/kept/{key}"]
             return 200, {"pyrtan": "hub", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "federation": fed.id if fed else None, "chat": self.lobby is not None, "chat_public": self.lobby is not None and self.chat_public, "audience": self.audience, "grants": len(self.grants), "chat_bots": self.lobby is not None and self._trusted(headers, may), "endpoints": endpoints}

@@ -111,7 +111,7 @@ def test_two_strangers_meet_talk_and_part():
     assert post(hub, "/chat/poll", {"seat": a["seat"]})[1]["reason"] == "no-seat"
     events, _ = until(hub, b["seat"], lambda ev, v: v["state"] == "ended", after=nxt["after"])
     assert texts(events, "system")[-1] == "Stranger has disconnected."
-    assert hub.route("GET", "/chat", None)[1] == {"status": "ok", "waiting": 0, "talking": 0, "bots": 0, "hubs": 0, "typing": True}
+    assert hub.route("GET", "/chat", None)[1] == {"status": "ok", "waiting": 0, "talking": 0, "bots": 0, "hubs": 0, "agents": 0, "playing": 0, "typing": True}
 
 
 def test_a_bot_is_trees_and_says_how_it_answered(examples_hub):
@@ -690,3 +690,184 @@ def test_waiting_seats_ask_other_hubs_less_often_as_the_lobby_fills():
         assert hub.lobby._meet_every() == 2 * hub.lobby.meet_every
     finally:
         hub.stop()
+
+
+# ---------------------------------------------------------------- agents, and the game
+
+SCOUT = {"name": "Scout", "model": "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"}
+
+
+def seat_agent(hub, game=False, agent=SCOUT):
+    status, out = post(hub, "/chat/start", {"as": "agent", "agent": agent, "game": game})
+    assert status == 200, out
+    return out
+
+
+def test_an_agent_takes_a_seat_and_is_always_named_as_one(examples_hub):
+    hub = examples_hub
+    hub.lobby.bot_after = 0.3
+    agent = seat_agent(hub)
+    assert agent["as"] == "agent" and agent["want"] == "people" and agent["state"] == "waiting"
+    assert hub.route("GET", "/chat", None)[1]["agents"] == 1
+
+    # People only never meets it, and neither does another agent.
+    people = start(hub, "people")
+    other = seat_agent(hub, agent={"name": "two"})
+    assert people["state"] == "waiting" and other["state"] == "waiting"
+    post(hub, "/chat/leave", {"seat": other["seat"]})
+    post(hub, "/chat/leave", {"seat": people["seat"]})
+
+    # Asking for an agent meets it, named, with its model.
+    me = start(hub, "agent")
+    assert me["state"] == "talking" and me["partner"] == {"kind": "agent", "hub": None, "name": "scout", "model": SCOUT["model"]}
+    assert f"You're now chatting with an agent: scout ({SCOUT['model']}). It is a model, not a person, and not a tree: what it says is its own. Say hi!" in texts(me["events"], "system")
+    events, view = until(hub, agent["seat"], lambda ev, v: v["state"] == "talking")
+    assert view["partner"] == {"kind": "stranger", "hub": None}
+    assert "You're now chatting with a random stranger. Say hi! They were told you are an agent." in texts(events, "system")
+
+    # Its lines come as an agent's, with its name; the person's reach it as a stranger's.
+    assert post(hub, "/chat/say", {"seat": me["seat"], "text": "hi, are you a person?"})[0] == 200
+    events, view = until(hub, agent["seat"], lambda ev, v: texts(ev, "stranger"), after=view["after"])
+    assert texts(events, "stranger") == ["hi, are you a person?"]
+    assert post(hub, "/chat/say", {"seat": agent["seat"], "text": "No, I'm an agent."})[0] == 200
+    events, mine = until(hub, me["seat"], lambda ev, v: texts(ev, "agent"), after=me["after"])
+    assert [(e["text"], e["name"]) for e in events if e["kind"] == "agent"] == [("No, I'm an agent.", "scout")]
+    assert post(hub, "/chat/leave", {"seat": agent["seat"]})[0] == 200
+    events, _ = until(hub, me["seat"], lambda ev, v: v["state"] == "ended", after=mine["after"])
+    assert texts(events, "system")[-1] == "The agent has disconnected."
+
+    # Wanting an agent when none is here: told so once, and never a bot.
+    post(hub, "/chat/next", {"seat": me["seat"]})
+    events, view = until(hub, me["seat"], lambda ev, v: any("No agent is in the lobby" in t for t in texts(ev, "system")))
+    time.sleep(0.4)
+    _, view = post(hub, "/chat/poll", {"seat": me["seat"], "after": view["after"], "wait": 0.1})
+    assert view["state"] == "waiting" and view["events"] == []
+
+
+def test_anyone_meets_people_then_agents_then_bots(examples_hub):
+    hub = examples_hub
+    hub.lobby.bot_after = 0.2
+    agent = seat_agent(hub)
+    person = start(hub, "people")
+    a = start(hub, "anyone")
+    assert a["partner"] == {"kind": "stranger", "hub": None}  # the person waiting, not the agent
+    b = start(hub, "anyone")
+    assert b["partner"]["kind"] == "agent"                      # nobody else: the agent, before a bot
+    c = start(hub, "anyone")
+    _, view = until(hub, c["seat"], lambda ev, v: v["state"] == "talking")
+    assert view["partner"]["kind"] == "bot"                     # nobody at all: a bot, after a while
+    assert agent["seat"] in hub.lobby.seats and person["seat"] in hub.lobby.seats
+
+
+def test_person_or_agent(examples_hub):
+    hub = examples_hub
+    hub.lobby.bot_after = 0
+    agent = seat_agent(hub, game=True)
+    plain = start(hub, "anyone")
+    assert plain["partner"]["kind"] == "bot"  # an agent playing the game is not met outside it
+    me = post(hub, "/chat/start", {"game": True})[1]
+    assert me["state"] == "talking" and me["game"] is True and me["guessing"] is True
+    assert me["partner"] == {"kind": "stranger", "hub": None}  # unlabelled
+    assert texts(me["events"], "system")[-1].startswith("You're now chatting with someone: a person or an agent.")
+    events, view = until(hub, agent["seat"], lambda ev, v: v["state"] == "talking")
+    assert "You're now playing “person or agent?” with a random stranger: they will guess which you are." in texts(events, "system")
+
+    # The agent's line comes as a stranger's; nothing in it says what it is.
+    post(hub, "/chat/say", {"seat": agent["seat"], "text": "hey whats up"})
+    events, mine = until(hub, me["seat"], lambda ev, v: texts(ev, "stranger"))
+    assert [e for e in events if e["kind"] == "stranger"][0].keys() == {"n", "at", "kind", "text"}
+
+    # One guess, locked; the answer when it ends.
+    assert post(hub, "/chat/guess", {"seat": me["seat"], "guess": "robot"})[0] == 400
+    status, view = post(hub, "/chat/guess", {"seat": me["seat"], "guess": "agent", "after": mine["after"]})
+    assert status == 200 and view["guess"] == "agent" and texts(view["events"], "system") == ["You guessed an agent. The answer comes when the conversation ends."]
+    assert post(hub, "/chat/guess", {"seat": me["seat"], "guess": "person"})[1]["reason"] == "guessed"
+    assert post(hub, "/chat/guess", {"seat": agent["seat"], "guess": "person"})[1]["reason"] == "no-round"
+    post(hub, "/chat/leave", {"seat": agent["seat"]})
+    events, view = until(hub, me["seat"], lambda ev, v: any(e["kind"] == "reveal" for e in ev), after=view["after"])
+    reveal = [e for e in events if e["kind"] == "reveal"][0]
+    assert reveal["text"] == f"It was an agent: scout ({SCOUT['model']}). You guessed agent: right. 1 of 1 right so far."
+    assert reveal["partner"] == "agent" and reveal["right"] is True and reveal["score"] == {"right": 1, "played": 1}
+    assert view["score"] == {"right": 1, "played": 1} and view["guessing"] is False
+
+
+def test_two_people_play_and_each_learns_the_others_guess():
+    hub = Hub(name="h", chat=True)
+    a = post(hub, "/chat/start", {"game": True})[1]
+    assert post(hub, "/chat/start", {"want": "anyone"})[1]["state"] == "waiting"  # not playing: never paired with a player
+    b = post(hub, "/chat/start", {"game": True})[1]
+    assert a["seat"] != b["seat"] and b["state"] == "talking"
+    assert hub.route("GET", "/chat", None)[1]["playing"] == 2
+    post(hub, "/chat/guess", {"seat": b["seat"], "guess": "agent"})
+    post(hub, "/chat/next", {"seat": b["seat"]})  # b ends it, having guessed
+    events, _ = until(hub, b["seat"], lambda ev, v: any(e["kind"] == "reveal" for e in ev))
+    assert [e["text"] for e in events if e["kind"] == "reveal"] == ["It was a person. You guessed agent: wrong. 0 of 1 right so far."]
+    # a had not guessed: asked to, and told the answer, with b's guess, on guessing.
+    events, view = until(hub, a["seat"], lambda ev, v: v["state"] == "ended")
+    assert texts(events, "system")[-1] == "Now guess: was that a person or an agent? (/guess person or /guess agent)"
+    status, view = post(hub, "/chat/guess", {"seat": a["seat"], "guess": "person", "after": view["after"]})
+    assert [e["text"] for e in view["events"] if e["kind"] == "reveal"] == ["It was a person. You guessed person: right. 1 of 1 right so far. They guessed you were an agent."]
+    events, _ = until(hub, b["seat"], lambda ev, v: any("Your last stranger" in t for t in texts(ev, "system")))
+    assert "Your last stranger guessed you were a person." in texts(events, "system")
+
+
+def test_moving_on_without_a_guess_tells_and_does_not_score():
+    hub = Hub(name="h", chat=True)
+    a = post(hub, "/chat/start", {"game": True})[1]
+    b = post(hub, "/chat/start", {"game": True})[1]
+    status, view = post(hub, "/chat/next", {"seat": a["seat"], "game": False})
+    assert view["game"] is False and "score" not in view
+    assert [e["text"] for e in view["events"] if e["kind"] == "reveal"] == ["It was a person. You did not guess."]
+    assert not any("Now guess" in t for t in texts(view["events"], "system"))
+    status, view = post(hub, "/chat/next", {"seat": a["seat"], "game": True})
+    assert view["score"] == {"right": 0, "played": 0}
+    assert post(hub, "/chat/next", {"seat": b["seat"]})[1]["state"] == "talking"  # both playing again: paired
+
+
+def test_what_a_seat_may_say_it_is(tmp_path):
+    hub = Hub(name="h", chat=True)
+    assert post(hub, "/chat/start", {"as": "robot"})[0] == 400
+    assert post(hub, "/chat/start", {"want": "bot", "game": True})[0] == 400
+    assert post(hub, "/chat/start", {"want": "bot", "as": "agent"})[0] == 400
+    # The name is a slug and the model a plain short line, whatever the console sent.
+    out = seat_agent(hub, agent={"name": "\x1b[31mA Person, Really\x1b[0m", "model": "x" * 200 + "<script>"})
+    seat = hub.lobby.seats[out["seat"]]
+    assert seat.agent == {"name": "31ma-person-really-0m", "model": "x" * 80}
+    assert seat_agent(hub, agent=None) and [s.agent["name"] for s in hub.lobby.seats.values()][-1] == "agent"
+
+
+def test_a_guest_may_meet_an_agent_and_play(tmp_path):
+    from pyrtan.hub import serve_hub
+
+    hub, srv = serve_hub(port=0, quiet=True, name="pub", token="sekrit", chat_public=True)
+    call = lambda path, body: http_json("POST", f"{srv.url}{path}", body)
+    try:
+        _, agent = call("/chat/start", {"as": "agent", "agent": SCOUT})
+        _, guest = call("/chat/start", {"want": "anyone"})
+        assert guest["want"] == "people" and guest["state"] == "waiting"  # anyone, to a guest, is people only
+        _, asking = call("/chat/start", {"want": "agent"})
+        assert asking["state"] == "talking" and asking["partner"]["kind"] == "agent"
+        _, playing = call("/chat/start", {"game": True})
+        assert playing["state"] == "waiting"
+        _, api = http_json("GET", f"{srv.url}/api")
+        assert "/chat/guess" in api["endpoints"]
+    finally:
+        hub.stop()
+        srv.stop()
+
+
+def test_cli_plays_person_or_agent(examples_hub, capsys, monkeypatch):
+    hub = examples_hub
+    agent = seat_agent(hub, game=True)
+    srv = Server(hub.route, quiet=True).start()
+    try:
+        monkeypatch.setattr(sys, "stdin", io.StringIO("hey\n/guess agent\n/next\n"))
+        assert main(["chat", "--game", "--at", srv.url]) == 0
+        out = capsys.readouterr().out
+        assert "/guess person or /guess agent" in out and "You're now chatting with someone: a person or an agent." in out
+        assert "  You guessed an agent. The answer comes when the conversation ends." in out
+        assert f"  It was an agent: scout ({SCOUT['model']}). You guessed agent: right. 1 of 1 right so far." in out
+        events, _ = until(hub, agent["seat"], lambda ev, v: any(e["kind"] == "reveal" for e in ev))
+        assert texts(events, "stranger") == ["hey"] and texts(events, "reveal") == ["They guessed you were an agent."]
+    finally:
+        srv.stop()

@@ -9,12 +9,13 @@
     pyrtan diff   FILE [--against REF]       what an edit changes: every test's run, before and after
     pyrtan memory FILE [--forget KEY ...]    what memory nodes keep across runs, and forgetting it
     pyrtan ask    TEXT --at URL              answer a sentence through a service or hub
-    pyrtan chat   [--at HUB] [--bot|--people]  talk to a random stranger or a bot, through a hub started --chat
+    pyrtan chat   [--at HUB] [--bot|--people|--agent]  talk to a random stranger, an agent or a bot, through a hub started --chat
+    pyrtan chat   --game                     play "person or agent?": guess which the stranger is, /guess person|agent
     pyrtan serve  [PATH ...] [--port N]      host trees as a service
     pyrtan hub    [--peer URL ...]           route between services
     pyrtan hub    --trees DIR                and hold trees itself: a swarm in one process
     pyrtan hub    --federate --advertise URL [--follow URL ...] [--listed]  and between hubs
-    pyrtan hub    --chat                     and keep a lobby: strangers and bots, Omegle-style
+    pyrtan hub    --chat                     and keep a lobby: strangers, agents and bots, Omegle-style
     pyrtan hub    --lan --join default       and find the hubs on this LAN by multicast, with nobody to ask
     pyrtan hub    --chat-public --chat-reach 8  and link its lobby with other open lobbies, for chat only
     pyrtan follow [URL] --at HUB [--listed]  follow another hub (and route to it); default: join the default network
@@ -143,11 +144,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-trace", action="store_true")
     _token_arg(p, "the token the service or hub requires, if any")
 
-    p = sub.add_parser("chat", help="talk to a random stranger or a bot, through a hub started with --chat")
+    p = sub.add_parser("chat", help="talk to a random stranger, an agent or a bot, through a hub started with --chat")
     p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the hub (default $PYRTAN_AT or the local hub)")
     who = p.add_mutually_exclusive_group()
     who.add_argument("--bot", action="store_true", help="meet a bot: trees on the network, not a person")
-    who.add_argument("--people", action="store_true", help="meet people only; never a bot")
+    who.add_argument("--people", action="store_true", help="meet people only; never a bot or an agent")
+    who.add_argument("--agent", action="store_true", help="meet an agent: a model someone seated from a console, named as one")
+    who.add_argument("--game", action="store_true", help="play \"person or agent?\": meet a person or an agent, unlabelled, and guess which with /guess person or /guess agent")
     p.add_argument("--interests", default="", metavar="WORDS", help="up to five words, comma-separated; a stranger or bot that shares one is met first")
     p.add_argument("--trace", action="store_true", help="print the path behind each bot line")
     p.add_argument("--no-typing", action="store_true", help="turn the typing indicator off: neither \"Stranger is typing…\" here nor your typing shown to them (at a terminal the chat reads keys as you type them; from a pipe, whole lines)")
@@ -789,13 +792,13 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 def cmd_chat(args: argparse.Namespace) -> int:
     at = args.at.rstrip("/")
-    want = "bot" if args.bot else "people" if args.people else "anyone"
+    want = "bot" if args.bot else "people" if args.people else "agent" if args.agent else "anyone"
 
     def post(path: str, body: dict[str, Any], timeout: float = 15.0) -> tuple[int, Any]:
         return _call(args, "POST", f"{at}{path}", body, timeout=timeout)
 
     try:
-        status, body = post("/chat/start", {"want": want, "interests": args.interests, "typing_indicator": not args.no_typing})
+        status, body = post("/chat/start", {"want": want, "interests": args.interests, "typing_indicator": not args.no_typing, "game": args.game})
     except Exception as e:
         print(f"pyrtan: {at}: {e}", file=sys.stderr)
         return 3
@@ -820,7 +823,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             else:
                 print(text, flush=True)
 
-    emit("Type to talk. /next for someone new, /quit or Ctrl-D to leave." + (" Up and Down for what you sent." if keyed else ""))
+    emit("Type to talk. /next for someone new, " + ("/guess person or /guess agent, " if args.game else "") + "/quit or Ctrl-D to leave." + (" Up and Down for what you sent." if keyed else ""))
 
     def show(answer: dict[str, Any]) -> None:
         with lock:
@@ -829,7 +832,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     continue
                 state["after"] = e["n"]
                 text = clean_line(str(e.get("text", "")))  # whatever a hub sends, no line steers this terminal
-                if e["kind"] == "system":
+                if e["kind"] in ("system", "reveal"):
                     emit(f"  {text}")
                 elif e["kind"] == "bot":
                     emit(f"Bot: {text}")
@@ -839,10 +842,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     state["owed"] = max(0, state["owed"] - 1)
                 elif e["kind"] == "stranger":
                     emit(f"Stranger: {text}")
+                elif e["kind"] == "agent":
+                    emit(f"Agent ({clean_line(str(e.get('name', '')))}): {text}")
             state["partner"] = answer.get("partner")
             typing = bool(answer.get("partner_typing"))
             if typing and not state["typing"]:
-                emit("  Bot is thinking…" if (state["partner"] or {}).get("kind") == "bot" else "  Stranger is typing…")
+                kind = (state["partner"] or {}).get("kind")
+                emit("  Bot is thinking…" if kind == "bot" else "  The agent is thinking…" if kind == "agent" else "  Stranger is typing…")
             state["typing"] = typing
             lock.notify_all()
 
@@ -889,7 +895,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         while not stop.is_set():
             tick.wait(1.0)
             tick.clear()
-            if not body.get("typing_indicator") or (state["partner"] or {}).get("kind") != "stranger":
+            if not body.get("typing_indicator") or (state["partner"] or {}).get("kind") not in ("stranger", "agent"):
                 typing["sent"] = False
                 continue
             want, now = typing["want"], time.time()
@@ -914,6 +920,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
             st, answer = post("/chat/next", {"seat": seat, "after": state["after"]})
             if st == 200 and isinstance(answer, dict):
                 show(answer)
+            return True
+        if line.split(" ", 1)[0] in ("/guess", "/g"):
+            st, answer = post("/chat/guess", {"seat": seat, "guess": line.partition(" ")[2].strip().lower(), "after": state["after"]})
+            if st == 200 and isinstance(answer, dict):
+                show(answer)
+            else:
+                emit(f"  {answer.get('say') if isinstance(answer, dict) else answer}")
             return True
         if not line:
             return True

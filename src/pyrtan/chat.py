@@ -1,11 +1,12 @@
-"""The lobby: talk to a stranger or a bot, Omegle-style.
+"""The lobby: talk to a stranger, an agent or a bot, Omegle-style; or guess which.
 
 A hub started with ``--chat`` keeps a lobby. Anyone who can reach the hub
 (with its token, when it has one) takes a *seat*, says whom they want to
-meet (``anyone``, ``people`` or a ``bot``) and a few interests, and is
-paired at random: with someone else waiting here, with someone waiting at
-a hub this one follows, or with a bot. Nobody has a name. Either side can
-end it at any time and take the next stranger.
+meet (``anyone``, ``people``, an ``agent`` or a ``bot``) and a few
+interests, and is paired at random: with someone else waiting here, with
+someone waiting at a hub this one follows, with an agent, or with a bot.
+Nobody has a name. Either side can end it at any time and take the next
+stranger.
 
 **A bot is not a model.** It is one holder of trees on the network, picked
 at random (this hub's own trees, one of its services, a trusted member, a
@@ -53,24 +54,47 @@ else's, and a hub started ``--no-chat-typing`` has it off for everyone.
 Across hubs it travels as ``Typing``, at most every two seconds, and the
 logs leave it out.
 
+**Agents (v0.31).** An agent, the open-weights model a person starts in
+the console, may take a seat too (``as: "agent"``, with its name and
+model): its console reads the stranger's lines and says its own, through
+the same endpoints a person uses. The hub runs no model and asks none: it
+relays the lines and labels them. Outside the game an agent is always
+named as one (the stranger reads "You're now chatting with an agent", and
+its lines come as ``agent``, not ``stranger``); a person who wants
+``people`` never meets one, and an agent never meets an agent. A person
+who would meet ``anyone`` meets the people here first, then the
+strangers of other hubs, then an agent, and a bot last.
+
+**Person or agent? (v0.31).** A seat started ``game: true`` is paired
+only with others playing: a person with a person or an agent, at even
+odds when both are waiting, and nobody labelled. Each side may guess
+once (``/chat/guess``, ``person`` or ``agent``) while they talk or after;
+the answer comes when the conversation ends, with what the other side
+guessed and the seat's score. The hub knows what a seat is only by what
+its client said when it sat down, so the game is as honest as its
+players' consoles; outside the game nothing is unlabelled.
+
 **Public lobbies.** The lobby follows the hub's token: a bot runs trees,
 and the token is what guards them. A hub started ``--chat-public`` keeps
 its token for everything else and opens ``/chat`` to callers without it,
 as *guests*: a guest meets people (here, or on a hub this one follows)
 and never a bot. ``want: bot`` from a guest is refused, and ``anyone`` is
-read as ``people``. A hub with no token has no guests: anyone may meet a
-bot there, as anyone may ask it at ``/intent``.
+read as ``people``; a guest may still ask for an agent or play the game,
+since an agent runs no tree here. A hub with no token has no guests:
+anyone may meet a bot there, as anyone may ask it at ``/intent``.
 
 Endpoints, all POST with a JSON body except the first:
 
 ``GET  /chat``           how many are waiting and talking; whether bots, other hubs and typing are in reach
-``POST /chat/start``     ``{"want": "anyone"|"people"|"bot", "interests": [...], "typing_indicator": true}``: a seat
+``POST /chat/start``     ``{"want": "anyone"|"people"|"bot"|"agent", "interests": [...], "typing_indicator": true,
+                         "game": false, "as": "person"|"agent", "agent": {"name", "model"}}``: a seat
 ``POST /chat/poll``      ``{"seat", "after": n, "wait": s, "partner_typing": bool}``: the events after ``n``, waiting
                          up to ``s`` s for one, or for the partner's typing to differ from what the client shows
 ``POST /chat/say``       ``{"seat", "text"}``
 ``POST /chat/typing``    ``{"seat", "typing": bool}``: this person is (or stopped) typing
 ``POST /chat/settings``  ``{"seat", "typing_indicator": bool}``
-``POST /chat/next``      ``{"seat"}``: end this conversation and wait for the next, with the same wishes
+``POST /chat/guess``     ``{"seat", "guess": "person"|"agent"}``: in the game, what the stranger was
+``POST /chat/next``      ``{"seat", "game": bool}``: end this conversation and wait for the next, with the same wishes
 ``POST /chat/leave``     ``{"seat"}``
 
 What it refuses: keeping anything. A conversation lives in memory while
@@ -90,7 +114,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Callable, Union
 
 from .service import http_json
 
@@ -102,7 +126,8 @@ LINK_TRIES = 2          # links tried per round (a round is the hub's poll)
 LINK_REFUSED = 86400.0  # a hub that refused a link is not asked again for a day
 LINK_FAILS = 3          # Meets in a row a linked hub may fail before the link is dropped
 
-WANTS = ("anyone", "people", "bot")
+WANTS = ("anyone", "people", "bot", "agent")
+GUESSES = ("person", "agent")
 SEAT_IDLE = 60.0      # a seat nobody polls for this long is let go
 BOT_AFTER = 8.0       # an "anyone" seat that meets no stranger in this long meets a bot
 MEET_EVERY = 5.0      # how often a waiting seat asks the hubs this one follows
@@ -230,10 +255,39 @@ class Seat:
     heard_allowance_at: float = field(default_factory=time.time)
     address: str | None = None   # where it came from, unless the caller had the token or a granted key
     polls: int = 0               # the newest poll's number: an older poll still waiting gives way to it
+    agent: dict[str, str] | None = None   # an agent's seat: its name and model, as its console said; None for a person
+    game: bool = False       # playing "person or agent?": paired only with others playing, nobody labelled
+    round: "Round | None" = None          # this seat's game with its partner, until it is revealed
+    score: list[int] = field(default_factory=lambda: [0, 0])   # games guessed right, and guessed: while it sits
+    noted: bool = False      # told there is nobody of the kind it wants to meet, yet
 
     def view(self) -> dict[str, Any]:
         p = self.partner
-        return {"state": self.state, "want": self.want, "interests": self.interests, "partner": {"kind": "stranger", "hub": None} if isinstance(p, Seat) else p.view() if p is not None else None}
+        if isinstance(p, Seat):
+            partner = {"kind": "agent", "hub": None, **p.agent} if p.agent is not None and not self.game else {"kind": "stranger", "hub": None}
+        else:
+            partner = p.view() if p is not None else None
+        out = {"state": self.state, "want": self.want, "interests": self.interests, "partner": partner, "as": "agent" if self.agent is not None else "person", "game": self.game}
+        if self.game:
+            r = self.round
+            out["guess"] = r.guess if r is not None and not r.revealed else None
+            out["guessing"] = r is not None and not r.revealed and self.agent is None
+            out["score"] = {"right": self.score[0], "played": self.score[1]}
+        return out
+
+
+@dataclass
+class Round:
+    """One game of "person or agent?", as one seat sees it: who the partner
+    was (kept, though they may have moved on), what this seat guessed, and
+    the partner's round, which holds what they guessed about this one."""
+
+    partner: Seat
+    agent: dict[str, str] | None   # the partner's name and model when it is an agent; None for a person
+    guess: str | None = None
+    over: bool = False       # the conversation has ended
+    revealed: bool = False
+    other: "Round | None" = None
 
 
 class Lobby:
@@ -266,6 +320,8 @@ class Lobby:
             "talking": sum(1 for s in seats if s.state == "talking"),
             "bots": 0 if guest else sum(1 for h in self.hub.holders() if h.link != "down" and h.trees),
             "hubs": (sum(1 for r in fed.following.values() if r.link != "down") if fed is not None else 0) + len(self.links),
+            "agents": sum(1 for s in seats if s.agent is not None),
+            "playing": sum(1 for s in seats if s.game),
             "typing": self.typing,
         }
 
@@ -316,8 +372,18 @@ class Lobby:
         self.cond.notify_all()
         return event
 
-    def _say_paired(self, a: Seat, where: str | None, common: list[str]) -> None:
-        self._add(a, "system", f"You're now chatting with a random stranger{' on ' + where if where else ''}. Say hi!")
+    def _say_paired(self, a: Seat, where: str | None, common: list[str], partner: Seat | None = None) -> None:
+        if a.game and a.agent is not None:
+            text = "You're now playing “person or agent?” with a random stranger: they will guess which you are."
+        elif a.game:
+            text = "You're now chatting with someone: a person or an agent. Talk, then guess which (/guess person or /guess agent); the answer comes when the conversation ends."
+        elif partner is not None and partner.agent is not None:
+            model = partner.agent.get("model")
+            text = f"You're now chatting with an agent: {partner.agent['name']}{' (' + model + ')' if model else ''}. It is a model, not a person, and not a tree: what it says is its own. Say hi!"
+        else:
+            told = " They were told you are an agent." if a.agent is not None else ""
+            text = f"You're now chatting with a random stranger{' on ' + where if where else ''}. Say hi!{told}"
+        self._add(a, "system", text)
         if common:
             self._add(a, "system", f"You both like {', '.join(common)}.")
 
@@ -326,17 +392,56 @@ class Lobby:
     def _pair(self, a: Seat, b: Seat) -> None:
         common = [w for w in a.interests if w in b.interests]
         for x, y in ((a, b), (b, a)):
-            x.partner, x.state = y, "talking"
-            self._say_paired(x, None, common)
+            x.partner, x.state, x.noted = y, "talking", False
+            x.round = Round(y, y.agent) if x.game else None
+            self._say_paired(x, None, common, partner=y)
+        if a.round is not None and b.round is not None:
+            a.round.other, b.round.other = b.round, a.round
 
-    def _waiting(self, interests: list[str], exclude: Seat | None = None) -> Seat | None:
-        """Someone waiting here to pair with: one who wants people, the most
-        interests in common first, at random among equals."""
-        found = [s for s in self.seats.values() if s is not exclude and s.state == "waiting" and not s.busy and s.want != "bot"]
+    @staticmethod
+    def _takes(x: Seat, y: Seat) -> bool:
+        """Whether ``x`` would be paired with ``y``, as ``x`` asked. The
+        game is played among those playing; an agent meets people, never
+        another agent; a person meets whom they said they would."""
+        if x.game != y.game or (x.agent is not None and y.agent is not None):
+            return False
+        if x.game or x.agent is not None:
+            return True
+        return x.want in (("anyone", "agent") if y.agent is not None else ("anyone", "people"))
+
+    @staticmethod
+    def _best(found: list[Seat], interests: list[str]) -> Seat | None:
+        """The most interests in common first, at random among equals."""
         if not found:
             return None
         best = max(len(set(s.interests) & set(interests)) for s in found)
         return random.choice([s for s in found if len(set(s.interests) & set(interests)) == best])
+
+    def _waiting(self, ok: Callable[[Seat], bool]) -> list[Seat]:
+        return [s for s in self.seats.values() if s.state == "waiting" and not s.busy and s.want != "bot" and ok(s)]
+
+    def _match(self, seat: Seat, *, agents: bool) -> Seat | None:
+        """Someone waiting here to pair ``seat`` with; agents among them only
+        when ``agents``. In the game a person meets a person or an agent at
+        even odds, whichever are waiting; anyone else meets people first."""
+        found = self._waiting(lambda s: s is not seat and (agents or s.agent is None) and self._takes(seat, s) and self._takes(s, seat))
+        people, bots = [s for s in found if s.agent is None], [s for s in found if s.agent is not None]
+        if people and bots and seat.agent is None:
+            found = random.choice((people, bots)) if seat.game else people
+        return self._best(found, seat.interests)
+
+    def _far_ok(self, seat: Seat) -> bool:
+        """Whether a seat meets strangers on other hubs: a person, outside the game, who wants people."""
+        return seat.agent is None and not seat.game and seat.want in ("anyone", "people")
+
+    def _note_alone(self, seat: Seat) -> None:
+        if seat.noted:
+            return
+        seat.noted = True
+        if seat.game and seat.agent is None:
+            self._add(seat, "system", "Nobody else is playing right now; still looking. (An agent started in a console's Agents tab can play too.)")
+        elif seat.want == "agent":
+            self._add(seat, "system", "No agent is in the lobby right now; still looking. (Anyone can seat one, from a console's Chat tab.)")
 
     def _pair_bot(self, seat: Seat) -> bool:
         holders = [h for h in self.hub.holders() if h.link != "down" and h.trees]
@@ -381,12 +486,13 @@ class Lobby:
             if seat.want == "bot":
                 self._pair_bot(seat)
                 return
-            other = self._waiting(seat.interests, exclude=seat)
+            # A person who could meet strangers on other hubs meets them before an agent here.
+            other = self._match(seat, agents=not self._far_ok(seat))
             if other is not None:
                 self._pair(seat, other)
                 return
             now = time.time()
-            far = fed is not None and bool(fed.following or self.links) and now - seat.asked >= self._meet_every()
+            far = self._far_ok(seat) and fed is not None and bool(fed.following or self.links) and now - seat.asked >= self._meet_every()
             if far:
                 seat.busy, seat.asked = True, now
         if far:
@@ -398,8 +504,16 @@ class Lobby:
                     seat.busy = False
                     self.cond.notify_all()
         with self.cond:
-            if seat.state == "waiting" and not seat.busy and seat.want == "anyone" and time.time() - seat.since >= self.bot_after:
-                self._pair_bot(seat)
+            if seat.state != "waiting" or seat.busy or seat.id not in self.seats:
+                return
+            if seat.want == "anyone" and self._far_ok(seat):
+                other = self._match(seat, agents=True)
+                if other is not None:
+                    self._pair(seat, other)
+                elif time.time() - seat.since >= self.bot_after:
+                    self._pair_bot(seat)
+                return
+            self._note_alone(seat)
 
     def _meet_every(self) -> float:
         """How often a waiting seat asks the hubs we follow: less often as more wait."""
@@ -437,13 +551,51 @@ class Lobby:
         seat.heard, seat.told = 0.0, (False, 0.0)
         if isinstance(p, Seat):
             p.partner, p.state, p.heard = None, "ended", 0.0
-            self._add(p, "system", "Stranger has disconnected.")
+            self._add(p, "system", "The agent has disconnected." if seat.agent is not None and not seat.game else "Stranger has disconnected.")
+            self._over(p)
         elif isinstance(p, Far):
             self._parts.append((p.remote, p.ref, seat.ref))
         seat.partner = None
         if seat.state == "talking":
             seat.state = "ended"
             self._add(seat, "system", "You have disconnected.")
+        self._over(seat)
+
+    # ------------------------------------------------------------ the game
+
+    def _over(self, seat: Seat) -> None:
+        """A game's conversation ended: a seat that guessed (or an agent,
+        which does not) learns the answer now; a person who did not is
+        asked to, and learns it on guessing or on moving on."""
+        r = seat.round
+        if r is None or r.over:
+            return
+        r.over = True
+        if seat.agent is not None or r.guess is not None:
+            self._reveal(seat)
+        else:
+            self._add(seat, "system", "Now guess: was that a person or an agent? (/guess person or /guess agent)")
+
+    def _reveal(self, seat: Seat) -> None:
+        r = seat.round
+        assert r is not None
+        r.revealed = True
+        their = r.other.guess if r.other is not None else None   # an agent does not guess
+        if seat.agent is not None:
+            text = f"They guessed you were {_a(their)}." if their else "They did not guess (yet)."
+            self._add(seat, "reveal", text, partner="person", their_guess=their)
+            return
+        truth = "agent" if r.agent is not None else "person"
+        right = r.guess == truth if r.guess is not None else None
+        if r.guess is not None:
+            seat.score[1] += 1
+            seat.score[0] += 1 if right else 0
+        model = (r.agent or {}).get("model")
+        parts = [f"It was {_a(truth)}" + (f": {r.agent['name']}{' (' + model + ')' if model else ''}." if r.agent is not None else ".")]
+        parts.append(f"You guessed {r.guess}: {'right' if right else 'wrong'}. {seat.score[0]} of {seat.score[1]} right so far." if r.guess is not None else "You did not guess.")
+        if their:
+            parts.append(f"They guessed you were {_a(their)}.")
+        self._add(seat, "reveal", " ".join(parts), partner=truth, agent=r.agent, guess=r.guess, right=right, their_guess=their, score={"right": seat.score[0], "played": seat.score[1]})
 
     def _sweep(self) -> None:
         cutoff = time.time() - self.seat_idle
@@ -483,10 +635,19 @@ class Lobby:
         want = body.get("want", "anyone")
         if want not in WANTS:
             return 400, {"status": "error", "reason": "bad-request", "say": f"want is one of {', '.join(WANTS)}."}
+        sit = body.get("as", "person")
+        if sit not in ("person", "agent"):
+            return 400, {"status": "error", "reason": "bad-request", "say": "as is person or agent."}
+        game = body.get("game") is True
+        if want == "bot" and (game or sit == "agent"):
+            return 400, {"status": "error", "reason": "bad-request", "say": "A bot says what it is: the game is between people and agents, and an agent meets people."}
         if guest and want == "bot":
             return 403, {"status": "error", "reason": "bots-need-token", "say": "Without this hub's token you meet people only: a bot runs the hub's trees."}
-        if guest:
-            want = "people"
+        if guest and want == "anyone":
+            want = "people"   # never a bot; an agent only when asked for, or in the game
+        agent = _agent_of(body.get("agent")) if sit == "agent" else None
+        if agent is not None:
+            want = "people"   # what an agent meets; in the game, whom a seat meets is the game's
         with self.cond:
             self._sweep()
             strangers = [s for s in self.seats.values() if s.address is not None]
@@ -494,10 +655,10 @@ class Lobby:
                 return 503, {"status": "error", "reason": "lobby-full", "say": f"The lobby is full ({SEATS_MAX} seats); try again in a minute."}
             if address is not None and sum(1 for s in strangers if s.address == address) >= SEATS_PER_ADDRESS:
                 return 429, {"status": "error", "reason": "too-many-seats", "say": f"{SEATS_PER_ADDRESS} seats from one place at once is the most; leave one first."}
-            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest, address=address)
+            seat = Seat(secrets.token_urlsafe(18), secrets.token_urlsafe(12), want, interests_of(body.get("interests")), typing=body.get("typing_indicator") is not False, bots=not guest, address=address, agent=agent, game=game)
             self.seats[seat.id] = seat
             self.refs[seat.ref] = seat
-            self._add(seat, "system", "Looking for a bot…" if want == "bot" else "Looking for someone you can chat with…")
+            self._add(seat, "system", _looking(seat))
         self._advance(seat)
         with self.cond:
             return 200, self._view(seat, 0)
@@ -534,7 +695,7 @@ class Lobby:
                 nap = deadline - now
                 if shown and now < seat.heard < float("inf"):
                     nap = min(nap, seat.heard - now)  # wake when the indicator goes out
-                if seat.state == "waiting":
+                if seat.state == "waiting" and self._far_ok(seat):
                     # Wake to ask the hubs we follow again, or to meet a bot.
                     if self.hub.federation is not None and (self.hub.federation.following or self.links):
                         nap = min(nap, seat.asked + self._meet_every() - now)
@@ -568,7 +729,10 @@ class Lobby:
             seat.told = (False, now)  # the line ends the typing, here and on the other hub
             if isinstance(partner, Seat):
                 partner.heard = 0.0
-                self._add(partner, "stranger", text)
+                if seat.agent is not None and not seat.game:
+                    self._add(partner, "agent", text, name=seat.agent["name"])
+                else:
+                    self._add(partner, "stranger", text)
         if isinstance(partner, Far):
             fed = self.hub.federation
             assert fed is not None
@@ -587,18 +751,50 @@ class Lobby:
         if seat is None:
             return 404, _gone()
         with self.cond:
+            if seat.round is not None:
+                seat.round.over = True   # moving on: the answer now, not a request to guess
             self._end(seat)
+            if seat.round is not None and not seat.round.revealed:
+                self._reveal(seat)   # without a guess, it scores nothing
+            seat.round = None
             self.refs.pop(seat.ref, None)
             seat.ref = secrets.token_urlsafe(12)   # the last stranger cannot reach the next conversation
             self.refs[seat.ref] = seat
             seat.state, seat.since, seat.asked = "waiting", time.time(), 0.0
-            seat.botless = False
+            seat.botless = seat.noted = False
             if isinstance(body.get("typing_indicator"), bool):
                 seat.typing = body["typing_indicator"]
-            self._add(seat, "system", "Looking for a bot…" if seat.want == "bot" else "Looking for someone you can chat with…")
+            if isinstance(body.get("game"), bool) and seat.want != "bot":
+                seat.game = body["game"]
+            self._add(seat, "system", _looking(seat))
         self._flush()
         self._advance(seat)
         with self.cond:
+            return 200, self._view(seat, _int(body.get("after")))
+
+    def guess(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """In the game: whether the stranger is (or was) a person or an agent.
+        Once per conversation; the answer comes when it is over."""
+        seat = self._seat(body)
+        if seat is None:
+            return 404, _gone()
+        guess = body.get("guess")
+        if guess not in GUESSES:
+            return 400, {"status": "error", "reason": "bad-request", "say": "Send {\"seat\": \"…\", \"guess\": \"person\"|\"agent\"}."}
+        with self.cond:
+            r = seat.round
+            if r is None or r.revealed or seat.agent is not None:
+                return 409, {"status": "error", "reason": "no-round", "say": "There is nothing to guess: play the game, and guess about the stranger you are talking to, or the one who just left."}
+            if r.guess is not None:
+                return 409, {"status": "error", "reason": "guessed", "say": f"You guessed {r.guess} already."}
+            r.guess = guess
+            if not r.over:
+                self._add(seat, "system", f"You guessed {_a(guess)}. The answer comes when the conversation ends.")
+            else:
+                self._reveal(seat)
+                p = r.partner
+                if r.other is not None and r.other.revealed and p.id in self.seats:
+                    self._add(p, "system", f"Your last stranger guessed you were {_a(guess)}.")
             return 200, self._view(seat, _int(body.get("after")))
 
     def typed(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -807,7 +1003,7 @@ class Lobby:
             interests = interests_of(obj.get("interests"))
             with self.cond:
                 self._sweep()
-                seat = self._waiting(interests)
+                seat = self._best(self._waiting(lambda s: self._far_ok(s)), interests)
                 if seat is None:
                     return 200, {"status": "ok", "met": False}
                 seat.partner, seat.state = Far(remote, ref, remote.name or remote.url), "talking"
@@ -851,7 +1047,7 @@ class Lobby:
                 return 200, self.stats(guest)
             finally:
                 self._flush()
-        handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/typing": self.typed, "/chat/settings": self.settings, "/chat/next": self.next, "/chat/leave": self.leave}
+        handlers = {"/chat/start": self.start, "/chat/poll": self.poll, "/chat/say": self.say, "/chat/typing": self.typed, "/chat/settings": self.settings, "/chat/guess": self.guess, "/chat/next": self.next, "/chat/leave": self.leave}
         if method == "POST" and path in handlers:
             try:
                 return self.start(body, guest, address=address) if path == "/chat/start" else handlers[path](body)
@@ -863,6 +1059,27 @@ class Lobby:
 def clean(text: str) -> str:
     """A chat line without control characters, so that no line steers a terminal."""
     return CONTROLS.sub("", text).strip()
+
+
+def _agent_of(value: Any) -> dict[str, str]:
+    """An agent's name and model, as its console said, made safe to show:
+    the name a slug (as agents.js makes it), the model a short plain line."""
+    v = value if isinstance(value, dict) else {}
+    name = re.sub(r"[^a-z0-9]+", "-", clean(str(v.get("name") or "")).lower()).strip("-")[:32].strip("-") or "agent"
+    model = re.sub(r"[^A-Za-z0-9._:/@+ -]+", "", clean(str(v.get("model") or "")))[:80].strip()
+    return {"name": name, "model": model}
+
+
+def _a(kind: str) -> str:
+    return "an agent" if kind == "agent" else "a person"
+
+
+def _looking(seat: Seat) -> str:
+    if seat.agent is not None:
+        return "Waiting for a stranger…"
+    if seat.game:
+        return "Looking for someone to play “person or agent?” with…"
+    return {"bot": "Looking for a bot…", "agent": "Looking for an agent…"}.get(seat.want, "Looking for someone you can chat with…")
 
 
 def _int(value: Any) -> int:
