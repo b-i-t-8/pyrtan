@@ -521,6 +521,9 @@
     if (source === "memory") return String(spec.key);
     return String(spec.url);
   }
+  // A good answer is the one a node's expect describes (adapters.good).
+  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists" };
+  const good = (source, observed) => { const key = GOOD[source || ""]; return key === undefined ? true : observed[key] === true; };
   function briefResult(source, observed) {
     if (source === "http" || source === "browser") return pyStr(observed.status === undefined ? null : observed.status);
     if (source === "file") return "written" in observed ? `wrote ${observed.written} B` : observed.exists ? `${observed.size} B` : "missing";
@@ -1293,12 +1296,12 @@
   class Trace {
     constructor(tree) { this.tree = tree; this.steps = []; this.started = Date.now() / 1000; this.gaps = []; }
     add(step) { this.steps.push(step); return step; }
-    gap(node, on, observed) { this.gaps.push({ tree: this.tree, node, on, observed: short(observed) }); }
+    gap(node, on, observed, expected) { this.gaps.push(Object.assign({ tree: this.tree, node, on, observed: short(observed) }, expected === undefined ? {} : { kind: "drift", expected })); }
     toDict() { return { tree: this.tree, started: this.started, steps: this.steps.map(stepDict), gaps: this.gaps }; }
     render() {
       const lines = [`trace: ${this.tree}`];
       for (const s of this.steps) lines.push(`${"  ".repeat((s.depth || 0) + 1)}${s.node} (${s.kind})${s.chosen ? " [" + s.chosen + "]" : ""}: ${s.summary}${s.next ? " -> " + s.next : ""}`);
-      for (const g of this.gaps) lines.push(`  gap: ${g.node} saw ${g.on} = ${pyJson(g.observed)} and had no branch for it`);
+      for (const g of this.gaps) lines.push(g.kind === "drift" ? `  drift: ${g.node} saw ${g.on} = ${pyJson(g.observed)}, where it expects ${condText(g.expected)}` : `  gap: ${g.node} saw ${g.on} = ${pyJson(g.observed)} and had no branch for it`);
       return lines.join("\n");
     }
   }
@@ -1428,13 +1431,13 @@
     async observeOrAct(tree, node, scope, trace, retry) {
       const state = scope.state, into = node.get("into", "last");
       const sourceName = SOURCES.find((s) => node.spec[s] !== undefined && node.spec[s] !== null);
-      let source, summary;
+      let source, summary, at, label;
       if (sourceName !== undefined) {
         const spec = render(node.get(sourceName), scope);
         const problem = tree.allowed(sourceName, spec);
         if (problem) return outcome("error", tree.name, { reason: problem[0], say: `${node.id}: ${problem[1]}` });
         const timeout = Number(node.get("timeout", DEFAULT_TIMEOUT));
-        let label, call;
+        let call;
         if (sourceName === "http") {
           const method = String(spec.method || "GET").toUpperCase(), url = String(spec.url);
           const headers = {}; for (const [k, v] of Object.entries(spec.headers || {})) headers[String(k)] = String(v);
@@ -1457,6 +1460,7 @@
         put(state, into, observed);
         source = observed;
         summary = `${label} -> ${briefResult(sourceName, observed)}`;
+        at = statePath(into);
       } else {
         const frm = node.get("from");
         const sourceVal = resolve(statePath(frm), scope);
@@ -1464,6 +1468,19 @@
         else if (isObj(sourceVal)) source = sourceVal;
         else source = { value: sourceVal, body: typeof sourceVal === "string" ? sourceVal : null };
         summary = `from ${frm}`;
+        at = statePath(frm); label = `from ${frm}`;
+      }
+      const expect = node.get("expect");
+      if (expect && good(sourceName, source)) {
+        const misses = Object.entries(expect).map(([path, cond]) => [path, resolve(path, source), cond]).filter(([, value, cond]) => !holds(cond, value));
+        if (misses.length) {
+          for (const [path, value, cond] of misses) trace.gap(node.id, `${at}.${path}`, plain(value), cond);
+          const [first, value, cond] = misses[0];
+          const seen = {}; for (const [p, v] of misses) seen[p] = plain(v);
+          trace.add(step(node.id, node.kind, `${summary}; drift: ${first} = ${brief(value)}, expected ${condText(cond)}`, { observed: seen }));
+          const more = misses.length > 1 ? ` (and ${misses.length - 1} more)` : "";
+          return outcome("error", tree.name, { reason: "drift", say: `${node.id}: ${label} answered, but not in the shape this tree expects: ${first} = ${brief(value)}, expected ${condText(cond)}${more}.`, output: { drift: trace.gaps.slice(-misses.length) } });
+        }
       }
       const extracted = {}; const cache = new Map();
       for (const entry of node.get("extract", []) || []) {

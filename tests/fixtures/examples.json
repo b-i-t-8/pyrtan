@@ -1572,5 +1572,14 @@
     "body": "",
     "written": null,
     "expires": null
+  },
+  "GET https://api.github.com/repos/b-i-t-8/drifted/releases/latest": {
+    "status": 200,
+    "body": {
+      "release": {
+        "tag_name": "v1.0.0"
+      },
+      "html_url": "https://github.com/b-i-t-8/drifted/releases/tag/v1.0.0"
+    }
   }
 }

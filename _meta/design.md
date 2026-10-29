@@ -391,7 +391,15 @@ Five trees, all against real public APIs, all tested offline:
     modelled exactly as `conditions.py` runs them, as intervals and
     points; anything else is left alone, so it can miss a dead branch but
     never reports a live one (`analysis.py`).
-16. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+16. **v0.31, built: the shape of a good answer.** An `observe` (or an
+    `act`) may say with `expect` what a good answer looks like, path by
+    path, in the conditions a `decide` uses. A good answer (2xx, exit 0, a
+    file that exists…) that misses it stops the run as `drift` and is
+    recorded as a gap on that node and path, so the federation's reports
+    tell a catalog tree's author which property changed. Section 8's
+    "when they stop, the trace will say exactly where" now holds for a
+    page that changed shape, not only for a value no branch covers.
+17. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

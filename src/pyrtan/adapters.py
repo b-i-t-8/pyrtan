@@ -233,6 +233,18 @@ def brief_result(source: str, observed: dict[str, Any]) -> str:
     return "ok"
 
 
+GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists"}
+
+
+def good(source: str | None, observed: dict[str, Any]) -> bool:
+    """Whether an observation is a good answer, the one a node's ``expect``
+    describes: a 2xx page, a program that exited 0, a file that is there, a
+    message that came, a line that ended, a key that is kept. A bad answer is a decide's business;
+    what it says is not drift. An observation from state is always checked."""
+    key = GOOD.get(source or "")
+    return True if key is None else observed.get(key) is True
+
+
 def _json(text: str | None) -> Any:
     if not text:
         return None

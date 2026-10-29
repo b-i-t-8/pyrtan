@@ -886,7 +886,7 @@
        "[what's the] latest release of {repo:word}",
        "latest {repo:word} release"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
@@ -9448,6 +9448,78 @@
     "repo": "b-i-t-8/busy"
    },
    "intent": "latest release of b-i-t-8/busy",
+   "tree": "github-release"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "repo": "b-i-t-8/drifted"
+    },
+    "output": {
+     "drift": [
+      {
+       "expected": {
+        "type": "str"
+       },
+       "kind": "drift",
+       "node": "fetch",
+       "observed": null,
+       "on": "state.resp.json.tag_name",
+       "tree": "github-release"
+      }
+     ]
+    },
+    "reason": "drift",
+    "say": "fetch: GET https://api.github.com/repos/b-i-t-8/drifted/releases/latest answered, but not in the shape this tree expects: json.tag_name = <missing>, expected type 'str'.",
+    "status": "error",
+    "trace": {
+     "gaps": [
+      {
+       "expected": {
+        "type": "str"
+       },
+       "kind": "drift",
+       "node": "fetch",
+       "observed": null,
+       "on": "state.resp.json.tag_name",
+       "tree": "github-release"
+      }
+     ],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "fetch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "latest release of b-i-t-8/drifted",
+        "inputs": {
+         "repo": "b-i-t-8/drifted"
+        },
+        "steps": [],
+        "trigger": "[what's the] latest release of {repo:word}"
+       },
+       "summary": "'latest release of b-i-t-8/drifted'; github-release via \"[what's the] latest release of {repo:word}\" (24 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "fetch",
+       "observed": {
+        "json.tag_name": null
+       },
+       "summary": "GET https://api.github.com/repos/b-i-t-8/drifted/releases/latest -> 200; drift: json.tag_name = <missing>, expected type 'str'"
+      }
+     ],
+     "tree": "github-release"
+    },
+    "tree": "github-release"
+   },
+   "inputs": {
+    "repo": "b-i-t-8/drifted"
+   },
+   "intent": "latest release of b-i-t-8/drifted",
    "tree": "github-release"
   },
   {
@@ -23294,6 +23366,14 @@
    "namespace": "pyrtan",
    "nodes": {
     "fetch": {
+     "expect": {
+      "json.html_url": {
+       "startswith": "https://"
+      },
+      "json.tag_name": {
+       "type": "str"
+      }
+     },
      "extract": [
       {
        "into": "tag",
@@ -23398,7 +23478,7 @@
      "pattern": "latest {repo:word} release"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "github-repo": {
    "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",

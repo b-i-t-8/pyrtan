@@ -177,6 +177,27 @@ next = "status"
 extracts from state already held. An extraction that finds nothing sets
 nothing; decide on absence with `{ exists = false }`.
 
+`expect` says what a good answer looks like: a path into what the node
+observed (the same paths as `extract`'s `json`) and a condition, the same
+tests a `decide` branch uses.
+
+```toml
+expect = { "json.tag_name" = { type = "str" }, "json.html_url" = { startswith = "https://" } }
+```
+
+It is checked on a good answer only: a 2xx page, a program that exited
+0, a file that is there, a message that came, a line that ended, a
+memory key that is kept (an observation `from` state is always checked). A bad answer is the tree's
+to `decide` on. A good answer that misses its `expect` means the source
+changed under the tree, and the run stops with reason `drift` before
+anything is extracted from it. The trace names each field and what was
+expected (`drift: fetch saw state.resp.json.tag_name = null, where it
+expects type 'str'`), and each one is recorded as a gap on that node
+and path, so `/gaps` and a catalog tree's reports show its author which
+property changed and where. `pyrtan grow` drafts nothing for a drift:
+what changed is for a person to read. `expect` works on an `act` as well,
+but not on an `emit`, which has no answer.
+
 Selectors support tag, `#id`, `.class`, `[attr]`, `[attr=v]`, `[attr^=v]`,
 `[attr$=v]`, `[attr*=v]`, `:first-child`, `:last-child`, `:nth-child(n)`,
 `:contains(text)`, the descendant and `>` combinators, and `,` groups.
@@ -407,7 +428,7 @@ empty string into a URL.
 | `done` | a `done` node was reached | `say`, `output` |
 | `failed` | a `fail` node was reached | `reason`, `say` |
 | `asked` | an `ask` node paused the run | `question`, `snapshot` |
-| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dead-end` |
+| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dead-end` |
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.
