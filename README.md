@@ -554,7 +554,7 @@ caller's trace.
 
 ## Watches: trees that run on their own
 
-A tree may carry `[[watches]]`: a clock, a file, a topic or a serial line
+A tree may carry `[[watches]]`: a clock, a calendar, a file, a topic or a serial line
 starts a run without anyone asking, with `inputs` rendered from what
 spoke (`event`), `env` and `now`.
 
@@ -563,6 +563,10 @@ spoke (`event`), `env` and `now`.
 name = "example.com"
 every = "15m"
 inputs = { host = "example.com" }
+
+[[watches]]
+at = "mon-fri 09:00"                                       # a calendar, in tz (UTC when not given)
+tz = "Europe/Oslo"
 
 [[watches]]
 file = "/var/log/syslog"                                   # each time lines are appended
@@ -842,7 +846,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.33.0. The core, the service, the hub, the command, the console (which
+0.35.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

@@ -117,7 +117,7 @@ def test_watches_are_checked():
     base = LINES.format(root="/tmp", log="/tmp/x.log")
     tree = load_tree_text(base)
     assert tree.watch_kinds() == ["file"] and tree.capability()["watches"] == [{"kind": "file", "what": "/tmp/x.log"}]
-    with pytest.raises(TreeError, match="exactly one of every, file, queue, serial"):
+    with pytest.raises(TreeError, match="exactly one of every, at, file, queue, serial"):
         load_tree_text(base.replace('file = "/tmp/x.log"', 'file = "/tmp/x.log"\nevery = "5m"'))
     with pytest.raises(TreeError, match="not under this tree's paths"):
         load_tree_text(base.replace('file = "/tmp/x.log"', 'file = "/etc/x.log"'))

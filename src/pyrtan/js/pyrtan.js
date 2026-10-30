@@ -1279,7 +1279,7 @@
       for (const k of LIST_NAMES) if (this[k].length) cap[k] = this[k];
       cap.sources = this.sources();
       const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
-      if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
+      if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "at", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "at" ? String(w.at) + (w.tz ? ` (${w.tz})` : "") : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
       const fixed = this.triggers.filter((t) => Object.keys(t.fixedInputs).length);
       return Object.assign(cap, { license: this.license, language: languageDict(this.language), triggers: this.triggers.map((t) => t.pattern) }, fixed.length ? { trigger_inputs: Object.fromEntries(fixed.map((t) => [t.pattern, t.fixedInputs])) } : {}, { inputs });
     }

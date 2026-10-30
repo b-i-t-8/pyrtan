@@ -115,6 +115,11 @@ every = "15m"                        # a duration, or seconds
 inputs = { host = "example.com" }    # templates may read event, env and now
 
 [[watches]]
+at = "mon-fri 09:00, 17:30"          # a calendar: days and times of day
+tz = "Europe/Oslo"                   # optional; UTC when not given
+inputs = { slot = "{{ event.slot }}" }   # event.slot = "fri 09:00", event.at = the instant, in UTC
+
+[[watches]]
 file = "/var/log/syslog"             # fires with the lines appended since last time
 inputs = { text = "{{ event.body | strip }}", n = "{{ event.lines | length }}" }
 
@@ -125,7 +130,20 @@ queue = { url = "mqtt://broker.local", topic = "home/+/temperature" }   # fires 
 serial = { device = "/dev/ttyUSB0", baud = 9600, read_until = "\n" }  # fires per line: event.body
 ```
 
-Exactly one of `every`, `file`, `queue`, `serial`. A watch is static:
+Exactly one of `every`, `at`, `file`, `queue`, `serial`.
+
+`at` is days and times of day. Days are names (`mon`, `tuesday`), ranges
+(`mon-fri`; `fri-mon` wraps the week), or `daily`, `every day`,
+`weekdays`, `weekends`; no days means every day. Times are `09:00`,
+`9am`, `noon`, `midnight`, several separated by commas. They are in `tz`,
+an IANA zone name, or UTC. A time the clocks skip (02:30 the night they
+go forward) runs at the shifted hour; a time that happens twice runs
+once, the first time. A slot missed while nothing was running is not
+made up. `pyrtan check` refuses a schedule it cannot read, a zone the
+machine does not know, and `tz` on any other kind of watch; `/watches`
+shows when an `at` watch runs next (`next_at`).
+
+A watch is static:
 no template reaches a path, a topic or a device, and `pyrtan check`
 holds each against the tree's `paths`, `hosts` and `topics`, `devices`.
 Every required input must be given or have a default. A watched run's
