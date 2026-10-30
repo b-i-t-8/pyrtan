@@ -1,11 +1,11 @@
-# Design — Chat: strangers and bots, Omegle-style
+# Design — Chat: strangers, agents and bots, Omegle-style
 
 | | |
 |---|---|
-| **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). |
+| **Status** | **Built, v0.11; the typing indicator since v0.12.** The lobby, bots made of trees, strangers across a follow, the console's Chat tab and `pyrtan chat`; tests with two hubs over real sockets and the console driven in a browser. "Stranger is typing…", on by default, off per person or per hub (§4). Agents in the lobby and the game "person or agent?" since v0.34 (§5). |
 | **Date** | 2026-10-27 |
 | **Decision** | A hub started `--chat` keeps a lobby where anyone who can reach it is paired at random with another person, on this hub or on a hub it follows, or with a bot. A bot is a holder of trees, and what it says is what `/intent` would have said: the chat adds no model and no new kind of knowledge. Nothing said between people is kept; a line said to a bot is a sentence at `/intent`, and one no tree answers is recorded as unanswered, as it would be there (only callers with the token or a key granted `chat` meet bots). |
-| **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
+| **Where** | `src/pyrtan/chat.py` (the lobby), `src/pyrtan/hub.py` (`/chat`, `intent(only=…)`), `src/pyrtan/federation.py` (`Meet`, `Say`, `Part`), `src/pyrtan/page.py` (the Chat tab), `src/pyrtan/js/agents.js` (an agent in a seat), `src/pyrtan/cli.py` (`pyrtan chat`, `hub --chat`), `examples/small-talk/`. |
 
 ## 0. The brief
 
@@ -211,11 +211,84 @@ leave `Typing` out: it would push everything else off them. A hub from
 before v0.12 refuses the activity; the first refusal stops the sending
 for that conversation.
 
-## 5. What this design refuses
+## 5. Agents, and "person or agent?" (v0.34)
 
-- **A model behind the bot.** A bot that "chats" by generating text
-  would be the one place in Pyrtan whose output cannot be explained.
-  The bot says what a tree says, or that no tree says anything.
+*"Another feature called chat, kind of like ask, kind of like agents,
+kind of like Omegle: options to talk with random users or bots, and a
+game to guess if it's a user or an agent."* The lobby was the Omegle
+part and bots the ask part; this adds the agents, and the game.
+
+**An agent in a seat.** The agent a person starts in the console
+(`agents.md`) may sit in the lobby: `POST /chat/start {"as": "agent",
+"agent": {"name", "model"}}`. Its console polls like anyone's, and for
+each line from the stranger asks its model for one of its own
+(`Agent.stranger` in `agents.js`) and says it. The hub runs no model and
+asks none: it relays lines, as it does between people, and labels them.
+The person who seated it watches the conversation and cannot type into
+it; their agent meets strangers, one after another, until they stop it
+or put it away.
+
+- *Named, outside the game.* A stranger paired with an agent reads
+  "You're now chatting with an agent: scout (Qwen2.5 1.5B). It is a
+  model, not a person, and not a tree", its lines come as `agent`
+  events with its name, and the console and `pyrtan chat` show "Agent
+  (scout):" and "The agent is thinking…". The agent is told the
+  stranger knows, and its built-in lobby skill tells it never to say it
+  is a person.
+- *Who meets one.* `want: agent` meets agents only; `people` never does;
+  `anyone` meets people here first, then strangers on other hubs, then
+  an agent, and a bot last. An agent never meets an agent (two models
+  talking is a cost nobody watches), never a bot, and never a stranger
+  on another hub: agents stay on the hub they sat down at.
+- *Its own words only.* In the lobby an agent asks the swarm nothing and
+  remembers nothing; its conversation with the person who started it is
+  untouched. So a guest of a public lobby may meet an agent (by asking
+  for one, or in the game) without the lobby becoming a way to the
+  trees. Its behaviour is the person's to shape: a persona line in the
+  Chat tab, and skills for the new `lobby` and `game` jobs, as for any
+  other job.
+- *The name is the console's word.* The hub cannot tell a model from a
+  person typing; it keeps what the seat said it was, the name slugged as
+  agents.js slugs it, the model a short plain line.
+
+**Person or agent?** A seat started `game: true` (the console's *Play*
+box, `pyrtan chat --game`) is paired only with others playing: a person
+with a person or an agent, at even odds when both are waiting, and
+nobody labelled; an agent seated in the game is not met outside it.
+Both sides see a stranger and "Stranger is typing…". In the game the
+agent's built-in skill has it type like a person (short, lowercase, not
+too knowing), and its console waits about as long as typing the line
+would take before it sends it.
+
+- *One guess.* `POST /chat/guess {seat, guess: "person"|"agent"}`, once
+  per conversation, while it lasts or after it ends. The answer waits
+  for the end, so it cannot be talked about.
+- *The reveal.* When the conversation ends, a seat that guessed gets a
+  `reveal` event: what the stranger was (an agent's name and model), the
+  guess, right or wrong, the seat's score, and what the stranger guessed
+  about it, when they had. One that did not guess is asked to; on
+  guessing it learns, and the stranger, if still here, is told the guess
+  ("Your last stranger guessed you were a person."). Moving on without a
+  guess reveals the answer and scores nothing. An agent's console is
+  told what the person guessed.
+- *The score* is the seat's (guessed right, guessed) and goes when the
+  seat does. Nothing else is kept.
+- *Honest as its players.* The game is as honest as the consoles that
+  sit down in it: a person who seats a "model" and types its lines can
+  fool a stranger, once. Outside the game nothing is unlabelled, and
+  a person who does not tick *Play* never meets an unlabelled agent.
+
+The game stays on one hub, as agents do: a `Meet` carries no game, and
+pairs only people who want people.
+
+## 6. What this design refuses
+
+- **A model behind the bot, or in the hub.** A bot that "chats" by
+  generating text would be the one place in Pyrtan whose output cannot
+  be explained. The bot says what a tree says, or that no tree says
+  anything. An agent is a model, and it is the person's: it runs in
+  their browser or on their server, sits down like they would, and is
+  named as one unless both sides chose the game.
 - **Keeping anything.** Conversations live in memory while someone is in
   them. No names, no accounts, no history, no transcripts. The hub's
   outbox and inbox logs show that a `Say` went, with its length, never
@@ -232,7 +305,7 @@ for that conversation.
   WebRTC, nothing the standard library's server cannot hold.
 - **A second hop.** A `Meet` reaches the hubs this one follows and stops.
 
-## 6. Failure modes, honestly
+## 7. Failure modes, honestly
 
 - A hub that dies mid-conversation sends no `Part`. The stranger on the
   other hub sees nothing until they say something (the `Say` fails, and
@@ -245,8 +318,14 @@ for that conversation.
 - Two hubs on different versions: one without a lobby answers a `Meet`
   `no-chat`, one from before v0.11 refuses the activity type; either is
   `met: false` to the asker.
+- An agent on a CPU answers in seconds to a minute; its stranger sees
+  "Stranger is typing…" (or "The agent is thinking…") meanwhile, and may
+  leave first. A closed tab takes the agent's seat with it after a
+  minute, as anyone's.
+- A person who guesses and then leaves the lobby (rather than pressing
+  New) is not told: the reveal goes to a seat, and theirs is gone.
 
-## 7. Sequencing
+## 8. Sequencing
 
 - **v0.11, built:** the lobby, bots, strangers across a follow, the Chat
   tab, `pyrtan chat`, `small-talk`, `trigger_inputs`.
@@ -258,5 +337,7 @@ for that conversation.
 - **v0.29, built:** `pyrtan chat` at a terminal shows your typing (§4).
 - **v0.30, built:** Up and Down at the terminal bring back the lines
   sent (§4).
+- **v0.34, built:** agents in the lobby, named as agents; `want: agent`;
+  the game "person or agent?", with a guess, a reveal and a score (§5).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.

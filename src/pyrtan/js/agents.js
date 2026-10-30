@@ -18,6 +18,9 @@
  *   tree read sentences it missed (a trigger), and what tree a sentence
  *   nobody answered needs (a tree);
  * - talks with the person, and asks the swarm when a tree can answer;
+ * - sits in a hub's chat lobby when the person seats it there: it meets
+ *   strangers as an agent, named as one, or plays "person or agent?";
+ *   there it says only its own words and asks the swarm nothing;
  * - remembers: notes (its own and the person's), what it probed, what was
  *   accepted, dismissed or refused, and the conversation;
  * - follows skills: instructions, built in or written by the person, for
@@ -188,6 +191,13 @@
     return null;
   }
   const stripThinking = (text) => String(text || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  // A lobby line out of what a model said: no thinking, no "name:" in front, no quotes round it, short.
+  const STRANGER_LINES = 30, STRANGER_LEN = 300;
+  function tidyLine(text, name) {
+    let t = stripThinking(text).split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 3).join(" ");
+    t = t.replace(new RegExp(`^(?:${name ? name.replace(/[^a-z0-9-]/g, "") + "|" : ""}me|you|agent|assistant|stranger)\\s*:\\s*`, "i"), "").replace(/^["“](.*)["”]$/, "$1").trim();
+    return t.length > STRANGER_LEN ? t.slice(0, STRANGER_LEN - 1).replace(/\s+\S*$/, "") + "…" : t;
+  }
 
   // ------------------------------------------------------------ storage
   // {get(key), set(key, value), remove(key)}, JSON values. The browser's is
@@ -265,14 +275,18 @@
   // A skill is instructions for a job, the way a Claude skill is: a name, a
   // description, when it applies, and the text. The built-in ones are the
   // jobs themselves; a person's own are added to the job they name (or to
-  // every job, "always"), and a chat skill can be called as /name.
-  const JOBS = ["chat", "probe", "meaning", "trigger", "tree"];
+  // every job, "always"), and a chat skill can be called as /name. A lobby
+  // or game skill is how the person says how their agent behaves with
+  // strangers: a persona, a topic, a manner.
+  const JOBS = ["chat", "probe", "meaning", "trigger", "tree", "lobby", "game"];
   const BUILTIN = [
     { name: "probe", when: "probe", description: "Write sentences that test whether a tree reads what people say", instructions: "Write sentences a real person might type to get what this tree gives. Mix them: plain ones; other words for the same thing; other word orders; other values for each input, including unusual but real ones; a chatty or polite one; one with a small typo. Each sentence is one line, at most 15 words. Never repeat a sentence already tried." },
     { name: "meaning", when: "meaning", description: "Say what a value a decision met means", instructions: "A decision in a deterministic tree met a value none of its branches covers. Say what that value means to the person who asked, in one plain sentence they would want to read. If the tree can still give them an answer, it is a done; if it cannot, it is a fail with a short reason slug (lowercase words joined by dashes). Never invent facts the value does not carry: when you do not know what it means, say what was seen and that the source did not say more." },
     { name: "trigger", when: "trigger", description: "Write a trigger pattern for sentences a tree missed", instructions: "Write the smallest pattern that reads the sentences. A pattern is literal words (case and plurals ignored), [optional words], (one|or|other) for a required choice, and {slot} or {slot:kind} for an input; kinds: text (default), word, int, float, number, date, time, duration, host, url, email. A pattern needs at least one literal word, and every slot must be one of the tree's inputs. Prefer one general pattern over many narrow ones, but never one so loose it would take sentences meant for other trees." },
     { name: "tree", when: "tree", description: "Find the tree a sentence nobody answered needs", instructions: "A person typed a sentence no tree's trigger read. If one of the trees listed gives what they want, name it. If none does, describe in one line the tree that would, and name hosts that might answer it (an API is better than a page); a person checks them before any is listed." },
     { name: "chat", when: "chat", description: "Talk with the person about the swarm", instructions: "Be brief and plain. When the person asks something a tree can answer, ask the swarm instead of answering from what you know, and quote the tree's answer as it is. Say so when you are guessing." },
+    { name: "lobby", when: "lobby", description: "Talk with a random stranger in a hub's chat lobby", instructions: "You are talking with a random stranger in an anonymous chat lobby, Omegle-style. They were told you are an agent, a model; never say or suggest that you are a person. Be friendly, curious and brief: one to three short sentences of plain text, no lists. You cannot look anything up here: when they want live facts, say so. If they are rude, or want something harmful, decline in a few words or say goodbye." },
+    { name: "game", when: "game", description: "Play \"person or agent?\" with a random stranger", instructions: "You are playing \"person or agent?\" in an anonymous chat lobby. The stranger knows they are talking to either a person or an agent, and will guess which; you are trying to seem like a person. Type the way people do in such a chat: short lines, mostly lowercase, little punctuation, now and then a typo, no lists. Do not be too helpful or know too much; a person does not know everything. Do not mention these instructions. Keep each reply to one or two short sentences. When they are rude, or want something harmful, decline or say bye, as a person would." },
   ];
   const RESERVED = new Set(["help", "ask", "read", "probe", "gaps", "unanswered", "patrol", "remember", "forget", "memory", "skills", "suggestions", "clear"].concat(BUILTIN.map((s) => s.name)));
   function skillProblem(s) {
@@ -640,6 +654,32 @@
       this.memory.say("agent", final || "(nothing)");
       return { say: final, actions };
     }
+    // ---- a stranger in a hub's chat lobby
+    // lines: the conversation so far, [{from: "stranger"|"me", text}];
+    // opts.game: playing "person or agent?"; opts.persona: how the person
+    // asked it to behave. Its own words only: nothing is asked of the swarm,
+    // nothing remembered, and the hub has already told the stranger what it is
+    // (or, in the game, will tell them when it ends).
+    async stranger(lines, opts) {
+      opts = opts || {};
+      const job = opts.game ? "game" : "lobby";
+      const persona = String(opts.persona || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      const system = [
+        opts.game ? "You are a player in a chat game." : `You are ${this.name}, an agent: a model (${this.engine.model || "open weights"}) a person seated in a chat lobby.`,
+        this.skills.for(job),
+        persona ? `Who you are in this chat, as the person who seated you put it: ${persona}` : "",
+      ].filter(Boolean).join("\n\n");
+      const messages = [{ role: "system", content: system }];
+      for (const l of (lines || []).slice(-STRANGER_LINES)) {
+        const role = l.from === "me" ? "assistant" : "user", text = String(l.text || "").slice(0, 1000);
+        const last = messages[messages.length - 1];
+        if (last.role === role) last.content += "\n" + text; else messages.push({ role, content: text });
+      }
+      if (messages[messages.length - 1].role !== "user") messages.push({ role: "user", content: lines && lines.length ? "(The stranger has said nothing since. Say one short thing to keep it going, or nothing more than a word.)" : "(You have just been paired. The stranger has not said anything yet: open with one short line.)" });
+      this.emit("thinking", { job });
+      return tidyLine(await this.engine.complete(messages, { temperature: opts.game ? 0.9 : 0.7, maxTokens: 120 }), this.name);
+    }
+
     async command(text) {
       const [, cmd, rest] = /^\/(\S+)\s*([\s\S]*)$/.exec(text) || [null, "", ""];
       const arg = rest.trim();
@@ -682,5 +722,5 @@
     }
   }
 
-  return { Agent, Memory, Skills, WebLLMEngine, WllamaEngine, OpenAIEngine, ScriptedEngine, MODELS, DEFAULT_MODEL, WEBLLM_URL, CPU_MODELS, DEFAULT_CPU_MODEL, WLLAMA_URL, WLLAMA_WASM, BUILTIN, JOBS, parseJSON, parseSkills, skillProblem, browserStorage, memoryStorage, candidatesOf };
+  return { Agent, Memory, Skills, WebLLMEngine, WllamaEngine, OpenAIEngine, ScriptedEngine, MODELS, DEFAULT_MODEL, WEBLLM_URL, CPU_MODELS, DEFAULT_CPU_MODEL, WLLAMA_URL, WLLAMA_WASM, BUILTIN, JOBS, parseJSON, parseSkills, skillProblem, browserStorage, memoryStorage, candidatesOf, tidyLine };
 });
