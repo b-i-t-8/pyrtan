@@ -1201,6 +1201,7 @@
       this.name = raw.name; this.version = raw.version || 1; this.description = raw.description || "";
       this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || ""; this.namespace = raw.namespace || "";
       for (const k of LIST_NAMES) this[k] = raw[k] || [];
+      this.budget = treeBudget(raw.budget);
       try { this.language = language(raw.language); } catch (e) { if (e instanceof TriggerError) throw new TreeError(`${this.name}: ${e.message}`); throw e; }
       this.triggers = (raw.triggers || []).map((t, i) => {
         if (typeof t === "string") t = { pattern: t };
@@ -1280,6 +1281,7 @@
       cap.sources = this.sources();
       const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
       if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
+      if (this.budget) cap.budget = { requests: this.budget.requests, per: this.budget.per };
       const fixed = this.triggers.filter((t) => Object.keys(t.fixedInputs).length);
       return Object.assign(cap, { license: this.license, language: languageDict(this.language), triggers: this.triggers.map((t) => t.pattern) }, fixed.length ? { trigger_inputs: Object.fromEntries(fixed.map((t) => [t.pattern, t.fixedInputs])) } : {}, { inputs });
     }
@@ -1375,6 +1377,14 @@
     return d;
   }
 
+  // budget = { requests, per }; tree.py refuses a bad one, so this only reads a good one.
+  function treeBudget(raw) {
+    if (!isObj(raw) || !Number.isInteger(raw.requests) || raw.requests < 1) return null;
+    let seconds = 0;
+    if (typeof raw.per === "number") seconds = raw.per;
+    else { try { seconds = parseDuration(String(raw.per)).value; } catch (e) { if (!(e instanceof ParseError)) throw e; } }
+    return seconds >= 1 ? { requests: raw.requests, per: seconds, said: typeof raw.per === "number" ? `${raw.per} s` : String(raw.per) } : null;
+  }
   class Runner {
     constructor(opts) {
       opts = opts || {};
@@ -1388,6 +1398,16 @@
       this.clock = opts.clock || (() => new Date());
       this.maxSteps = opts.maxSteps || MAX_STEPS; this.maxDepth = opts.maxDepth || MAX_DEPTH;
       this.emitted = [];
+      this.spent = new Map();  // per tree with a budget: when its recent requests went
+    }
+    // One request against the tree's budget: null when it may go, else the seconds until the next may (as runtime.py).
+    spend(tree) {
+      if (!tree.budget) return null;
+      const { requests, per } = tree.budget, now = this.clock().getTime() / 1000;
+      const recent = (this.spent.get(tree.name) || []).filter((t) => t > now - per);
+      if (recent.length >= requests) { this.spent.set(tree.name, recent); return Math.max(1, Math.ceil(recent[0] + per - now)); }
+      this.spent.set(tree.name, recent.concat([now]));
+      return null;
     }
     add(treeOrRaw) { const t = treeOrRaw instanceof Tree ? treeOrRaw : new Tree(treeOrRaw); this.trees[t.name] = t; return t; }
     get(name) { return this.trees[name] || null; }
@@ -1536,6 +1556,12 @@
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
         let lastError = null, observed = null;
         for (let attempt = 0; attempt < attempts; attempt++) {
+          const wait = sourceName !== "memory" ? this.spend(tree) : null;
+          if (wait !== null) {
+            const b = tree.budget;
+            trace.add(step(node.id, node.kind, `${label}: not sent; the budget of ${b.requests} requests per ${b.said} is spent, the next in ${wait} s`));
+            return outcome("error", tree.name, { reason: "budget", say: `${node.id}: ${tree.name} has spent its budget of ${b.requests} requests per ${b.said}; the next is allowed in ${wait} s.`, output: { budget: { requests: b.requests, per: b.per, retry_after: wait } } });
+          }
           try { observed = await call(); break; }
           catch (e) { if (!(e instanceof TransportError)) throw e; lastError = e.message; if (attempt + 1 < attempts) await sleep(Math.min(200 * (attempt + 1), 1000)); }
         }
@@ -1652,6 +1678,10 @@
         if (sub.reason === "dry-run") {  // an act it would have done: the whole run stops there
           if (sub.trace && sub.trace !== trace) { for (const s of sub.trace.steps) { s.depth = depth + 1; trace.steps.push(s); } trace.gaps.push(...sub.trace.gaps); }
           return outcome("error", tree.name, { reason: "dry-run", say: sub.say });
+        }
+        if (sub.reason === "budget") {  // the rest of the items would be refused too: stop at the first
+          if (sub.trace && sub.trace !== trace) { for (const s of sub.trace.steps) { s.depth = depth + 1; trace.steps.push(s); } trace.gaps.push(...sub.trace.gaps); }
+          return outcome("error", tree.name, { reason: "budget", say: sub.say, output: sub.output });
         }
         if (sub.status === "done") results.push(sub.output !== null && sub.output !== undefined ? sub.output : sub.say);
         else { failures++; results.push(null); if (node.get("stop_on_fail", false)) return outcome("error", tree.name, { reason: "each-failed", say: `${node.id}: item ${index} failed: ${sub.say || sub.reason}` }); }

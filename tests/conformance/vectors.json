@@ -861,6 +861,10 @@
       "version": 1
      },
      {
+      "budget": {
+       "per": 3600,
+       "requests": 30
+      },
       "description": "The latest release of a GitHub repository.",
       "hosts": [
        "api.github.com"
@@ -887,7 +891,7 @@
        "[what's the] latest release of {repo:word}",
        "latest {repo:word} release"
       ],
-      "version": 3
+      "version": 4
      },
      {
       "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
@@ -1935,6 +1939,41 @@
        "[what's the] latest version of {package:word} on pypi",
        "latest {package:word} on pypi",
        "(pypi|pip) (package|version) {package:word}"
+      ],
+      "version": 1
+     },
+     {
+      "budget": {
+       "per": 60,
+       "requests": 3
+      },
+      "description": "reads items, within a budget",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {
+       "ids": {
+        "default": [
+         101,
+         102,
+         103
+        ],
+        "type": "list"
+       },
+       "n": {
+        "default": 1,
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "quota",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [
+       "quota {n:int}"
       ],
       "version": 1
      },
@@ -5024,6 +5063,233 @@
   },
   {
    "body": {
+    "text": "quota 2"
+   },
+   "expect": {
+    "inputs": {
+     "ids": [
+      101,
+      102,
+      103
+     ],
+     "n": 2
+    },
+    "output": {
+     "items": [
+      "Pyrtan 0.1",
+      "Ask HN: self post"
+     ]
+    },
+    "say": "2 read",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "each",
+       "node": "intent",
+       "observed": {
+        "cleaned": "quota 2",
+        "inputs": {
+         "n": 2
+        },
+        "steps": [],
+        "trigger": "quota {n:int}"
+       },
+       "summary": "'quota 2'; quota via 'quota {n:int}' (5 literal chars)"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "got",
+       "node": "item",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "got",
+       "summary": "Pyrtan 0.1"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "got",
+       "node": "item",
+       "observed": {
+        "title": "Ask HN: self post"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json -> 200; title=Ask HN: self post"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "got",
+       "summary": "Ask HN: self post"
+      },
+      {
+       "depth": 0,
+       "kind": "each",
+       "next": "reply",
+       "node": "each",
+       "summary": "2 item(s)"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "2 read"
+      }
+     ],
+     "tree": "quota"
+    },
+    "tree": "quota"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "quota 2"
+   },
+   "expect": {
+    "inputs": {
+     "ids": [
+      101,
+      102,
+      103
+     ],
+     "n": 2
+    },
+    "output": {
+     "budget": {
+      "per": 60,
+      "requests": 3,
+      "retry_after": 60
+     }
+    },
+    "reason": "budget",
+    "say": "item: quota has spent its budget of 3 requests per 1 minute; the next is allowed in 60 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "each",
+       "node": "intent",
+       "observed": {
+        "cleaned": "quota 2",
+        "inputs": {
+         "n": 2
+        },
+        "steps": [],
+        "trigger": "quota {n:int}"
+       },
+       "summary": "'quota 2'; quota via 'quota {n:int}' (5 literal chars)"
+      },
+      {
+       "depth": 1,
+       "kind": "observe",
+       "next": "got",
+       "node": "item",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 1,
+       "kind": "done",
+       "next": null,
+       "node": "got",
+       "summary": "Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "item",
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/102.json: not sent; the budget of 3 requests per 1 minute is spent, the next in 60 s"
+      }
+     ],
+     "tree": "quota"
+    },
+    "tree": "quota"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
+    "text": "quota 1"
+   },
+   "expect": {
+    "inputs": {
+     "ids": [
+      101,
+      102,
+      103
+     ],
+     "n": 1
+    },
+    "output": {
+     "budget": {
+      "per": 60,
+      "requests": 3,
+      "retry_after": 60
+     }
+    },
+    "reason": "budget",
+    "say": "item: quota has spent its budget of 3 requests per 1 minute; the next is allowed in 60 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "each",
+       "node": "intent",
+       "observed": {
+        "cleaned": "quota 1",
+        "inputs": {
+         "n": 1
+        },
+        "steps": [],
+        "trigger": "quota {n:int}"
+       },
+       "summary": "'quota 1'; quota via 'quota {n:int}' (5 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "item",
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json: not sent; the budget of 3 requests per 1 minute is spent, the next in 60 s"
+      }
+     ],
+     "tree": "quota"
+    },
+    "tree": "quota"
+   },
+   "method": "POST",
+   "path": "/intent",
+   "status": 200
+  },
+  {
+   "body": {
     "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
@@ -5589,7 +5855,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 37,
+    "runs": 40,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5651,6 +5917,7 @@
      "postfinite-search",
      "programming-joke",
      "pypi-package",
+     "quota",
      "quote",
      "recipe",
      "remind",
@@ -6165,6 +6432,71 @@
    "start": "word",
    "triggers": [
     "grade {score:int}"
+   ],
+   "version": 1
+  },
+  {
+   "budget": {
+    "per": "1 minute",
+    "requests": 3
+   },
+   "description": "reads items, within a budget",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "inputs": {
+    "ids": {
+     "default": [
+      101,
+      102,
+      103
+     ],
+     "type": "list"
+    },
+    "n": {
+     "default": 1,
+     "type": "int"
+    }
+   },
+   "name": "quota",
+   "nodes": {
+    "each": {
+     "into": "items",
+     "kind": "each",
+     "limit": "{{ inputs.n }}",
+     "next": "reply",
+     "over": "inputs.ids",
+     "start": "item"
+    },
+    "got": {
+     "kind": "done",
+     "say": "{{ state.title }}"
+    },
+    "item": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      }
+     ],
+     "http": {
+      "url": "https://hacker-news.firebaseio.com/v0/item/{{ item }}.json"
+     },
+     "into": "r",
+     "kind": "observe",
+     "next": "got"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "items": "{{ state.items }}"
+     },
+     "say": "{{ state.items | length }} read"
+    }
+   },
+   "start": "each",
+   "triggers": [
+    "quota {n:int}"
    ],
    "version": 1
   },
@@ -24294,6 +24626,10 @@
    "version": 1
   },
   "github-release": {
+   "budget": {
+    "per": "1 hour",
+    "requests": 30
+   },
    "description": "The latest release of a GitHub repository.",
    "hosts": [
     "api.github.com"
@@ -24422,7 +24758,7 @@
      "pattern": "latest {repo:word} release"
     }
    ],
-   "version": 3
+   "version": 4
   },
   "github-repo": {
    "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",

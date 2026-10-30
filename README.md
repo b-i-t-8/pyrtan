@@ -69,6 +69,7 @@ From a checkout, `uv sync` then `uv run pyrtan …`, and `uv run pytest`.
 name = "github-release"
 description = "The latest release of a GitHub repository."
 hosts = ["api.github.com"]
+budget = { requests = 30, per = "1 hour" }          # then "budget", before GitHub says 403
 start = "fetch"
 
 [[triggers]]
@@ -878,7 +879,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.34.0. The core, the service, the hub, the command, the console (which
+0.37.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

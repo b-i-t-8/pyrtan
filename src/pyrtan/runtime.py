@@ -30,6 +30,8 @@ the trace is the whole of its explanation.
 from __future__ import annotations
 
 import datetime as _dt
+import math
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
@@ -107,6 +109,8 @@ class Runner:
     max_depth: int = MAX_DEPTH
     emitted: list[dict[str, Any]] = field(default_factory=list)
     adapters: Any = None  # the other sources (file, shell, serial, queue, browser); a recorded transport answers for them too
+    spent: dict[str, list[float]] = field(default_factory=dict, repr=False)  # per tree with a budget: when its recent requests went
+    _spending: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         if self.adapters is None:
@@ -240,6 +244,23 @@ class Runner:
                 raise _Halt(Outcome("error", tree.name, reason="dead-end", say=f"{node.id} has nowhere to go.", trace=trace))
             node_id = next_id
 
+    def _spend(self, tree: Tree) -> int | None:
+        """Count one request against the tree's budget. None when it may go;
+        when the budget is spent, the seconds until the next may. The window
+        slides: a request counts for ``per`` seconds after it went, by the
+        runner's clock, across every run this runner makes."""
+        if tree.budget is None:
+            return None
+        n, per = tree.budget["requests"], tree.budget["per"]
+        now = self.clock().timestamp()
+        with self._spending:
+            recent = [t for t in self.spent.get(tree.name, []) if t > now - per]
+            if len(recent) >= n:
+                self.spent[tree.name] = recent
+                return max(1, math.ceil(recent[0] + per - now))
+            self.spent[tree.name] = recent + [now]
+        return None
+
     # ------------------------------------------------------------ node kinds
 
     def _do_observe(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
@@ -287,6 +308,12 @@ class Runner:
             last_error: str | None = None
             observed = None
             for attempt in range(attempts):
+                wait = self._spend(tree) if source_name != "memory" else None
+                if wait is not None:
+                    b = tree.budget
+                    trace.add(Step(node.id, node.kind, f"{label}: not sent; the budget of {b['requests']} requests per {b['said']} is spent, the next in {wait} s"))
+                    return Outcome("error", tree.name, reason="budget", say=f"{node.id}: {tree.name} has spent its budget of {b['requests']} requests per {b['said']}; the next is allowed in {wait} s.",
+                                   output={"budget": {"requests": b["requests"], "per": b["per"], "retry_after": wait}})
                 try:
                     observed = call()
                     break
@@ -402,6 +429,9 @@ class Runner:
             if sub.reason == "dry-run":  # an act it would have done: the whole run stops there
                 _merge_sub(trace, sub, depth)
                 return Outcome("error", tree.name, reason="dry-run", say=sub.say)
+            if sub.reason == "budget":  # the rest of the items would be refused too: stop at the first
+                _merge_sub(trace, sub, depth)
+                return Outcome("error", tree.name, reason="budget", say=sub.say, output=sub.output)
             if sub.status == "done":
                 results.append(sub.output if sub.output is not None else sub.say)
             else:
