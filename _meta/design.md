@@ -413,7 +413,14 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+19. **v0.39, built: declared budgets.** `budget = { requests = 30, per =
+    "1 hour" }` holds a tree to so many requests in any window, across
+    the runs a service makes of it. The one that would go past is not
+    sent: the run stops with reason `budget` and says when the next may
+    go. The window slides by the runner's clock, so a recording gives the
+    same refusal every time; `github-release` spends GitHub's hourly
+    allowance slowly enough to refuse before GitHub does (`runtime.py`).
+20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

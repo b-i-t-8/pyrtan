@@ -176,6 +176,7 @@ class Tree:
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
     keys: list[str] = field(default_factory=list)       # what ``memory`` nodes may read and write
     tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
+    budget: dict[str, Any] | None = None                # how many requests it may make in a window: { requests, per (seconds), said }
 
     def node(self, node_id: str) -> Node:
         try:
@@ -270,6 +271,7 @@ class Tree:
             **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
+            **({"budget": {"requests": self.budget["requests"], "per": self.budget["per"]}} if self.budget else {}),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -280,6 +282,27 @@ class Tree:
                 for n, s in self.inputs.items()
             },
         }
+
+
+def _budget(name: str, raw: Any) -> dict[str, Any] | None:
+    """``budget = { requests = 10, per = "1m" }``: at most that many requests
+    in any window of that length, across every run of the tree."""
+    from .nlp import ParseError, parse_duration
+
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"requests", "per"}:
+        raise TreeError(f"{name}: 'budget' is a table of 'requests' and 'per', such as {{ requests = 10, per = \"1m\" }}")
+    requests, per = raw["requests"], raw["per"]
+    if isinstance(requests, bool) or not isinstance(requests, int) or requests < 1:
+        raise TreeError(f"{name}: budget.requests is a whole number of requests, 1 or more, got {requests!r}")
+    try:
+        seconds = per if isinstance(per, int) and not isinstance(per, bool) else parse_duration(str(per))
+    except ParseError:
+        seconds = 0
+    if seconds < 1:
+        raise TreeError(f"{name}: budget.per is a duration such as \"1m\" or \"1 hour\", got {per!r}")
+    return {"requests": requests, "per": seconds, "said": f"{per} s" if isinstance(per, int) else str(per)}
 
 
 def load_tree(path: str | Path) -> Tree:
@@ -333,6 +356,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     tests = raw.get("tests", [])
     if not isinstance(tests, list) or not all(isinstance(t, dict) for t in tests):
         raise TreeError(f"{name}: 'tests' is a list of tables ([[tests]])")
+    budget = _budget(name, raw.get("budget"))
 
     try:
         language = Language.from_raw(raw.get("language"), "language")
@@ -393,7 +417,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists, tests=tests)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists, tests=tests, budget=budget)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))

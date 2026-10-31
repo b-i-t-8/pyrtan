@@ -15,6 +15,7 @@ A tree is one TOML file. This is the whole of it.
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
+| `budget` | no | At most so many requests in any window: `{ requests = 10, per = "1m" }` (below). |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -27,6 +28,26 @@ A tree is one TOML file. This is the whole of it.
 
 TOML puts top-level keys before the first `[table]`; `start` after
 `[inputs.x]` lands inside `inputs.x`, and the loader says so.
+
+### Budget
+
+```toml
+budget = { requests = 30, per = "1 hour" }
+```
+
+A tree may say how many requests it makes in any window of `per` (a
+duration, or seconds), across every run the same service makes of it,
+watched runs included. Every attempt through a source counts (an
+observe's retries too) except `memory`, which reaches nobody. The
+request that would go past it is not sent: the run stops with reason
+`budget`, the trace says so (`GET …: not sent; the budget of 30 requests
+per 1 hour is spent, the next in 1260 s`), and `output.budget` carries
+`requests`, `per` and `retry_after` in seconds. The window slides by the
+runner's clock, so a recording and a fixed clock give the same refusal
+every time. An `each` stops at the first item its budget refuses, since
+the rest would be refused too. A delegated tree spends its own budget,
+not its caller's. The budget lives in the running service: `pyrtan run`
+starts with a fresh one each time. `/capabilities` shows it.
 
 ## Triggers
 
@@ -480,7 +501,7 @@ empty string into a URL.
 | `done` | a `done` node was reached | `say`, `output` |
 | `failed` | a `fail` node was reached, or an act was not confirmed (reason `declined`) | `reason`, `say` |
 | `asked` | an `ask` node paused the run, or an act waits for a yes (`confirm`, or a dry run) | `question`, `snapshot` |
-| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `dead-end` |
+| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `budget`, `dead-end` |
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.
