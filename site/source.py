@@ -4,9 +4,10 @@
 
 Writes a static browser of this checkout into OUT (the site's ``source/``):
 the files at HEAD, a page per directory and per file, README and Markdown
-rendered; the releases, one per commit that changed the version in
-``pyproject.toml``, each with its commit message as its notes and a
-tarball of the tree at that commit; the branches the checkout knows
+rendered; the releases, one per version HEAD's own line of history has
+had in ``pyproject.toml`` (the commit, often a merge, at which it first
+said that version), each with the message of the commit that set the
+number as its notes and a tarball of the tree at the release commit; the branches the checkout knows
 (``refs/remotes/origin/*``), each with what it holds that HEAD does not;
 and the history, a page per commit with its diff. Only git and the
 standard library; the Pages workflow checks out with full history so the
@@ -256,17 +257,36 @@ def version_at(sha: str) -> str | None:
 
 
 def releases(ref: str) -> list[dict]:
-    """The commits at ``ref`` that changed the project's version, newest first."""
+    """Each version ``ref`` has had, once, newest first: the commit on its first-parent
+    line (often a merge) where ``pyproject.toml`` first said it, with ``notes``, the
+    subject and body of the commit that set the number, on the merged branch when it
+    was set there. A branch's own commits are never releases by themselves: two
+    branches that each bumped to the same number, or a number a merge superseded,
+    would list a version twice or one ``ref`` never had."""
     shallow = set(_shallow())
-    out = []
-    for c in commits("--no-merges", ref, limit=1000, paths=("pyproject.toml",)):
+    out, seen = [], set()
+    for c in commits("--first-parent", ref, limit=1000, paths=("pyproject.toml",)):
         if c["sha"] in shallow:
             continue    # its parent is not in this checkout; the change is unknowable
         v = version_at(c["sha"])
         before = version_at(c["parents"][0]) if c["parents"] else None
-        if v and v != before:
-            out.append({**c, "version": v})
-    return out
+        if not v or v == before:
+            continue
+        note = c
+        if len(c["parents"]) > 1:
+            # The newest commit on the merged branch that set this number, merges of main into it included.
+            for b in commits(f"{c['parents'][0]}..{c['parents'][1]}", limit=1000, paths=("pyproject.toml",)):
+                if b["sha"] not in shallow and version_at(b["sha"]) == v and (not b["parents"] or version_at(b["parents"][0]) != v):
+                    note = b
+                    break
+        out.append({**c, "version": v, "notes": {"sha": note["sha"], "subject": note["subject"], "body": note["body"]}})
+    # A version said twice on the line (set, changed, set again) is the oldest's: that is when it was released.
+    kept = []
+    for r in reversed(out):
+        if r["version"] not in seen:
+            seen.add(r["version"])
+            kept.append(r)
+    return kept[::-1]
 
 
 def _shallow() -> list[str]:
@@ -420,7 +440,7 @@ def build(out: Path, branch: str, max_commits: int) -> int:
         blocks.append(f'<div class="release" id="v{esc(r["version"])}"><h2>v{esc(r["version"])}{"<span class=tag>latest</span>" if k == 0 else ""}</h2>'
                       f'<p class="mute small">{esc(r["date"])} · {commit_link(page, r, r["sha"][:7])} · '
                       f'<a href="releases/{quote(name)}.tar.gz">{esc(name)}.tar.gz</a></p>'
-                      f'<p><b>{esc(r["subject"])}</b></p>{notes(r["body"], trailers=False)}</div>')
+                      f'<p><b>{esc(r["notes"]["subject"])}</b></p>{notes(r["notes"]["body"], trailers=False)}</div>')
     site.write(page, "Releases", "<h1>Releases</h1>" + ("".join(blocks) or '<p class="mute">None yet.</p>'), on="releases")
 
     # Branches
