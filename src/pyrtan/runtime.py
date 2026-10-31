@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from . import conditions
+from . import conditions, contracts
 from .adapters import SOURCES, LocalAdapters, brief_result, good, what, would
 from .extract import extract
 from .grow import no_match_outcome
@@ -483,6 +483,11 @@ class Runner:
         output = node.get("output")
         say = render(say, scope, strict=False) if say is not None else None
         output = render(output, scope, strict=False) if output is not None else None
+        if tree.returns and "item" not in scope:  # the tree's own ending, not an each sub-flow's
+            problem = contracts.broken(tree.returns, output)
+            if problem is not None:
+                trace.add(Step(node.id, "done", f"contract: {problem}", depth=depth))
+                return Outcome("error", tree.name, reason="contract", say=f"{node.id}: {tree.name} promises what it returns, and {problem}.", output=output)
         trace.add(Step(node.id, "done", str(say) if say else "done", depth=depth))
         return Outcome("done", tree.name, say=str(say) if say is not None else None, output=output)
 

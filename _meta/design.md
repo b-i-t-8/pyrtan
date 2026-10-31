@@ -413,7 +413,14 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+19. **v0.42, built: what a tree returns, and who relies on it.** A tree
+    may declare `returns`, the fields and types its output promises.
+    `pyrtan check` holds its own `done` nodes to it and, over several
+    trees, holds every caller that reads a delegated tree's output to it;
+    a run whose output breaks it stops as `contract`. Drift detection
+    between a tree and a site, the same between two trees, caught before
+    anything runs (`contracts.py`).
+20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

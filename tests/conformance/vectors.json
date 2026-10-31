@@ -1021,6 +1021,13 @@
       "license": "MIT",
       "name": "hacker-news-item",
       "namespace": "pyrtan",
+      "returns": {
+       "by": "str?",
+       "id": "int",
+       "score": "int?",
+       "title": "str",
+       "url": "str"
+      },
       "sources": [
        "http"
       ],
@@ -1031,7 +1038,7 @@
       "triggers": [
        "hacker news item {id:int}"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "description": "Hacker News stories about something, through HN Search: the top three matches.",
@@ -1905,6 +1912,35 @@
        "tell me a (programming|coding|nerd) joke",
        "[a] (programming|coding|nerd) joke"
       ],
+      "version": 1
+     },
+     {
+      "description": "returns what it says it returns, or says it did not",
+      "hosts": [],
+      "inputs": {
+       "as_int": {
+        "default": true,
+        "type": "bool"
+       },
+       "label": {
+        "type": "str"
+       },
+       "n": {
+        "default": "3",
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "promise",
+      "returns": {
+       "label": "str",
+       "n": "int",
+       "note": "str?"
+      },
+      "sources": [],
+      "tags": [],
+      "triggers": [],
       "version": 1
      },
      {
@@ -5025,6 +5061,169 @@
   {
    "body": {
     "inputs": {
+     "label": "apples"
+    },
+    "tree": "promise"
+   },
+   "expect": {
+    "inputs": {
+     "as_int": true,
+     "label": "apples",
+     "n": "3"
+    },
+    "output": {
+     "label": "apples",
+     "n": 3
+    },
+    "say": "3 apples",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "number",
+       "node": "which",
+       "observed": true,
+       "summary": "inputs.as_int = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply-int",
+       "node": "number",
+       "observed": {
+        "n": 3
+       },
+       "summary": "n=3"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply-int",
+       "summary": "3 apples"
+      }
+     ],
+     "tree": "promise"
+    },
+    "tree": "promise"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {},
+    "tree": "promise"
+   },
+   "expect": {
+    "inputs": {
+     "as_int": true,
+     "label": "",
+     "n": "3"
+    },
+    "output": {
+     "label": "",
+     "n": 3
+    },
+    "reason": "contract",
+    "say": "reply-int: promise promises what it returns, and label (str) is empty.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "eq True",
+       "depth": 0,
+       "kind": "decide",
+       "next": "number",
+       "node": "which",
+       "observed": true,
+       "summary": "inputs.as_int = True"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "reply-int",
+       "node": "number",
+       "observed": {
+        "n": 3
+       },
+       "summary": "n=3"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply-int",
+       "summary": "contract: label (str) is empty"
+      }
+     ],
+     "tree": "promise"
+    },
+    "tree": "promise"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "as_int": false,
+     "label": "pears"
+    },
+    "tree": "promise"
+   },
+   "expect": {
+    "inputs": {
+     "as_int": false,
+     "label": "pears",
+     "n": "3"
+    },
+    "output": {
+     "label": "pears",
+     "n": "3",
+     "note": "as text"
+    },
+    "reason": "contract",
+    "say": "reply: promise promises what it returns, and n is a str '3', where it promises int.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "which",
+       "observed": false,
+       "summary": "inputs.as_int = False"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "contract: n is a str '3', where it promises int"
+      }
+     ],
+     "tree": "promise"
+    },
+    "tree": "promise"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
     "tree": "panel"
@@ -5589,7 +5788,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 37,
+    "runs": 40,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5650,6 +5849,7 @@
      "postfinite-readings",
      "postfinite-search",
      "programming-joke",
+     "promise",
      "pypi-package",
      "quote",
      "recipe",
@@ -6166,6 +6366,73 @@
    "triggers": [
     "grade {score:int}"
    ],
+   "version": 1
+  },
+  {
+   "description": "returns what it says it returns, or says it did not",
+   "hosts": [],
+   "inputs": {
+    "as_int": {
+     "default": true,
+     "type": "bool"
+    },
+    "label": {
+     "default": "",
+     "type": "str"
+    },
+    "n": {
+     "default": "3",
+     "type": "str"
+    }
+   },
+   "name": "promise",
+   "nodes": {
+    "number": {
+     "kind": "set",
+     "next": "reply-int",
+     "set": {
+      "n": "{{ inputs.n | int }}"
+     }
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "label": "{{ inputs.label }}",
+      "n": "{{ inputs.n }}",
+      "note": "as text"
+     },
+     "say": "{{ inputs.n }}"
+    },
+    "reply-int": {
+     "kind": "done",
+     "output": {
+      "label": "{{ inputs.label }}",
+      "n": "{{ state.n }}"
+     },
+     "say": "{{ state.n }} {{ inputs.label }}"
+    },
+    "which": {
+     "branches": [
+      {
+       "then": "number",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.as_int"
+    }
+   },
+   "returns": {
+    "label": "str",
+    "n": "int",
+    "note": "str?"
+   },
+   "start": "which",
    "version": 1
   },
   {
@@ -24907,6 +25174,13 @@
      }
     }
    },
+   "returns": {
+    "by": "str?",
+    "id": "int",
+    "score": "int?",
+    "title": "str",
+    "url": "str"
+   },
    "start": "fetch",
    "tags": [
     "news",
@@ -24917,7 +25191,7 @@
      "pattern": "hacker news item {id:int}"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "hn-search": {
    "description": "Hacker News stories about something, through HN Search: the top three matches.",

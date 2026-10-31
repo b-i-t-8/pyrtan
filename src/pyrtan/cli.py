@@ -75,7 +75,8 @@ from . import term
 from .service import RemoteResolver, http_json, outcome_from_dict, serve
 from .adapters import LocalAdapters
 from .transport import EGRESS_POLICIES, RecordedTransport, RecordingTransport, UrllibTransport
-from .tree import TreeError, check, load_tree
+from . import contracts
+from .tree import Problem, Tree, TreeError, check, load_tree
 
 
 
@@ -569,14 +570,17 @@ def cmd_check(args: argparse.Namespace) -> int:
     if not files:
         print("pyrtan: nothing to check", file=sys.stderr)
         return 2
+    loaded: list[tuple[Path, Tree]] = []
     for path in files:
         try:
-            tree = load_tree(path)
+            loaded.append((path, load_tree(path)))
         except Exception as e:  # TreeError or TOML trouble: already explained
             print(f"{path}: error: {e}")
             worst = max(worst, 1)
-            continue
-        problems = check(tree)
+    # What a tree reads of another's output, held to what that one returns.
+    callers = contracts.check_callers({t.name: t for _, t in loaded})
+    for path, tree in loaded:
+        problems = check(tree) + [Problem(level, where, message) for level, where, message in callers.get(tree.name, [])]
         errors = [p for p in problems if p.level == "error"]
         if errors:
             worst = max(worst, 1)

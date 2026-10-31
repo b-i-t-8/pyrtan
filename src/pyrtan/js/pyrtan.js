@@ -1201,6 +1201,7 @@
       this.name = raw.name; this.version = raw.version || 1; this.description = raw.description || "";
       this.hosts = raw.hosts || []; this.start = raw.start; this.tags = raw.tags || []; this.license = raw.license || ""; this.namespace = raw.namespace || "";
       for (const k of LIST_NAMES) this[k] = raw[k] || [];
+      this.returns = treeReturns(raw.returns);  // what its output promises (contracts.py checks the file)
       try { this.language = language(raw.language); } catch (e) { if (e instanceof TriggerError) throw new TreeError(`${this.name}: ${e.message}`); throw e; }
       this.triggers = (raw.triggers || []).map((t, i) => {
         if (typeof t === "string") t = { pattern: t };
@@ -1280,6 +1281,7 @@
       cap.sources = this.sources();
       const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
       if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
+      if (this.returns) cap.returns = Object.fromEntries(Object.entries(this.returns).map(([f, [k, opt]]) => [f, k + (opt ? "?" : "")]));
       const fixed = this.triggers.filter((t) => Object.keys(t.fixedInputs).length);
       return Object.assign(cap, { license: this.license, language: languageDict(this.language), triggers: this.triggers.map((t) => t.pattern) }, fixed.length ? { trigger_inputs: Object.fromEntries(fixed.map((t) => [t.pattern, t.fixedInputs])) } : {}, { inputs });
     }
@@ -1375,6 +1377,35 @@
     return d;
   }
 
+  // returns = { field = "type" or "type?" } (contracts.py): what a tree's output promises.
+  function treeReturns(raw) {
+    if (!isObj(raw) || !Object.keys(raw).length) return null;
+    const out = {};
+    for (const [field, kind] of Object.entries(raw)) { if (typeof kind !== "string") return null; out[field] = [kind.replace(/\?$/, ""), kind.endsWith("?")]; }
+    return out;
+  }
+  function fitsType(kind, v) {
+    if (kind === "any") return true;
+    if (kind === "str") return typeof v === "string";
+    if (kind === "bool") return isBool(v);
+    if (isBool(v)) return false;
+    if (kind === "int") return isNum(v) && Number.isInteger(v);
+    if (kind === "float" || kind === "number") return isNum(v);
+    return kind === "list" ? Array.isArray(v) : isObj(v);
+  }
+  function brokenContract(returns, output) {
+    const table = isObj(output) ? output : {};
+    for (const [field, [kind, optional]] of Object.entries(returns)) {
+      const v = has(table, field) ? table[field] : null;
+      if (v === null || v === undefined || v === "") { if (!optional) return `${field} (${kind}) is empty`; continue; }
+      if (!fitsType(kind, v)) {
+        const what = isBool(v) ? "a bool" : isNum(v) ? (Number.isInteger(v) ? "an int" : "a float") : typeof v === "string" ? "a str" : Array.isArray(v) ? "a list" : isObj(v) ? "a dict" : "a value";
+        let text = pyrepr(v); if (text.length > 60) text = text.slice(0, 59) + "…";
+        return `${field} is ${what} ${text}, where it promises ${kind}`;
+      }
+    }
+    return null;
+  }
   class Runner {
     constructor(opts) {
       opts = opts || {};
@@ -1681,6 +1712,13 @@
       let say = node.get("say"), output = node.get("output");
       say = say !== undefined && say !== null ? render(say, scope, false) : null;
       output = output !== undefined && output !== null ? render(output, scope, false) : null;
+      if (tree.returns && !("item" in scope)) {  // the tree's own ending, not an each sub-flow's
+        const problem = brokenContract(tree.returns, output);
+        if (problem !== null) {
+          trace.add(step(node.id, "done", `contract: ${problem}`, { depth }));
+          return outcome("error", tree.name, { reason: "contract", say: `${node.id}: ${tree.name} promises what it returns, and ${problem}.`, output });
+        }
+      }
       trace.add(step(node.id, "done", say ? pyStr(say) : "done", { depth }));
       return outcome("done", tree.name, { say: say !== null ? pyStr(say) : null, output });
     }

@@ -166,6 +166,12 @@ finds the words in what was observed and reads the slot with its kind's
 parser (`number`, `date`, `duration`, `host`…); a pattern with several
 slots gives a table of them.
 
+A tree that others delegate to can say what its output carries,
+`returns = { title = "str", score = "int?" }`, and `pyrtan check` then
+holds both sides to it: the tree's own endings, and every caller that
+reads a field of that output. A run that would hand back something else
+stops as `contract` instead ([`_meta/tree-format.md`](_meta/tree-format.md#returns)).
+
 ## The command
 
 | Command | What it does |
@@ -924,7 +930,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.36.0. The core, the service, the hub, the command, the console (which
+0.42.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

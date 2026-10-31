@@ -48,6 +48,7 @@ from typing import Any
 
 from . import adapters, analysis, conditions, extract as extractmod
 from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerError
+from . import contracts
 from .template import PLACEHOLDER, placeholders
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9\-]*$")
@@ -176,6 +177,7 @@ class Tree:
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
     keys: list[str] = field(default_factory=list)       # what ``memory`` nodes may read and write
     tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
+    returns: dict[str, tuple[str, bool]] | None = None  # what its output promises: field -> (type, may be empty); see contracts.py
 
     def node(self, node_id: str) -> Node:
         try:
@@ -270,6 +272,7 @@ class Tree:
             **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
+            **({"returns": {f: k + ("?" if opt else "") for f, (k, opt) in self.returns.items()}} if self.returns else {}),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -333,6 +336,10 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     tests = raw.get("tests", [])
     if not isinstance(tests, list) or not all(isinstance(t, dict) for t in tests):
         raise TreeError(f"{name}: 'tests' is a list of tables ([[tests]])")
+    try:
+        returns = contracts.parse_returns(name, raw.get("returns"))
+    except contracts.ContractError as e:
+        raise TreeError(str(e)) from e
 
     try:
         language = Language.from_raw(raw.get("language"), "language")
@@ -393,7 +400,7 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
         hint = " (top-level keys such as 'start' must come before the first [table] in TOML)" if _buried(raw, "start") else ""
         raise TreeError(f"{name}: 'start' must name a node{hint}")
 
-    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists, tests=tests)
+    tree = Tree(name, description, version, hosts, triggers, inputs, start, nodes, tags, source, raw, license_.strip(), language, namespace, watches, **lists, tests=tests, returns=returns)
     errors = [p for p in check(tree) if p.level == "error"]
     if errors:
         raise TreeError(f"{name}: " + "; ".join(f"{p.where}: {p.message}" for p in errors))
@@ -648,6 +655,8 @@ def check(tree: Tree) -> list[Problem]:
                     warn(where, f"template refers to state.{key}, which no node produces")
             elif head not in ("item", "index", "tree", "now", "env"):
                 err(where, f"template root {head!r} is not one of inputs, state, item, index, tree, now, env")
+
+    contracts.check_own(tree, err)
 
     for i, w in enumerate(tree.watches):
         used.update(_check_watch(tree, i, w, err, warn))

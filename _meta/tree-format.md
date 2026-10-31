@@ -15,6 +15,7 @@ A tree is one TOML file. This is the whole of it.
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
+| `returns` | no | What the tree's `output` promises when it ends `done`: `{ title = "str", score = "int?" }` (below). |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -27,6 +28,32 @@ A tree is one TOML file. This is the whole of it.
 
 TOML puts top-level keys before the first `[table]`; `start` after
 `[inputs.x]` lands inside `inputs.x`, and the loader says so.
+
+### Returns
+
+```toml
+returns = { id = "int", title = "str", url = "str", score = "int?" }
+```
+
+What a tree's `output` always carries when it ends `done`, for the
+trees that `delegate` to it or walk it with `each`. A type is `str`,
+`int`, `float`, `number`, `bool`, `list`, `dict` or `any`; a `?` says the
+field may be empty (absent, null or an empty string). Three things hold
+it:
+
+- `pyrtan check` refuses a `done` the tree can end on (not one that ends
+  an `each` sub-flow) whose `output` lacks a promised field.
+- `pyrtan check` over several trees refuses a caller that reads a field
+  the callee does not promise: `state.r.output.author` after a
+  `delegate` into `r`, or `state.items[0].author` after an `each` over
+  the tree into `items`, says `item does not return 'author'; it returns
+  id, title, url, score`. A caller of a tree that promises nothing hears
+  that once, as a note.
+- A run that ends `done` with a promised field empty or of another type
+  stops with reason `contract` instead (`score is a str 'lots', where it
+  promises int`), so no caller is handed what it was not promised.
+
+`/capabilities` carries it, so a hub knows what each tree returns.
 
 ## Triggers
 
@@ -480,7 +507,7 @@ empty string into a URL.
 | `done` | a `done` node was reached | `say`, `output` |
 | `failed` | a `fail` node was reached, or an act was not confirmed (reason `declined`) | `reason`, `say` |
 | `asked` | an `ask` node paused the run, or an act waits for a yes (`confirm`, or a dry run) | `question`, `snapshot` |
-| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `dead-end` |
+| `error` | the run could not proceed | `reason`: `no-match`, `ambiguous`, `no-such-tree`, `bad-input`, `host-not-allowed`, `transport`, `gap`, `drift`, `template`, `too-deep`, `too-many-steps`, `not-a-list`, `each-failed`, `ask-in-delegate`, `ask-in-subflow`, `dry-run`, `contract`, `dead-end` |
 
 Every outcome carries `trace`: `steps` (node, kind, summary, observed,
 chosen, next, elapsed_ms, depth) and `gaps`.
