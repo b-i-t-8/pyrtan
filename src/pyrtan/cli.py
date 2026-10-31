@@ -38,10 +38,14 @@
     pyrtan id     new|show|check|device|revoke|route|name   your identity: a key, any domain
     pyrtan id     resolve NAME@DOMAIN        what identity a name is, pinned the first time
     pyrtan allow  WHO --may ask,run --at HUB  grant an identity abilities on your hub; allowed, disallow
+    pyrtan login  --at URL --user NAME       sign in with your directory account (--ldap): prints a session token
     pyrtan names  init DIR --domain D | gate  a network's own names, in any git repository
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
-bearer token, ``--cors ORIGIN`` to let a browser elsewhere call them, and
+bearer token, ``--ldap URL`` (with ``--ldap-user-dn`` or ``--ldap-base``)
+to let people in with their directory account on top of it, and
+``pyrtan login --at URL --user NAME`` prints a session token for one;
+``--cors ORIGIN`` to let a browser elsewhere call them, and
 ``serve`` takes ``--gaps FILE`` to keep gaps across restarts and
 ``--egress public`` to refuse private addresses.
 """
@@ -240,6 +244,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--chat-typing", action=argparse.BooleanOptionalAction, default=os.environ.get("PYRTAN_CHAT_TYPING", "").lower() not in ("0", "false", "no", "off"), help="the lobby's typing indicator: \"Stranger is typing…\" for anyone who keeps theirs on (default on; $PYRTAN_CHAT_TYPING=0 turns it off)")
     p.add_argument("--report-gaps", action="store_true", default=os.environ.get("PYRTAN_REPORT_GAPS", "").lower() in ("1", "true", "yes"), help="put the gaps this swarm's catalog trees meet (tree id, node, value; never inputs) into its announces, so they reach the tree's author through the federation and pyrtan.com (default $PYRTAN_REPORT_GAPS)")
     p.add_argument("--quiet", action="store_true")
+
+    p = sub.add_parser("login", help="sign in to a service or hub started with --ldap, and print a session token for --token")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the service or hub (default $PYRTAN_AT or the local hub)")
+    p.add_argument("--user", default=os.environ.get("PYRTAN_USER") or os.environ.get("USER"), help="your directory user name (default $PYRTAN_USER, else $USER)")
+    p.add_argument("--json", action="store_true", help="the whole answer: the token, when it expires, and what you may do")
+
+    p = sub.add_parser("logout", help="end a session token from pyrtan login")
+    p.add_argument("--at", default=os.environ.get("PYRTAN_AT", "http://127.0.0.1:8700"), help="the service or hub (default $PYRTAN_AT or the local hub)")
+    _token_arg(p, "the session token to end", sign=False)
 
     p = sub.add_parser("follow", help="follow another hub, through a running federated hub of yours")
     p.add_argument("url", nargs="?", default=None, help="the other hub's URL (default: join the default network, as `pyrtan join`)")
@@ -449,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "drop": cmd_drop, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
         "keep": cmd_keep, "kept": cmd_kept, "fetch": cmd_fetch, "id": cmd_id,
         "allow": cmd_allow, "allowed": cmd_allowed, "disallow": cmd_disallow, "names": cmd_names,
+        "login": cmd_login, "logout": cmd_logout,
     }
     from .memory import MemoryRefused
 
@@ -491,6 +505,42 @@ def _key_headers(args: argparse.Namespace, method: str, url: str, payload: Any) 
 def _access_args(p: argparse.ArgumentParser) -> None:
     _token_arg(p, "require this bearer token on every request but /health and the console", sign=False)
     p.add_argument("--cors", action="append", default=[], metavar="ORIGIN", help="let a browser at this origin call (repeatable; '*' for any; e.g. https://pyrtan.com)")
+    env = os.environ.get
+    g = p.add_argument_group("LDAP users", "let people in with their directory account, on top of --token (pyrtan.ldap)")
+    g.add_argument("--ldap", metavar="URL", default=env("PYRTAN_LDAP"), help="the directory: ldaps://host or ldap://host (default $PYRTAN_LDAP)")
+    g.add_argument("--ldap-user-dn", metavar="TEMPLATE", default=env("PYRTAN_LDAP_USER_DN"), help="bind as this DN, {user} the name given, e.g. 'uid={user},ou=people,dc=example,dc=org' (default $PYRTAN_LDAP_USER_DN)")
+    g.add_argument("--ldap-base", metavar="DN", default=env("PYRTAN_LDAP_BASE"), help="instead, search for the person under this DN, and bind as the one entry found (default $PYRTAN_LDAP_BASE)")
+    g.add_argument("--ldap-filter", metavar="FILTER", default=env("PYRTAN_LDAP_FILTER", "(uid={user})"), help="with --ldap-base, the search (default $PYRTAN_LDAP_FILTER or '(uid={user})'; Active Directory: '(sAMAccountName={user})')")
+    g.add_argument("--ldap-bind-dn", metavar="DN", default=env("PYRTAN_LDAP_BIND_DN"), help="search and read groups as this account, its password in $PYRTAN_LDAP_BIND_PASSWORD (default $PYRTAN_LDAP_BIND_DN; anonymous otherwise)")
+    g.add_argument("--ldap-group", action="append", default=[a for a in env("PYRTAN_LDAP_GROUPS", "").split(";") if a.strip()], metavar="DN=ABILITIES", help="this group's members may these: ask, chat, run, operate (repeatable; default $PYRTAN_LDAP_GROUPS, ';'-separated)")
+    g.add_argument("--ldap-may", metavar="ABILITIES", default=env("PYRTAN_LDAP_MAY"), help="what anyone who signs in may, in a group or not; 'none' for nothing (default $PYRTAN_LDAP_MAY, else ask when no --ldap-group is given and none when one is)")
+    g.add_argument("--ldap-starttls", action="store_true", default=env("PYRTAN_LDAP_STARTTLS", "").lower() in ("1", "true", "yes"), help="upgrade an ldap:// connection with StartTLS (default $PYRTAN_LDAP_STARTTLS)")
+    g.add_argument("--ldap-ca", metavar="FILE", default=env("PYRTAN_LDAP_CA"), help="check the directory's certificate against this CA bundle (default $PYRTAN_LDAP_CA, else the system's)")
+    g.add_argument("--ldap-session", type=float, metavar="HOURS", default=float(env("PYRTAN_LDAP_SESSION", "12") or 12), help="how long a session from /login lasts (default $PYRTAN_LDAP_SESSION or 12)")
+
+
+def _ldap_users(args: argparse.Namespace) -> Any:
+    """The directory --ldap names, or None; SystemExit with what is wrong."""
+    if not getattr(args, "ldap", None):
+        return None
+    from .ldap import LdapError, LdapUsers, parse_abilities, parse_group
+    command = args.command
+    if not args.token:
+        raise SystemExit(f"pyrtan {command}: --ldap lets people in on top of a token: give --token (or $PYRTAN_TOKEN) too")
+    try:
+        users = LdapUsers(
+            args.ldap, user_dn=args.ldap_user_dn, base=args.ldap_base, filter=args.ldap_filter,
+            bind_dn=args.ldap_bind_dn, bind_password=os.environ.get("PYRTAN_LDAP_BIND_PASSWORD"),
+            groups=dict(parse_group(g) for g in args.ldap_group), may=parse_abilities(args.ldap_may),
+            starttls=args.ldap_starttls, ca=args.ldap_ca, session_ttl=args.ldap_session * 3600.0,
+        )
+    except LdapError as e:
+        raise SystemExit(f"pyrtan {command}: {e}") from None
+    if not users.secure:
+        print(f"pyrtan {command}: {args.ldap} is not TLS: passwords cross the network in the clear; use ldaps:// or --ldap-starttls", file=sys.stderr)
+    if not users.may and not users.groups:
+        print(f"pyrtan {command}: --ldap-may none and no --ldap-group: nobody who signs in may do anything", file=sys.stderr)
+    return users
 
 
 # ---------------------------------------------------------------- commands
@@ -1022,7 +1072,8 @@ def _report(outcome: Outcome, as_json: bool, with_trace: bool) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory)
+    users = _ldap_users(args)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -1351,6 +1402,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
 
     follow = list(args.follow)
     join = list(args.join)
+    users = _ldap_users(args)
     try:
         hub, server = serve_hub(
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
@@ -1358,7 +1410,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
             trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
             store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, memory=args.memory, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
-            allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain,
+            allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain, users=users,
         )
     except IdentityError as e:
         print(f"pyrtan hub: {e}", file=sys.stderr)
@@ -1674,6 +1726,9 @@ def _access_note(args: argparse.Namespace) -> str:
     notes = []
     if getattr(args, "token", None):
         notes.append("token required")
+    if getattr(args, "ldap", None):
+        groups = len(getattr(args, "ldap_group", []) or [])
+        notes.append(f"LDAP users from {args.ldap}" + (f" in {groups} group(s)" if groups else ""))
     if getattr(args, "cors", None):
         notes.append("cors: " + ", ".join(args.cors))
     if getattr(args, "egress", "any") != "any":
@@ -1683,6 +1738,56 @@ def _access_note(args: argparse.Namespace) -> str:
     elif getattr(args, "closed", False):
         notes.append("no follows taken")
     return f" ({'; '.join(notes)})" if notes else ""
+
+
+def cmd_login(args: argparse.Namespace) -> int:
+    import getpass
+    if not args.user:
+        print("pyrtan login: say who: --user NAME (or $PYRTAN_USER)", file=sys.stderr)
+        return 2
+    password = os.environ.get("PYRTAN_PASSWORD")
+    if password is None:
+        try:
+            password = getpass.getpass(f"{args.user}'s password at {args.at}: ")
+        except (EOFError, KeyboardInterrupt):
+            print(file=sys.stderr)
+            return 1
+    try:
+        status, body = http_json("POST", f"{args.at.rstrip('/')}/login", {"user": args.user, "password": password})
+    except Exception as e:
+        print(f"pyrtan login: {args.at} did not answer: {e}", file=sys.stderr)
+        return 1
+    if status == 404 or (status == 401 and isinstance(body, dict) and str(body.get("say", "")).startswith("This Pyrtan needs a token:")):  # what a server without --ldap says
+        print(f"pyrtan login: {args.at} takes no sign-in: it was not started with --ldap", file=sys.stderr)
+        return 1
+    if status != 200 or not isinstance(body, dict) or not body.get("token"):
+        say = body.get("say") if isinstance(body, dict) else None
+        print(f"pyrtan login: {say or f'{args.at} answered {status}'}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+    else:
+        print(body["token"])
+        until = time.strftime("%Y-%m-%d %H:%M", time.localtime(int(body.get("expires", 0))))
+        print(f"pyrtan login: {body.get('user')} may {', '.join(body.get('may', []))} at {args.at} until {until}; export PYRTAN_TOKEN=<the token above>", file=sys.stderr)
+    return 0
+
+
+def cmd_logout(args: argparse.Namespace) -> int:
+    if not args.token:
+        print("pyrtan logout: give the session token: --token or $PYRTAN_TOKEN", file=sys.stderr)
+        return 2
+    try:
+        status, body = http_json("POST", f"{args.at.rstrip('/')}/logout", {}, token=args.token)
+    except Exception as e:
+        print(f"pyrtan logout: {args.at} did not answer: {e}", file=sys.stderr)
+        return 1
+    if status != 200:
+        say = body.get("say") if isinstance(body, dict) else None
+        print(f"pyrtan logout: {say or f'{args.at} answered {status}'}", file=sys.stderr)
+        return 1
+    print("ended" if body.get("ended") else "no such session (it had ended already)")
+    return 0
 
 
 # ---------------------------------------------------------------- catalog
