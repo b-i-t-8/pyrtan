@@ -33,7 +33,15 @@ DN, RFC 4515 in a filter), so a user name cannot widen a search.
 members those abilities. A person is a member when the group entry names
 them in ``member``, ``uniqueMember`` (their DN) or ``memberUid`` (their
 user name): groupOfNames, groupOfUniqueNames, posixGroup and Active
-Directory's groups alike. Nested groups are not followed. A person in no
+Directory's groups alike. Nested groups are not followed unless
+``--ldap-nested`` says so; then a person in a group that is itself a member
+of a listed group (to any depth) is a member too, by asking Active
+Directory with its transitive matching rule, ``LDAP_MATCHING_RULE_IN_CHAIN``
+(``member:1.2.840.113556.1.4.1941:=``). The directory follows the chain in
+one search per group, cycles included; a directory that does not know the
+rule matches nothing by it, so direct members are still asked for first,
+the same way, and keep what they had. A primary group (``primaryGroupID``,
+usually Domain Users) is not in ``member`` and is never matched. A person in no
 listed group may what ``--ldap-may`` says: ``ask`` when no group is listed,
 nothing otherwise, so listing a group is how a hub says "only these
 people". Someone who binds and may nothing is refused at the door like a
@@ -84,6 +92,7 @@ SESSION_TTL = 12 * 3600.0       # how long a /login session lasts
 CACHE_TTL = 60.0                # how long a Basic bind is remembered
 FAILURES = 5                    # wrong passwords for one name ...
 FAILURE_WINDOW = 60.0           # ... within this long, and the name rests this long
+IN_CHAIN = "1.2.840.113556.1.4.1941"  # Active Directory's LDAP_MATCHING_RULE_IN_CHAIN: membership through nested groups
 MAX_SESSIONS = 10_000
 MAX_MESSAGE = 1 << 20           # the most read of one LDAP message
 SESSION_PREFIX = "pyu_"
@@ -203,8 +212,8 @@ def _unescape(text: str) -> bytes:
 
 def encode_filter(text: str) -> bytes:
     """A search filter in its string form (RFC 4515) as BER: ``&``, ``|``, ``!``,
-    equality, presence, substrings, ``>=``, ``<=`` and ``~=``. Extensible matches
-    (``:=``) are not read."""
+    equality, presence, substrings, ``>=``, ``<=``, ``~=`` and extensible matches
+    (``attr:rule:=``, ``attr:dn:=``, ``:rule:=``)."""
     text = text.strip()
     if not text.startswith("("):
         text = f"({text})"
@@ -249,7 +258,7 @@ def _item(text: str) -> bytes:
     op = attr[-1:] if attr[-1:] in (">", "<", "~", ":") else ""
     attr = attr[:-1] if op else attr
     if op == ":":
-        raise LdapError("extensible matches (:=) are not read")
+        return _extensible(attr, value)
     if not _ATTR.match(attr):
         raise LdapError(f"{attr!r} is not an attribute name")
     if op:
@@ -266,6 +275,24 @@ def _item(text: str) -> bytes:
             subs.append(_octets(_unescape(pieces[-1]), tag=0x82))
         return _seq(_octets(attr), _seq(*subs), tag=0xA4)
     return _seq(_octets(attr), _octets(_unescape(value)), tag=0xA3)
+
+
+def _extensible(left: str, value: str) -> bytes:
+    """``attr[:dn][:rule]:=value`` or ``[:dn]:rule:=value`` (``left`` without the last
+    colon) as a MatchingRuleAssertion: [9] {rule [1], type [2], value [3], dnAttributes [4]}."""
+    attr, *rest = left.split(":")
+    dn = bool(rest) and rest[0].lower() == "dn"
+    if dn:
+        rest = rest[1:]
+    if len(rest) > 1 or (attr and not _ATTR.match(attr)) or (rest and not _ATTR.match(rest[0])):
+        raise LdapError(f"{left + ':=' + value!r} is not an extensible match")
+    rule = rest[0] if rest else None
+    if not attr and not rule:
+        raise LdapError(f"{left + ':=' + value!r} names neither an attribute nor a matching rule")
+    parts = ([_octets(rule, tag=0x81)] if rule else []) + ([_octets(attr, tag=0x82)] if attr else []) + [_octets(_unescape(value), tag=0x83)]
+    if dn:
+        parts.append(_tlv(0x84, b"\xff"))
+    return _seq(*parts, tag=0xA9)
 
 
 # ---------------------------------------------------------------- the wire
@@ -477,6 +504,7 @@ class LdapUsers:
         bind_password: str | None = None,
         groups: dict[str, list[str]] | None = None,
         may: list[str] | None = None,
+        nested: bool = False,
         starttls: bool = False,
         ca: str | None = None,
         timeout: float = 10.0,
@@ -504,6 +532,7 @@ class LdapUsers:
         self.bind_dn = bind_dn
         self.bind_password = bind_password
         self.groups = dict(groups or {})
+        self.nested = nested  # follow nested groups by Active Directory's in-chain rule
         self.may = frozenset(may if may is not None else ([] if self.groups else ["ask"]))
         self.session_ttl = session_ttl
         self.cache_ttl = cache_ttl
@@ -591,8 +620,15 @@ class LdapUsers:
             raise LdapError(f"the directory refused --ldap-bind-dn: {result.message or result.code}")
 
     def _member(self, conn: Connection, group: str, dn: str, user: str) -> bool:
+        """Whether the group entry names this person, directly, or (``nested``) through
+        groups that are its members, as Active Directory follows them."""
         who = f"(|(member={escape_filter(dn)})(uniqueMember={escape_filter(dn)})(memberUid={escape_filter(user)}))"
         result, entries = conn.search(group, who, scope=0, limit=1)
+        if result.code == SUCCESS and entries:
+            return True
+        if not self.nested:
+            return False
+        result, entries = conn.search(group, f"(member:{IN_CHAIN}:={escape_filter(dn)})", scope=0, limit=1)
         return result.code == SUCCESS and bool(entries)
 
     # -------------------------------------------------------- the Authorization header

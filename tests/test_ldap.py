@@ -14,7 +14,7 @@ import pytest
 from pyrtan import Registry, RecordedTransport
 from pyrtan.hub import Hub
 from pyrtan.ldap import (
-    Connection, LdapError, LdapUsers, _int, _items, _number, _octets, _read, _seq, _tlv,
+    IN_CHAIN, Connection, LdapError, LdapUsers, _int, _items, _number, _octets, _read, _seq, _tlv,
     encode_filter, escape_dn, escape_filter, parse_abilities, parse_group,
 )
 from pyrtan.service import PEER_HEADER, Server, Service, _with_peer, http_json
@@ -26,6 +26,9 @@ GROUPS = f"ou=groups,{BASE}"
 SERVICE_DN = f"cn=pyrtan,{BASE}"
 OPS = f"cn=ops,{GROUPS}"
 CHATTERS = f"cn=chatters,{GROUPS}"
+STAFF = f"cn=staff,{GROUPS}"        # holds the ops group, which holds alice
+LOOP_A = f"cn=loop-a,{GROUPS}"      # loop-a holds loop-b, which holds loop-a and ops: a cycle
+LOOP_B = f"cn=loop-b,{GROUPS}"
 
 
 def _entries() -> dict[str, dict[str, list[str]]]:
@@ -35,17 +38,40 @@ def _entries() -> dict[str, dict[str, list[str]]]:
     out[SERVICE_DN] = {"objectclass": ["account"], "cn": ["pyrtan"], "userpassword": ["svc-pw"]}
     out[OPS] = {"objectclass": ["groupOfNames"], "cn": ["ops"], "member": [f"uid=alice,{PEOPLE}"]}
     out[CHATTERS] = {"objectclass": ["posixGroup"], "cn": ["chatters"], "memberuid": ["bob"]}
+    out[STAFF] = {"objectclass": ["group"], "cn": ["staff"], "member": [OPS]}
+    out[LOOP_A] = {"objectclass": ["group"], "cn": ["loop-a"], "member": [LOOP_B]}
+    out[LOOP_B] = {"objectclass": ["group"], "cn": ["loop-b"], "member": [LOOP_A, OPS]}
     return out
 
 
-def _match(f: tuple[int, bytes], attrs: dict[str, list[str]]) -> bool:
+def _in_chain(entries: dict[str, dict[str, list[str]]], group: dict[str, list[str]], dn: str) -> bool:
+    """What Active Directory's LDAP_MATCHING_RULE_IN_CHAIN says: dn is a member of the
+    group, or of a group that is, to any depth; a cycle ends."""
+    by_dn = {d.lower(): e for d, e in entries.items()}
+    seen, todo = set(), [m.lower() for m in group.get("member", [])]
+    while todo:
+        m = todo.pop()
+        if m == dn.lower():
+            return True
+        if m not in seen:
+            seen.add(m)
+            todo.extend(x.lower() for x in by_dn.get(m, {}).get("member", []))
+    return False
+
+
+def _match(f: tuple[int, bytes], attrs: dict[str, list[str]], d: "FakeDirectory | None" = None) -> bool:
     tag, content = f
     if tag == 0xA0:
-        return all(_match(x, attrs) for x in _items(content))
+        return all(_match(x, attrs, d) for x in _items(content))
     if tag == 0xA1:
-        return any(_match(x, attrs) for x in _items(content))
+        return any(_match(x, attrs, d) for x in _items(content))
     if tag == 0xA2:
-        return not _match(_items(content)[0], attrs)
+        return not _match(_items(content)[0], attrs, d)
+    if tag == 0xA9:
+        parts = {t: v.decode() for t, v in _items(content)}
+        if d is not None and d.in_chain and parts.get(0x81) == IN_CHAIN and parts.get(0x82, "").lower() == "member":
+            return _in_chain(d.entries, attrs, parts[0x83])
+        return False  # a rule this directory does not know: Undefined, which matches nothing
     if tag == 0x87:
         return content.decode().lower() in attrs
     if tag == 0xA3:
@@ -66,9 +92,10 @@ class FakeDirectory:
     """Enough of an LDAP server for these tests: simple bind (and the unauthenticated
     bind a DN with no password is), base and subtree search, StartTLS refused."""
 
-    def __init__(self, anonymous_search: bool = True) -> None:
+    def __init__(self, anonymous_search: bool = True, in_chain: bool = True) -> None:
         self.entries = _entries()
         self.anonymous_search = anonymous_search
+        self.in_chain = in_chain  # knows Active Directory's transitive rule (OpenLDAP does not)
         self.binds: list[str] = []
         self.filters: list[bytes] = []
         self.sock = socket.socket()
@@ -130,7 +157,7 @@ class FakeDirectory:
                     if scope == 0 and base not in {d.lower() for d in self.entries}:
                         reply(result(32, 0x65))
                         continue
-                    found = [d for d, e in self.entries.items() if (d.lower() == base if scope == 0 else d.lower().endswith(base)) and _match(filt, e)]
+                    found = [d for d, e in self.entries.items() if (d.lower() == base if scope == 0 else d.lower().endswith(base)) and _match(filt, e, self)]
                     reply(*[_seq(_octets(d), _seq(), tag=0x64) for d in found], result(0, 0x65))
                 elif op == 0x77:
                     reply(_tlv(0x78, _int(2, 0x0A) + _octets("") + _octets("no TLS here")))
@@ -187,9 +214,20 @@ def test_filters_encode_to_ber():
     ]:
         assert _match(_read(encode_filter(text))[:2], attrs) is want, text
     assert encode_filter("(uid>=5)")[0] == 0xA5 and encode_filter("(uid<=5)")[0] == 0xA6 and encode_filter("(cn~=x)")[0] == 0xA8
-    for bad in ["(uid=alice", "(&)", "(=x)", "(uid=a\\zz)", "(uid:dn:=x)", "(uid=a))", "(bad attr=x)"]:
+    for bad in ["(uid=alice", "(&)", "(=x)", "(uid=a\\zz)", "(uid=a))", "(bad attr=x)", "(:=x)", "(a:b:c:=x)", "(bad attr:=x)", "(:dn:=x)"]:
         with pytest.raises(LdapError):
             encode_filter(bad)
+
+
+def test_extensible_matches_encode_to_ber():
+    tag, content, _ = _read(encode_filter(f"(member:{IN_CHAIN}:=uid=alice\\2cou=people)"))
+    assert tag == 0xA9 and _items(content) == [(0x81, IN_CHAIN.encode()), (0x82, b"member"), (0x83, b"uid=alice,ou=people")]
+    _, content, _ = _read(encode_filter("(cn:dn:2.5.13.5:=John)"))
+    assert _items(content) == [(0x81, b"2.5.13.5"), (0x82, b"cn"), (0x83, b"John"), (0x84, b"\xff")]
+    _, content, _ = _read(encode_filter("(:caseExactMatch:=x)"))
+    assert _items(content) == [(0x81, b"caseExactMatch"), (0x83, b"x")]
+    _, content, _ = _read(encode_filter("(o:dn:=Ace)"))
+    assert _items(content) == [(0x82, b"o"), (0x83, b"Ace"), (0x84, b"\xff")]
 
 
 def test_groups_and_abilities_parse():
@@ -229,6 +267,29 @@ def test_a_bind_by_template_and_the_groups(directory):
     assert users.authenticate("carol", "carol-pw").may == {"ask"}           # in no group
     assert users.authenticate("alice", "wrong") is None
     assert users.authenticate("nobody", "x") is None
+
+
+def test_nested_groups_as_active_directory_follows_them(directory):
+    groups = {STAFF: ["chat"], OPS: ["operate"]}
+    assert _users(directory, groups=groups).authenticate("alice", "alice-pw").may == {"ask", "operate"}  # staff holds ops, not alice
+    directory.filters.clear()
+    nested = _users(directory, groups=groups, nested=True)
+    assert nested.authenticate("alice", "alice-pw").may == {"ask", "chat", "operate"}
+    in_chain = [f for f in directory.filters if f[0] == 0xA9]
+    assert len(in_chain) == 1  # only for staff: ops named alice directly, so the chain was never asked
+    assert nested.authenticate("bob", "bob-pw").may == {"ask"}  # in neither, however deep
+    # A cycle (loop-a holds loop-b, which holds loop-a and ops) is the directory's to end.
+    assert _users(directory, groups={LOOP_A: ["run"]}, nested=True).authenticate("alice", "alice-pw").may == {"ask", "run"}
+    assert _users(directory, groups={LOOP_A: ["run"]}).authenticate("alice", "alice-pw").may == {"ask"}
+
+
+def test_nested_on_a_directory_without_the_rule_keeps_direct_members():
+    d = FakeDirectory(in_chain=False)  # OpenLDAP, say: the rule matches nothing
+    try:
+        users = _users(d, groups={STAFF: ["chat"], OPS: ["operate"]}, nested=True)
+        assert users.authenticate("alice", "alice-pw").may == {"ask", "operate"}
+    finally:
+        d.close()
 
 
 def test_an_empty_password_is_nobody(directory):
@@ -446,3 +507,27 @@ def test_the_console_signs_in(door):
     assert "signed in as carol" in lines["WHERE"]
     assert "pyu_" in lines["KEPT"] and "carol-pw" not in lines["KEPT"]  # the session token is kept, never the password
     assert "Oslo" in lines["ASKED"]
+
+
+def test_serve_takes_ldap_nested(monkeypatch, directory):
+    import pyrtan.cli as cli
+
+    class Started(Exception):
+        pass
+
+    def started(*args, users=None, **kw):
+        raise Started(users)
+
+    monkeypatch.setattr(cli, "serve", started)
+    monkeypatch.setenv("PYRTAN_TOKEN", "t")
+    common = ["serve", str(EXAMPLES), "--ldap", directory.url, "--ldap-user-dn", f"uid={{user}},{PEOPLE}", "--ldap-group", f"{STAFF}=chat"]
+    with pytest.raises(Started) as got:
+        cli.main(common + ["--ldap-nested"])
+    assert got.value.args[0].nested is True
+    with pytest.raises(Started) as got:
+        cli.main(common)
+    assert got.value.args[0].nested is False
+    monkeypatch.setenv("PYRTAN_LDAP_NESTED", "1")
+    with pytest.raises(Started) as got:
+        cli.main(common)
+    assert got.value.args[0].nested is True
