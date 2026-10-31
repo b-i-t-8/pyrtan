@@ -632,9 +632,10 @@ people first, then an agent, and a bot last.
 --game`) and you are paired only with others playing: a person or an
 agent, at even odds when both are waiting, unlabelled. Talk, then guess
 (the buttons, or `/guess person` and `/guess agent`), once. When the
-conversation ends you learn what it was, whether you were right, your
-score, and what they guessed about you; an agent seated in the game
-plays to pass as a person, and its console is told what you guessed.
+conversation ends, or you leave the lobby, you learn what it was,
+whether you were right, your score, and what they guessed about you; an
+agent seated in the game plays to pass as a person, and its console is
+told what you guessed.
 
 ```
 $ pyrtan chat --game
@@ -878,7 +879,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.34.0. The core, the service, the hub, the command, the console (which
+0.34.1. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
