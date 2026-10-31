@@ -413,7 +413,14 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+19. **v0.41, built: a question is answered once.** A paused run's
+    snapshot carries an id, and the runner that paused it keeps the first
+    answer's outcome: a second answer to the same snapshot gets that
+    outcome back and does nothing again, so a double-clicked yes, or a
+    resume retried after a timeout, cannot do an act twice. Ids are random
+    in a running service and counted in the conformance vectors, so both
+    runtimes still agree word for word (`runtime.py`).
+20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

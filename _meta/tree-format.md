@@ -433,6 +433,19 @@ next = "geocode"
 The run returns `asked` with the prompt and a snapshot; `/resume` (or
 `pyrtan run` interactively) continues it. Only a top-level run can ask.
 
+A paused run is resumed **once**. The snapshot carries an `id`, and the
+first answer to it is the answer: a second one (a double click, a
+request retried after a timeout, a yes after a no) gets the first one's
+outcome back, with a last step `already answered (yes, at …): this is
+that answer's outcome; nothing was done again`. So an act after an
+`ask`, or one that asked first with `confirm`, is never done twice for
+one question. Two answers that arrive together are taken in turn: the
+second waits for the first and is given its outcome. The service that
+paused the run remembers the last thousand it resumed, in memory; a
+snapshot without an `id` (one kept from before) resumes as it always
+did. The id is for honest retries, not a lock: whoever holds a snapshot
+can always ask the question afresh.
+
 ### `done` and `fail`: finish
 
 ```toml

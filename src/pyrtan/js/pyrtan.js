@@ -1365,6 +1365,19 @@
       return lines.join("\n");
     }
   }
+  const ANSWERS_KEPT = 1000;  // the paused runs a runner remembers answering
+  function randomId() {
+    const bytes = new Uint8Array(9), c = typeof globalThis !== "undefined" ? globalThis.crypto : null;
+    if (c && c.getRandomValues) c.getRandomValues(bytes); else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  // The first answer's outcome, again, with a step that says so.
+  function replayed(first, node, given, when) {
+    const trace = new Trace(first.trace ? first.trace.tree : first.tree);
+    if (first.trace) { trace.steps = first.trace.steps.slice(); trace.gaps = first.trace.gaps.slice(); }
+    trace.add(step(node, "resume", `already answered (${brief(given)}, at ${when}): this is that answer's outcome; nothing was done again`));
+    return Object.assign({}, first, { trace });
+  }
   function step(node, kind, summary, extra) { return Object.assign({ node, kind, summary, observed: null, chosen: null, next: null, elapsed_ms: 0, depth: 0 }, extra || {}); }
   function stepDict(s) { const d = { node: s.node, kind: s.kind, summary: s.summary, next: s.next, elapsed_ms: s.elapsed_ms, depth: s.depth }; if (s.observed !== null && s.observed !== undefined) d.observed = s.observed; if (s.chosen !== null && s.chosen !== undefined) d.chosen = s.chosen; return d; }
   function outcome(status, tree, fields) { return Object.assign({ status, tree, say: null, output: null, reason: null, question: null, snapshot: null, trace: null, inputs: {} }, fields || {}); }
@@ -1388,6 +1401,8 @@
       this.clock = opts.clock || (() => new Date());
       this.maxSteps = opts.maxSteps || MAX_STEPS; this.maxDepth = opts.maxDepth || MAX_DEPTH;
       this.emitted = [];
+      this.newId = opts.newId || randomId;  // a paused run's id, so it is resumed once
+      this.answered = new Map();            // id -> { answer, when, outcome (a promise) }, the last ANSWERS_KEPT
     }
     add(treeOrRaw) { const t = treeOrRaw instanceof Tree ? treeOrRaw : new Tree(treeOrRaw); this.trees[t.name] = t; return t; }
     get(name) { return this.trees[name] || null; }
@@ -1429,7 +1444,19 @@
       return this.run(tree, match.inputs, { depth, trace, dryRun });
     }
     // Continue a run paused by ask: the answer goes where the ask node said.
+    // A paused run is resumed once: the first answer to a snapshot's id is the
+    // answer, and a second gets the first one's outcome back (as runtime.py).
     async resume(snapshot, answer) {
+      const sid = typeof snapshot.id === "string" ? snapshot.id : null;
+      if (sid === null) return this.resumeOnce(snapshot, answer);
+      const first = this.answered.get(sid);
+      if (first) return replayed(await first.outcome, String(snapshot.node || ""), first.answer, first.when);
+      const entry = { answer, when: this.clock().toISOString().replace(/\.\d{3}Z$/, "Z"), outcome: this.resumeOnce(snapshot, answer) };
+      this.answered.set(sid, entry);
+      while (this.answered.size > ANSWERS_KEPT) this.answered.delete(this.answered.keys().next().value);
+      try { return await entry.outcome; } catch (e) { this.answered.delete(sid); throw e; }
+    }
+    async resumeOnce(snapshot, answer) {
       const tree = this.get(snapshot.tree);
       if (!tree) return outcome("error", snapshot.tree || "", { reason: "no-such-tree" });
       if (snapshot.confirm) return this.resumeConfirm(tree, tree.node(snapshot.node), snapshot, answer);
@@ -1632,7 +1659,7 @@
       const confirm = node.get("confirm");
       const question = typeof confirm === "string" ? pyStr(render(confirm, scope)) : flags.dryRun && !confirm ? `Dry run: ${node.id} would ${doing}. Go ahead?` : `${node.id} would ${doing}. Go ahead?`;
       trace.add(step(node.id, "act", `asked: ${question}` + (question.includes(doing) ? "" : ` (would ${doing})`), { depth }));
-      const snapshot = { tree: tree.name, node: node.id, inputs: scope.inputs, state: scope.state, trace: trace.steps.map(stepDict), confirm: true, dry_run: flags.dryRun, would: doing };
+      const snapshot = { id: this.newId(), tree: tree.name, node: node.id, inputs: scope.inputs, state: scope.state, trace: trace.steps.map(stepDict), confirm: true, dry_run: flags.dryRun, would: doing };
       return outcome("asked", tree.name, { question, snapshot });
     }
     async do_each(tree, node, scope, trace, depth) {
@@ -1675,7 +1702,7 @@
       if (depth > 0) return outcome("error", tree.name, { reason: "ask-in-subflow", say: `${node.id}: only a top-level run can ask.` });
       const prompt = render(node.get("prompt"), scope);
       trace.add(step(node.id, "ask", `asked: ${prompt}`, { depth }));
-      return outcome("asked", tree.name, { question: pyStr(prompt), snapshot: { tree: tree.name, node: node.id, inputs: scope.inputs, state: scope.state, trace: trace.steps.map(stepDict) } });
+      return outcome("asked", tree.name, { question: pyStr(prompt), snapshot: { id: this.newId(), tree: tree.name, node: node.id, inputs: scope.inputs, state: scope.state, trace: trace.steps.map(stepDict) } });
     }
     do_done(tree, node, scope, trace, depth) {
       let say = node.get("say"), output = node.get("output");
@@ -1864,7 +1891,7 @@
       this.version = opts.version || VERSION;
       this.clock = opts.clock || (() => new Date());
       this.wall = opts.wall || (() => Date.now() / 1000);
-      this.runner = new Runner({ transport: opts.transport || new FetchTransport(), adapters: opts.adapters || null, clock: this.clock, env: opts.env });
+      this.runner = new Runner({ transport: opts.transport || new FetchTransport(), adapters: opts.adapters || null, clock: this.clock, env: opts.env, newId: opts.newId });
       this.errors = {}; this.held = {};
       this.gaps = new Map(); this.unanswered = new Map(); this.suggestions = new Map();
       this.runs = 0; this.started = this.wall();

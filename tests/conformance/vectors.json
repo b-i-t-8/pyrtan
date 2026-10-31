@@ -3322,6 +3322,7 @@
     },
     "question": "What size of latte?",
     "snapshot": {
+     "id": "ask-1",
      "inputs": {
       "drink": "latte",
       "shots": 1
@@ -3395,6 +3396,7 @@
    "body": {
     "answer": "large",
     "snapshot": {
+     "id": "ask-1",
      "inputs": {
       "drink": "latte",
       "shots": 1
@@ -3437,6 +3439,7 @@
     },
     "question": "How many shots?",
     "snapshot": {
+     "id": "ask-2",
      "inputs": {
       "drink": "latte",
       "shots": 1
@@ -3542,6 +3545,7 @@
    "body": {
     "answer": "2",
     "snapshot": {
+     "id": "ask-2",
      "inputs": {
       "drink": "latte",
       "shots": 1
@@ -3694,6 +3698,7 @@
     },
     "question": "What size of mocha?",
     "snapshot": {
+     "id": "ask-3",
      "inputs": {
       "drink": "mocha",
       "shots": 1
@@ -3767,6 +3772,7 @@
    "body": {
     "answer": "small",
     "snapshot": {
+     "id": "ask-3",
      "inputs": {
       "drink": "mocha",
       "shots": 1
@@ -3809,6 +3815,7 @@
     },
     "question": "How many shots?",
     "snapshot": {
+     "id": "ask-4",
      "inputs": {
       "drink": "mocha",
       "shots": 1
@@ -3914,6 +3921,7 @@
    "body": {
     "answer": "many",
     "snapshot": {
+     "id": "ask-4",
      "inputs": {
       "drink": "mocha",
       "shots": 1
@@ -3991,6 +3999,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": false,
+     "id": "ask-5",
      "inputs": {
       "room": "kitchen",
       "state": "on"
@@ -4069,6 +4078,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": false,
+     "id": "ask-5",
      "inputs": {
       "room": "kitchen",
       "state": "on"
@@ -4174,6 +4184,123 @@
   },
   {
    "body": {
+    "answer": "yes",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "id": "ask-5",
+     "inputs": {
+      "room": "kitchen",
+      "state": "on"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"on\"}"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "on"
+    },
+    "output": {
+     "status": 204
+    },
+    "say": "The kitchen light is on (204).",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn on the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "on"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn on the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light on? (would POST https://lights.example/kitchen with {\"on\": \"on\"})"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "switch",
+       "node": "switch",
+       "summary": "answered: yes"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "switch",
+       "summary": "POST https://lights.example/kitchen -> 204"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "The kitchen light is on (204)."
+      },
+      {
+       "depth": 0,
+       "kind": "resume",
+       "next": null,
+       "node": "switch",
+       "summary": "already answered (yes, at 2026-10-25T12:00:00Z): this is that answer's outcome; nothing was done again"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
     "text": "turn off the kitchen light"
    },
    "expect": {
@@ -4185,6 +4312,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": false,
+     "id": "ask-6",
      "inputs": {
       "room": "kitchen",
       "state": "off"
@@ -4263,6 +4391,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": false,
+     "id": "ask-6",
      "inputs": {
       "room": "kitchen",
       "state": "off"
@@ -4352,6 +4481,107 @@
   },
   {
    "body": {
+    "answer": "yes",
+    "snapshot": {
+     "confirm": true,
+     "dry_run": false,
+     "id": "ask-6",
+     "inputs": {
+      "room": "kitchen",
+      "state": "off"
+     },
+     "node": "switch",
+     "state": {},
+     "trace": [
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "elapsed_ms": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      }
+     ],
+     "tree": "light",
+     "would": "POST https://lights.example/kitchen with {\"on\": \"off\"}"
+    }
+   },
+   "expect": {
+    "inputs": {
+     "room": "kitchen",
+     "state": "off"
+    },
+    "reason": "declined",
+    "say": "Not done: switch was not confirmed.",
+    "status": "failed",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "switch",
+       "node": "intent",
+       "observed": {
+        "cleaned": "turn off the kitchen light",
+        "inputs": {
+         "room": "kitchen",
+         "state": "off"
+        },
+        "steps": [],
+        "trigger": "turn {state:word} the {room:word} light"
+       },
+       "summary": "'turn off the kitchen light'; light via 'turn {state:word} the {room:word} light' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "asked: Turn the kitchen light off? (would POST https://lights.example/kitchen with {\"on\": \"off\"})"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": null,
+       "node": "switch",
+       "summary": "answered: not now; not done"
+      },
+      {
+       "depth": 0,
+       "kind": "resume",
+       "next": null,
+       "node": "switch",
+       "summary": "already answered (not now, at 2026-10-25T12:00:00Z): this is that answer's outcome; nothing was done again"
+      }
+     ],
+     "tree": "light"
+    },
+    "tree": "light"
+   },
+   "method": "POST",
+   "path": "/resume",
+   "status": 200
+  },
+  {
+   "body": {
     "dry_run": true,
     "text": "turn on the kitchen light"
    },
@@ -4364,6 +4594,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": true,
+     "id": "ask-7",
      "inputs": {
       "room": "kitchen",
       "state": "on"
@@ -4453,6 +4684,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": true,
+     "id": "ask-8",
      "inputs": {
       "room": "hall",
       "state": "on"
@@ -4508,6 +4740,7 @@
     "snapshot": {
      "confirm": true,
      "dry_run": false,
+     "id": "ask-9",
      "inputs": {
       "room": "attic",
       "state": "on"
@@ -5589,7 +5822,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 37,
+    "runs": 39,
     "status": "ok",
     "suggestions": 3,
     "trees": [
