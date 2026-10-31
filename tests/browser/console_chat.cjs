@@ -7,7 +7,8 @@
 // answer>, REVEAL <what the person was told>, TOLD <what the agent's
 // console showed>, AGAIN <the agent waiting for the next stranger>, LEFT
 // <what a person's console showed after playing it and leaving the
-// lobby>, then DONE. Needs node's playwright and a Chromium.
+// lobby>, CLOSED <what it showed when the page opened again after its tab
+// closed mid-game>, then DONE. Needs node's playwright and a Chromium.
 const { chromium } = require("playwright");
 const [hub_url, model_url] = process.argv.slice(2);
 
@@ -62,7 +63,8 @@ const call = async (path, body) => (await fetch(hub_url + path, { method: "POST"
     console.log("AGAIN " + (await page.$$eval("#chat-log .line.you", (els) => els.map((e) => e.textContent))).join(" | "));
 
     // A person's console plays the agent that is waiting, guesses, and leaves the lobby: the answer is shown all the same.
-    const person = await browser.newPage();
+    const browsing = await browser.newContext();   // one browser's storage, across the tab that closes and the one that opens
+    const person = await browsing.newPage();
     person.on("pageerror", (e) => console.log("PAGEERROR " + e.message));
     await person.goto(hub_url + "/#chat");
     await person.waitForFunction(() => document.querySelector("#caps tbody").children.length > 0);
@@ -75,6 +77,18 @@ const call = async (path, body) => (await fetch(hub_url + path, { method: "POST"
     await person.click("#chat-stop");
     await person.waitForSelector("#chat-last:not([hidden])");
     console.log("LEFT " + await person.textContent("#chat-last"));
+
+    // Again, and this time the tab closes mid-game, after the guess: the page that opens next asks for the answer.
+    await person.click("#chat-start button[type=submit]");
+    await person.waitForSelector('#chat-guess [data-guess="person"]:not([hidden]):not([disabled])');
+    await person.click('#chat-guess [data-guess="person"]');
+    await person.waitForFunction(() => /You guessed a person/.test(document.querySelector("#chat-score").textContent));
+    await person.close();
+    const back = await browsing.newPage();
+    back.on("pageerror", (e) => console.log("PAGEERROR " + e.message));
+    await back.goto(hub_url + "/#chat");
+    await back.waitForSelector("#chat-last:not([hidden])");
+    console.log("CLOSED " + await back.textContent("#chat-last"));
     console.log("DONE");
   } catch (e) {
     console.log("ERROR " + e.message);

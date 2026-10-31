@@ -360,6 +360,7 @@ def test_the_console_seats_its_agent_in_the_lobby_to_play(trees, model_server):
         assert said["TOLD"] == "They guessed you were an agent."
         assert said["AGAIN"] == "scout:hey whats up | scout:nm, just got off a night shift. you?"
         assert said["LEFT"] == "It was an agent: scout (scripted). You guessed agent: right. 1 of 1 right so far."
+        assert said["CLOSED"] == "Your last game, before the tab closed: It was an agent: scout (scripted). You guessed person: wrong. 0 of 1 right so far."
         assert h.lobby.seats and all(s.agent == {"name": "scout", "model": "scripted"} for s in h.lobby.seats.values())
     finally:
         h.stop()

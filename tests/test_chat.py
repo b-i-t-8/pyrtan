@@ -914,3 +914,31 @@ def test_cli_tells_the_answer_on_the_way_out(examples_hub, capsys, monkeypatch):
         assert out.count("It was an agent") == 1
     finally:
         srv.stop()
+
+
+def test_a_closed_tab_gets_its_answer_when_it_comes_back():
+    hub = Hub(name="h", chat=True)
+    hub.lobby.seat_idle = 0.3
+    agent = seat_agent(hub, game=True)
+    me = post(hub, "/chat/start", {"game": True})[1]
+    post(hub, "/chat/guess", {"seat": me["seat"], "guess": "agent"})
+    # The tab closes and nobody polls: the seat is let go, and its answer kept for it.
+    time.sleep(0.4)
+    post(hub, "/chat/poll", {"seat": agent["seat"], "wait": 0})   # the agent is still here; the person is swept
+    assert me["seat"] not in hub.lobby.seats
+    # Back, the page asks once with the seat it remembered: the answer, then nothing.
+    status, back = post(hub, "/chat/leave", {"seat": me["seat"]})
+    assert status == 200 and back["left"] is False
+    assert back["reveal"]["text"] == f"It was an agent: scout ({SCOUT['model']}). You guessed agent: right. 1 of 1 right so far."
+    assert post(hub, "/chat/leave", {"seat": me["seat"]})[1]["reveal"] is None
+    # A tab that said goodbye as it closed (its leave nobody read) is answered again on its return.
+    a = post(hub, "/chat/start", {"game": True})[1]
+    b = post(hub, "/chat/start", {"game": True})[1]
+    assert post(hub, "/chat/leave", {"seat": a["seat"]})[1]["reveal"]["text"] == "It was a person. You did not guess."
+    assert post(hub, "/chat/leave", {"seat": a["seat"]})[1]["reveal"]["text"] == "It was a person. You did not guess."
+    # Nothing outlives its ten minutes, and a seat outside the game keeps nothing.
+    hub.lobby.kept["long-gone-seat"] = (time.time() - 1, {"kind": "reveal", "text": "stale"})
+    assert post(hub, "/chat/leave", {"seat": "long-gone-seat"})[1]["reveal"] is None and "long-gone-seat" not in hub.lobby.kept
+    c = start(hub, "people")
+    post(hub, "/chat/leave", {"seat": c["seat"]})
+    assert c["seat"] not in hub.lobby.kept

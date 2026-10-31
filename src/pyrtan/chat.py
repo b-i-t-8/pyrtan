@@ -95,11 +95,13 @@ Endpoints, all POST with a JSON body except the first:
 ``POST /chat/settings``  ``{"seat", "typing_indicator": bool}``
 ``POST /chat/guess``     ``{"seat", "guess": "person"|"agent"}``: in the game, what the stranger was
 ``POST /chat/next``      ``{"seat", "game": bool}``: end this conversation and wait for the next, with the same wishes
-``POST /chat/leave``     ``{"seat", "after": n}``: in the game, the answer comes back as ``reveal``
+``POST /chat/leave``     ``{"seat", "after": n}``: in the game, the answer comes back as ``reveal``; for a seat
+                         already gone (a closed tab), its last game's answer, once
 
 What it refuses: keeping anything. A conversation lives in memory while
-someone is in it; a seat nobody polls for a minute is let go and its
-partner told. A federated ``Say`` appears in the hub's outbox and inbox
+someone is in it, and a game's answer ten minutes after its player's
+seat went, for that seat alone to ask for once; a seat nobody polls for
+a minute is let go and its partner told. A federated ``Say`` appears in the hub's outbox and inbox
 logs without its text. There are no names, no history, no accounts and
 no moderation but leaving: a seat says at most five lines in a burst and
 one a second after that, each at most a thousand characters.
@@ -143,6 +145,7 @@ INTERESTS_MAX = 5
 BURST, REFILL = 5.0, 1.0   # lines: a burst of five, then one a second
 TYPING_TTL = 5.0      # an indicator nobody refreshes goes out after this long
 TYPING_EVERY = 2.0    # how often "still typing" travels to another hub
+KEPT_FOR = 600.0      # a game's answer, for a player whose seat went (a closed tab), is kept this long for them to ask again
 CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")  # C0 and C1 controls, but tab and newline: a line is text, not terminal commands
 REF = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 INTEREST = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
@@ -288,6 +291,7 @@ class Round:
     over: bool = False       # the conversation has ended
     revealed: bool = False
     other: "Round | None" = None
+    event: dict[str, Any] | None = None   # the reveal, once there is one
 
 
 class Lobby:
@@ -306,6 +310,7 @@ class Lobby:
         self.seat_idle = SEAT_IDLE
         self.typing_ttl = TYPING_TTL
         self._parts: list[tuple["Remote", str, str]] = []   # Parts to send once the lock is let go: (remote, to, from)
+        self.kept: dict[str, tuple[float, dict[str, Any]]] = {}   # seat id -> (until when, its last game's reveal): a closed tab asks for it once
 
     # ------------------------------------------------------------ views
 
@@ -595,18 +600,36 @@ class Lobby:
         parts.append(f"You guessed {r.guess}: {'right' if right else 'wrong'}. {seat.score[0]} of {seat.score[1]} right so far." if r.guess is not None else "You did not guess.")
         if their:
             parts.append(f"They guessed you were {_a(their)}.")
-        self._add(seat, "reveal", " ".join(parts), partner=truth, agent=r.agent, guess=r.guess, right=right, their_guess=their, score={"right": seat.score[0], "played": seat.score[1]})
+        r.event = self._add(seat, "reveal", " ".join(parts), partner=truth, agent=r.agent, guess=r.guess, right=right, their_guess=their, score={"right": seat.score[0], "played": seat.score[1]})
+
+    def _settle(self, seat: Seat) -> None:
+        """End the seat's conversation and, in the game, give the answer now,
+        guessed or not: it is moving on, or going."""
+        if seat.round is not None:
+            seat.round.over = True   # the answer now, not a request to guess
+        self._end(seat)
+        if seat.round is not None and not seat.round.revealed:
+            self._reveal(seat)   # without a guess, it scores nothing
 
     def _sweep(self) -> None:
-        cutoff = time.time() - self.seat_idle
+        now = time.time()
+        cutoff = now - self.seat_idle
         for seat in [s for s in self.seats.values() if s.seen < cutoff]:
-            self._end(seat)
+            self._settle(seat)
             self._drop(seat)
+        for sid in [k for k, (until, _) in self.kept.items() if until < now]:
+            del self.kept[sid]
 
     def _drop(self, seat: Seat) -> None:
         self.seats.pop(seat.id, None)
         self.refs.pop(seat.ref, None)
         seat.state = "left"
+        r = seat.round
+        if r is not None and r.event is not None and seat.agent is None:
+            # Its game's answer, for a tab that closed before it could show it: kept a while, handed back once.
+            if len(self.kept) >= SEATS_MAX:
+                del self.kept[min(self.kept, key=lambda k: self.kept[k][0])]
+            self.kept[seat.id] = (time.time() + KEPT_FOR, r.event)
         self.cond.notify_all()
 
     def _send_part(self, remote: "Remote", to: str, frm: str) -> None:
@@ -751,11 +774,7 @@ class Lobby:
         if seat is None:
             return 404, _gone()
         with self.cond:
-            if seat.round is not None:
-                seat.round.over = True   # moving on: the answer now, not a request to guess
-            self._end(seat)
-            if seat.round is not None and not seat.round.revealed:
-                self._reveal(seat)   # without a guess, it scores nothing
+            self._settle(seat)
             seat.round = None
             self.refs.pop(seat.ref, None)
             seat.ref = secrets.token_urlsafe(12)   # the last stranger cannot reach the next conversation
@@ -839,17 +858,18 @@ class Lobby:
         """Let the seat go. In the game, leaving settles it as New does: the
         answer comes back in ``reveal``, guessed or not, since the seat that
         would have been told is gone. With ``after``, a reveal the client
-        has not polled yet comes back too."""
+        has not polled yet comes back too. A seat already gone (a tab that
+        closed, a seat let go for want of polls) gets its last game's answer,
+        once, for ten minutes."""
         seat = self._seat(body)
         if seat is None:
-            return 200, {"status": "ok", "left": False}
+            with self.cond:
+                self._sweep()
+                kept = self.kept.pop(str(body.get("seat", "")), None)
+            return 200, {"status": "ok", "left": False, "reveal": kept[1] if kept else None}
         with self.cond:
             n = seat.n
-            if seat.round is not None:
-                seat.round.over = True   # leaving: the answer now, not a request to guess
-            self._end(seat)
-            if seat.round is not None and not seat.round.revealed:
-                self._reveal(seat)
+            self._settle(seat)
             self._drop(seat)
             since = _int(body.get("after")) if "after" in body else n
             reveal = next((e for e in reversed(seat.events) if e["kind"] == "reveal" and e["n"] > since), None)
