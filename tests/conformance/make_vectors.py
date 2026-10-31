@@ -326,8 +326,10 @@ HUB = [
     ("POST", "/resume", {"snapshot": "@last", "answer": "many"}),
     ("POST", "/intent", {"text": "turn on the kitchen light"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "yes"}),
+    ("POST", "/resume", {"snapshot": "@last", "answer": "yes"}),      # the same snapshot again: its first outcome, nothing done twice
     ("POST", "/intent", {"text": "turn off the kitchen light"}),
     ("POST", "/resume", {"snapshot": "@last", "answer": "not now"}),
+    ("POST", "/resume", {"snapshot": "@last", "answer": "yes"}),      # a yes after the no: the no stands
     ("POST", "/intent", {"text": "turn on the kitchen light", "dry_run": True}),
     ("POST", "/run", {"tree": "light", "inputs": {"room": "hall"}, "dry_run": True}),
     ("POST", "/run", {"tree": "light", "inputs": {"room": "attic"}}),
@@ -377,11 +379,18 @@ def _nlp_case(fn: str, text: str) -> dict:
     return {"fn": fn, "text": text, "value": value}
 
 
+def _counter():
+    """Ids for paused runs that both runtimes give in the same order: ask-1, ask-2…"""
+    n = iter(range(1, 1_000_000))
+    return lambda: f"ask-{next(n)}"
+
+
 def _hub_exchanges(reg: Registry, fixture: Path) -> list[dict]:
     """What a service with these trees answers, request by request. A
     snapshot of "@last" is the one the previous answer carried."""
     service = Service(reg, name="this browser", transport=RecordedTransport.from_file(fixture))
     service.runner.clock = lambda: CLOCK
+    service.runner.new_id = _counter()  # a paused run's id, the same in both runtimes (pyrtan.js counts the same way)
     out, last = [], None
     for method, path, body in HUB:
         if body is not None and body.get("snapshot") == "@last":
@@ -422,7 +431,7 @@ def build() -> dict:
     runs = []
     for case in CASES:
         # A run may bring its own fixture and env (the operator's credentials, say).
-        runner = Runner(reg, RecordedTransport.from_file(ROOT / case["fixture"] if "fixture" in case else fixture), env=dict(case.get("env", {})), clock=lambda: CLOCK)
+        runner = Runner(reg, RecordedTransport.from_file(ROOT / case["fixture"] if "fixture" in case else fixture), env=dict(case.get("env", {})), clock=lambda: CLOCK, new_id=_counter())
         extra = {k: case[k] for k in ("env", "fixture") if k in case}
         if "intent" in case:
             reading = reg.read(case["intent"], CLOCK)

@@ -30,7 +30,10 @@ the trace is the whole of its explanation.
 from __future__ import annotations
 
 import datetime as _dt
+import secrets
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -107,6 +110,9 @@ class Runner:
     max_depth: int = MAX_DEPTH
     emitted: list[dict[str, Any]] = field(default_factory=list)
     adapters: Any = None  # the other sources (file, shell, serial, queue, browser); a recorded transport answers for them too
+    new_id: Callable[[], str] = field(default=lambda: secrets.token_urlsafe(9), repr=False)  # a paused run's id, so it is resumed once
+    answered: "OrderedDict[str, tuple[Any, str, Outcome]]" = field(default_factory=OrderedDict, repr=False)  # id -> (answer, when, outcome)
+    _answering: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         if self.adapters is None:
@@ -176,7 +182,46 @@ class Runner:
 
     def resume(self, snapshot: dict[str, Any], answer: Any) -> Outcome:
         """Continue a run paused by ``ask``. The snapshot is what the asked
-        outcome carried; the answer goes where the ask node said."""
+        outcome carried; the answer goes where the ask node said.
+
+        A paused run is resumed once. Its snapshot carries an ``id``, and
+        the first answer to it is the answer: a second one (a double click,
+        a retried request) gets the first one's outcome back, with a step
+        saying so, and nothing it did is done again. This runner remembers
+        the last :data:`ANSWERS_KEPT` it was given; a snapshot without an
+        id (one made before ids) resumes as it always did."""
+        sid = snapshot.get("id") if isinstance(snapshot.get("id"), str) else None
+        if sid is None:
+            return self._resume(snapshot, answer)
+        with self._answering:
+            first = self.answered.get(sid)
+            if first is None:
+                # Held while the first answer runs, so a second one waits for its outcome.
+                mine = (answer, _iso(self.clock()), threading.Event())
+                self.answered[sid] = mine
+                while len(self.answered) > ANSWERS_KEPT:
+                    self.answered.popitem(last=False)
+        if first is not None:
+            given, when, outcome = first
+            if isinstance(outcome, threading.Event):
+                outcome.wait(60)
+                given, when, outcome = self.answered.get(sid, first)
+            if isinstance(outcome, Outcome):
+                return _replayed(outcome, str(snapshot.get("node", "")), given, when)
+            return Outcome("error", str(snapshot.get("tree", "")), reason="answering", say="This question is still being answered; ask for its outcome again in a moment.")
+        out: Outcome | None = None
+        try:
+            out = self._resume(snapshot, answer)
+            return out
+        finally:
+            with self._answering:
+                if out is None:
+                    self.answered.pop(sid, None)  # it raised: nothing to give back, and nothing was settled
+                else:
+                    self.answered[sid] = (mine[0], mine[1], out)
+            mine[2].set()
+
+    def _resume(self, snapshot: dict[str, Any], answer: Any) -> Outcome:
         tree = self.registry.get(snapshot["tree"])
         if tree is None:
             return Outcome("error", snapshot.get("tree", ""), reason="no-such-tree")
@@ -467,7 +512,7 @@ class Runner:
         else:
             question = f"{node.id} would {doing}. Go ahead?"
         trace.add(Step(node.id, "act", f"asked: {question}" + ("" if doing in question else f" (would {doing})"), depth=depth))
-        snapshot = {"tree": tree.name, "node": node.id, "inputs": scope["inputs"], "state": scope["state"], "trace": [s.to_dict() for s in trace.steps], "confirm": True, "dry_run": flags["dry_run"], "would": doing}
+        snapshot = {"id": self.new_id(), "tree": tree.name, "node": node.id, "inputs": scope["inputs"], "state": scope["state"], "trace": [s.to_dict() for s in trace.steps], "confirm": True, "dry_run": flags["dry_run"], "would": doing}
         return Outcome("asked", tree.name, question=question, snapshot=snapshot)
 
     def _do_ask(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
@@ -475,7 +520,7 @@ class Runner:
             return Outcome("error", tree.name, reason="ask-in-subflow", say=f"{node.id}: only a top-level run can ask.")
         prompt = render(node.get("prompt"), scope)
         trace.add(Step(node.id, "ask", f"asked: {prompt}", depth=depth))
-        snapshot = {"tree": tree.name, "node": node.id, "inputs": scope["inputs"], "state": scope["state"], "trace": [s.to_dict() for s in trace.steps]}
+        snapshot = {"id": self.new_id(), "tree": tree.name, "node": node.id, "inputs": scope["inputs"], "state": scope["state"], "trace": [s.to_dict() for s in trace.steps]}
         return Outcome("asked", tree.name, question=str(prompt), snapshot=snapshot)
 
     def _do_done(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
@@ -507,6 +552,23 @@ def yes(answer: Any) -> bool:
     if isinstance(answer, bool):
         return answer
     return isinstance(answer, str) and answer.strip().lower().rstrip(".!") in YES
+
+
+ANSWERS_KEPT = 1000  # the paused runs a runner remembers answering
+
+
+def _iso(at: _dt.datetime) -> str:
+    return at.astimezone(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _replayed(first: Outcome, node: str, given: Any, when: str) -> Outcome:
+    """The first answer's outcome, again, with a step that says so."""
+    trace = Trace(first.trace.tree if first.trace else first.tree)
+    if first.trace is not None:
+        trace.steps = list(first.trace.steps)
+        trace.gaps = list(first.trace.gaps)
+    trace.add(Step(node, "resume", f"already answered ({_brief(given)}, at {when}): this is that answer's outcome; nothing was done again"))
+    return Outcome(first.status, first.tree, say=first.say, output=first.output, reason=first.reason, question=first.question, snapshot=first.snapshot, trace=trace, inputs=first.inputs)
 
 
 def _merge_sub(trace: Trace, sub: Outcome, depth: int) -> None:
