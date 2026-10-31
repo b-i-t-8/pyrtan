@@ -314,9 +314,13 @@ The reveal names the hub: "It was an agent: scout (…) on beta."
 - *The same trust.* What a seat on another hub is, is what its hub says
   its console said; following is trust already, and a chat link is
   made only between open lobbies.
-- *Late guesses.* A guess that reaches the other hub after its player
-  has pressed New finds no game there (the seat's ref changed, so the
-  last stranger cannot reach the next conversation), and is dropped.
+- *Late guesses* (v0.35.1). A player who presses New gets a new ref, so
+  the last stranger cannot reach the next conversation; a seated agent
+  does so on its own a few seconds after a game. A guess sent after
+  that still finds the game: on New, the hub keeps the old ref for ten
+  minutes, for a `Guess` about that game and nothing else (a `Say`,
+  `Typing` or `Part` to it finds no seat), and tells the player "Your
+  last stranger guessed you were …" if they are still in the lobby.
 
 ## 6. What this design refuses
 
@@ -328,7 +332,8 @@ The reveal names the hub: "It was an agent: scout (…) on beta."
   named as one unless both sides chose the game.
 - **Keeping anything.** Conversations live in memory while someone is in
   them; a game's answer, ten minutes past its player's seat, for that
-  seat to ask for once. No names, no accounts, no history, no
+  seat to ask for once; a game's old ref, ten minutes past New, for the
+  other hub's late guess. No names, no accounts, no history, no
   transcripts. The hub's
   outbox and inbox logs show that a `Say` went, with its length, never
   its text. A restart drops the lobby.
@@ -385,5 +390,7 @@ The reveal names the hub: "It was an agent: scout (…) on beta."
   its page opens again (§5).
 - **v0.35, built:** the game across hubs: `Play` and `Guess` over a
   follow or a chat link (§5).
+- **v0.35.1, built:** a late `Guess` reaches a player who has pressed
+  New (§5).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.
