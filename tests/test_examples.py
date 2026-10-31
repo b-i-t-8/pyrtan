@@ -102,7 +102,7 @@ def test_fixture_fails_loudly_on_unforeseen_request(runner):
 def test_disk_space_over_a_shell(runner):
     out = runner.run_intent("how full is the disk")
     assert out.status == "done" and out.say == "/ is 71% full." and out.output == {"mounted": "/", "percent": 71}
-    assert out.trace.steps[1].summary == "shell df -P / -> exit 0; percent=71, mounted=/"
+    assert out.trace.steps[1].summary == "shell df -P / -> exit 0; used={'percent': 71, 'mounted': '/'}"
     assert runner.run_intent("disk space on /data").reason == "disk-full"
     failed = runner.run_intent("disk space on /nowhere")
     assert failed.status == "failed" and failed.reason == "df-failed" and "No such file" in failed.say

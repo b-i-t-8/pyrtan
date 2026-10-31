@@ -591,6 +591,52 @@
       "commands": [
        "df"
       ],
+      "description": "Says when a filesystem has been nearly full for two readings in a row, and keeps quiet about one.",
+      "hosts": [],
+      "inputs": {
+       "mount": {
+        "default": "/",
+        "description": "A mount point, or any path on the filesystem to measure",
+        "type": "str"
+       },
+       "name": {
+        "default": "root",
+        "description": "What the count is kept under: disk-alert/<name>",
+        "type": "str"
+       }
+      },
+      "keys": [
+       "disk-alert/*"
+      ],
+      "language": {},
+      "license": "MIT",
+      "name": "disk-alert",
+      "namespace": "pyrtan",
+      "sources": [
+       "memory",
+       "shell"
+      ],
+      "tags": [
+       "ops",
+       "box",
+       "alert"
+      ],
+      "triggers": [
+       "disk alert",
+       "disk alert for {mount:word} as {name:word}"
+      ],
+      "version": 1,
+      "watches": [
+       {
+        "kind": "every",
+        "what": "15m"
+       }
+      ]
+     },
+     {
+      "commands": [
+       "df"
+      ],
       "description": "How full a filesystem is, from df on the box this tree runs on.",
       "hosts": [],
       "inputs": {
@@ -617,7 +663,7 @@
        "disk space",
        "disk space on {mount:word}"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "description": "A domain's DNS records (A, AAAA, MX, TXT, NS or CNAME), from Google Public DNS.",
@@ -5605,6 +5651,7 @@
      "crypto-price",
      "dad-joke",
      "define",
+     "disk-alert",
      "disk-space",
      "dns",
      "earthquakes",
@@ -10818,29 +10865,21 @@
        "next": "ran",
        "node": "df",
        "observed": {
-        "mounted": "/",
-        "percent": "71"
+        "used": {
+         "mounted": "/",
+         "percent": 71
+        }
        },
-       "summary": "shell df -P / -> exit 0; percent=71, mounted=/"
+       "summary": "shell df -P / -> exit 0; used={'percent': 71, 'mounted': '/'}"
       },
       {
        "chosen": "eq True",
        "depth": 0,
        "kind": "decide",
-       "next": "number",
+       "next": "level",
        "node": "ran",
        "observed": true,
        "summary": "state.df.ok = True"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "level",
-       "node": "number",
-       "observed": {
-        "pct": 71
-       },
-       "summary": "pct=71"
       },
       {
        "chosen": "lt 80",
@@ -10849,7 +10888,7 @@
        "next": "fine",
        "node": "level",
        "observed": 71,
-       "summary": "state.pct = 71"
+       "summary": "state.used.percent = 71"
       },
       {
        "depth": 0,
@@ -10899,29 +10938,21 @@
        "next": "ran",
        "node": "df",
        "observed": {
-        "mounted": "/data",
-        "percent": "96"
+        "used": {
+         "mounted": "/data",
+         "percent": 96
+        }
        },
-       "summary": "shell df -P /data -> exit 0; percent=96, mounted=/data"
+       "summary": "shell df -P /data -> exit 0; used={'percent': 96, 'mounted': '/data'}"
       },
       {
        "chosen": "eq True",
        "depth": 0,
        "kind": "decide",
-       "next": "number",
+       "next": "level",
        "node": "ran",
        "observed": true,
        "summary": "state.df.ok = True"
-      },
-      {
-       "depth": 0,
-       "kind": "set",
-       "next": "level",
-       "node": "number",
-       "observed": {
-        "pct": 96
-       },
-       "summary": "pct=96"
       },
       {
        "chosen": "else",
@@ -10930,7 +10961,7 @@
        "next": "full",
        "node": "level",
        "observed": 96,
-       "summary": "state.pct = 96"
+       "summary": "state.used.percent = 96"
       },
       {
        "depth": 0,
@@ -10982,10 +11013,9 @@
        "next": "ran",
        "node": "df",
        "observed": {
-        "mounted": null,
-        "percent": null
+        "used": null
        },
-       "summary": "shell df -P /nowhere -> exit 1; percent=None, mounted=None"
+       "summary": "shell df -P /nowhere -> exit 1; used=None"
       },
       {
        "chosen": "else",
@@ -23078,33 +23108,71 @@
    ],
    "version": 1
   },
-  "disk-space": {
+  "disk-alert": {
    "commands": [
     "df"
    ],
-   "description": "How full a filesystem is, from df on the box this tree runs on.",
+   "description": "Says when a filesystem has been nearly full for two readings in a row, and keeps quiet about one.",
    "inputs": {
     "mount": {
      "default": "/",
      "description": "A mount point, or any path on the filesystem to measure",
      "type": "str"
+    },
+    "name": {
+     "default": "root",
+     "description": "What the count is kept under: disk-alert/<name>",
+     "pattern": "^[a-z0-9-]+$",
+     "type": "str"
     }
    },
+   "keys": [
+    "disk-alert/*"
+   ],
    "license": "MIT",
-   "name": "disk-space",
+   "name": "disk-alert",
    "namespace": "pyrtan",
    "nodes": {
+    "again": {
+     "branches": [
+      {
+       "then": "noted",
+       "when": {
+        "eq": 1
+       }
+      },
+      {
+       "else": "alert"
+      }
+     ],
+     "kind": "decide",
+     "on": "row.value"
+    },
+    "alert": {
+     "kind": "fail",
+     "output": {
+      "in_a_row": "{{ state.row.value }}",
+      "mounted": "{{ state.used.mounted }}",
+      "percent": "{{ state.used.percent }}"
+     },
+     "reason": "disk-full",
+     "say": "{{ state.used.mounted }} has been {{ state.used.percent }}% full for {{ state.row.value }} readings in a row."
+    },
+    "count": {
+     "into": "row",
+     "kind": "act",
+     "memory": {
+      "add": 1,
+      "key": "disk-alert/{{ inputs.name }}",
+      "ttl": "1 hour"
+     },
+     "next": "again"
+    },
     "df": {
      "extract": [
       {
-       "group": 1,
-       "into": "percent",
-       "regex": "(\\d+)%"
-      },
-      {
-       "group": 1,
-       "into": "mounted",
-       "regex": "%\\s+(\\S+)\\s*$"
+       "into": "used",
+       "pattern": "{percent:int}% {mounted:word}"
       }
      ],
      "into": "df",
@@ -23126,18 +23194,208 @@
     "fine": {
      "kind": "done",
      "output": {
-      "mounted": "{{ state.mounted }}",
-      "percent": "{{ state.pct }}"
+      "in_a_row": 0,
+      "mounted": "{{ state.used.mounted }}",
+      "percent": "{{ state.used.percent }}"
      },
-     "say": "{{ state.mounted }} is {{ state.pct }}% full."
+     "say": "{{ state.used.mounted }} is {{ state.used.percent }}% full."
+    },
+    "forget": {
+     "into": "forgot",
+     "kind": "act",
+     "memory": {
+      "delete": true,
+      "key": "disk-alert/{{ inputs.name }}"
+     },
+     "next": "fine"
+    },
+    "level": {
+     "branches": [
+      {
+       "then": "unreadable",
+       "when": {
+        "exists": false
+       }
+      },
+      {
+       "then": "count",
+       "when": {
+        "gte": 90
+       }
+      },
+      {
+       "else": "forget"
+      }
+     ],
+     "kind": "decide",
+     "on": "used.percent"
+    },
+    "noted": {
+     "kind": "done",
+     "output": {
+      "in_a_row": "{{ state.row.value }}",
+      "mounted": "{{ state.used.mounted }}",
+      "percent": "{{ state.used.percent }}"
+     },
+     "say": "{{ state.used.mounted }} is {{ state.used.percent }}% full; noted, and quiet unless the next reading says the same."
+    },
+    "ran": {
+     "branches": [
+      {
+       "then": "level",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "failed"
+      }
+     ],
+     "kind": "decide",
+     "on": "df.ok"
+    },
+    "unreadable": {
+     "kind": "fail",
+     "reason": "df-unreadable",
+     "say": "df answered for {{ inputs.mount }}, but no line of it reads as \"N% mount\"."
+    }
+   },
+   "start": "df",
+   "tags": [
+    "ops",
+    "box",
+    "alert"
+   ],
+   "tests": [
+    {
+     "expect": {
+      "path": [
+       "df",
+       "ran",
+       "level",
+       "count",
+       "again",
+       "noted"
+      ],
+      "status": "done"
+     },
+     "fixture": "disk-alert.first.json",
+     "inputs": {
+      "mount": "/data",
+      "name": "data"
+     },
+     "name": "one high reading is noted, and nobody is told"
+    },
+    {
+     "expect": {
+      "reason": "disk-full",
+      "say": "/data has been 96% full for 2 readings in a row.",
+      "status": "failed"
+     },
+     "fixture": "disk-alert.second.json",
+     "inputs": {
+      "mount": "/data",
+      "name": "data"
+     },
+     "name": "the second high reading in a row speaks"
+    },
+    {
+     "expect": {
+      "path": [
+       "df",
+       "ran",
+       "level",
+       "forget",
+       "fine"
+      ],
+      "say": "/ is 71% full.",
+      "status": "done"
+     },
+     "fixture": "disk-alert.fine.json",
+     "name": "a reading under the line forgets the count",
+     "sentence": "disk alert"
+    }
+   ],
+   "triggers": [
+    {
+     "pattern": "disk alert"
+    },
+    {
+     "pattern": "disk alert for {mount:word} as {name:word}"
+    }
+   ],
+   "version": 1,
+   "watches": [
+    {
+     "every": "15m",
+     "inputs": {
+      "mount": "/",
+      "name": "root"
+     },
+     "name": "root"
+    }
+   ]
+  },
+  "disk-space": {
+   "commands": [
+    "df"
+   ],
+   "description": "How full a filesystem is, from df on the box this tree runs on.",
+   "inputs": {
+    "mount": {
+     "default": "/",
+     "description": "A mount point, or any path on the filesystem to measure",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "disk-space",
+   "namespace": "pyrtan",
+   "nodes": {
+    "df": {
+     "extract": [
+      {
+       "into": "used",
+       "pattern": "{percent:int}% {mounted:word}"
+      }
+     ],
+     "into": "df",
+     "kind": "observe",
+     "next": "ran",
+     "shell": {
+      "args": [
+       "-P",
+       "{{ inputs.mount }}"
+      ],
+      "command": "df"
+     }
+    },
+    "failed": {
+     "kind": "fail",
+     "reason": "df-failed",
+     "say": "df could not measure {{ inputs.mount }}: {{ state.df.stderr | strip }}"
+    },
+    "fine": {
+     "kind": "done",
+     "output": {
+      "mounted": "{{ state.used.mounted }}",
+      "percent": "{{ state.used.percent }}"
+     },
+     "say": "{{ state.used.mounted }} is {{ state.used.percent }}% full."
     },
     "full": {
      "kind": "fail",
      "reason": "disk-full",
-     "say": "{{ state.mounted }} is {{ state.pct }}% full."
+     "say": "{{ state.used.mounted }} is {{ state.used.percent }}% full."
     },
     "level": {
      "branches": [
+      {
+       "then": "unreadable",
+       "when": {
+        "exists": false
+       }
+      },
       {
        "then": "fine",
        "when": {
@@ -23155,19 +23413,12 @@
       }
      ],
      "kind": "decide",
-     "on": "pct"
-    },
-    "number": {
-     "kind": "set",
-     "next": "level",
-     "set": {
-      "pct": "{{ state.percent | int }}"
-     }
+     "on": "used.percent"
     },
     "ran": {
      "branches": [
       {
-       "then": "number",
+       "then": "level",
        "when": {
         "eq": true
        }
@@ -23182,10 +23433,15 @@
     "tight": {
      "kind": "done",
      "output": {
-      "mounted": "{{ state.mounted }}",
-      "percent": "{{ state.pct }}"
+      "mounted": "{{ state.used.mounted }}",
+      "percent": "{{ state.used.percent }}"
      },
-     "say": "{{ state.mounted }} is {{ state.pct }}% full; make room soon."
+     "say": "{{ state.used.mounted }} is {{ state.used.percent }}% full; make room soon."
+    },
+    "unreadable": {
+     "kind": "fail",
+     "reason": "df-unreadable",
+     "say": "df answered for {{ inputs.mount }}, but no line of it reads as \"N% mount\"."
     }
    },
    "start": "df",
@@ -23193,6 +23449,58 @@
     "ops",
     "box",
     "read-only"
+   ],
+   "tests": [
+    {
+     "expect": {
+      "output": {
+       "mounted": "/",
+       "percent": 71
+      },
+      "say": "/ is 71% full.",
+      "status": "done"
+     },
+     "fixture": "disk-space.fixture.json",
+     "name": "the root filesystem, with room",
+     "sentence": "how full is the disk"
+    },
+    {
+     "expect": {
+      "path": [
+       "df",
+       "ran",
+       "level",
+       "full"
+      ],
+      "reason": "disk-full",
+      "status": "failed"
+     },
+     "fixture": "disk-space.fixture.json",
+     "name": "a full one",
+     "sentence": "disk space on /data"
+    },
+    {
+     "expect": {
+      "reason": "df-unreadable",
+      "status": "failed"
+     },
+     "fixture": "disk-space.fixture.json",
+     "inputs": {
+      "mount": "/odd"
+     },
+     "name": "a df that prints no usage line is said so, not read as full"
+    },
+    {
+     "expect": {
+      "reason": "df-failed",
+      "status": "failed"
+     },
+     "fixture": "disk-space.fixture.json",
+     "inputs": {
+      "mount": "/nowhere"
+     },
+     "name": "a path that is not there"
+    }
    ],
    "triggers": [
     {
@@ -23205,7 +23513,7 @@
      "pattern": "disk space on {mount:word}"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "dns": {
    "description": "A domain's DNS records (A, AAAA, MX, TXT, NS or CNAME), from Google Public DNS.",
