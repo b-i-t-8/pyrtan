@@ -171,6 +171,7 @@ slots gives a table of them.
 | Command | What it does |
 | :-- | :-- |
 | `pyrtan check DIR` | Validates every tree: references, conditions, selectors, hosts, templates, reachability, cycles. Warns about a branch an earlier one already covers and a condition no value meets, and names the numbers a decision without `else` leaves to a gap. Exit 1 on any error. |
+| `pyrtan paths DIR` | Every route through each tree, without running it: the branch it takes at each decision, what it reads, does and asks on the way (requests as written), and how it ends: `done`, `fail` with its reason, or a gap where nothing foresaw the value. A branch the order check proves is never taken is marked. An `each` sub-flow's routes are listed beside the tree's. `--json` for an audit to keep. |
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. `--dry-run` reads for real but stops before the first act and says what it would do. An act with `confirm` asks first, at the terminal. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
@@ -878,7 +879,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.34.0. The core, the service, the hub, the command, the console (which
+0.38.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
