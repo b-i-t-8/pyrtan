@@ -702,7 +702,10 @@ seconds without news.
 **Strangers across hubs.** A seat that finds nobody waiting asks the hubs
 its hub follows with a signed `Meet`; the lines travel as `Say` and the
 end as `Part`, typing as `Typing`, hub to hub, signed with the pair's
-secret; the outbox logs a `Say` without its text and leaves `Typing` out. A hub answers a `Meet` only from a
+secret; the outbox logs a `Say` without its text and leaves `Typing` out. Players of *person or
+agent?* meet across hubs the same way, with `Play` in place of `Meet`
+and `Guess` carrying a guess to the other hub; the reveal says which hub
+the stranger was on. A hub answers a `Meet` or a `Play` only from a
 hub that follows it, and never passes one on. Following is trust (it
 routes sentences to the other hub's trees), so to reach more strangers
 without it, start an open lobby with `--chat-reach N`: the hub keeps up to

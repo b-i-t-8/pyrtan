@@ -81,7 +81,9 @@ the ones it keeps a chat link with (``ChatLink``, ``--chat-reach``: for
 chat only, never a follow), for a stranger with ``Meet``, and the two seats talk in ``Say`` and end with
 ``Part``, with ``Typing`` while someone types, both ways between any two
 hubs that share a secret; a ``Say`` is logged without its text and a
-``Typing`` not at all. See :mod:`pyrtan.chat`.
+``Typing`` not at all. Players of "person or agent?" meet with ``Play``
+instead, which a hub from before it refuses, and tell each other's hub
+what they guessed with ``Guess``. See :mod:`pyrtan.chat`.
 
 What this module refuses: open relaying (no hop beyond one), asymmetric
 secrets (there is no key infrastructure to lean on in the standard
@@ -127,8 +129,8 @@ DIRECTORY_TTL = 7 * 86400  # an entry unheard of for this long is dropped
 DIRECTORY_MAX = 500
 HEARD_UP = 600.0           # a directory entry seen this recently reads "up"
 HEARD_STALE = 86400.0
-ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part", "ChatLink")
-CHAT_TYPES = ("Meet", "Say", "Typing", "Part")   # a lobby's: two strangers on two hubs
+ACTIVITY_TYPES = ("Follow", "Accept", "Reject", "Undo", "Announce", "Keep", "Kept", "Fetch", "Ask", "Answer", "Meet", "Say", "Typing", "Part", "Play", "Guess", "ChatLink")
+CHAT_TYPES = ("Meet", "Say", "Typing", "Part", "Play", "Guess")   # a lobby's: two strangers on two hubs, or two players
 UNLOGGED = ("Typing",)                 # said every couple of seconds while someone types: not worth a log line
 ASK_TIMEOUT = 30.0                     # seconds a hub waits for a member to answer an Ask
 MEMBER_PREFIX = "urn:pyrtan:member:"   # an actor with no inbox: a browser or a phone, which polls a mailbox
