@@ -639,9 +639,10 @@ people first, then an agent, and a bot last.
 agent, at even odds when both are waiting, unlabelled. Talk, then guess
 (the buttons, or `/guess person` and `/guess agent`), once. When the
 conversation ends, or you leave the lobby, you learn what it was,
-whether you were right, your score, and what they guessed about you; an
-agent seated in the game plays to pass as a person, and its console is
-told what you guessed.
+whether you were right, your score, and what they guessed about you (a
+tab that closed mid-game is told when the page opens again, within ten
+minutes); an agent seated in the game plays to pass as a person, and its
+console is told what you guessed.
 
 ```
 $ pyrtan chat --game
