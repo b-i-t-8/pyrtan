@@ -518,6 +518,7 @@ def _access_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--ldap-bind-dn", metavar="DN", default=env("PYRTAN_LDAP_BIND_DN"), help="search and read groups as this account, its password in $PYRTAN_LDAP_BIND_PASSWORD (default $PYRTAN_LDAP_BIND_DN; anonymous otherwise)")
     g.add_argument("--ldap-group", action="append", default=[a for a in env("PYRTAN_LDAP_GROUPS", "").split(";") if a.strip()], metavar="DN=ABILITIES", help="this group's members may these: ask, chat, run, operate (repeatable; default $PYRTAN_LDAP_GROUPS, ';'-separated)")
     g.add_argument("--ldap-may", metavar="ABILITIES", default=env("PYRTAN_LDAP_MAY"), help="what anyone who signs in may, in a group or not; 'none' for nothing (default $PYRTAN_LDAP_MAY, else ask when no --ldap-group is given and none when one is)")
+    g.add_argument("--ldap-nested", action="store_true", default=env("PYRTAN_LDAP_NESTED", "").lower() in ("1", "true", "yes"), help="also count members of groups nested in a --ldap-group, to any depth, as Active Directory follows them (LDAP_MATCHING_RULE_IN_CHAIN); direct members are still counted on any directory (default $PYRTAN_LDAP_NESTED)")
     g.add_argument("--ldap-starttls", action="store_true", default=env("PYRTAN_LDAP_STARTTLS", "").lower() in ("1", "true", "yes"), help="upgrade an ldap:// connection with StartTLS (default $PYRTAN_LDAP_STARTTLS)")
     g.add_argument("--ldap-ca", metavar="FILE", default=env("PYRTAN_LDAP_CA"), help="check the directory's certificate against this CA bundle (default $PYRTAN_LDAP_CA, else the system's)")
     g.add_argument("--ldap-session", type=float, metavar="HOURS", default=float(env("PYRTAN_LDAP_SESSION", "12") or 12), help="how long a session from /login lasts (default $PYRTAN_LDAP_SESSION or 12)")
@@ -535,7 +536,7 @@ def _ldap_users(args: argparse.Namespace) -> Any:
         users = LdapUsers(
             args.ldap, user_dn=args.ldap_user_dn, base=args.ldap_base, filter=args.ldap_filter,
             bind_dn=args.ldap_bind_dn, bind_password=os.environ.get("PYRTAN_LDAP_BIND_PASSWORD"),
-            groups=dict(parse_group(g) for g in args.ldap_group), may=parse_abilities(args.ldap_may),
+            groups=dict(parse_group(g) for g in args.ldap_group), may=parse_abilities(args.ldap_may), nested=args.ldap_nested,
             starttls=args.ldap_starttls, ca=args.ldap_ca, session_ttl=args.ldap_session * 3600.0,
         )
     except LdapError as e:
@@ -1763,7 +1764,7 @@ def _access_note(args: argparse.Namespace) -> str:
         notes.append("token required")
     if getattr(args, "ldap", None):
         groups = len(getattr(args, "ldap_group", []) or [])
-        notes.append(f"LDAP users from {args.ldap}" + (f" in {groups} group(s)" if groups else ""))
+        notes.append(f"LDAP users from {args.ldap}" + (f" in {groups} group(s)" if groups else "") + (", nested" if groups and getattr(args, "ldap_nested", False) else ""))
     if getattr(args, "cors", None):
         notes.append("cors: " + ", ".join(args.cors))
     if getattr(args, "egress", "any") != "any":
