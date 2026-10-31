@@ -983,8 +983,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
     finally:
         stop.set()
         tick.set()
+        left: Any = None
+        with lock:
+            after = state["after"]   # what was shown: a reveal past it was not
         try:
-            post("/chat/leave", {"seat": seat}, timeout=5.0)
+            _, left = post("/chat/leave", {"seat": seat, "after": after}, timeout=5.0)
         except Exception:
             pass
         # Leaving wakes the poll and the typist; let them finish before the
@@ -992,6 +995,9 @@ def cmd_chat(args: argparse.Namespace) -> int:
         # shutdown aborts the process (exit -6).
         for t in threads:
             t.join(timeout=5.0)
+        reveal = left.get("reveal") if isinstance(left, dict) else None
+        if isinstance(reveal, dict):
+            print(f"  {clean_line(str(reveal.get('text', '')))}", flush=True)  # in the game: what the last stranger was
     return 0
 
 
