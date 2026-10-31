@@ -88,6 +88,7 @@ from .registry import Registry
 from .runtime import Outcome
 from .tree import Tree
 from .service import PEER_HEADER, Server, Service, bearer_ok, http_json, outcome_from_dict, set_egress, signed_path, build_answer
+from .ldap import LdapUsers, user_may
 from .store import StoreError, check_key
 from .transport import EgressRefused, check_egress
 
@@ -649,6 +650,9 @@ class Hub:
         signer, may, refused = self._signer(method, path, body, headers)
         if refused:
             return refused
+        # A directory account the server let in may what its groups say, as a key may what it is granted.
+        by_user = user_may(headers) if self.token else set()
+        may = set(may) | by_user
         # The operator: the token, or a key whose root this hub grants operate.
         operator = (bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)) or "operate" in may
         signed = any(k.lower() == "x-pyrtan-signature" for k in headers)
@@ -688,7 +692,8 @@ class Hub:
             if method == "POST" and path == "/inbox":
                 by_token = bool(self.token) and bearer_ok(headers.get("Authorization") or headers.get("authorization"), self.token)
                 by_key = signer is not None and "run" in may
-                return fed.handle_inbox(body, headers, trusted=by_token or by_key, trusted_by="token" if by_token else "key" if by_key else None, signer=signer)
+                by_ldap = not by_token and not by_key and "run" in by_user
+                return fed.handle_inbox(body, headers, trusted=by_token or by_key or by_ldap, trusted_by="token" if by_token else "key" if by_key else "ldap" if by_ldap else None, signer=signer)
             if method == "GET" and path in ("/following", "/followers"):
                 return 200, {path[1:]: fed.to_dict()[path[1:]]}
             if method == "GET" and path == "/outbox":
@@ -959,6 +964,7 @@ def serve_hub(
     names_domain: str | None = None,
     chat_typing: bool = True,
     chat_public: bool = False,
+    users: LdapUsers | None = None,
 ) -> tuple[Hub, Server]:
     """Start a hub. ``allow`` holds ``WHO=ABILITIES`` grants, made before it answers
     anything (a name is resolved now; IdentityError if it cannot be); ``grants`` is
@@ -974,7 +980,7 @@ def serve_hub(
     set_egress(egress)  # the hub's own requests to hosts it did not choose (followed hubs, the hub list, identity documents) under the same policy as its trees
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch, memory=memory) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
-    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True).start()
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True, users=users).start()
     hub._audience = (advertise or server.url).rstrip("/")
     hub.advertised = bool(advertise)
     hub.egress = egress

@@ -110,7 +110,8 @@ routing a sentence to another holder dropped them. Capabilities now carry
 ## 3. Strangers across hubs
 
 A seat that finds nobody here asks up to three of the hubs this one
-follows, every five seconds while it waits, with a signed `Meet {ref,
+follows (a player of "person or agent?" with `Play` instead, §5),
+every five seconds while it waits, with a signed `Meet {ref,
 interests}`. The followed hub pairs it with one of its own waiting seats
 or answers `met: false`. From then on each side's lines go as `Say {to,
 from, text}` and the end as `Part {to, from}`, delivered to the other
@@ -238,8 +239,9 @@ or put it away.
 - *Who meets one.* `want: agent` meets agents only; `people` never does;
   `anyone` meets people here first, then strangers on other hubs, then
   an agent, and a bot last. An agent never meets an agent (two models
-  talking is a cost nobody watches), never a bot, and never a stranger
-  on another hub: agents stay on the hub they sat down at.
+  talking is a cost nobody watches), never a bot, and, outside the game,
+  never a stranger on another hub: there it stays on the hub it sat down
+  at.
 - *Its own words only.* In the lobby an agent asks the swarm nothing and
   remembers nothing; its conversation with the person who started it is
   untouched. So a guest of a public lobby may meet an agent (by asking
@@ -289,8 +291,36 @@ would take before it sends it.
   fool a stranger, once. Outside the game nothing is unlabelled, and
   a person who does not tick *Play* never meets an unlabelled agent.
 
-The game stays on one hub, as agents do: a `Meet` carries no game, and
-pairs only people who want people.
+**Across hubs (v0.35).** A player who finds nobody playing here asks
+the hubs this one follows, and its chat links, as a stranger would, but
+with `Play {ref, interests, agent}` in place of `Meet`. The hub asked
+pairs it with one of its own players (never two agents; a person at
+even odds between people and agents) and answers `{met, game: true,
+ref, interests, agent}`. Each hub keeps what the other's seat is, for
+the end, and neither shows it until then; the lines, typing and end
+travel as `Say`, `Typing` and `Part`, as between any two strangers.
+A guess travels as `Guess {to, from, guess}` to the partner's hub, which
+keeps it for its player's reveal ("They guessed you were a person.").
+The reveal names the hub: "It was an agent: scout (…) on beta."
+
+- *A new activity, not a flag.* A hub from before the game ignores a
+  field it does not know, so a `Meet` marked as a game would pair a
+  player with someone who is not playing, and an agent playing to pass
+  as a person would meet someone who never chose the game. A hub from
+  before it refuses `Play` as an activity it does not know, and the
+  player just goes on waiting. A refusal from a linked hub does not
+  count against the link: the hub is there, it only does not play.
+- *A `Meet` never meets a player, and a `Play` never meets anyone else.*
+- *The same trust.* What a seat on another hub is, is what its hub says
+  its console said; following is trust already, and a chat link is
+  made only between open lobbies.
+- *Late guesses* (v0.35.1). A player who presses New gets a new ref, so
+  the last stranger cannot reach the next conversation; a seated agent
+  does so on its own a few seconds after a game. A guess sent after
+  that still finds the game: on New, the hub keeps the old ref for ten
+  minutes, for a `Guess` about that game and nothing else (a `Say`,
+  `Typing` or `Part` to it finds no seat), and tells the player "Your
+  last stranger guessed you were …" if they are still in the lobby.
 
 ## 6. What this design refuses
 
@@ -302,7 +332,8 @@ pairs only people who want people.
   named as one unless both sides chose the game.
 - **Keeping anything.** Conversations live in memory while someone is in
   them; a game's answer, ten minutes past its player's seat, for that
-  seat to ask for once. No names, no accounts, no history, no
+  seat to ask for once; a game's old ref, ten minutes past New, for the
+  other hub's late guess. No names, no accounts, no history, no
   transcripts. The hub's
   outbox and inbox logs show that a `Say` went, with its length, never
   its text. A restart drops the lobby.
@@ -357,5 +388,9 @@ pairs only people who want people.
   reveal, in the console and `pyrtan chat` (§5).
 - **v0.34.2, built:** a tab that closed mid-game is told the answer when
   its page opens again (§5).
+- **v0.35, built:** the game across hubs: `Play` and `Guess` over a
+  follow or a chat link (§5).
+- **v0.35.1, built:** a late `Guess` reaches a player who has pressed
+  New (§5).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.

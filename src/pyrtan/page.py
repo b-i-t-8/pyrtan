@@ -191,6 +191,8 @@ TEMPLATE = r"""<!doctype html>
       <form class="row" id="connect-form">
         <input type="url" id="hub-url" placeholder="https://hub.example.net or http://192.168.1.20:8700" autocomplete="off">
         <input type="password" id="hub-token" placeholder="token, if the hub needs one" autocomplete="off">
+        <input type="text" id="hub-user" placeholder="or your user name" autocomplete="username" hidden>
+        <input type="password" id="hub-password" placeholder="and password" autocomplete="current-password" hidden>
         <button type="submit" id="connect-go">Connect</button>
         <button type="button" class="quiet" id="forget">Forget</button>
       </form>
@@ -895,6 +897,7 @@ async function detect() {
         $("#connect-lede").textContent = "This Pyrtan needs a token:";
         $("#connect-help").innerHTML = "Kept in this browser only. The token is the one the hub or service was started with (<code>--token</code> or <code>$PYRTAN_TOKEN</code>).";
         $("#hub-token").value = token;
+        signIn(a);
         if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
       }
       return a;
@@ -914,7 +917,7 @@ async function detect() {
   if (!base) return startLocal();
   try {
     const a = await json("api");
-    if (a && a.pyrtan) { isHub = a.pyrtan === "hub"; return a; }
+    if (a && a.pyrtan) { isHub = a.pyrtan === "hub"; signIn(a); return a; }
     problem(`${base} answered, but not as a Pyrtan.`, true);
   } catch (e) { problem(`${base}: ${e.message}. Is the hub up, and started with --cors ${location.origin}?`, true); }
   return null;
@@ -1027,8 +1030,8 @@ async function load() {
   $("#access-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   if (isHub && a.chat) chat.recover();
-  if (a.chat && a.chat_bots === false && token) {
-    try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
+  if (token && ((a.chat && a.chat_bots === false) || (a.login === "ldap" && !a.user))) {
+    try { const again = await json("api"); a.chat_bots = again.chat_bots; a.user = again.user; } catch (e) {}  // the first ask went without the token
   }
   if (a.chat && a.chat_bots === false) {
     // A public lobby, and no token here: people only, since a bot runs the hub's trees.
@@ -1037,7 +1040,7 @@ async function load() {
   }
   member.hub = a.federation || null;
   if (member.hub) member.start();
-  $("#where").textContent = local ? "running in this browser" : (base || location.origin) + (a.auth === "bearer" ? " · token" : "");
+  $("#where").textContent = local ? "running in this browser" : (base || location.origin) + (a.user ? ` · signed in as ${a.user.user}` : a.auth === "bearer" ? " · token" : "");
   $("#hub-version").textContent = a.version ? ` · ${a.pyrtan} v${a.version}` : "";
   try {
     const h = await json("health");
@@ -1050,6 +1053,7 @@ async function load() {
   }
   let c;
   try { c = await json("capabilities"); } catch (e) { problem(e.message + (a.auth === "bearer" ? " (is it the right one?)" : ""), true); return; }
+  if (c && c.status === "error") { problem(c.say || c.reason, true); return; }  // signed in, and not let ask: a 403 says what they may
   problem(local && !(c.trees || []).length ? "No catalog answered and none was kept in this browser, so it holds no trees yet. Join a hub above, or try again online." : "", true);
   renderCaps(c);
   showTab(tabFromHash());
@@ -1676,10 +1680,30 @@ $("#hubs").addEventListener("click", async (e) => {
   loadPeers();
 });
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
-$("#connect-form").addEventListener("submit", (e) => {
+// A Pyrtan started with --ldap takes a directory account too: the password goes to /login once,
+// and only the session token it answers with is kept, in place of a token.
+function signIn(a) {
+  const on = !!(a && a.login === "ldap");
+  $("#hub-user").hidden = !on; $("#hub-password").hidden = !on;
+  if (on) {
+    $("#hub-token").placeholder = "token, or sign in:";
+    if (!remote) $("#connect-lede").textContent = "This Pyrtan needs a token, or your directory account:";
+  }
+}
+$("#connect-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   agentsUI.putAway();
   token = $("#hub-token").value;
+  const user = $("#hub-user").value.trim(), password = $("#hub-password").value;
+  if (!$("#hub-user").hidden && user && password) {
+    if (remote) base = $("#hub-url").value.trim();
+    try {
+      const r = await fetch((base ? base.replace(/\/+$/, "") + "/" : "") + "login", {method: "POST", headers: {"Content-Type": "application/json", "Accept": "application/json"}, body: JSON.stringify({user, password})});
+      const out = await r.json();
+      if (!r.ok || !out.token) { problem(out.say || `Sign-in answered ${r.status}.`, true); return; }
+      token = out.token; $("#hub-token").value = token; $("#hub-password").value = "";
+    } catch (err) { problem(`Sign-in failed: ${err.message}`, true); return; }
+  }
   store.set(remote ? {url: $("#hub-url").value.trim(), token} : {token});
   load();
 });
