@@ -196,6 +196,7 @@ slots gives a table of them.
 | `pyrtan index DIR` | Builds a catalog `index.json` from a directory of trees, and `trees.json` beside it (the same trees as JSON, for the console in a browser); what a catalog's CI runs. |
 | `pyrtan console --out FILE` | Writes the console as one static HTML file, to host anywhere; there the browser is a hub of its own until it joins one. It carries the default trees, so it holds them with no network; `--trees DIR` carries others instead. |
 | `pyrtan id new` | Makes your identity: a root key and the signed document hubs will hold. `id device add pyr:…` delegates to a device key, `id revoke` takes it back, `id route add HOST` says where you can be reached, `id name alice@domain` signs a name claim for a domain to serve (`--into` a checkout for a name at pyrtan.com), `id check` checks an identifier or any of those documents, `id show` shows them. |
+| `pyrtan login --at URL --user NAME` | Signs in to a service or hub started with `--ldap`, with your directory account, and prints a session token to use as `--token` (or `$PYRTAN_TOKEN`) until it expires; `pyrtan logout` ends it. The password comes from a prompt, or `$PYRTAN_PASSWORD`. |
 | `pyrtan allow WHO --may ABILITIES --at HUB` | Grants an identity (`pyr:…`, or a name the hub resolves and pins) abilities on your hub: `ask`, `chat`, `run`, `operate`. `allowed` lists the grants; `disallow` takes them back. Every command that calls a hub takes `--sign` to sign as your identity instead of (or beside) `--token`. |
 | `pyrtan names init DIR --domain D` | Writes a names repository for a network: a README, `names/`, and for GitHub (or GitLab) the gate and Pages. `names gate` judges a change to names owned by their keys; `hub --names DIR` serves them. `id backup` / `restore` keep your key encrypted with a passphrase; `id release` gives a name up. |
 | `pyrtan id resolve NAME@DOMAIN` | What identity a name is, checked against the key's own signature and pinned the first time; a changed answer is refused until `--repin`. `id pins` lists the pins; `id wellknown DIR --domain D` builds `/.well-known/pyrtan/` for a domain to serve names. |
@@ -203,7 +204,8 @@ slots gives a table of them.
 `serve` and `hub` take `--token` (or `$PYRTAN_TOKEN`) to require
 `Authorization: Bearer` on everything but `/health` and the console, and
 `--cors ORIGIN` to let a browser at another origin call. `ask`, `gaps` and
-`unanswered` take `--token` too.
+`unanswered` take `--token` too. With a token, `--ldap URL` lets people in
+with their directory account as well (*LDAP users*, below).
 
 ## A swarm
 
@@ -538,7 +540,42 @@ pyrtan serve trees --hub http://hub:8700 --token … --gaps /var/lib/pyrtan/gaps
 A swarm shares one token: a service presents it when it registers, the hub
 presents it when it forwards, and a stranger can neither join nor ask.
 People need not share it: grant their identities what each may do
-(`--allow`, `pyrtan allow`; see *Identity* above).
+(`--allow`, `pyrtan allow`; see *Identity* above), or let them sign in
+with the account they already have.
+
+### LDAP users
+
+On top of the token, a service or hub takes a person's directory account
+(OpenLDAP, Active Directory, FreeIPA, anything that speaks LDAPv3), and
+what each person may do comes from the directory's groups, in the same
+four abilities a key is granted: `ask`, `chat`, `run`, `operate`.
+
+```
+export PYRTAN_TOKEN="$(openssl rand -hex 24)"
+pyrtan hub --host 0.0.0.0 --ldap ldaps://ldap.example.org \
+    --ldap-user-dn 'uid={user},ou=people,dc=example,dc=org' \
+    --ldap-group 'cn=pyrtan,ou=groups,dc=example,dc=org=ask,chat' \
+    --ldap-group 'cn=admins,ou=groups,dc=example,dc=org=operate'
+
+# Active Directory: search for the person as a service account, then bind as them
+export PYRTAN_LDAP_BIND_PASSWORD=…
+pyrtan hub --ldap ldaps://dc.corp.example --ldap-base 'dc=corp,dc=example' \
+    --ldap-filter '(sAMAccountName={user})' --ldap-bind-dn 'cn=pyrtan,ou=service,dc=corp,dc=example' \
+    --ldap-group 'cn=Pyrtan Users,ou=groups,dc=corp,dc=example=ask'
+```
+
+A person sends `Authorization: Basic` with their name and password, or
+signs in once (`POST /login`, `pyrtan login`, or the console's connect
+box, which shows a user name and password beside the token) and sends the
+session token it answers with as a bearer. A person in no listed group may
+what `--ldap-may` says: `ask` when no group is listed, nothing otherwise.
+A group's members are those its entry names in `member`, `uniqueMember` or
+`memberUid`; nested groups are not followed. An empty password is refused
+before it reaches the directory (most take it as an anonymous bind), five
+wrong passwords for a name rest it for a minute, and the token is still
+the swarm's: services register and hubs forward with it, never with a
+person's account. Use `ldaps://` or `--ldap-starttls`; every flag has a
+`$PYRTAN_LDAP…` variable. See `src/pyrtan/ldap.py`.
 `--egress public` makes a service refuse any host that resolves to a
 loopback, private, link-local or metadata address, on the first URL and on
 every redirect, so a tree whose host comes from its input cannot be
@@ -669,7 +706,10 @@ seconds without news.
 **Strangers across hubs.** A seat that finds nobody waiting asks the hubs
 its hub follows with a signed `Meet`; the lines travel as `Say` and the
 end as `Part`, typing as `Typing`, hub to hub, signed with the pair's
-secret; the outbox logs a `Say` without its text and leaves `Typing` out. A hub answers a `Meet` only from a
+secret; the outbox logs a `Say` without its text and leaves `Typing` out. Players of *person or
+agent?* meet across hubs the same way, with `Play` in place of `Meet`
+and `Guess` carrying a guess to the other hub; the reveal says which hub
+the stranger was on. A hub answers a `Meet` or a `Play` only from a
 hub that follows it, and never passes one on. Following is trust (it
 routes sentences to the other hub's trees), so to reach more strangers
 without it, start an open lobby with `--chat-reach N`: the hub keeps up to
@@ -884,7 +924,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.36.0. The core, the service, the hub, the command, the console (which
+0.37.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -907,7 +947,7 @@ questions with defaults by rules), a tree's own tests and the diff an edit
 makes to them (`pyrtan test`, `pyrtan diff`), memory across runs (a
 `memory` source with its own `keys` list), and the chat lobby (strangers on the hub and the
 hubs it follows, bots made of trees, agents in the seats, the game "person or agent?", a typing indicator, lobbies open to the public, and chat links between open lobbies) are built and tested; a swarm can require a
-token, keep its gaps and unanswered sentences, refuse private addresses
+token, let people in with their LDAP accounts on top of it, keep its gaps and unanswered sentences, refuse private addresses
 and its own box, and follow other swarms. Identities (keys, device notes,
 name claims, names at pyrtan.com and pins, grants on hubs, the console's
 key, `pyrtan id` and `pyrtan allow`) are built, and all of it works from

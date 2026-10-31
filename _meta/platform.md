@@ -54,7 +54,20 @@ behind the token, so a stranger cannot join a swarm.
 for any). Off by default. The console at pyrtan.com needs
 `--cors https://pyrtan.com` on the hub it talks to.
 
-Neither does TLS. A hub that leaves the LAN sits behind a proxy that does.
+**LDAP users (v0.35).** On top of a token, `--ldap URL` lets people in
+with their directory account (`src/pyrtan/ldap.py`): `Authorization:
+Basic`, or a session token from `POST /login` sent as a bearer. The
+directory's groups give the same four abilities a key is granted
+(`--ldap-group DN=ABILITIES`), checked in the server before the route by
+the rule `grants.ability_for` already applies to keys; the server tells
+the route what the person may in headers it sets and never takes from
+the caller. LDAP never replaces the token: a swarm's own requests carry
+the token, and `--ldap` without one is refused. The client is LDAPv3 as
+far as a simple bind and a search need it, in the standard library, so
+the runtime keeps no dependencies. A tenant's hosted hub can point it at
+the tenant's own directory; nothing about tenants is in the code.
+
+None of these does TLS. A hub that leaves the LAN sits behind a proxy that does.
 mTLS between services is still open (design.md §7); a shared token is
 enough for the first swarm that crosses a network boundary.
 

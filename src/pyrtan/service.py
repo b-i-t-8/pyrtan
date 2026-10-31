@@ -45,6 +45,13 @@ origins (or ``*``) a browser may call from; the console at pyrtan.com is
 one such origin. The server does not do TLS; put it behind a proxy that
 does when it leaves the LAN.
 
+**LDAP users.** On top of a token, ``--ldap URL`` lets people in with their
+directory account (:mod:`pyrtan.ldap`): ``Authorization: Basic`` on any
+request, or ``POST /login`` for a session token sent as a bearer. What a
+person may do (``ask``, ``chat``, ``run``, ``operate``) comes from the
+directory's groups and is checked here, before the route, by the same
+path-to-ability rule a key's grants are (:func:`pyrtan.grants.ability_for`).
+
 The server is the standard library's threading HTTP server.
 """
 
@@ -74,6 +81,7 @@ from .trace import Trace
 from .tree import Tree
 from .watch import Watcher
 from .adapters import LocalAdapters
+from .ldap import USER_HEADER, USER_MAY_HEADER, LdapError, LdapUsers
 from .transport import Transport, UrllibTransport, _EgressRedirectHandler, check_egress
 
 MAX_BODY = 1 << 20
@@ -354,9 +362,16 @@ def peer_address(client: str, headers: Any) -> str:
     return forwarded or client
 
 
-def _with_peer(headers: Any, client: str) -> dict[str, str]:
-    out = {k: v for k, v in headers.items() if k.lower() != PEER_HEADER.lower()}
+# Headers the server sets for the route, and never takes from the caller.
+_SERVER_HEADERS = frozenset(h.lower() for h in (PEER_HEADER, USER_HEADER, USER_MAY_HEADER))
+
+
+def _with_peer(headers: Any, client: str, user: Any = None) -> dict[str, str]:
+    out = {k: v for k, v in headers.items() if k.lower() not in _SERVER_HEADERS}
     out[PEER_HEADER] = peer_address(client, headers)
+    if user is not None:
+        out[USER_HEADER] = user.name
+        out[USER_MAY_HEADER] = ",".join(sorted(user.may))
     return out
 
 
@@ -369,8 +384,11 @@ def bearer_ok(header: str | None, token: str) -> bool:
     return scheme.lower() == "bearer" and hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
 
 
-def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None, keyed: bool = False):
+def make_handler(route: Route, quiet: bool = False, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None, keyed: bool = False, users: LdapUsers | None = None):
+    from .grants import ability_for
     token = token or None
+    if users is not None and token is None:
+        raise ValueError("LDAP users are on top of a token: give --token too")
     origins = [o.rstrip("/") for o in (cors or []) if o]
     any_origin = "*" in origins
 
@@ -407,21 +425,51 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
 
         # -------------------------------------------------------- auth
 
-        def _authorised(self, path: str) -> bool:
-            """True if the request may proceed; otherwise a 401 has been sent."""
-            if token is None or public_path(path) or bearer_ok(self.headers.get("Authorization"), token) or (public is not None and public(path)):
+        def _authorised(self, method: str, path: str) -> bool:
+            """True if the request may proceed; otherwise a 401 (or 403, 503) has been sent.
+            A directory account that holds is kept in ``self.user`` for the route."""
+            self.user = None
+            header = self.headers.get("Authorization")
+            open_path = public_path(path) or (public is not None and public(path))
+            if token is None or bearer_ok(header, token):
+                return True
+            if users is not None and users.presented(header):
+                try:
+                    user = users.check(header)
+                except LdapError as e:
+                    if open_path:
+                        return True
+                    self._send(503, {"status": "error", "reason": "directory-down", "say": f"The directory could not be asked: {e}."})
+                    return False
+                if user is not None:
+                    needed = ability_for(method, path)
+                    if needed is None or needed in user.may or open_path:
+                        self.user = user
+                        return True
+                    may = ", ".join(sorted(user.may))
+                    self._send(403, {"status": "error", "reason": "not-granted", "say": f"{user.name} may not {needed} here: they may {may}."})
+                    return False
+            if open_path:
                 return True
             if federated and signed_path(path) and self.headers.get("X-Pyrtan-Signature"):
                 return True  # the route verifies the signature
             if keyed and self.headers.get("X-Pyrtan-Key-Signature"):
                 return True  # the route verifies the key and asks its grants
+            if users is not None:
+                self._send(401, {"status": "error", "reason": "unauthorised", "say": "This Pyrtan needs a token or a sign-in: send Authorization: Bearer <token>, or Basic with your directory account, or POST /login."}, extra={"WWW-Authenticate": 'Bearer realm="pyrtan"'})  # never a Basic challenge: a browser would put its own password box over the console
+                return False
             self._send(401, {"status": "error", "reason": "unauthorised", "say": "This Pyrtan needs a token: send Authorization: Bearer <token>."}, extra={"WWW-Authenticate": 'Bearer realm="pyrtan"'})
             return False
 
         def _public_view(self, path: str, payload: Any) -> Any:
-            """Trim /health for a caller with no token, when one is required."""
-            if token is not None and path == "/health" and isinstance(payload, dict) and not bearer_ok(self.headers.get("Authorization"), token):
+            """Trim /health for a caller with no token, when one is required; say on /api
+            that people may sign in."""
+            if token is not None and path == "/health" and isinstance(payload, dict) and not bearer_ok(self.headers.get("Authorization"), token) and not (self.user is not None and "operate" in self.user.may):
                 return {k: v for k, v in payload.items() if k in PUBLIC_HEALTH_KEYS}
+            if users is not None and path == "/api" and isinstance(payload, dict):
+                payload = {**payload, "login": "ldap", "endpoints": [*payload.get("endpoints", []), "/login", "/logout"]}
+                if self.user is not None:
+                    payload["user"] = self.user.to_dict()
             return payload
 
         # -------------------------------------------------------- i/o
@@ -454,14 +502,16 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
 
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
-            if not self._authorised(path):
+            if not self._authorised("GET", path):
                 return
-            status, payload = route("GET", path, None, _with_peer(self.headers, self.client_address[0]))
+            status, payload = route("GET", path, None, _with_peer(self.headers, self.client_address[0], self.user))
             self._send(status, self._public_view(path, payload))
 
         def do_POST(self) -> None:
             path = self.path.split("?", 1)[0]
-            if not self._authorised(path):
+            self.user = None
+            signing_in = users is not None and path in ("/login", "/logout")
+            if not signing_in and not self._authorised("POST", path):
                 return
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_BODY:
@@ -487,7 +537,11 @@ def make_handler(route: Route, quiet: bool = False, token: str | None = None, co
                 # "\ud800" is valid JSON and no text: signatures and logs are over UTF-8.
                 self._send(400, {"status": "error", "reason": "bad-json", "say": "The body holds a lone surrogate (\\ud800-\\udfff), which is not text."})
                 return
-            status, payload = route("POST", path, body, _with_peer(self.headers, self.client_address[0]))
+            if signing_in:
+                assert users is not None
+                self._send(*(users.login(body) if path == "/login" else users.logout(self.headers.get("Authorization"))))
+                return
+            status, payload = route("POST", path, body, _with_peer(self.headers, self.client_address[0], self.user))
             self._send(status, payload)
 
     return Handler
@@ -498,10 +552,11 @@ class Server:
 
     ``token`` requires ``Authorization: Bearer`` on everything but the public
     paths, and any path ``public`` says yes to (a hub's open lobby); ``cors``
-    lists the browser origins allowed to call (``*`` for any)."""
+    lists the browser origins allowed to call (``*`` for any); ``users`` lets
+    people in with a directory account, on top of the token."""
 
-    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None, keyed: bool = False) -> None:
-        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated, public, keyed))
+    def __init__(self, route: Route, host: str = "127.0.0.1", port: int = 0, quiet: bool = False, *, token: str | None = None, cors: list[str] | None = None, federated: bool = False, public: Callable[[str], bool] | None = None, keyed: bool = False, users: LdapUsers | None = None) -> None:
+        self.httpd = ThreadingHTTPServer((host, port), make_handler(route, quiet, token, cors, federated, public, keyed, users))
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 
@@ -573,11 +628,12 @@ def serve(
     watch: bool = False,
     suggestions: str | Path | None = None,
     memory: str | Path | None = None,
+    users: LdapUsers | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
     set_egress(egress)  # the service's own requests (its hub) under the same policy as its trees
     service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions, memory=memory)
-    server = Server(service.route, host, port, quiet, token=token, cors=cors).start()
+    server = Server(service.route, host, port, quiet, token=token, cors=cors, users=users).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a
     # service that is itself waiting for the hub's answer.
