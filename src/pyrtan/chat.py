@@ -76,7 +76,8 @@ players' consoles; outside the game nothing is unlabelled. A player who
 finds nobody playing here asks the hubs this one meets with ``Play``
 (v0.35), never ``Meet``: a hub from before the game refuses it rather
 than pair a player with someone who is not playing. A guess travels to
-the partner's hub as ``Guess``.
+the partner's hub as ``Guess``, and finds the game there even after its
+player has pressed New, for ten minutes.
 
 **Public lobbies.** The lobby follows the hub's token: a bot runs trees,
 and the token is what guards them. A hub started ``--chat-public`` keeps
@@ -320,6 +321,7 @@ class Lobby:
         self.typing_ttl = TYPING_TTL
         self._parts: list[tuple["Remote", str, str]] = []   # Parts to send once the lock is let go: (remote, to, from)
         self.kept: dict[str, tuple[float, dict[str, Any]]] = {}   # seat id -> (until when, its last game's reveal): a closed tab asks for it once
+        self.past: dict[str, tuple[float, Seat, Round]] = {}       # a ref given up on New -> (until when, the seat, its game with a player on another hub): for a late Guess, nothing else
 
     # ------------------------------------------------------------ views
 
@@ -640,6 +642,8 @@ class Lobby:
             self._drop(seat)
         for sid in [k for k, (until, _) in self.kept.items() if until < now]:
             del self.kept[sid]
+        for ref in [k for k, (until, _, _) in self.past.items() if until < now]:
+            del self.past[ref]
 
     def _drop(self, seat: Seat) -> None:
         self.seats.pop(seat.id, None)
@@ -797,6 +801,13 @@ class Lobby:
             return 404, _gone()
         with self.cond:
             self._settle(seat)
+            r = seat.round
+            if r is not None and isinstance(r.partner, Far):
+                # A player on another hub may guess after this one has moved on: its Guess
+                # still finds this game, for a while, by the ref it knew. Nothing else does.
+                if len(self.past) >= SEATS_MAX:
+                    del self.past[min(self.past, key=lambda k: self.past[k][0])]
+                self.past[seat.ref] = (time.time() + KEPT_FOR, seat, r)
             seat.round = None
             self.refs.pop(seat.ref, None)
             seat.ref = secrets.token_urlsafe(12)   # the last stranger cannot reach the next conversation
@@ -1125,18 +1136,23 @@ class Lobby:
 
     def _guessed(self, remote: "Remote", to: Any, frm: Any, guess: Any) -> tuple[int, dict[str, Any]]:
         """A player on another hub guessed what the seat here is: kept for the
-        seat's reveal, or told now when it has had it."""
+        seat's reveal, or told now when it has had it. The seat may have
+        pressed New since, and its ref changed: a late guess finds the game
+        by the ref it was played under, for ten minutes."""
         if guess not in GUESSES:
             return 400, {"status": "error", "reason": "bad-activity", "say": "A Guess is person or agent."}
         with self.cond:
+            self._sweep()
             seat = self.refs.get(to) if isinstance(to, str) else None
             r = seat.round if seat is not None else None
+            if r is None and isinstance(to, str) and to in self.past:
+                _, seat, r = self.past[to]
             p = r.partner if r is not None else None
-            if r is None or not isinstance(p, Far) or p.remote.url != remote.url or p.ref != frm:
+            if seat is None or r is None or not isinstance(p, Far) or p.remote.url != remote.url or p.ref != frm:
                 return 404, {"status": "error", "reason": "no-such-seat", "say": "No game here with that player."}
             if r.their is None:
                 r.their = guess
-                if r.revealed:
+                if r.revealed and seat.id in self.seats:
                     self._add(seat, "system", f"Your last stranger guessed you were {_a(guess)}.")
             return 200, {"status": "ok"}
 

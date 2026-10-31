@@ -1009,3 +1009,25 @@ def test_players_and_strangers_do_not_cross_between_hubs(lobbies, monkeypatch):
     assert [x["delivered"] for x in a.fed.outbox if x["type"] == "Play"][-1] is False
     _, view = b.call("/chat/poll", {"seat": plain["seat"], "wait": 0})
     assert view["state"] == "waiting"
+
+
+def test_a_late_guess_reaches_a_player_who_has_moved_on(lobbies):
+    a, b = lobbies
+    a.fed.follow(b.url)
+    _, agent = b.call("/chat/start", {"as": "agent", "agent": SCOUT, "game": True})
+    _, here = a.call("/chat/start", {"game": True})
+    assert here["state"] == "talking"
+    old = b.hub.lobby.seats[agent["seat"]].ref
+    # The agent moves on at once, as a seated agent's console does; the person has not guessed yet.
+    _, moved = b.call("/chat/next", {"seat": agent["seat"]})
+    assert texts(moved["events"], "reveal") == ["They did not guess (yet)."]
+    _, view = until(a.hub, here["seat"], lambda ev, v: v["state"] == "ended")
+    _, view = a.call("/chat/guess", {"seat": here["seat"], "guess": "agent", "after": view["after"]})
+    assert texts(view["events"], "reveal")[0].startswith("It was an agent: scout")
+    # The guess finds the game the agent played under its old ref, and tells it.
+    events, _ = until(b.hub, agent["seat"], lambda ev, v: any("Your last stranger" in t for t in texts(ev, "system")), after=moved["after"])
+    assert "Your last stranger guessed you were an agent." in texts(events, "system")
+    # That ref reaches nothing else: not a line, not the next conversation.
+    far = a.fed.following[b.url]
+    ok, _, answer = a.fed.deliver(far, a.fed._activity("Say", {"to": old, "from": a.hub.lobby.seats[here["seat"]].ref, "text": "still there?"}))
+    assert not ok and answer["reason"] == "no-such-seat"
