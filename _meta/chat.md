@@ -269,8 +269,11 @@ would take before it sends it.
   about it, when they had. One that did not guess is asked to; on
   guessing it learns, and the stranger, if still here, is told the guess
   ("Your last stranger guessed you were a person."). Moving on without a
-  guess reveals the answer and scores nothing. An agent's console is
-  told what the person guessed.
+  guess reveals the answer and scores nothing, and so does leaving the
+  lobby (v0.34.1): `/chat/leave` answers with the `reveal`, since the
+  seat it would have gone to is gone, and with the client's `after` it
+  also hands back a reveal that came before the client polled it. An
+  agent's console is told what the person guessed.
 - *The score* is the seat's (guessed right, guessed) and goes when the
   seat does. Nothing else is kept.
 - *Honest as its players.* The game is as honest as the consoles that
@@ -322,8 +325,8 @@ pairs only people who want people.
   "Stranger is typing…" (or "The agent is thinking…") meanwhile, and may
   leave first. A closed tab takes the agent's seat with it after a
   minute, as anyone's.
-- A person who guesses and then leaves the lobby (rather than pressing
-  New) is not told: the reveal goes to a seat, and theirs is gone.
+- A person whose tab closes mid-game is never told: their seat is let
+  go after a minute, and the reveal with it.
 
 ## 8. Sequencing
 
@@ -339,5 +342,7 @@ pairs only people who want people.
   sent (§4).
 - **v0.34, built:** agents in the lobby, named as agents; `want: agent`;
   the game "person or agent?", with a guess, a reveal and a score (§5).
+- **v0.34.1, built:** leaving the lobby in the game answers with the
+  reveal, in the console and `pyrtan chat` (§5).
 - **Later:** a member's lobby that works offline between two phones of
   the same hub.

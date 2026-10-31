@@ -492,6 +492,7 @@ TEMPLATE = r"""<!doctype html>
     <p class="mute" style="font-size:14px;margin-top:0">You are paired at random: with someone else on this hub or on a hub it follows, with an agent someone seated here, or with a bot. A bot is a set of trees on the network, not a person and not a model; each of its lines carries the path that produced it, and what it cannot answer it says so, with the tree that would. An agent is a model, named as one; its words are its own. Or play <em>person or agent?</em>: nobody is labelled, and you guess. Nobody has a name and nothing is kept: the conversation is gone when either of you leaves. <span id="chat-count"></span></p>
     <div class="notice" id="chat-guest" hidden>This hub's lobby is open to anyone, and you are here without its token: you meet people and agents, not bots. A bot runs the hub's trees, and the token is what guards them.</div>
     <div class="card" id="chat-off">
+      <div class="reveal" id="chat-last" style="margin:0 0 10px;font-weight:600" hidden></div>
       <form class="row" id="chat-start" style="margin:0">
         <input type="text" id="chat-interests" placeholder="interests, optional: weather, news, music" autocomplete="off">
         <select id="chat-want" aria-label="who to meet"><option value="anyone">a stranger, or a bot</option><option value="people">people only</option><option value="agent">an agent</option><option value="bot">a bot</option></select>
@@ -1887,7 +1888,7 @@ const chat = {
     if (asAgent) Object.assign(body, {as: "agent", agent: {name: agent.name, model: String(agent.engine.model || "")}});
     let r; try { r = await this.post("chat/start", body); } catch (e) { problem(e.message, true); return; }
     if (!r.seat) { problem(r.say || "The lobby did not take a seat.", true); return; }
-    problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = "";
+    problem(""); this.seat = r.seat; this.after = 0; $("#chat-log").innerHTML = ""; $("#chat-last").hidden = true;
     this.as = asAgent ? "agent" : "me"; this.persona = $("#chat-persona").value.trim(); this.state = null; this.lines = []; this.convo++;
     $("#chat-off").hidden = true; $("#chat-on").hidden = false;
     this.take(r); this.loop(++this.gen); if (!asAgent) $("#chat-text").focus();
@@ -2003,11 +2004,17 @@ const chat = {
     try { this.take(await this.post("chat/next", {seat: this.seat, after: this.after, typing_indicator: $("#chat-typing").checked, game: $("#chat-game").checked})); } catch (e) { this.line("sys", e.message); }
   },
   leave(keepalive) {
-    if (!this.seat) return;
+    if (!this.seat) return Promise.resolve(null);
     const seat = this.seat; this.seat = null; this.gen++; this.convo++;
-    this.post("chat/leave", {seat}, keepalive ? {keepalive: true} : {}).catch(() => {});
+    return this.post("chat/leave", {seat, after: this.after}, keepalive ? {keepalive: true} : {}).catch(() => null);
   },
-  close() { this.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false; this.count(); },
+  // Leaving the lobby: in the game, the hub answers with what the last stranger was, shown above Start.
+  async close() {
+    const left = this.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false;
+    const r = await left, reveal = r && r.reveal;
+    $("#chat-last").textContent = reveal ? reveal.text : ""; $("#chat-last").hidden = !reveal;
+    this.count();
+  },
 };
 $("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
 $("#chat-say").addEventListener("submit", (e) => { e.preventDefault(); chat.say(); });
