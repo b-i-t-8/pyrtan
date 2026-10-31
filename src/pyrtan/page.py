@@ -1026,6 +1026,7 @@ async function load() {
   $("#identity-tab").hidden = false;  // an identity needs no hub; signing does, when there is one
   $("#access-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
+  if (isHub && a.chat) chat.recover();
   if (a.chat && a.chat_bots === false && token) {
     try { a.chat_bots = (await json("api")).chat_bots; } catch (e) {}  // the first ask went without the token
   }
@@ -1907,6 +1908,7 @@ const chat = {
     for (const b of document.querySelectorAll("#chat-guess button")) { b.disabled = !r.guessing || !!r.guess; b.hidden = !r.guessing; }
     $("#chat-score").textContent = r.guess ? `You guessed ${r.guess === "agent" ? "an agent" : "a person"}.` : r.score && r.score.played ? `${r.score.right} of ${r.score.played} right so far.` : "";
     this.resetNext();
+    this.remember(this.game && this.as === "me" && !!r.guessing);
     if (mine && talking) { const c = this.convo; setTimeout(() => { if (c === this.convo && !this.lines.length) this.agentTurn(c); }, 2500 + Math.random() * 4000); }
     if (mine && ended) { const seat = this.seat; setTimeout(() => { if (seat === this.seat && this.state === "ended" && agentsUI.agent) this.next(true); }, 2500); }
   },
@@ -1917,7 +1919,12 @@ const chat = {
       let r; try { r = await this.post("chat/poll", ask); } catch (e) { await new Promise(res => setTimeout(res, 2000)); continue; }
       if (gen !== this.gen) return;
       if (r.state === "left") return;
-      if (r.reason === "no-seat") { this.line("sys", "This seat is gone (nobody polled it for a minute). Start again."); this.seat = null; this.take({state: "ended"}); return; }
+      if (r.reason === "no-seat") {
+        this.line("sys", "This seat is gone (nobody polled it for a minute). Start again.");
+        const gone = await this.post("chat/leave", {seat: this.seat}).catch(() => null);  // in the game, its answer was kept for it
+        if (gone && gone.reveal) this.line("reveal", gone.reveal.text);
+        this.seat = null; this.take({state: "ended"}); return;
+      }
       this.take(r);
     }
   },
@@ -2011,9 +2018,29 @@ const chat = {
   // Leaving the lobby: in the game, the hub answers with what the last stranger was, shown above Start.
   async close() {
     const left = this.leave(); $("#chat-on").hidden = true; $("#chat-off").hidden = false;
-    const r = await left, reveal = r && r.reveal;
-    $("#chat-last").textContent = reveal ? reveal.text : ""; $("#chat-last").hidden = !reveal;
+    const r = await left;
+    if (r) this.remember(false);
+    this.showLast(r && r.reveal);
     this.count();
+  },
+  showLast(reveal, prefix) { $("#chat-last").textContent = reveal ? (prefix || "") + reveal.text : ""; $("#chat-last").hidden = !reveal; },
+  // While a game's answer is owed, this browser remembers the seat, so that a
+  // tab closed mid-game asks for it when the page opens again (the hub keeps
+  // it ten minutes, and hands it back once).
+  hubKey() { return base || location.origin; },
+  remember(on) {
+    try {
+      if (on && this.seat) localStorage.setItem("pyrtan.chat.owed", JSON.stringify({hub: this.hubKey(), seat: this.seat}));
+      else localStorage.removeItem("pyrtan.chat.owed");
+    } catch (e) {}
+  },
+  async recover() {
+    let owed = null;
+    try { owed = JSON.parse(localStorage.getItem("pyrtan.chat.owed") || "null"); } catch (e) {}
+    if (!owed || owed.hub !== this.hubKey() || this.seat) return;
+    let r; try { r = await this.post("chat/leave", {seat: owed.seat}); } catch (e) { return; }  // a hub that would not say keeps it owed
+    try { localStorage.removeItem("pyrtan.chat.owed"); } catch (e) {}
+    if (r && r.reveal) this.showLast(r.reveal, "Your last game, before the tab closed: ");
   },
 };
 $("#chat-start").addEventListener("submit", (e) => { e.preventDefault(); chat.start(); });
