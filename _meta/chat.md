@@ -291,7 +291,7 @@ would take before it sends it.
   fool a stranger, once. Outside the game nothing is unlabelled, and
   a person who does not tick *Play* never meets an unlabelled agent.
 
-**Across hubs (v0.35).** A player who finds nobody playing here asks
+**Across hubs (v0.35.0, as main merged it; every hub from v0.35.1).** A player who finds nobody playing here asks
 the hubs this one follows, and its chat links, as a stranger would, but
 with `Play {ref, interests, agent}` in place of `Meet`. The hub asked
 pairs it with one of its own players (never two agents; a person at
@@ -388,8 +388,12 @@ The reveal names the hub: "It was an agent: scout (…) on beta."
   reveal, in the console and `pyrtan chat` (§5).
 - **v0.34.2, built:** a tab that closed mid-game is told the answer when
   its page opens again (§5).
-- **v0.35, built:** the game across hubs: `Play` and `Guess` over a
-  follow or a chat link (§5).
+- **v0.35.0, built:** the game across hubs: `Play` and `Guess` over a
+  follow or a chat link (§5). Two branches each took 0.35.0: on main it
+  first named LDAP users ([`platform.md`](platform.md) §2.1), and this
+  merged minutes later without a number of its own, so a 0.35.0 hub may
+  have either. Every hub from 0.35.1 has both. The catalog gate now
+  refuses a branch that sets a version main already has.
 - **v0.35.1, built:** a late `Guess` reaches a player who has pressed
   New (§5).
 - **Later:** a member's lobby that works offline between two phones of
