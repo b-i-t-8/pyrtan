@@ -1,0 +1,31 @@
+{
+  "shell df -P /data": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/data"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "Filesystem     1024-blocks     Used Available Capacity Mounted on",
+      "/dev/sdb1        400000000 384000000 16000000      96% /data"
+    ],
+    "elapsed_ms": 4,
+    "body": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n"
+  },
+  "memory add disk-alert/data": {
+    "key": "disk-alert/data",
+    "exists": true,
+    "value": 2,
+    "json": 2,
+    "body": "2",
+    "written": "2026-10-31T12:00:00Z",
+    "expires": "2026-10-31T13:00:00Z",
+    "existed": true,
+    "previous": 1
+  }
+}

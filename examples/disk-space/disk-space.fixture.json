@@ -1,0 +1,70 @@
+{
+  "shell df -P /": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1        100000000 71000000  29000000      71% /\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "Filesystem     1024-blocks     Used Available Capacity Mounted on",
+      "/dev/sda1        100000000 71000000  29000000      71% /"
+    ],
+    "elapsed_ms": 4,
+    "body": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sda1        100000000 71000000  29000000      71% /\n"
+  },
+  "shell df -P /data": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/data"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "Filesystem     1024-blocks     Used Available Capacity Mounted on",
+      "/dev/sdb1        400000000 384000000 16000000      96% /data"
+    ],
+    "elapsed_ms": 4,
+    "body": "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/sdb1        400000000 384000000 16000000      96% /data\n"
+  },
+  "shell df -P /nowhere": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/nowhere"
+    ],
+    "status": 1,
+    "ok": false,
+    "stdout": "",
+    "stderr": "df: /nowhere: No such file or directory\n",
+    "json": null,
+    "lines": [],
+    "elapsed_ms": 3,
+    "body": ""
+  },
+  "shell df -P /odd": {
+    "command": "df",
+    "args": [
+      "-P",
+      "/odd"
+    ],
+    "status": 0,
+    "ok": true,
+    "stdout": "df: warning: cannot read table of mounted file systems\n",
+    "stderr": "",
+    "json": null,
+    "lines": [
+      "df: warning: cannot read table of mounted file systems"
+    ],
+    "elapsed_ms": 4,
+    "body": "df: warning: cannot read table of mounted file systems\n"
+  }
+}

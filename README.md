@@ -139,7 +139,7 @@ commands = ["df"]
 kind = "observe"
 shell = { command = "df", args = ["-P", "{{ inputs.mount }}"] }     # one program, arguments as a list, no shell in between
 into = "df"                                                          # status (exit code), ok, stdout, stderr, body, json, lines
-extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
+extract = [{ into = "used", pattern = "{percent:int}% {mounted:word}" }]   # the "71% /" line, as numbers and words
 ```
 
 | Source | Allow-list | Example |
@@ -149,7 +149,7 @@ extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
 | `serial = { device, baud, write, read_until }` | `devices` | [`modem-check`](examples/modem-check/modem-check.toml): does the modem answer AT |
 | `queue = { url, topic }` or `{ …, publish }` | `hosts`, `topics` | [`room-temperature`](examples/room-temperature/room-temperature.toml): a sensor's last reading over MQTT |
 | `browser = { url, wait_for, actions }` | `hosts` | [`rendered-headline`](examples/rendered-headline/rendered-headline.toml): the heading of a page that needs a script to render |
-| `memory = { key }` or `{ key, write / add / delete, ttl }` | `keys` | what a tree keeps across runs: the last reading, a count of checks in a row, whether it already said so |
+| `memory = { key }` or `{ key, write / add / delete, ttl }` | `keys` | [`disk-alert`](examples/disk-alert/disk-alert.toml): a watch that counts nearly full readings in a row, and speaks at the second |
 
 The trace reads the same whichever source a node used (`shell df -P / ->
 exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
@@ -246,8 +246,8 @@ NuGet), DNS, books, recipes and cocktails, food barcodes, earthquakes,
 NASA's natural events, the ISS and who is in space, launches, space
 news, NASA's picture of the day, Formula 1, holidays, the Wayback
 Machine, Pokémon, your IP and where it is, quotes, jokes, advice and cat
-facts. The six that need a hub reach a box or any site at all:
-`disk-space`, `log-errors`, `modem-check`, `room-temperature`,
+facts. The seven that need a hub reach a box or any site at all:
+`disk-space`, `disk-alert`, `log-errors`, `modem-check`, `room-temperature`,
 `rendered-headline` and `site-status`. Trees that need a box (files, programs, serial
 lines, brokers, a browser to drive), a site that does not let a page
 read it, or the operator's credentials (`--env`, as the Postfinite trees
