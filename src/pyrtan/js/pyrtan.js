@@ -127,6 +127,77 @@
   const pyQuote = (s) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
   const asText = (v) => (Array.isArray(v) || isObj(v) ? pyJson(v) : pyStr(v));  // a value as it reads inside a sentence
   const pyStr = (v) => (typeof v === "string" ? v : isBool(v) ? (v ? "True" : "False") : v === null || v === undefined ? "None" : Array.isArray(v) || isObj(v) ? pyrepr(v) : String(v));
+  // The number filters agree with template.py digit for digit: rounding works
+  // on a float's shortest decimal form (half away from zero), sums add left
+  // to right, and a whole result is an int.
+  const MAX_PLACES = 12;
+  const numberOf = (v, name) => {
+    if (typeof v === "string" && /^\s*-?\d+(?:\.\d+)?\s*$/.test(v)) return Number(v.trim());
+    if (!isNum(v) || !Number.isFinite(v)) throw new TemplateError(`${name}: ${pyrepr(asText(v))} is not a number`);
+    return v;
+  };
+  const whole = (x) => (x === 0 ? 0 : x);  // no -0; a whole float is already an int here
+  function roundText(x, places) {
+    if (Number.isInteger(x) && Math.abs(x) < 2 ** 53) return String(x === 0 ? 0 : x);
+    const m = /^(-?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/.exec(String(x));
+    if (!m) throw new TemplateError(`${pyrepr(x)} is not a number`);
+    const sign = m[1], int = m[2], frac = m[3] || "";
+    let digits = int + frac, point = int.length + parseInt(m[4] || "0", 10);
+    if (point < 0) { digits = "0".repeat(-point) + digits; point = 0; }
+    if (digits.length < point) digits = digits.padEnd(point, "0");
+    const keep = point + places;
+    let kept = keep < digits.length ? (BigInt(digits.slice(0, keep) || "0") + (digits[keep] >= "5" ? 1n : 0n)).toString() : digits.padEnd(keep, "0");
+    kept = kept.padStart(places + 1, "0");
+    const head = kept.slice(0, kept.length - places).replace(/^0+/, "") || "0", tail = kept.slice(kept.length - places).replace(/0+$/, "");
+    const text = head + (tail ? "." + tail : "");
+    return text === "0" ? text : sign + text;
+  }
+  const BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  function bytesText(v) {
+    let n = numberOf(v, "bytes"), i = 0;
+    while (Math.abs(n) >= 1024 && i < BYTE_UNITS.length - 1) { n = n / 1024; i++; }
+    let text = roundText(n, i === 0 ? 0 : 1);
+    if (text.replace(/^-/, "") === "1024" && i < BYTE_UNITS.length - 1) { text = text.startsWith("-") ? "-1" : "1"; i++; }
+    return `${text} ${BYTE_UNITS[i]}`;
+  }
+  const CONVERSIONS = {
+    c_to_f: (x) => x * 9 / 5 + 32,
+    f_to_c: (x) => (x - 32) * 5 / 9,
+    km_to_mi: (x) => x / 1.609344,
+    mi_to_km: (x) => x * 1.609344,
+    kg_to_lb: (x) => x / 0.45359237,
+    lb_to_kg: (x) => x * 0.45359237,
+    m_to_ft: (x) => x / 0.3048,
+    ft_to_m: (x) => x * 0.3048,
+  };
+  const listOf = (v, name) => { if (!Array.isArray(v)) throw new TemplateError(`${name} needs a list, not ${pyrepr(asText(v))}`); return v.slice(); };
+  function sumOf(v) { let total = 0; for (const x of listOf(v, "sum")) total = total + numberOf(x, "sum"); return whole(total); }
+  function extreme(v, name) {
+    const ns = listOf(v, name).map((x) => numberOf(x, name));
+    if (!ns.length) return MISSING;
+    let best = ns[0];
+    for (const n of ns.slice(1)) if (name === "min" ? n < best : n > best) best = n;
+    return whole(best);
+  }
+  const codepoints = (a, b) => { const x = Array.from(a, (c) => c.codePointAt(0)), y = Array.from(b, (c) => c.codePointAt(0)); for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i]; return x.length - y.length; };
+  function sortedOf(v, key) {
+    const items = listOf(v, "sort");
+    let values = items;
+    if (key !== null) {
+      if (!items.every((x) => isObj(x) && has(x, key))) throw new TemplateError(`sort:${key} needs a list of tables that all have ${pyrepr(key)}`);
+      values = items.map((x) => x[key]);
+    }
+    // Numbers (or strings that are numbers, as the number filters read them) sort as numbers; otherwise words as words.
+    let numbers = true;
+    try { values = values.map((x) => numberOf(x, "sort")); } catch (e) {
+      if (!(e instanceof TemplateError)) throw e;
+      numbers = false;
+      if (!values.every((x) => typeof x === "string")) throw new TemplateError("sort needs a list of numbers or a list of words (a list of tables takes sort:key)");
+    }
+    const order = items.map((_, i) => i).sort((i, j) => (numbers ? values[i] - values[j] : codepoints(values[i], values[j])));
+    return order.map((i) => items[i]);
+  }
+  const ARGS = { round: ["places", false], percent: ["places", false], sort: ["key", false], pluck: ["key", true] };
   const FILTERS = {
     url: (v) => pyQuote(pyStr(v)),
     json: (v) => pyJson(v),
@@ -141,14 +212,41 @@
     length: (v) => (Array.isArray(v) || typeof v === "string" ? v.length : isObj(v) ? Object.keys(v).length : MISSING),
     join: (v) => (Array.isArray(v) ? v.map(asText).join(", ") : asText(v)),
     title: (v) => pyStr(v).toLowerCase().replace(/(^|[^a-z0-9'])([a-z])/gi, (m, pre, c) => pre + c.toUpperCase()).replace(/'([a-z])/gi, (m, c) => "'" + c.toUpperCase()),
+    sum: sumOf,
+    average: (v) => { const xs = listOf(v, "average"); return xs.length ? whole(sumOf(xs) / xs.length) : MISSING; },
+    min: (v) => extreme(v, "min"),
+    max: (v) => extreme(v, "max"),
+    sort: (v, key = null) => sortedOf(v, key),
+    reverse: (v) => listOf(v, "reverse").reverse(),
+    pluck: (v, key) => listOf(v, "pluck").filter((x) => isObj(x) && has(x, key)).map((x) => x[key]),
+    round: (v, places = 0) => { const x = numberOf(v, "round"); return Math.abs(x) >= 2 ** 53 ? x : Number(roundText(x, places)); },
+    percent: (v, places = 0) => roundText(numberOf(v, "percent") * 100, places) + "%",
+    bytes: bytesText,
   };
+  for (const [name, f] of Object.entries(CONVERSIONS)) FILTERS[name] = (v) => whole(f(numberOf(v, name)));
+  function parseFilter(part, expr) {
+    const at = part.indexOf(":");
+    const name = (at < 0 ? part : part.slice(0, at)).trim(), arg = at < 0 ? "" : part.slice(at + 1).trim();
+    if (!has(FILTERS, name)) throw new TemplateError(`unknown filter ${pyrepr(name)} in {{ ${expr} }}`);
+    if (at < 0) {
+      if (has(ARGS, name) && ARGS[name][1]) throw new TemplateError(`${name} needs a ${ARGS[name][0]}: ${name}:${ARGS[name][0]} in {{ ${expr} }}`);
+      return [name, null];
+    }
+    if (!has(ARGS, name)) throw new TemplateError(`${name} takes no argument in {{ ${expr} }}`);
+    if (ARGS[name][0] === "places") {
+      if (!/^[0-9]+$/.test(arg) || parseInt(arg, 10) > MAX_PLACES) throw new TemplateError(`${name}:${arg}: the places are a whole number from 0 to ${MAX_PLACES}, in {{ ${expr} }}`);
+      return [name, parseInt(arg, 10)];
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(arg)) throw new TemplateError(`${name}:${arg}: the key is letters, digits, '_' and '-', in {{ ${expr} }}`);
+    return [name, arg];
+  }
   function renderValue(expr, scope) {
     const parts = expr.split("|").map((p) => p.trim());
     let value = resolve(parts[0], scope);
-    for (const name of parts.slice(1)) {
-      if (!(name in FILTERS)) throw new TemplateError(`unknown filter ${pyrepr(name)} in {{ ${expr} }}`);
+    for (const part of parts.slice(1)) {
+      const [name, arg] = parseFilter(part, expr);
       if (isMissing(value)) continue;
-      value = FILTERS[name](value);
+      value = arg === null ? FILTERS[name](value) : FILTERS[name](value, arg);
     }
     return value;
   }

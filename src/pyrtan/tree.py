@@ -48,7 +48,7 @@ from typing import Any
 
 from . import adapters, analysis, conditions, extract as extractmod
 from .intent import KINDS as SLOT_KINDS, PRODUCES, Language, Trigger, TriggerError
-from .template import PLACEHOLDER, placeholders
+from .template import PLACEHOLDER, check_expression, expressions, placeholders
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9\-]*$")
 KINDS = {"observe", "act", "decide", "set", "lookup", "each", "delegate", "ask", "done", "fail"}
@@ -636,6 +636,10 @@ def check(tree: Tree) -> list[Problem]:
             if not isinstance(node.get("reason"), str):
                 err(where, "a fail node needs a 'reason' code")
 
+        for expr in expressions(node.spec):
+            problem = check_expression(expr)
+            if problem:
+                err(where, problem)
         for path in placeholders(node.spec):
             head, _, rest = path.partition(".")
             if head == "inputs":

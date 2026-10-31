@@ -346,6 +346,35 @@
       "version": 1
      },
      {
+      "description": "sums, sorts and rounds what it was given",
+      "hosts": [],
+      "inputs": {
+       "rows": {
+        "required": true,
+        "type": "list"
+       },
+       "share": {
+        "default": 0.4735,
+        "type": "float"
+       },
+       "size": {
+        "default": 1536,
+        "type": "int"
+       },
+       "temp": {
+        "default": 21.37,
+        "type": "float"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "basket",
+      "sources": [],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
       "description": "A book from Open Library: the best match for a title or an author, who wrote it, and when it first came out.",
       "hosts": [
        "openlibrary.org"
@@ -5025,6 +5054,276 @@
   {
    "body": {
     "inputs": {
+     "rows": [
+      {
+       "name": "pear",
+       "qty": 2
+      },
+      {
+       "name": "apple",
+       "qty": 3.5
+      },
+      {
+       "name": "fig",
+       "qty": "1.25"
+      }
+     ]
+    },
+    "tree": "basket"
+   },
+   "expect": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "pear",
+       "qty": 2
+      },
+      {
+       "name": "apple",
+       "qty": 3.5
+      },
+      {
+       "name": "fig",
+       "qty": "1.25"
+      }
+     ],
+     "share": 0.4735,
+     "size": 1536,
+     "temp": 21.37
+    },
+    "output": {
+     "biggest": 3.5,
+     "half": 21,
+     "km": 34.392,
+     "names": [
+      "apple",
+      "fig",
+      "pear"
+     ],
+     "nothing": null,
+     "share": "47.3%",
+     "size": "1.5 KiB",
+     "smallest": 1.25,
+     "temp": "70.5°F"
+    },
+    "say": "6.75 in all, 2.25 each, most is apple",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "how",
+       "node": "count",
+       "observed": {
+        "top": "apple",
+        "total": 6.75
+       },
+       "summary": "total=6.75, top=apple"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "reply",
+       "node": "how",
+       "observed": 6.75,
+       "summary": "state.total = 6.75"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "reply",
+       "summary": "6.75 in all, 2.25 each, most is apple"
+      }
+     ],
+     "tree": "basket"
+    },
+    "tree": "basket"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "pear",
+       "qty": 2
+      },
+      {
+       "name": "date"
+      }
+     ]
+    },
+    "tree": "basket"
+   },
+   "expect": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "pear",
+       "qty": 2
+      },
+      {
+       "name": "date"
+      }
+     ],
+     "share": 0.4735,
+     "size": 1536,
+     "temp": 21.37
+    },
+    "reason": "template",
+    "say": "count: sort:qty needs a list of tables that all have 'qty'",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": null,
+       "node": "count",
+       "summary": "template: sort:qty needs a list of tables that all have 'qty'"
+      }
+     ],
+     "tree": "basket"
+    },
+    "tree": "basket"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "melon",
+       "qty": 9
+      },
+      {
+       "name": "lime",
+       "qty": 2.675
+      }
+     ],
+     "share": 1.005,
+     "size": 1099511627776,
+     "temp": -40
+    },
+    "tree": "basket"
+   },
+   "expect": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "melon",
+       "qty": 9
+      },
+      {
+       "name": "lime",
+       "qty": 2.675
+      }
+     ],
+     "share": 1.005,
+     "size": 1099511627776,
+     "temp": -40.0
+    },
+    "say": "11.675 is a lot; most is melon",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "how",
+       "node": "count",
+       "observed": {
+        "top": "melon",
+        "total": 11.675
+       },
+       "summary": "total=11.675, top=melon"
+      },
+      {
+       "chosen": "gt 10",
+       "depth": 0,
+       "kind": "decide",
+       "next": "many",
+       "node": "how",
+       "observed": 11.675,
+       "summary": "state.total = 11.675"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "many",
+       "summary": "11.675 is a lot; most is melon"
+      }
+     ],
+     "tree": "basket"
+    },
+    "tree": "basket"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "odd",
+       "qty": "lots"
+      }
+     ]
+    },
+    "tree": "basket"
+   },
+   "expect": {
+    "inputs": {
+     "rows": [
+      {
+       "name": "odd",
+       "qty": "lots"
+      }
+     ],
+     "share": 0.4735,
+     "size": 1536,
+     "temp": 21.37
+    },
+    "reason": "template",
+    "say": "count: sum: 'lots' is not a number",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": null,
+       "node": "count",
+       "summary": "template: sum: 'lots' is not a number"
+      }
+     ],
+     "tree": "basket"
+    },
+    "tree": "basket"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
     "tree": "panel"
@@ -5589,7 +5888,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 37,
+    "runs": 41,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5597,6 +5896,7 @@
      "air-quality",
      "antonyms",
      "apod",
+     "basket",
      "books",
      "capital",
      "cat-fact",
@@ -6166,6 +6466,75 @@
    "triggers": [
     "grade {score:int}"
    ],
+   "version": 1
+  },
+  {
+   "description": "sums, sorts and rounds what it was given",
+   "hosts": [],
+   "inputs": {
+    "rows": {
+     "required": true,
+     "type": "list"
+    },
+    "share": {
+     "default": 0.4735,
+     "type": "float"
+    },
+    "size": {
+     "default": 1536,
+     "type": "int"
+    },
+    "temp": {
+     "default": 21.37,
+     "type": "float"
+    }
+   },
+   "name": "basket",
+   "nodes": {
+    "count": {
+     "kind": "set",
+     "next": "how",
+     "set": {
+      "top": "{{ inputs.rows | sort:qty | reverse | pluck:name | first }}",
+      "total": "{{ inputs.rows | pluck:qty | sum }}"
+     }
+    },
+    "how": {
+     "branches": [
+      {
+       "then": "many",
+       "when": {
+        "gt": 10
+       }
+      },
+      {
+       "else": "reply"
+      }
+     ],
+     "kind": "decide",
+     "on": "state.total"
+    },
+    "many": {
+     "kind": "done",
+     "say": "{{ state.total }} is a lot; most is {{ state.top }}"
+    },
+    "reply": {
+     "kind": "done",
+     "output": {
+      "biggest": "{{ inputs.rows | pluck:qty | max }}",
+      "half": "{{ inputs.temp | round }}",
+      "km": "{{ inputs.temp | mi_to_km | round:3 }}",
+      "names": "{{ inputs.rows | pluck:name | sort }}",
+      "nothing": "{{ inputs.rows | pluck:none | max }}",
+      "share": "{{ inputs.share | percent:1 }}",
+      "size": "{{ inputs.size | bytes }}",
+      "smallest": "{{ inputs.rows | pluck:qty | min }}",
+      "temp": "{{ inputs.temp | c_to_f | round:1 }}°F"
+     },
+     "say": "{{ state.total }} in all, {{ inputs.rows | pluck:qty | average | round:2 }} each, most is {{ state.top }}"
+    }
+   },
+   "start": "count",
    "version": 1
   },
   {

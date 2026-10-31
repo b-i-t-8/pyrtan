@@ -466,7 +466,25 @@ it goes out and nowhere else: a header, a request body.
 
 Filters: `url`, `json`, `int`, `float`, `str`, `lower`, `upper`, `strip`,
 `title`, `first`, `last`, `length`, `join` (a list as `a, b, c`, for a
-sentence).
+sentence), and the fixed list and number filters below. A few take one
+literal argument after a colon, never a path:
+
+| Filter | Gives |
+| :-- | :-- |
+| `sum`, `average`, `min`, `max` | a list of numbers' total, mean, least, greatest; an empty list's `sum` is 0, the rest are nothing |
+| `sort`, `sort:key`, `reverse` | a list in order: numbers as numbers, words by code point; `sort:key` orders tables by that key |
+| `pluck:key` | each table's value for `key`, leaving out a table without it: `{{ state.rows \| pluck:qty \| sum }}` |
+| `round`, `round:n` | a number to `n` places (0 to 12, default 0), half away from zero on the digits as written: 2.675 → 2.68 |
+| `percent`, `percent:n` | a fraction as a percentage, as text: 0.4735 → `47%`, `percent:1` → `47.3%` |
+| `bytes` | a size as people read it, in powers of 1024: `512 B`, `1.5 KiB`, `5 GiB` |
+| `c_to_f`, `f_to_c`, `km_to_mi`, `mi_to_km`, `kg_to_lb`, `lb_to_kg`, `m_to_ft`, `ft_to_m` | the number converted, unrounded: chain `round` |
+
+The number filters read a string that is a number (`"12.5"`, as JSON
+APIs often send) as one, and a whole result is a whole number (`-40 |
+c_to_f` is `-40`, not `-40.0`). A value of the wrong kind (`sum` of a
+word, `sort` of tables without a key) stops the run with reason
+`template` and says which. `pyrtan check` refuses an unknown filter or a
+bad argument. They give the same answer, digit for digit, in the browser.
 
 A string that is exactly one placeholder keeps the value's type (a list
 stays a list). A placeholder that resolves to nothing fails the node, except
