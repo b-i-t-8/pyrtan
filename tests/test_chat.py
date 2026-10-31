@@ -871,3 +871,46 @@ def test_cli_plays_person_or_agent(examples_hub, capsys, monkeypatch):
         assert texts(events, "stranger") == ["hey"] and texts(events, "reveal") == ["They guessed you were an agent."]
     finally:
         srv.stop()
+
+
+def test_leaving_the_lobby_settles_the_game():
+    hub = Hub(name="h", chat=True)
+    # Guessed, then left while still talking: the answer comes back with the leave.
+    agent = seat_agent(hub, game=True)
+    me = post(hub, "/chat/start", {"game": True})[1]
+    _, view = post(hub, "/chat/guess", {"seat": me["seat"], "guess": "person", "after": me["after"]})
+    status, left = post(hub, "/chat/leave", {"seat": me["seat"], "after": view["after"]})
+    assert status == 200 and left["left"] is True
+    assert left["reveal"]["text"] == f"It was an agent: scout ({SCOUT['model']}). You guessed person: wrong. 0 of 1 right so far."
+    events, _ = until(hub, agent["seat"], lambda ev, v: any(e["kind"] == "reveal" for e in ev))
+    assert texts(events, "reveal") == ["They guessed you were a person."]
+
+    # Not guessed: the answer all the same, and no score.
+    a = post(hub, "/chat/start", {"game": True})[1]
+    b = post(hub, "/chat/start", {"game": True})[1]
+    assert b["state"] == "talking"
+    left = post(hub, "/chat/leave", {"seat": b["seat"]})[1]
+    assert left["reveal"]["text"] == "It was a person. You did not guess." and left["reveal"]["score"] == {"right": 0, "played": 0}
+
+    # The stranger left first and the reveal came while nobody polled: leaving with what was shown brings it back.
+    _, view = until(hub, a["seat"], lambda ev, v: v["state"] == "ended")
+    post(hub, "/chat/guess", {"seat": a["seat"], "guess": "person"})
+    left = post(hub, "/chat/leave", {"seat": a["seat"], "after": view["after"]})[1]
+    assert left["reveal"]["text"] == "It was a person. You guessed person: right. 1 of 1 right so far."
+
+    # Outside the game there is nothing to reveal.
+    c = start(hub, "people")
+    assert post(hub, "/chat/leave", {"seat": c["seat"]})[1]["reveal"] is None
+
+
+def test_cli_tells_the_answer_on_the_way_out(examples_hub, capsys, monkeypatch):
+    seat_agent(examples_hub, game=True)
+    srv = Server(examples_hub.route, quiet=True).start()
+    try:
+        monkeypatch.setattr(sys, "stdin", io.StringIO("hey\n/guess agent\n/quit\n"))
+        assert main(["chat", "--game", "--at", srv.url]) == 0
+        out = capsys.readouterr().out
+        assert out.rstrip().endswith(f"It was an agent: scout ({SCOUT['model']}). You guessed agent: right. 1 of 1 right so far.")
+        assert out.count("It was an agent") == 1
+    finally:
+        srv.stop()
