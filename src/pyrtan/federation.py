@@ -334,7 +334,7 @@ class Remote:
     kind: str = "hub"           # hub | member
     trusted: bool = False       # a member that joined with the operator's token, or as an identity granted run: it may run the hub's trees
     network: str | None = None  # the id of the network the follow was made in; None for a follow outside any
-    trusted_by: str | None = None          # "token" or "key": how a trusted member came to be
+    trusted_by: str | None = None          # "token", "key" or "ldap" (a directory account in a group granted run): how a trusted member came to be
     identity: str | None = None            # the root a member followed as, if it signed the follow with a key
     device: str | None = None              # the key that signed it
     note: dict[str, Any] | None = None     # its device note, when the key is a device
