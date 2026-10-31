@@ -22,9 +22,11 @@ COPY --from=build /install /usr/local
 COPY examples /examples
 # The build context keeps the host checkout's modes, which a NAS share
 # can leave unreadable to others; the non-root user must read the examples.
+# /state is where a hub keeps its store and federation state; a new named
+# volume mounted there takes this directory's owner, so the hub can write it.
 RUN chmod -R a+rX /examples \
  && useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin pyrtan \
- && mkdir -p /trees && chown pyrtan:pyrtan /trees
+ && mkdir -p /trees /state && chown pyrtan:pyrtan /trees /state
 USER pyrtan
 VOLUME ["/trees"]
 ENV PYTHONUNBUFFERED=1 PYRTAN_TREES=/trees
