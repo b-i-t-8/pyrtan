@@ -1,6 +1,8 @@
 """Watches: a tree that runs when something speaks, without being asked.
 
-A tree may carry ``[[watches]]``: a clock (``every = "5m"``), a file
+A tree may carry ``[[watches]]``: a clock (``every = "5m"``), a calendar
+(``at = "mon-fri 09:00"``, with ``tz = "Europe/Oslo"``; see
+:mod:`pyrtan.schedule`), a file
 (``file = "/var/log/syslog"``: each time lines are appended), a queue
 (``queue = { url, topic }``: each message) or a serial line (``serial =
 { device, baud }``: each line). Each watch may give ``inputs``, templates
@@ -32,7 +34,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from . import adapters
+from . import adapters, schedule
 from .nlp import ParseError, parse_duration
 from .runtime import Outcome
 from .template import TemplateError, render
@@ -63,7 +65,7 @@ class Watch:
         self.tree_name = tree_name
         self.index = index
         self.spec = spec
-        self.kind = next(k for k in ("every", "file", "queue", "serial") if k in spec)
+        self.kind = next(k for k in ("every", "at", "file", "queue", "serial") if k in spec)
         self.name = str(spec.get("name") or f"{tree_name}#{index}")
         self.key = json.dumps([tree_name, index, spec], sort_keys=True, default=str)
         self.stop = threading.Event()
@@ -77,6 +79,7 @@ class Watch:
         self.path_changed_at: float | None = None
         self.previous_path: list[str] | None = None
         self.history: list[dict[str, Any]] = []
+        self.next_at: float | None = None  # a calendar watch: when it runs next
         self.lock = threading.Lock()
 
     def start(self) -> None:
@@ -92,6 +95,8 @@ class Watch:
             try:
                 if self.kind == "every":
                     self._every()
+                elif self.kind == "at":
+                    self._at()
                 elif self.kind == "file":
                     self._file()
                 elif self.kind == "queue":
@@ -122,6 +127,24 @@ class Watch:
             self.fire({"kind": "every", "n": n, "at": _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"), "every": seconds})
             if self.stop.wait(seconds):
                 return
+
+    def _at(self) -> None:
+        when = schedule.parse_at(self.spec["at"])
+        tz = schedule.zone(self.spec.get("tz"))
+        n = 0
+        after = self.watcher.clock()
+        while not self.stop.is_set():
+            due = schedule.next_after(when, after, tz)
+            with self.lock:
+                self.next_at = due.timestamp()
+            # Wait in short steps against the clock, so a clock that jumps
+            # (a laptop that slept) is noticed within a minute.
+            while (now := self.watcher.clock()) < due:
+                if self.stop.wait(min(60.0, (due - now).total_seconds())):
+                    return
+            n += 1
+            self.fire({"kind": "at", "n": n, "at": due.replace(microsecond=0).isoformat().replace("+00:00", "Z"), "slot": schedule.slot_name(due, tz), "tz": str(self.spec.get("tz") or "UTC")})
+            after = max(due, self.watcher.clock())  # a slot missed while running is not made up
 
     def _file(self) -> None:
         path = adapters.absolute_path(self.spec["file"])
@@ -188,6 +211,7 @@ class Watch:
                 "fires": self.fires, "errors": self.errors, "last_error": self.last_error, "last_at": self.last_at,
                 "last": self.last_outcome, "path": self.last_path, "path_changed_at": self.path_changed_at, "previous_path": self.previous_path,
                 "alive": bool(self.thread and self.thread.is_alive()),
+                **({"next_at": self.next_at} if self.kind == "at" else {}),
             }
 
 
@@ -266,6 +290,8 @@ class Watcher:
 def _what(kind: str, spec: dict[str, Any]) -> str:
     if kind == "every":
         return f"every {spec['every']}"
+    if kind == "at":
+        return f"at {spec['at']}" + (f" ({spec['tz']})" if spec.get("tz") else " (UTC)")
     if kind == "file":
         return str(spec["file"])
     if kind == "queue":
@@ -276,6 +302,8 @@ def _what(kind: str, spec: dict[str, Any]) -> str:
 def _summary(kind: str, event: dict[str, Any]) -> str:
     if kind == "every":
         return f"every {event.get('every')} s, run {event.get('n')}"
+    if kind == "at":
+        return f"at {event.get('slot')} {event.get('tz')}, run {event.get('n')}"
     if kind == "file":
         return f"{event.get('path')}: {len(event.get('lines') or [])} new line(s)"
     if kind == "queue":

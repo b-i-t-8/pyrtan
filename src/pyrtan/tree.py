@@ -672,13 +672,15 @@ def check(tree: Tree) -> list[Problem]:
 
 
 _NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}}
-WATCH_KINDS = ("every", "file", "queue", "serial")
+WATCH_KINDS = ("every", "at", "file", "queue", "serial")
 WATCH_ROOTS = ("event", "env", "now")
 
 
 def _watch_what(w: dict[str, Any]) -> str:
     if "every" in w:
         return str(w["every"])
+    if "at" in w:
+        return str(w["at"]) + (f" ({w['tz']})" if w.get("tz") else "")
     if "file" in w:
         return str(w["file"])
     if "queue" in w and isinstance(w["queue"], dict):
@@ -709,6 +711,17 @@ def _check_watch(tree: Tree, i: int, w: dict[str, Any], err, warn) -> set[str]:
             seconds = 0
         if seconds < 1:
             err(where, f"'every' is a duration such as \"5m\" or \"1 hour\", got {value!r}")
+    elif kind == "at":
+        from . import schedule
+
+        try:
+            schedule.parse_at(w["at"])
+        except schedule.ScheduleError as e:
+            err(where, str(e))
+        try:
+            schedule.zone(w.get("tz"))
+        except schedule.ScheduleError as e:
+            err(where, str(e))
     elif kind == "file":
         path = w["file"]
         if not isinstance(path, str) or not path or PLACEHOLDER.search(path):
@@ -738,6 +751,8 @@ def _check_watch(tree: Tree, i: int, w: dict[str, Any], err, warn) -> set[str]:
         elif tree.devices and not adapters.device_allowed(tree.devices, spec["device"]):
             err(where, f"{spec['device']!r} is not in this tree's devices")
         used.add("serial")
+    if "tz" in w and kind != "at":
+        err(where, "'tz' is the zone of an 'at' watch's times; an 'every' or a stream has none")
     inputs = w.get("inputs", {})
     if not isinstance(inputs, dict):
         err(where, "'inputs' is a table of input = value (templates may read event, env and now)")
