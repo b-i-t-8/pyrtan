@@ -99,6 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("paths", nargs="*")
     p.add_argument("--quiet", action="store_true", help="only print problems")
 
+    p = sub.add_parser("paths", help="every route through a tree: the branches it takes, what it reads, how it ends")
+    p.add_argument("paths", nargs="*")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("list", help="what is loaded and what it answers to")
     p.add_argument("paths", nargs="*")
     p.add_argument("--json", action="store_true")
@@ -456,7 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _warn_secret_flags(sys.argv[1:] if argv is None else argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
+        "check": cmd_check, "paths": cmd_paths, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "drop": cmd_drop, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -585,6 +589,37 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(f"{path}: {tree.name}: {summary}" + ("" if not problems else f", {len(problems)} note(s)"))
         for p in problems:
             print(f"  {p}")
+    return worst
+
+
+def cmd_paths(args: argparse.Namespace) -> int:
+    from . import paths as pathsmod
+
+    files = _files(_paths(args.paths))
+    if not files:
+        print("pyrtan: no trees here", file=sys.stderr)
+        return 2
+    worst, out = 0, []
+    for path in files:
+        try:
+            tree = load_tree(path)
+        except Exception as e:
+            print(f"{path}: error: {e}", file=sys.stderr)
+            worst = 1
+            continue
+        if args.json:
+            flows = {}
+            for start in [tree.start] + pathsmod.sub_flows(tree):
+                found, over = pathsmod.routes(tree, start)
+                flows[start] = {"routes": [r.to_dict() for r in found], "more": over}
+            out.append({"tree": tree.name, "file": str(path), "start": tree.start, "flows": flows, "stops": pathsmod.stops(tree)})
+        else:
+            if out:
+                print()
+            out.append(tree.name)
+            print(pathsmod.render(tree))
+    if args.json:
+        print(json.dumps(out if len(out) != 1 else out[0], indent=2, ensure_ascii=False))
     return worst
 
 
