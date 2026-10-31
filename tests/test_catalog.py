@@ -380,3 +380,55 @@ def test_gate_knows_owners_by_id_and_guards_the_examples(tmp_path):
         "catalog/alice/OWNERS: the name 'alice' is claimed at pyrtan.com by GitHub account 5; only it may start that namespace"]
     (repo / "catalog" / "alice" / "OWNERS").write_text("alice 5\n")
     assert gate(repo, changed=new, author="alice", author_id=5, base_owners={}) == []
+
+
+def test_site_gate_refuses_a_release_number_main_already_has(tmp_path):
+    """Two branches that each bump to the next version cannot both be merged under it:
+    the one that comes second is told to bump past the base's (0.35.0 named two releases)."""
+    import subprocess
+    import sys
+    from conftest import ROOT
+
+    repo = tmp_path / "repo"
+    (repo / "examples").mkdir(parents=True)
+    (repo / "examples" / ".keep").write_text("")
+    (repo / "site" / "names").mkdir(parents=True)
+    (repo / "site" / "CNAME").write_text("pyrtan.com\n")
+    (repo / "src" / "pyrtan").mkdir(parents=True)
+
+    def version(v: str, init: str | None = None) -> None:
+        (repo / "pyproject.toml").write_text(f'[project]\nname = "pyrtan"\nversion = "{v}"\n')
+        (repo / "src" / "pyrtan" / "__init__.py").write_text(f'"""pyrtan"""\n\n__version__ = "{init or v}"\n')
+
+    git = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=repo, check=True, capture_output=True)
+    gate = lambda: subprocess.run([sys.executable, str(ROOT / "site" / "gate.py"), "--root", str(repo), "--base", "main"], cwd=tmp_path, capture_output=True, text=True)
+    version("0.34.2")
+    git("init", "-q", "-b", "main")
+    git("add", ".")
+    git("commit", "-q", "-m", "0.34.2")
+    git("checkout", "-q", "-b", "game")
+    version("0.35.0")
+    git("commit", "-q", "-am", "the game; release 0.35.0")
+    assert gate().returncode == 0  # above main's 0.34.2
+    git("checkout", "-q", "main")
+    version("0.35.0")
+    git("commit", "-q", "-am", "LDAP users; release 0.35.0")  # another branch takes the number first
+    git("checkout", "-q", "game")
+    run = gate()
+    assert run.returncode == 1 and "sets version 0.35.0, which is already the base's" in run.stdout and "above 0.35.0" in run.stdout, run.stdout
+    version("0.34.9")
+    git("commit", "-q", "-am", "lower")
+    assert "below the base's 0.35.0" in gate().stdout
+    version("0.36.0")
+    git("commit", "-q", "-am", "past it")
+    assert gate().returncode == 0
+    version("0.36.0", init="0.35.0")
+    git("commit", "-q", "-am", "forgot one")
+    run = gate()
+    assert run.returncode == 1 and "__init__.py says __version__ = '0.35.0'" in run.stdout, run.stdout
+    # A branch that sets no number of its own is open, however old its fork.
+    git("checkout", "-q", "-b", "docs", "main~1")
+    (repo / "examples" / "README").write_text("docs\n")
+    git("add", ".")
+    git("commit", "-q", "-m", "docs only")
+    assert gate().returncode == 0

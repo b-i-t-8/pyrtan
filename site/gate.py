@@ -19,6 +19,14 @@ identity document holds, a name is a GitHub login, one per account. With
 ``--base``, a new name must be the author's own login carrying the
 author's numeric id (``--author-id``), and a name may be changed or
 removed only by the account whose id it carried on the base branch.
+Then, with ``--base``, the release number: a pull request that sets a new
+version in ``pyproject.toml`` must set one above the base branch's, so two
+branches that each bumped to the same number cannot both be merged under
+it (0.35.0 named two releases that way). One that leaves the version as it
+forked from the base is open. ``src/pyrtan/__init__.py`` must say the same
+version as ``pyproject.toml``. The base is the base as the event found it:
+branch protection's "require branches to be up to date before merging"
+makes the gate run again on today's main before a merge.
 Exit 1 with the problems listed, 0 when the gate is open.
 
 The code that judges is always this file's own checkout (its ``src/``);
@@ -30,6 +38,7 @@ cannot change the gate that judges it.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 import tomllib
@@ -47,6 +56,47 @@ def git(root: Path, *args: str) -> str | None:
         return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
+
+
+def _version_text(root: Path, rev: str, path: str) -> str | None:
+    text = git(root, "show", f"{rev}:{path}")
+    if text is None:
+        return None
+    if path == "pyproject.toml":
+        try:
+            return str(tomllib.loads(text)["project"]["version"])
+        except (tomllib.TOMLDecodeError, KeyError):
+            return None
+    found = re.search(r"""^__version__\s*=\s*["']([^"']+)["']""", text, re.M)
+    return found.group(1) if found else None
+
+
+def _number(version: str) -> tuple[int, ...] | None:
+    return tuple(int(n) for n in version.split(".")) if re.fullmatch(r"\d+(\.\d+)*", version) else None
+
+
+def release_problems(root: Path, base: str) -> list[str]:
+    """The version the pull request (HEAD of ``root``) sets, judged against ``base``:
+    above the base's when it differs from where the branch forked, and the same in
+    ``__init__.py`` as in ``pyproject.toml``."""
+    head = _version_text(root, "HEAD", "pyproject.toml")
+    if head is None:
+        return []  # a checkout with no project version (a catalog of trees alone) has no release to judge
+    problems = []
+    init = _version_text(root, "HEAD", "src/pyrtan/__init__.py")
+    if init is not None and init != head:
+        problems.append(f"src/pyrtan/__init__.py says __version__ = {init!r}, but pyproject.toml says {head!r}: one release, one number")
+    fork = (git(root, "merge-base", base, "HEAD") or "").strip()
+    forked = _version_text(root, fork, "pyproject.toml") if fork else None
+    on_base = _version_text(root, base, "pyproject.toml")
+    if forked is None or on_base is None or head == forked:
+        return problems  # this branch sets no new number: the merge keeps the base's
+    if _number(head) is None or _number(on_base) is None:
+        problems.append(f"pyproject.toml: version {head!r} (base {on_base!r}) is not numbers and dots, so it cannot be ordered")
+    elif _number(head) <= _number(on_base):
+        taken = "is already the base's" if head == on_base else f"is below the base's {on_base}"
+        problems.append(f"pyproject.toml: this branch sets version {head}, which {taken} (another branch took it after this one forked from {forked}): merge the base and set a number above {on_base}")
+    return problems
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
                 base[path] = (version, prior.stdout)
     problems = gate(root, changed=changed, author=args.author, base=base, base_owners=base_owners, author_id=args.author_id, base_examples=base_examples)
     problems += names_gate(root, changed=changed, author=args.author, author_id=args.author_id, base=names_base)
+    if args.base:
+        problems += release_problems(root, args.base)
     for p in problems:
         print(f"gate: {p}")
     scope = f"{len(changed)} changed file(s)" if changed is not None else "the whole checkout"

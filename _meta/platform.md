@@ -54,7 +54,7 @@ behind the token, so a stranger cannot join a swarm.
 for any). Off by default. The console at pyrtan.com needs
 `--cors https://pyrtan.com` on the hub it talks to.
 
-**LDAP users (v0.35).** On top of a token, `--ldap URL` lets people in
+**LDAP users (v0.35.0).** On top of a token, `--ldap URL` lets people in
 with their directory account (`src/pyrtan/ldap.py`): `Authorization:
 Basic`, or a session token from `POST /login` sent as a bearer. The
 directory's groups give the same four abilities a key is granted
@@ -66,6 +66,9 @@ the token, and `--ldap` without one is refused. The client is LDAPv3 as
 far as a simple bind and a search need it, in the standard library, so
 the runtime keeps no dependencies. A tenant's hosted hub can point it at
 the tenant's own directory; nothing about tenants is in the code.
+On main, 0.35.0 also took in the game across hubs (`chat.md` §5) minutes
+later: two branches had each bumped to it. Since then `site/gate.py`
+refuses a pull request that sets a version not above the base branch's.
 Since v0.36, `--ldap-nested` counts members of nested groups by Active
 Directory's own transitive rule (`member:1.2.840.113556.1.4.1941:=`), one
 search per listed group, rather than walking the groups here: the
