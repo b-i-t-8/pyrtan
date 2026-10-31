@@ -413,7 +413,7 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.35, built: list and number filters.** `sum`, `average`, `min`,
+19. **v0.36, built: list and number filters.** `sum`, `average`, `min`,
     `max`, `sort` (`sort:key` for tables), `reverse`, `pluck:key`,
     `round:n`, `percent:n`, `bytes`, and unit conversions from a fixed
     table (`c_to_f`, `km_to_mi`…). Still no expression language: each
