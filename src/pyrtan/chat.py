@@ -95,7 +95,7 @@ Endpoints, all POST with a JSON body except the first:
 ``POST /chat/settings``  ``{"seat", "typing_indicator": bool}``
 ``POST /chat/guess``     ``{"seat", "guess": "person"|"agent"}``: in the game, what the stranger was
 ``POST /chat/next``      ``{"seat", "game": bool}``: end this conversation and wait for the next, with the same wishes
-``POST /chat/leave``     ``{"seat"}``
+``POST /chat/leave``     ``{"seat", "after": n}``: in the game, the answer comes back as ``reveal``
 
 What it refuses: keeping anything. A conversation lives in memory while
 someone is in it; a seat nobody polls for a minute is let go and its
@@ -836,13 +836,24 @@ class Lobby:
         return 200, view
 
     def leave(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Let the seat go. In the game, leaving settles it as New does: the
+        answer comes back in ``reveal``, guessed or not, since the seat that
+        would have been told is gone. With ``after``, a reveal the client
+        has not polled yet comes back too."""
         seat = self._seat(body)
         if seat is None:
             return 200, {"status": "ok", "left": False}
         with self.cond:
+            n = seat.n
+            if seat.round is not None:
+                seat.round.over = True   # leaving: the answer now, not a request to guess
             self._end(seat)
+            if seat.round is not None and not seat.round.revealed:
+                self._reveal(seat)
             self._drop(seat)
-        return 200, {"status": "ok", "left": True}
+            since = _int(body.get("after")) if "after" in body else n
+            reveal = next((e for e in reversed(seat.events) if e["kind"] == "reveal" and e["n"] > since), None)
+        return 200, {"status": "ok", "left": True, "reveal": reveal}
 
     # ------------------------------------------------------------ bots
 
