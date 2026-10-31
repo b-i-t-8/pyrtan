@@ -413,7 +413,7 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.38, built: declared budgets.** `budget = { requests = 30, per =
+19. **v0.39, built: declared budgets.** `budget = { requests = 30, per =
     "1 hour" }` holds a tree to so many requests in any window, across
     the runs a service makes of it. The one that would go past is not
     sent: the run stops with reason `budget` and says when the next may

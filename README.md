@@ -543,6 +543,11 @@ presents it when it forwards, and a stranger can neither join nor ask.
 People need not share it: grant their identities what each may do
 (`--allow`, `pyrtan allow`; see *Identity* above), or let them sign in
 with the account they already have.
+`--egress public` makes a service refuse any host that resolves to a
+loopback, private, link-local or metadata address, on the first URL and on
+every redirect, so a tree whose host comes from its input cannot be
+pointed at your own network. Put TLS in front with whatever proxy you
+already run; Pyrtan does not do it itself.
 
 ### LDAP users
 
@@ -562,7 +567,7 @@ pyrtan hub --host 0.0.0.0 --ldap ldaps://ldap.example.org \
 export PYRTAN_LDAP_BIND_PASSWORD=…
 pyrtan hub --ldap ldaps://dc.corp.example --ldap-base 'dc=corp,dc=example' \
     --ldap-filter '(sAMAccountName={user})' --ldap-bind-dn 'cn=pyrtan,ou=service,dc=corp,dc=example' \
-    --ldap-group 'cn=Pyrtan Users,ou=groups,dc=corp,dc=example=ask'
+    --ldap-group 'cn=Pyrtan Users,ou=groups,dc=corp,dc=example=ask' --ldap-nested
 ```
 
 A person sends `Authorization: Basic` with their name and password, or
@@ -571,17 +576,16 @@ box, which shows a user name and password beside the token) and sends the
 session token it answers with as a bearer. A person in no listed group may
 what `--ldap-may` says: `ask` when no group is listed, nothing otherwise.
 A group's members are those its entry names in `member`, `uniqueMember` or
-`memberUid`; nested groups are not followed. An empty password is refused
+`memberUid`. With `--ldap-nested`, members of groups nested in a listed
+group count too, to any depth: Active Directory follows the chain itself
+(`LDAP_MATCHING_RULE_IN_CHAIN`, one search per group, cycles included).
+A directory without that rule still counts direct members, and a primary
+group (`primaryGroupID`, usually Domain Users) never counts. An empty password is refused
 before it reaches the directory (most take it as an anonymous bind), five
 wrong passwords for a name rest it for a minute, and the token is still
 the swarm's: services register and hubs forward with it, never with a
 person's account. Use `ldaps://` or `--ldap-starttls`; every flag has a
 `$PYRTAN_LDAP…` variable. See `src/pyrtan/ldap.py`.
-`--egress public` makes a service refuse any host that resolves to a
-loopback, private, link-local or metadata address, on the first URL and on
-every redirect, so a tree whose host comes from its input cannot be
-pointed at your own network. Put TLS in front with whatever proxy you
-already run; Pyrtan does not do it itself.
 
 A service and a hub answer the same requests, so a caller never needs to
 know which it is talking to. A swarm starts as one process holding every
@@ -921,7 +925,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.38.0. The core, the service, the hub, the command, the console (which
+0.39.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

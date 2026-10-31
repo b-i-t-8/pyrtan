@@ -66,6 +66,10 @@ the token, and `--ldap` without one is refused. The client is LDAPv3 as
 far as a simple bind and a search need it, in the standard library, so
 the runtime keeps no dependencies. A tenant's hosted hub can point it at
 the tenant's own directory; nothing about tenants is in the code.
+Since v0.36, `--ldap-nested` counts members of nested groups by Active
+Directory's own transitive rule (`member:1.2.840.113556.1.4.1941:=`), one
+search per listed group, rather than walking the groups here: the
+directory knows its graph, and ends its cycles, better than a client does.
 
 None of these does TLS. A hub that leaves the LAN sits behind a proxy that does.
 mTLS between services is still open (design.md §7); a shared token is
