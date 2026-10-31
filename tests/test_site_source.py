@@ -49,3 +49,42 @@ def test_links_that_leave_the_site_are_only_web_and_mail():
     assert source.outside("#usage") == "#usage" and source.outside("docs/x.md") is None
     for bad in ("javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<script>", "vbscript:x"):
         assert source.outside(bad) == "#", bad   # a Markdown file merged to main is no script on pyrtan.com
+
+
+def test_releases_name_each_version_once(tmp_path, monkeypatch):
+    """A release is a version main's own line said first, once: two branches that each
+    bumped to 0.35.0 are one 0.35.0 (the first merged), and a branch that set its number
+    in a merge of main gives that merge's message as the notes."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+
+    def version(v: str, message: str) -> None:
+        (repo / "pyproject.toml").write_text(f'[project]\nname = "x"\nversion = "{v}"\n')
+        git("add", ".")
+        git("commit", "-q", "-m", message)
+
+    git("init", "-q", "-b", "main")
+    version("0.34.2", "release 0.34.2")
+    git("checkout", "-q", "-b", "ldap")
+    version("0.35.0", "LDAP users; release 0.35.0")
+    git("checkout", "-q", "-b", "game", "main")
+    version("0.35.0", "The game across hubs; release 0.35.0")
+    git("checkout", "-q", "-b", "late", "main")
+    version("0.31.0", "Late guesses; release 0.31.0")
+    git("checkout", "-q", "main")
+    git("merge", "-q", "--no-ff", "-m", "Merge ldap", "ldap")
+    git("merge", "-q", "--no-ff", "-m", "Merge game", "game")   # no version change on main: not a release
+    git("checkout", "-q", "late")
+    git("merge", "-q", "-X", "theirs", "-m", "Merge main into late; this is release 0.35.1", "main")
+    (repo / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0.35.1"\n')
+    git("commit", "-q", "-a", "--amend", "--no-edit")
+    git("checkout", "-q", "main")
+    git("merge", "-q", "--no-ff", "-m", "Merge late", "late")
+    monkeypatch.setattr(source, "ROOT", repo)
+    got = [(r["version"], r["subject"], r["notes"]["subject"]) for r in source.releases("HEAD")]
+    assert got == [
+        ("0.35.1", "Merge late", "Merge main into late; this is release 0.35.1"),
+        ("0.35.0", "Merge ldap", "LDAP users; release 0.35.0"),
+        ("0.34.2", "release 0.34.2", "release 0.34.2"),
+    ]  # 0.31.0 was never main's, and the game's 0.35.0 is not a second one

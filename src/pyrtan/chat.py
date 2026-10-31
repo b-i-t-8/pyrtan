@@ -74,7 +74,7 @@ guessed and the seat's score. The hub knows what a seat is only by what
 its client said when it sat down, so the game is as honest as its
 players' consoles; outside the game nothing is unlabelled. A player who
 finds nobody playing here asks the hubs this one meets with ``Play``
-(v0.35), never ``Meet``: a hub from before the game refuses it rather
+(0.35.0 as main merged it; every hub from 0.35.1), never ``Meet``: a hub from before the game refuses it rather
 than pair a player with someone who is not playing. A guess travels to
 the partner's hub as ``Guess``, and finds the game there even after its
 player has pressed New, for ten minutes.

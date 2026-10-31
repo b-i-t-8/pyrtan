@@ -92,6 +92,16 @@ of `env`, or apply itself without a person, breaks the first rule; see
 `src/pyrtan` knows about tenants, plans or billing. The hosted product runs
 this code unchanged.
 
+## Release numbers
+
+A change that sets a new version in `pyproject.toml` (and the same in
+`src/pyrtan/__init__.py`) sets one above main's. The `catalog-gate`
+workflow refuses a number main already has, which is what happens when
+two branches each bump to the next one: merge main and bump past it. The
+gate judges main as the pull request's event found it, so a branch whose
+gate ran before another release merged is caught only when it runs again
+(branch protection's "require branches to be up to date" makes it).
+
 ## License of contributions
 
 Pyrtan is AGPL-3.0-or-later. By opening a pull request you agree that your
