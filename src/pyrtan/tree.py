@@ -176,7 +176,7 @@ class Tree:
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
     keys: list[str] = field(default_factory=list)       # what ``memory`` nodes may read and write
     tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
-    budget: dict[str, Any] | None = None                # how many requests it may make in a window: { requests, per (seconds), said }
+    budget: list[dict[str, Any]] | None = None          # how many requests it may make in a window: [{ requests, per (seconds), said, host }]
 
     def node(self, node_id: str) -> Node:
         try:
@@ -271,7 +271,7 @@ class Tree:
             **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
-            **({"budget": {"requests": self.budget["requests"], "per": self.budget["per"]}} if self.budget else {}),
+            **({"budget": [{"requests": b["requests"], "per": b["per"], **({"host": b["host"]} if b["host"] else {})} for b in self.budget]} if self.budget else {}),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -284,25 +284,39 @@ class Tree:
         }
 
 
-def _budget(name: str, raw: Any) -> dict[str, Any] | None:
+def _budget(name: str, raw: Any) -> list[dict[str, Any]] | None:
     """``budget = { requests = 10, per = "1m" }``: at most that many requests
-    in any window of that length, across every run of the tree."""
+    in any window of that length, across every run of the tree. With
+    ``host``, the budget is the host's: every tree that names the same one
+    spends one count of the requests that reach it. A list holds several,
+    and a request must fit them all."""
     from .nlp import ParseError, parse_duration
 
     if raw is None:
         return None
-    if not isinstance(raw, dict) or set(raw) != {"requests", "per"}:
-        raise TreeError(f"{name}: 'budget' is a table of 'requests' and 'per', such as {{ requests = 10, per = \"1m\" }}")
-    requests, per = raw["requests"], raw["per"]
-    if isinstance(requests, bool) or not isinstance(requests, int) or requests < 1:
-        raise TreeError(f"{name}: budget.requests is a whole number of requests, 1 or more, got {requests!r}")
-    try:
-        seconds = per if isinstance(per, int) and not isinstance(per, bool) else parse_duration(str(per))
-    except ParseError:
-        seconds = 0
-    if seconds < 1:
-        raise TreeError(f"{name}: budget.per is a duration such as \"1m\" or \"1 hour\", got {per!r}")
-    return {"requests": requests, "per": seconds, "said": f"{per} s" if isinstance(per, int) else str(per)}
+    tables = raw if isinstance(raw, list) else [raw]
+    if not tables:
+        raise TreeError(f"{name}: 'budget' is a table, or a list of them, such as {{ requests = 10, per = \"1m\" }}")
+    out: list[dict[str, Any]] = []
+    for i, b in enumerate(tables):
+        where = "budget" if not isinstance(raw, list) else f"budget[{i}]"
+        if not isinstance(b, dict) or not {"requests", "per"} <= set(b) or set(b) - {"requests", "per", "host"}:
+            raise TreeError(f"{name}: '{where}' is a table of 'requests' and 'per', and 'host' for a host's own, such as {{ requests = 10, per = \"1m\" }}")
+        requests, per, host = b["requests"], b["per"], b.get("host")
+        if isinstance(requests, bool) or not isinstance(requests, int) or requests < 1:
+            raise TreeError(f"{name}: {where}.requests is a whole number of requests, 1 or more, got {requests!r}")
+        try:
+            seconds = per if isinstance(per, int) and not isinstance(per, bool) else parse_duration(str(per))
+        except ParseError:
+            seconds = 0
+        if seconds < 1:
+            raise TreeError(f"{name}: {where}.per is a duration such as \"1m\" or \"1 hour\", got {per!r}")
+        if host is not None and (not isinstance(host, str) or not re.fullmatch(r"(?:\*\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*", host)):
+            raise TreeError(f"{name}: {where}.host is a host name such as \"api.github.com\" (or \"*.example.com\"), got {host!r}")
+        out.append({"requests": requests, "per": seconds, "said": f"{per} s" if isinstance(per, int) else str(per), "host": host})
+    if len({b["host"] for b in out}) != len(out):
+        raise TreeError(f"{name}: 'budget' names a host (or the tree itself) twice; give each one budget")
+    return out
 
 
 def load_tree(path: str | Path) -> Tree:

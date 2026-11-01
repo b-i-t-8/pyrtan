@@ -15,7 +15,7 @@ A tree is one TOML file. This is the whole of it.
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
-| `budget` | no | At most so many requests in any window: `{ requests = 10, per = "1m" }` (below). |
+| `budget` | no | At most so many requests in any window: `{ requests = 10, per = "1m" }`, or a host's, shared by every tree that names it (below). |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -48,6 +48,22 @@ every time. An `each` stops at the first item its budget refuses, since
 the rest would be refused too. A delegated tree spends its own budget,
 not its caller's. The budget lives in the running service: `pyrtan run`
 starts with a fresh one each time. `/capabilities` shows it.
+
+```toml
+budget = { host = "api.github.com", requests = 60, per = "1 hour" }
+budget = [{ requests = 10, per = "1m" }, { host = "api.github.com", requests = 60, per = "1 hour" }]
+```
+
+With `host` (a name, or `*.example.com`), the budget is the host's: one
+count of the requests that reach it (by `http` or `browser`), shared by
+every tree on the service that names it, as a site's rate limit is
+shared by everyone at one address. Each tree holds the shared count to
+its own number, so one that names fewer is refused sooner. A list holds
+several, at most one per host and one of the tree's own, and a request
+must fit every one that applies: if any refuses it, it is counted in
+none. A refusal by a host's says so (`the budget of 60 requests per 1
+hour for api.github.com, which every tree here naming it shares, is
+spent`) and `output.budget` names the `host`.
 
 ## Triggers
 

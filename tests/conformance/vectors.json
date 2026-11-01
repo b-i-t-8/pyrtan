@@ -861,10 +861,13 @@
       "version": 1
      },
      {
-      "budget": {
-       "per": 3600,
-       "requests": 30
-      },
+      "budget": [
+       {
+        "host": "api.github.com",
+        "per": 3600,
+        "requests": 60
+       }
+      ],
       "description": "The latest release of a GitHub repository.",
       "hosts": [
        "api.github.com"
@@ -891,9 +894,16 @@
        "[what's the] latest release of {repo:word}",
        "latest {repo:word} release"
       ],
-      "version": 4
+      "version": 5
      },
      {
+      "budget": [
+       {
+        "host": "api.github.com",
+        "per": 3600,
+        "requests": 60
+       }
+      ],
       "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
       "hosts": [
        "api.github.com"
@@ -922,7 +932,7 @@
        "github (repo|repository) {repo:word}",
        "tell me about the {repo:word} repo"
       ],
-      "version": 1
+      "version": 2
      },
      {
       "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
@@ -1943,10 +1953,12 @@
       "version": 1
      },
      {
-      "budget": {
-       "per": 60,
-       "requests": 3
-      },
+      "budget": [
+       {
+        "per": 60,
+        "requests": 3
+       }
+      ],
       "description": "reads items, within a budget",
       "hosts": [
        "hacker-news.firebaseio.com"
@@ -2149,6 +2161,60 @@
         "what": "home/kitchen/temperature at mqtt://broker.local"
        }
       ]
+     },
+     {
+      "budget": [
+       {
+        "host": "hacker-news.firebaseio.com",
+        "per": 3600,
+        "requests": 2
+       },
+       {
+        "per": 60,
+        "requests": 5
+       }
+      ],
+      "description": "reads one item, within the host's budget (a)",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "share-a",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
+      "budget": [
+       {
+        "host": "hacker-news.firebaseio.com",
+        "per": 3600,
+        "requests": 2
+       },
+       {
+        "per": 60,
+        "requests": 5
+       }
+      ],
+      "description": "reads one item, within the host's budget (b)",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "share-b",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
      },
      {
       "description": "Whether a web site answers, and how quickly.",
@@ -5290,6 +5356,116 @@
   },
   {
    "body": {
+    "tree": "share-a"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "Pyrtan 0.1",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "Pyrtan 0.1"
+      }
+     ],
+     "tree": "share-a"
+    },
+    "tree": "share-a"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "share-b"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "Pyrtan 0.1",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "Pyrtan 0.1"
+      }
+     ],
+     "tree": "share-b"
+    },
+    "tree": "share-b"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "share-a"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "budget": {
+      "host": "hacker-news.firebaseio.com",
+      "per": 3600,
+      "requests": 2,
+      "retry_after": 3600
+     }
+    },
+    "reason": "budget",
+    "say": "get: the budget of 2 requests per 1 hour for hacker-news.firebaseio.com, which every tree here naming it shares, is spent; the next is allowed in 3600 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "get",
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json: not sent; the budget of 2 requests per 1 hour for hacker-news.firebaseio.com is spent, the next in 3600 s"
+      }
+     ],
+     "tree": "share-a"
+    },
+    "tree": "share-a"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
     "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
@@ -5855,7 +6031,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 40,
+    "runs": 43,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5924,6 +6100,8 @@
      "rendered-headline",
      "rhymes",
      "room-temperature",
+     "share-a",
+     "share-b",
      "site-status",
      "small-talk",
      "space-news",
@@ -6498,6 +6676,86 @@
    "triggers": [
     "quota {n:int}"
    ],
+   "version": 1
+  },
+  {
+   "budget": [
+    {
+     "host": "hacker-news.firebaseio.com",
+     "per": "1 hour",
+     "requests": 2
+    },
+    {
+     "per": 60,
+     "requests": 5
+    }
+   ],
+   "description": "reads one item, within the host's budget (a)",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "name": "share-a",
+   "nodes": {
+    "get": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      }
+     ],
+     "http": {
+      "url": "https://hacker-news.firebaseio.com/v0/item/101.json"
+     },
+     "into": "r",
+     "kind": "observe",
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "{{ state.title }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": [
+    {
+     "host": "hacker-news.firebaseio.com",
+     "per": "1 hour",
+     "requests": 2
+    },
+    {
+     "per": 60,
+     "requests": 5
+    }
+   ],
+   "description": "reads one item, within the host's budget (b)",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "name": "share-b",
+   "nodes": {
+    "get": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      }
+     ],
+     "http": {
+      "url": "https://hacker-news.firebaseio.com/v0/item/101.json"
+     },
+     "into": "r",
+     "kind": "observe",
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "{{ state.title }}"
+    }
+   },
+   "start": "get",
    "version": 1
   },
   {
@@ -24627,8 +24885,9 @@
   },
   "github-release": {
    "budget": {
+    "host": "api.github.com",
     "per": "1 hour",
-    "requests": 30
+    "requests": 60
    },
    "description": "The latest release of a GitHub repository.",
    "hosts": [
@@ -24758,9 +25017,14 @@
      "pattern": "latest {repo:word} release"
     }
    ],
-   "version": 4
+   "version": 5
   },
   "github-repo": {
+   "budget": {
+    "host": "api.github.com",
+    "per": "1 hour",
+    "requests": 60
+   },
    "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
    "hosts": [
     "api.github.com"
@@ -24899,7 +25163,7 @@
      "pattern": "tell me about the {repo:word} repo"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "go-module": {
    "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
