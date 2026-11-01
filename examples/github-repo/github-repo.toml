@@ -2,13 +2,12 @@
 # issues, from GitHub's REST API (no token: sixty requests an hour).
 
 name = "github-repo"
-version = 2
+version = 1
 namespace = "pyrtan"
 description = "A GitHub repository at a glance: description, language, stars, forks, open issues."
 tags = ["github", "software", "read-only"]
 license = "MIT"
 hosts = ["api.github.com"]
-budget = { host = "api.github.com", requests = 60, per = "1 hour" }   # shared with github-release: one address, one allowance
 start = "fetch"
 
 [[triggers]]

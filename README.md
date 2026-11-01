@@ -69,7 +69,7 @@ From a checkout, `uv sync` then `uv run pyrtan …`, and `uv run pytest`.
 name = "github-release"
 description = "The latest release of a GitHub repository."
 hosts = ["api.github.com"]
-budget = { host = "api.github.com", requests = 60, per = "1 hour" }   # every tree here shares it; then "budget", before GitHub says 403
+budget = { requests = 30, per = "1 hour" }          # then "budget", before GitHub says 403
 start = "fetch"
 
 [[triggers]]

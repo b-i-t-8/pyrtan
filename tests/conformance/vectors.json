@@ -863,9 +863,8 @@
      {
       "budget": [
        {
-        "host": "api.github.com",
         "per": 3600,
-        "requests": 60
+        "requests": 30
        }
       ],
       "description": "The latest release of a GitHub repository.",
@@ -894,16 +893,9 @@
        "[what's the] latest release of {repo:word}",
        "latest {repo:word} release"
       ],
-      "version": 5
+      "version": 4
      },
      {
-      "budget": [
-       {
-        "host": "api.github.com",
-        "per": 3600,
-        "requests": 60
-       }
-      ],
       "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
       "hosts": [
        "api.github.com"
@@ -932,7 +924,7 @@
        "github (repo|repository) {repo:word}",
        "tell me about the {repo:word} repo"
       ],
-      "version": 2
+      "version": 1
      },
      {
       "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
@@ -24885,9 +24877,8 @@
   },
   "github-release": {
    "budget": {
-    "host": "api.github.com",
     "per": "1 hour",
-    "requests": 60
+    "requests": 30
    },
    "description": "The latest release of a GitHub repository.",
    "hosts": [
@@ -25017,14 +25008,9 @@
      "pattern": "latest {repo:word} release"
     }
    ],
-   "version": 5
+   "version": 4
   },
   "github-repo": {
-   "budget": {
-    "host": "api.github.com",
-    "per": "1 hour",
-    "requests": 60
-   },
    "description": "A GitHub repository at a glance: description, language, stars, forks, open issues.",
    "hosts": [
     "api.github.com"
@@ -25163,7 +25149,7 @@
      "pattern": "tell me about the {repo:word} repo"
     }
    ],
-   "version": 2
+   "version": 1
   },
   "go-module": {
    "description": "The latest version of a Go module, and when it was published, from proxy.golang.org.",
