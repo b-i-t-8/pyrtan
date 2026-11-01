@@ -419,7 +419,12 @@ Five trees, all against real public APIs, all tested offline:
     ranges, `weekdays`, `weekends`, `daily`; times as `nlp.parse_time`
     reads them), a change of clocks has one stated rule, and a missed slot
     is not made up (`schedule.py`).
-20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+20. **v0.43, built: days of the month, and every other week.** A
+    calendar watch may name days of the month (`1st,15th`, `last`), passed
+    over in a month without them, or run every N weeks counted from the
+    week of a `from` date it must give, so "every other Monday" says
+    which Mondays and keeps counting across a new year (`schedule.py`).
+21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

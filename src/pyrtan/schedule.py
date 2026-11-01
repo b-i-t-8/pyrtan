@@ -7,9 +7,18 @@ A schedule is days and times of day, in a fixed little grammar::
     "sat,sun 10am"              the weekend, at ten
     "weekdays noon"             also: daily, every day, weekends
     "fri-mon 22:00"             a range may wrap the week
+    "1st,15th 09:00"            days of the month; "last" is its last day
+    "every 2 weeks from 2026-11-02 mon 10:00"
+                                every other Monday, counting from that week
+                                (also: every other week, fortnightly)
 
 Days are names (``mon`` or ``monday``), ranges of them, or the words
-above; no days means every day. Times are read by :func:`nlp.parse_time`
+above; no days means every day. Days of the month are ordinals (``1st``,
+``2nd``, ``31st``) or ``last``, and a month without that day (the 31st in
+April) is passed over, as cron does; a schedule names days of the month
+or days of the week, not both. ``every N weeks`` counts weeks (Monday to
+Sunday) from the week of its ``from`` date, which it needs, since "every
+other" has to know which; nothing runs before that date. Times are read by :func:`nlp.parse_time`
 (``09:00``, ``9am``, ``noon``, ``midnight``), so a time has no space in
 it. The times are in ``tz`` (an IANA zone such as ``Europe/Oslo``), or
 UTC when none is given.
@@ -37,14 +46,41 @@ class ScheduleError(ValueError):
     pass
 
 
+LAST = 0  # in monthdays: the month's last day
+
+
 @dataclass(frozen=True)
 class Schedule:
     days: frozenset[int]          # 0 = Monday, as datetime.weekday()
     times: tuple[tuple[int, int], ...]  # (hour, minute), sorted
+    monthdays: frozenset[int] = frozenset()  # 1..31, and LAST; when given, days is every day
+    weeks: int = 1                # every N weeks
+    since: _dt.date | None = None  # the from date: weeks count from its week, and nothing runs before it
 
     def describe(self) -> str:
-        days = "every day" if len(self.days) == 7 else ",".join(DAYS[d] for d in sorted(self.days))
-        return f"{days} {', '.join(f'{h:02d}:{m:02d}' for h, m in self.times)}"
+        if self.monthdays:
+            days = ",".join("last" if d == LAST else _ordinal(d) for d in sorted(self.monthdays, key=lambda d: d or 32))
+        else:
+            days = "every day" if len(self.days) == 7 else ",".join(DAYS[d] for d in sorted(self.days))
+        every = f"every {self.weeks} weeks from {self.since.isoformat()} " if self.weeks > 1 and self.since else ""
+        return f"{every}{days} {', '.join(f'{h:02d}:{m:02d}' for h, m in self.times)}"
+
+    def runs_on(self, day: _dt.date) -> bool:
+        if self.monthdays:
+            last = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1) - _dt.timedelta(days=1)
+            if day.day not in self.monthdays and not (LAST in self.monthdays and day == last):
+                return False
+        elif day.weekday() not in self.days:
+            return False
+        if self.weeks > 1 and self.since is not None:
+            monday = self.since - _dt.timedelta(days=self.since.weekday())
+            if day < self.since or ((day - monday).days // 7) % self.weeks:
+                return False
+        return True
+
+
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
 
 
 def _day(word: str) -> int:
@@ -57,12 +93,36 @@ def _day(word: str) -> int:
 def parse_at(text: object) -> Schedule:
     if not isinstance(text, str) or not text.strip():
         raise ScheduleError("'at' is days and times of day, such as \"mon-fri 09:00\"")
-    t = re.sub(r"\bevery\s+day\b", "everyday", text.strip().lower())
+    t = text.strip().lower()
+    t = re.sub(r"\bevery\s+day\b", "everyday", t)
+    t = re.sub(r"\b(?:every\s+other\s+week|fortnightly)\b", "every 2 weeks", t)
+    weeks, since = 1, None
+    m = re.search(r"\bevery\s+(\d+)\s+weeks?\b(?:\s+from\s+(\S+))?", t)
+    if m:
+        weeks = int(m.group(1))
+        if weeks < 1:
+            raise ScheduleError(f"{text!r}: every 0 weeks is never")
+        if weeks > 1:
+            if m.group(2) is None:
+                raise ScheduleError(f"{text!r}: every {weeks} weeks counts from a week; say which, such as \"every {weeks} weeks from 2026-11-02 ...\"")
+            try:
+                since = _dt.date.fromisoformat(m.group(2))
+            except ValueError:
+                raise ScheduleError(f"{text!r}: {m.group(2)!r} is not a date such as 2026-11-02") from None
+        t = t[: m.start()] + " " + t[m.end():]
     days: set[int] = set()
+    monthdays: set[int] = set()
     times: set[tuple[int, int]] = set()
     for token in (x for x in re.split(r"[\s,]+", t) if x):
         if token in WORDS:
             days.update(WORDS[token])
+        elif token == "last":
+            monthdays.add(LAST)
+        elif re.fullmatch(r"\d{1,2}(?:st|nd|rd|th)", token):
+            n = int(token[:-2])
+            if not 1 <= n <= 31 or _ordinal(n) != token:
+                raise ScheduleError(f"{token!r} in {text!r} is not a day of the month; say 1st, 2nd, 3rd ... 31st, or last")
+            monthdays.add(n)
         elif re.fullmatch(r"[a-z]+-[a-z]+", token):
             first, last = (_day(w) for w in token.split("-"))
             days.update((first + i) % 7 for i in range((last - first) % 7 + 1))
@@ -76,7 +136,11 @@ def parse_at(text: object) -> Schedule:
             times.add((int(hh), int(mm)))
     if not times:
         raise ScheduleError(f"{text!r} names no time of day; say when, such as \"{text.strip()} 09:00\"")
-    return Schedule(frozenset(days or range(7)), tuple(sorted(times)))
+    if monthdays and days:
+        raise ScheduleError(f"{text!r} names days of the month and days of the week; a schedule is one or the other")
+    if monthdays and weeks > 1:
+        raise ScheduleError(f"{text!r}: every {weeks} weeks counts weeks, so it names days of the week, not of the month")
+    return Schedule(frozenset(days or range(7)), tuple(sorted(times)), frozenset(monthdays), weeks, since)
 
 
 def zone(name: object) -> _dt.tzinfo:
@@ -96,15 +160,18 @@ def zone(name: object) -> _dt.tzinfo:
 def next_after(schedule: Schedule, after: _dt.datetime, tz: _dt.tzinfo) -> _dt.datetime:
     """The first slot strictly after ``after`` (an aware instant), in UTC."""
     local = after.astimezone(tz)
-    for d in range(8):
+    # Long enough to reach the next slot whatever the schedule: a 31st two
+    # months on, N weeks, and the wait for a week that has not begun.
+    ahead = 62 + 7 * schedule.weeks + max(0, (schedule.since - local.date()).days if schedule.since else 0)
+    for d in range(ahead + 1):
         day = local.date() + _dt.timedelta(days=d)
-        if day.weekday() not in schedule.days:
+        if not schedule.runs_on(day):
             continue
         for hour, minute in schedule.times:
             slot = _dt.datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz).astimezone(_dt.timezone.utc)
             if slot > after:
                 return slot
-    raise AssertionError("a schedule has a slot every week")  # every schedule has a day and a time
+    raise AssertionError("a schedule has a slot within two months")  # every schedule has a day and a time
 
 
 def slot_name(at: _dt.datetime, tz: _dt.tzinfo) -> str:
