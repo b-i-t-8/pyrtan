@@ -421,7 +421,14 @@ Five trees, all against real public APIs, all tested offline:
     branch the order check proves is never taken is marked. Trees do not
     loop, so the list is finite: the audit, and the documentation, of
     what a tree can do (`paths.py`).
-20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+20. **v0.45, built: which routes the tests take.** `pyrtan paths
+    --covered` runs a tree's own `[[tests]]` and matches each run's route,
+    node by node and choice by choice as its trace records them, to one
+    of the routes from the tree's start: each route says which tests take
+    it or that none does, a test that stops on the way (a transport, a
+    drift) says where, and the tree says how many of the routes that can
+    be taken are tested (`paths.py`).
+21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

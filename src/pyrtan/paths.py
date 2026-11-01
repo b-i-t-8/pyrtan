@@ -38,6 +38,7 @@ class Leg:
     does: str = ""          # what the node reads, does or asks, as written
     via: str = ""           # for a decide: the branch taken
     never: bool = False     # that branch is never taken (analysis)
+    choice: str | None = None  # what a trace records for it: a decide's condition or "else", "row"; "gap" for none
 
     def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in {"node": self.node, "kind": self.kind, "does": self.does, "via": self.via, "never": self.never}.items() if v not in ("", False)}
@@ -129,20 +130,20 @@ def routes(tree: Tree, start: str | None = None, limit: int = MAX_ROUTES) -> tup
             i = 0
             for b in branches:
                 if "else" in b:
-                    walk(b["else"], legs + [Leg(node.id, "decide", via=f"{on}: anything else")])
+                    walk(b["else"], legs + [Leg(node.id, "decide", via=f"{on}: anything else", choice="else")])
                     continue
-                walk(b.get("then"), legs + [Leg(node.id, "decide", via=f"{on} {cond_words(b['when'])}", never=i in never)])
+                walk(b.get("then"), legs + [Leg(node.id, "decide", via=f"{on} {cond_words(b['when'])}", never=i in never, choice=cond_words(b["when"]))])
                 i += 1
             if not any("else" in b for b in branches):
                 holes = analysis.holes_in_words(conds)
-                end(legs + [Leg(node.id, "decide", via=f"{on}: anything else")], "gap", f"no branch takes it{f' ({holes})' if holes else ''}: recorded as a gap")
+                end(legs + [Leg(node.id, "decide", via=f"{on}: anything else", choice="gap")], "gap", f"no branch takes it{f' ({holes})' if holes else ''}: recorded as a gap")
         elif node.kind == "lookup":
-            leg = Leg(node.id, "lookup", does(node))
+            leg = Leg(node.id, "lookup", does(node), choice="row")
             walk(node.next, legs + [leg])
             if node.get("default") is None:
                 conds = [row_condition(r) for r in node.get("table") or [] if isinstance(r, dict)]
                 holes = analysis.holes_in_words(conds)
-                end(legs + [Leg(node.id, "lookup", does(node), via=f"{node.get('on')}: no row")], "gap", f"no row takes it{f' ({holes})' if holes else ''}: recorded as a gap")
+                end(legs + [Leg(node.id, "lookup", does(node), via=f"{node.get('on')}: no row", choice="gap")], "gap", f"no row takes it{f' ({holes})' if holes else ''}: recorded as a gap")
         else:
             walk(node.next, legs + [Leg(node.id, node.kind, does(node))])
 
@@ -171,7 +172,72 @@ def stops(tree: Tree) -> list[str]:
     return out
 
 
-def render(tree: Tree, limit: int = MAX_ROUTES) -> str:
+def signature(legs: list[Leg]) -> tuple[tuple[str, str | None], ...]:
+    """A route as a trace would show it: each node, and what it chose."""
+    return tuple((leg.node, leg.choice) for leg in legs)
+
+
+def walked(outcome: Any) -> tuple[tuple[str, str | None], ...]:
+    """The route a run took at its top level, in the same terms. A node
+    that paused and was answered (an ask, an act that asked first) is one
+    leg; a decide that found no branch, or a lookup no row, chose "gap"."""
+    out: list[tuple[str, str | None]] = []
+    for step in outcome.trace.steps if outcome.trace is not None else []:
+        if step.depth or step.kind in ("intent", "resume"):
+            continue
+        if step.kind == "decide":
+            choice: str | None = step.chosen or "gap"
+        elif step.kind == "lookup":
+            choice = "row" if step.chosen else "gap"
+        else:
+            choice = None
+        if out and out[-1][0] == step.node:
+            out[-1] = (step.node, choice)
+        else:
+            out.append((step.node, choice))
+    return tuple(out)
+
+
+@dataclass
+class Coverage:
+    """Which of a tree's routes its own [[tests]] take."""
+    tested: dict[int, list[str]] = field(default_factory=dict)  # route index -> the tests that take it
+    stopped: list[tuple[str, str, str]] = field(default_factory=list)  # (test, the node it stopped at, why) for a run no route ends like
+    unrun: list[tuple[str, str]] = field(default_factory=list)  # (test, why) for a test that could not run
+
+
+def coverage(tree: Tree, others: list[Tree] = (), found: list[Route] | None = None) -> Coverage:
+    """Run the tree's tests against their recordings, and match each run's
+    route to one of the routes from the tree's start."""
+    from .cases import cases, run_case, with_tree
+
+    found = found if found is not None else routes(tree)[0]
+    by_signature: dict[tuple[tuple[str, str | None], ...], int] = {}
+    for i, r in enumerate(found):
+        by_signature.setdefault(signature(r.legs), i)
+    out = Coverage()
+    registry = with_tree(list(others), tree)
+    for case in cases(tree):
+        outcome = run_case(case, tree, registry)
+        if outcome.reason == "no-fixture":
+            out.unrun.append((case.name, outcome.say or "no recording"))
+            continue
+        took = walked(outcome)
+        i = by_signature.get(took)
+        if i is not None:
+            out.tested.setdefault(i, []).append(case.name)
+        else:
+            out.stopped.append((case.name, took[-1][0] if took else tree.start, outcome.reason or outcome.status))
+    return out
+
+
+def cases_of(tree: Tree) -> list[Any]:
+    from .cases import cases
+
+    return cases(tree)
+
+
+def render(tree: Tree, limit: int = MAX_ROUTES, covered: Coverage | None = None) -> str:
     """The routes as text, the way ``pyrtan paths`` prints them."""
     lines: list[str] = []
     sections = [(None, tree.start)] + [(f"each sub-flow from {s}", s) for s in sub_flows(tree)]
@@ -185,11 +251,23 @@ def render(tree: Tree, limit: int = MAX_ROUTES) -> str:
         for i, r in enumerate(found, 1):
             steps = " -> ".join(f"{leg.node} [{leg.via}]" if leg.via else leg.node for leg in r.legs)
             mark = "  (never taken)" if r.never else ""
+            if covered is not None and title is None:
+                by = covered.tested.get(i - 1)
+                mark += f"  [tested: {', '.join(by)}]" if by else ("" if r.never else "  [untested]")
             lines.append(f"{i}. {steps}: {r.end} {r.says}{mark}")
             for read in r.reads:
                 lines.append(f"     {read}")
         if over:
             lines.append(f"… more than {limit} routes; the rest are not listed")
+    if covered is not None:
+        top = routes(tree, tree.start, limit)[0]
+        live = [i for i, r in enumerate(top) if not r.never]
+        lines.append("")
+        lines.append(f"tested: {sum(1 for i in live if i in covered.tested)} of {len(live)} route(s) that can be taken, by {len(cases_of(tree))} test(s)")
+        for name, node, why in covered.stopped:
+            lines.append(f"  {name}: stopped at {node} ({why}), on no route above")
+        for name, why in covered.unrun:
+            lines.append(f"  {name}: not run: {why}")
     head = f"{tree.name}: {total} route(s)"
     can = stops(tree)
     if can:
