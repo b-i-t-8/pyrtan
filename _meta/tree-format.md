@@ -152,7 +152,13 @@ trace begins with a `watch` step. Each watch keeps a timeline, a month of
 what its runs came to as spans of runs that ended alike (`GET
 /watches/history`; `--watch-history FILE` keeps it across restarts): an
 output that names a `host` and whether it is `online` is drawn as a
-device's uptime in the console's Devices tab. `--watch` on a service or hub runs
+device's uptime in the console's Devices tab. A run continues the last
+span when the watch kept time: within two and a half intervals of an
+`every`, or with no slot of an `at` passed between them (a slot passed by
+while the service was down is a gap, drawn as unknown; a weekend with no
+slots is not). The newest span holds until `holds_until`, which
+`/watches/history` gives: those intervals past it, or an `at`'s next slot
+and five minutes. `--watch` on a service or hub runs
 them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs

@@ -1173,6 +1173,7 @@ document.addEventListener("click", (e) => {
 let devicesTimer = null, devicesRange = 86400, deviceOpen = null;
 try { const r = Number(localStorage.getItem("pyrtan.devices.range")); if ([86400, 604800, 2592000].includes(r)) devicesRange = r; } catch (e) {}
 const STALE_AFTER = 10 * 60;  // seconds without a check before a device reads "not checked lately"
+const CALENDAR_GRACE = 300;    // watch.CALENDAR_GRACE: seconds past a calendar's slot before it reads late
 function ago(seconds) {
   seconds = Math.max(0, Math.round(seconds));
   if (seconds < 60) return `${seconds} s`;
@@ -1184,8 +1185,10 @@ function ago(seconds) {
 }
 // A watch's timeline as stretches of up, down and unknown within [from, now]:
 // a span holds its runs from its first to its last; the newest one reaches
-// now while its watch keeps time; anything else is time nobody checked.
-function stretches(spans, every, from, now) {
+// now while its watch keeps time (until holds_until, which the service
+// says: past a clock's interval, or a calendar's next slot; a service from
+// before it said only every); anything else is time nobody checked.
+function stretches(spans, every, from, now, holdsUntil) {
   const out = [];
   const add = (state, a, b) => {
     a = Math.max(a, from); b = Math.min(b, now);
@@ -1198,7 +1201,8 @@ function stretches(spans, every, from, now) {
     const o = s.output || {};
     const state = s.status === "done" && typeof o.online === "boolean" ? (o.online ? "up" : "down") : "unknown";
     let b = s.to;
-    if (i === spans.length - 1 && every && now - s.to <= 2.5 * every) b = now;
+    const until = holdsUntil != null ? holdsUntil : every ? s.to + 2.5 * every : null;
+    if (i === spans.length - 1 && until != null && now <= until) b = now;
     if (s.from > t) add("unknown", t, s.from);
     add(state, s.from, b);
     t = Math.max(t, b);
@@ -1227,7 +1231,9 @@ function devicesFrom(watches, now) {
     const since = typeof o.since === "string" ? Date.parse(o.since) / 1000 : NaN;
     const checked = x.last_at || null;
     let state = !isDevice ? "stale" : o.online ? "up" : "down";
-    if (checked !== null && now - checked > STALE_AFTER) state = "stale";
+    // A calendar watch is late only once its next slot (and a grace for that run) has passed.
+    const late = x.kind === "at" && x.next_at ? now > x.next_at + CALENDAR_GRACE : now - checked > STALE_AFTER;
+    if (checked !== null && late) state = "stale";
     out.push({ name: String(o.name || x.name || o.host || "?"), host: o.host !== undefined ? String(o.host) : "", state, online: isDevice ? o.online : null, since: Number.isNaN(since) ? null : since, checked, error: x.last_error || (x.last && x.last.status !== "done" ? x.last.say : null), peer: x.peer, key: `${x.peer || ""} ${x.tree} ${x.name}`, tree: x.tree, watch: x.name });
   }
   const rank = { down: 0, stale: 1, up: 2 };
@@ -1253,13 +1259,13 @@ function renderDevice(d, t, haveHistory, now) {
     box.innerHTML = html + `<div class="card mute">${haveHistory ? "No history for this watch yet." : "The service that watches this device keeps no history (it is older than 0.40): uptime and outages need it."}</div>`;
     return;
   }
-  const month = stretches(t.spans, t.every, now - 2592000, now);
+  const month = stretches(t.spans, t.every, now - 2592000, now, t.holds_until);
   const ranges = [[86400, "24 hours"], [604800, "7 days"], [2592000, "30 days"]];
   html += `<div class="stats">` + ranges.map(([r, label]) => {
-    const parts = stretches(t.spans, t.every, now - r, now), u = uptimeOf(parts), n = outagesOf(parts, now).length;
+    const parts = stretches(t.spans, t.every, now - r, now, t.holds_until), u = uptimeOf(parts), n = outagesOf(parts, now).length;
     return `<div class="stat"><div class="mute">Last ${esc(label)}</div><div class="big">${esc(pctText(u.pct))}</div><div class="mute">${n} outage${n === 1 ? "" : "s"}${u.known < r * 0.995 ? ` · ${esc(ago(u.known))} checked` : ""}</div></div>`;
   }).join("") + `</div>`;
-  html += `<div class="card"><h4>Last 24 hours</h4>${barSvg(stretches(t.spans, t.every, now - 86400, now), now - 86400, now)}<div class="axis"><span>24 h ago</span><span>now</span></div>` +
+  html += `<div class="card"><h4>Last 24 hours</h4>${barSvg(stretches(t.spans, t.every, now - 86400, now, t.holds_until), now - 86400, now)}<div class="axis"><span>24 h ago</span><span>now</span></div>` +
     `<h4 style="margin-top:14px">Last 30 days</h4>${barSvg(month, now - 2592000, now)}<div class="axis"><span>30 d ago</span><span>now</span></div></div>`;
   const outages = outagesOf(month, now);
   const total = outages.reduce((s, o) => s + (o.b - o.a), 0), longest = outages.reduce((m, o) => Math.max(m, o.b - o.a), 0);
@@ -1297,7 +1303,7 @@ async function loadDevices() {
       `<div class="when">${d.checked ? `checked ${esc(ago(now - d.checked))} ago` : "not checked yet"}</div>` + (d.error ? `<div class="when">${esc(d.error)}</div>` : "");
     const t = timelines.get(d.key);
     if (t) {
-      const parts = stretches(t.spans, t.every, from, now), u = uptimeOf(parts);
+      const parts = stretches(t.spans, t.every, from, now, t.holds_until), u = uptimeOf(parts);
       const covered = u.known < devicesRange * 0.995 ? ` <span class="mute">of ${esc(ago(u.known))} checked</span>` : "";
       card.insertAdjacentHTML("beforeend", `<div class="uptime"><span><b>${esc(pctText(u.pct))}</b> up${covered}</span><span class="mute range-name">${esc(rangeName)}</span></div>${barSvg(parts, from, now)}<div class="axis"><span>${esc(ago(devicesRange))} ago</span><span>now</span></div>`);
     }
