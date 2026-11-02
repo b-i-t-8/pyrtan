@@ -284,7 +284,10 @@ first, with a bar of its history and its uptime over the last 24 hours,
 7 days or 30 days. That history is each watch's timeline, which `mine`
 keeps in `trees/.watch-history.json` (`PYRTAN_WATCH_HISTORY`) so it
 survives a restart; time nobody checked (the stack was down) shows grey
-and does not count against uptime. A device is online when any of a dozen common
+and does not count against uptime. Tap a device's name for its own page
+(`#devices/…`, a link you can keep): uptime over a day, a week and a
+month, its history as bars, and its recent outages, newest first, with
+when each began, when it ended and how long it lasted. A device is online when any of a dozen common
 TCP ports answers, even with a refusal; one that drops everything (a
 phone asleep, a strict firewall) looks offline.
 
