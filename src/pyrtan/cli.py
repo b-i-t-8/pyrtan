@@ -137,6 +137,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--forget", action="append", default=[], metavar="KEY", help="forget this key (repeatable)")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("discover", help="what is on this box's network: mDNS services, UPnP devices, BACnet devices, or a TCP scan of a network")
+    p.add_argument("method", choices=["mdns", "ssdp", "bacnet", "scan"], help="mdns: DNS-SD (a service such as _matter._tcp, or none for the service types); ssdp: UPnP; bacnet: Who-Is; scan: which hosts of a network answer on which ports")
+    p.add_argument("query", nargs="?", default=None, help="the mdns service, the ssdp search target (ssdp:all), or the network to scan (192.168.1.0/24)")
+    p.add_argument("--ports", default=None, help="scan: comma-separated ports (default " + ",".join(str(x) for x in (22, 80, 443, 502, 1883, 5540, 8080, 47808)) + ")")
+    p.add_argument("--wait", type=float, default=3.0, help="seconds to listen for answers (default 3)")
+    p.add_argument("--timeout", type=float, default=30.0, help="scan: seconds for the whole scan (default 30)")
+    p.add_argument("--names", action="store_true", help="scan: look up each host's name")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("match", help="how a sentence reads against the trees: the rewrites, every trigger's verdict, the winner")
     p.add_argument("text")
     p.add_argument("--trees", action="append", default=[], help="tree file or directory (repeatable; default $PYRTAN_TREES or ./trees)")
@@ -456,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _warn_secret_flags(sys.argv[1:] if argv is None else argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "discover": cmd_discover, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "drop": cmd_drop, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -733,6 +742,57 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print(c.render())
     print(f"{new.name}: {len(result.changed)} of {total} test run(s) changed against {label}")
     return 1 if result.changed else 0
+
+
+def cmd_discover(args: argparse.Namespace) -> int:
+    """What is on this box's network, for the person writing trees: the
+    addresses and services to put in a tree's hosts, networks and nodes.
+    The person at the command is the operator, so no allow-list applies."""
+    from . import discover
+    from .transport import TransportError
+
+    spec: dict[str, Any] = {"wait": args.wait}
+    if args.method == "scan":
+        if not args.query:
+            print("pyrtan discover scan: name the network, such as 192.168.1.0/24", file=sys.stderr)
+            return 2
+        spec["scan"] = args.query
+        if args.ports:
+            try:
+                spec["ports"] = [int(x) for x in args.ports.split(",") if x.strip()]
+            except ValueError:
+                print("pyrtan discover: --ports is numbers separated by commas", file=sys.stderr)
+                return 2
+        spec["names"] = args.names
+    elif args.method == "bacnet":
+        spec["bacnet"] = "who-is"
+    else:
+        spec[args.method] = args.query or ("" if args.method == "mdns" else "ssdp:all")
+    try:
+        out = discover.perform(spec, args.timeout if args.method == "scan" else args.wait + 1)
+    except TransportError as e:
+        print(f"pyrtan discover: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(out["devices"], indent=2, ensure_ascii=False))
+        return 0
+    if not out["devices"]:
+        print("nothing answered" + (" (in a container, multicast and broadcast need the host's network)" if args.method != "scan" else ""))
+        return 0
+    for d in out["devices"]:
+        if args.method == "scan":
+            print(f"{d['address']:<16} " + (", ".join(str(x) for x in d["open"]) or "up, nothing open") + (f"  ({d['name']})" if d.get("name") else ""))
+        elif args.method == "bacnet":
+            where = f"{d['address']}:{d['port']}" + (f" network {d['network']} mac {d['mac']}" if d.get("network") is not None else "")
+            print(f"device:{d['instance']:<10} {where}  vendor {d['vendor']}")
+        elif args.method == "ssdp":
+            name = " / ".join(x for x in (d.get("friendly_name"), d.get("manufacturer"), d.get("model")) if x) or d.get("server") or ""
+            print(f"{d['address']:<16} {name}  {d['st']}")
+        elif "name" in d:
+            print(f"{d['address'] or '?':<16} {d['name']}  {d['host']}:{d['port']}" + (f"  {d['txt']}" if d.get("txt") else ""))
+        else:
+            print(d["service"])
+    return 0
 
 
 def cmd_memory(args: argparse.Namespace) -> int:

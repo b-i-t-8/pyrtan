@@ -15,6 +15,7 @@ A tree is one TOML file. This is the whole of it.
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
+| `networks` | if any node discovers | Networks (CIDRs) a `discover` node may look at (`192.168.1.0/24`); a scan's target must be inside them and devices answering from outside are left out. `*` is everything. |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -248,6 +249,10 @@ coap   = { url = "coap://garden.local/sensors/bed-1/moisture" }                 
 coap   = { url = "coap://garden.local/valves/1", method = "PUT", payload = "open" }              # act
 matter = { url = "ws://matter.local:5580/ws", node = 4, read = "1/OnOff/OnOff" }                 # url, node, path, ok, value, result, refused, body, json
 matter = { url = "ws://matter.local:5580/ws", node = 4, endpoint = 1, cluster = "OnOff", command = "On" }   # act (or write = "1/LevelControl/OnLevel", value = 128)
+discover = { mdns = "_matter._tcp" }                                     # method, query, ok, found, devices [{ name, service, host, address, port, txt }], body, json
+discover = { ssdp = "ssdp:all", wait = 3 }                               # devices [{ address, location, server, st, usn, friendly_name, manufacturer, model }]
+discover = { bacnet = "who-is" }                                         # devices [{ instance, address, port, network, mac, vendor, max_apdu }]  (low, high: an instance range)
+discover = { scan = "192.168.1.0/24", ports = [22, 80, 443, 502] }       # devices [{ address, open }]: hosts that answered, the ports that accepted  (names = true: reverse DNS)
 ```
 
 `shell` runs one program with its arguments as a list; no shell reads the
@@ -289,6 +294,15 @@ device's own refusal is an answer a decide reads, not a transport error:
 a Modbus `exception`, a BACnet `refused` (`unknown-object`), an SNMP
 `status` (`noSuchName`), a CoAP `4.04`, a Matter `refused` (the node is not
 reachable). The details are in [`io.md`](io.md).
+
+`discover` looks at the network the box sits on, within the tree's
+`networks`: an `mdns` browse (`""` lists the service types), an `ssdp`
+search (each device's description read for its name, maker and model), a
+BACnet `who-is`, or a TCP `scan` of up to 1,024 hosts and 64 ports within
+the node's `timeout` (a host that refuses a connection is up too; there is
+no ICMP). `wait` is how long to listen for answers. A service started
+with `--egress public` refuses it. In a container, mDNS, SSDP and BACnet
+need the host's network; a scan does not.
 
 ### `act`: change
 

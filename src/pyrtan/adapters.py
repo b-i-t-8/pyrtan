@@ -21,13 +21,15 @@ the same whichever source a node used.
     [nodes.ups]     observe   snmp   = { url = "snmp://ups.local", get = ["upsEstimatedChargeRemaining.0"] }
     [nodes.soil]    observe   coap   = { url = "coap://garden.local/sensors/bed-1/moisture" }
     [nodes.lamp]    act       matter = { url = "ws://matter.local:5580/ws", node = 4, endpoint = 1, cluster = "OnOff", command = "On" }
+    [nodes.find]    observe   discover = { mdns = "_matter._tcp" }      (or ssdp, bacnet = "who-is", scan = "192.168.1.0/24")
 
 and at the top of the tree the allow-list of the same kind: ``hosts`` for
 ``http``, ``browser`` and a queue's broker; ``paths`` for ``file``;
 ``commands`` for ``shell``; ``devices`` for ``serial``; ``topics`` for
 ``queue``; ``keys`` for ``memory``; ``hosts`` again for the field protocols,
-whose URL names the device (or, for Matter, the controller). A tree
-without the list cannot use the source; ``pyrtan check`` says so.
+whose URL names the device (or, for Matter, the controller); ``networks``
+for ``discover``. A tree without the list cannot use the source; ``pyrtan
+check`` says so.
 
 What each source leaves in state (the node's ``into``):
 
@@ -54,12 +56,14 @@ What each source leaves in state (the node's ``into``):
             ``elapsed_ms`` (``coap.py``).
 ``matter``  ``url``, ``node``, ``ok``, ``refused``, ``path``, ``value``, ``result``, ``body``,
             ``json`` (``matter.py``).
+``discover`` ``method``, ``query``, ``ok``, ``found``, ``devices``, ``body``, ``json`` (``discover.py``).
 
 Files, shells, serial lines and memory are on the box the service runs on. A
 service started with ``--egress public`` refuses them outright, the way it
 refuses private addresses: an operator hosting other people's trees does
 not lend them the box. A queue's broker and a browser's page go through the
 same egress check as an HTTP request, and so do the field protocols' devices.
+Discovery looks at the box's own network, and ``--egress public`` refuses it.
 
 The browser adapter needs Playwright (``pip install 'pyrtan[browser]'``),
 the one optional dependency; everything else here is the standard library.
@@ -92,10 +96,10 @@ from typing import Any, Callable
 from .transport import EgressRefused, TransportError, check_egress
 
 FIELD_SOURCES = ("modbus", "bacnet", "snmp", "coap", "matter")  # a device on the network, named by a URL
-SOURCES = ("http", "browser", "file", "shell", "serial", "queue", "memory") + FIELD_SOURCES
+SOURCES = ("http", "browser", "file", "shell", "serial", "queue", "memory") + FIELD_SOURCES + ("discover",)
 LOCAL_SOURCES = ("file", "shell", "serial", "memory")  # on the box itself
-ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics"), "memory": ("keys",), **{s: ("hosts",) for s in FIELD_SOURCES}}
-LIST_NAMES = ("hosts", "paths", "commands", "devices", "topics", "keys")
+ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics"), "memory": ("keys",), **{s: ("hosts",) for s in FIELD_SOURCES}, "discover": ("networks",)}
+LIST_NAMES = ("hosts", "paths", "commands", "devices", "topics", "keys", "networks")
 MAX_READ = 8 * 1024 * 1024                              # a file or a command's output larger than this is refused
 TAIL_WINDOW = 1024 * 1024                               # how far back a tail looks
 MQTT_PORTS = {"mqtt": 1883, "mqtts": 8883}
@@ -205,6 +209,12 @@ def _snmp_oids(spec: dict[str, Any]) -> list[str]:
     return [str(o) for o in (get if isinstance(get, list) else [get])]
 
 
+def _discover_what(spec: dict[str, Any]) -> str:
+    method = next((m for m in ("mdns", "ssdp", "bacnet", "scan") if m in spec), "?")
+    ports = spec.get("ports")
+    return f"{method} {spec.get(method)}".rstrip() + (" ports " + ",".join(str(p) for p in ports) if method == "scan" and isinstance(ports, list) else "")
+
+
 def _matter_mode(spec: dict[str, Any]) -> str:
     return "command" if "command" in spec else "write" if "write" in spec else "read"
 
@@ -251,6 +261,8 @@ def adapter_key(source: str, spec: dict[str, Any]) -> str:
         if mode == "command":
             return f"matter command {spec.get('url')} node {spec.get('node')} {spec.get('endpoint', 1)}/{spec.get('cluster')} {spec.get('command')}"
         return f"matter {'write ' if mode == 'write' else ''}{spec.get('url')} node {spec.get('node')} {spec.get(mode)}"
+    if source == "discover":
+        return f"discover {_discover_what(spec)}"
     raise ValueError(source)
 
 
@@ -290,6 +302,8 @@ def what(source: str, spec: dict[str, Any]) -> str:
         if mode == "command":
             return f"node {spec.get('node')} {spec.get('cluster')} {spec.get('command')} at {spec.get('url')}"
         return f"node {spec.get('node')} {spec.get(mode)} at {spec.get('url')}"
+    if source == "discover":
+        return _discover_what(spec)
     return str(spec.get("url"))
 
 
@@ -387,10 +401,12 @@ def brief_result(source: str, observed: dict[str, Any]) -> str:
         if "path" not in observed:
             return "sent"
         return "written" if "written" in observed else short(observed.get("value"))
+    if source == "discover":
+        return f"{observed.get('found')} found"
     return "ok"
 
 
-GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists", **{s: "ok" for s in FIELD_SOURCES}}
+GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists", **{s: "ok" for s in FIELD_SOURCES}, "discover": "ok"}
 
 
 def good(source: str | None, observed: dict[str, Any]) -> bool:
@@ -449,6 +465,12 @@ class LocalAdapters:
             return self.memory.perform(spec)
         if source in FIELD_SOURCES:
             return _field_module(source).perform(spec, timeout, self.egress)
+        if source == "discover":
+            from . import discover
+
+            if self.egress != "any":
+                raise EgressRefused(f"discover: this service reaches only public addresses (--egress {self.egress}); the network it sits on is not looked at")
+            return discover.perform(spec, timeout, self.egress, allowed)
         if source == "browser":
             with self._lock:
                 if self._browser is None:

@@ -89,7 +89,7 @@ def entry_for(tree: Tree, data: bytes, path: str) -> dict[str, Any]:
         "description": tree.description,
         "tags": tree.tags,
         "hosts": tree.hosts,
-        **{k: cap[k] for k in ("paths", "commands", "devices", "topics") if k in cap},
+        **{k: cap[k] for k in ("paths", "commands", "devices", "topics", "networks") if k in cap},
         "sources": cap["sources"],
         "triggers": cap["triggers"],
         "inputs": cap["inputs"],

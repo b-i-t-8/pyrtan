@@ -38,9 +38,9 @@ x-pyrtan: &pyrtan
     PYRTAN_TOKEN: "CHANGE-ME-to-a-long-random-string"
     # Hubs that follow this one (the family's other hubs) may ask it to run
     # trees, so no tree may reach the LAN, files, programs or serial lines
-    # on their behalf. If a tree of yours in trees/ needs those, give the
-    # `mine` service PYRTAN_EGRESS: any; every hub in the family network can
-    # then ask for it.
+    # on their behalf: the hub and the example services keep to public
+    # addresses. The `mine` service below overrides this with any, so the
+    # trees you put in trees/ can reach the house's devices.
     PYRTAN_EGRESS: public
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run
     PYRTAN_UNANSWERED: /state/unanswered.jsonl   # sentences nobody answered, kept across restarts (the hub's; services with a hub leave the record to it)
@@ -118,9 +118,22 @@ services:
   #   docker compose -p pyrtan exec mine pyrtan check /trees
   # Gaps are kept in /trees/.gaps.jsonl (the one file the service writes),
   # so the list of branches to write survives a restart.
+  #
+  # This one reaches the LAN (PYRTAN_EGRESS: any): a tree here may talk to
+  # the house's devices (Modbus, BACnet, SNMP, CoAP, a Matter controller,
+  # anything on a private address) and look for them (discover), within the
+  # hosts and networks it lists. Every hub in the family network may ask it
+  # to run its trees, so put a tree here only if the family may use it.
+  # The container is on the compose network, so unicast reaches the LAN
+  # (a scan, or a device by its address) but a broadcast or a multicast
+  # does not: for discovery by mDNS, SSDP or BACnet Who-Is, give it the
+  # NAS's network instead (network_mode: host; ../README.md says how).
   mine:
     <<: *pyrtan
     command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701", "--gaps", "/trees/.gaps.jsonl"]
+    environment:
+      <<: *env
+      PYRTAN_EGRESS: any
     volumes:
       - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]

@@ -130,7 +130,7 @@ whole format is in [`_meta/tree-format.md`](_meta/tree-format.md).
 HTTP is one source. An `observe` or `act` node may instead name a file,
 a program, a serial line, a queue, a browser, or a device that speaks a
 field protocol (Modbus TCP, BACnet/IP, SNMP, CoAP, or Matter through a
-controller), and every one of them
+controller), or look for what is on the network (`discover`), and every one of them
 follows the rule `hosts` set: the tree lists what the source may reach,
 `pyrtan check` refuses a literal outside the list, the runtime refuses a
 templated one, and nothing else is reachable.
@@ -157,6 +157,7 @@ extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
 | `snmp = { url, get }`, `{ url, walk }` or `{ url, set }` | `hosts` | [`ups-battery`](examples/ups-battery/ups-battery.toml): a UPS's power source, charge and minutes left |
 | `coap = { url, method, payload }` | `hosts` | [`soil-moisture`](examples/soil-moisture/soil-moisture.toml): a garden sensor over the small-device web |
 | `matter = { url, node, read }`, `{ …, write, value }` or `{ …, cluster, command }` | `hosts` | [`plug-status`](examples/plugs/plug-status.toml), [`plug-switch`](examples/plugs/plug-switch.toml): a smart plug, through a Matter controller |
+| `discover = { mdns }`, `{ ssdp }`, `{ bacnet = "who-is" }` or `{ scan, ports }` | `networks` | what is on the network: DNS-SD services (Matter, HomeKit, printers), UPnP devices, BACnet devices, or which hosts of a subnet answer on which ports |
 
 The trace reads the same whichever source a node used (`shell df -P / ->
 exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
@@ -164,7 +165,9 @@ for all of them, so every example runs offline in the test suite and the
 same vectors hold in the JavaScript runtime. A service started with
 `--egress public` refuses files, programs, serial lines and memory
 outright: a hosted box is not lent out, and a device on its network is
-refused like any private address. Memory lives in the file a
+refused like any private address; it does not look at its own network
+either. `pyrtan discover mdns|ssdp|bacnet|scan` asks the same questions
+from the command line, to find the addresses a tree names. Memory lives in the file a
 service's `--memory` names, and nowhere else: it is not served, not
 gossiped and not handed to members. The design is in [`_meta/io.md`](_meta/io.md).
 
@@ -932,7 +935,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.37.0. The core, the service, the hub, the command, the console (which
+0.38.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -943,7 +946,8 @@ in; hubs on one LAN find each other by multicast), the gossiped directory, membe
 part of the swarm), the blobs they keep and the trees they run
 (`pyrtan.js`, conformant with the Python runtime), the forms of I/O
 (HTTP, a browser, files, programs, serial lines, MQTT queues, memory,
-and the field protocols: Modbus TCP, BACnet/IP, SNMP, CoAP and Matter), each
+and the field protocols: Modbus TCP, BACnet/IP, SNMP, CoAP and Matter;
+and discovery by mDNS, SSDP, BACnet Who-Is or a TCP scan), each
 behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),

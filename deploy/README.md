@@ -222,6 +222,51 @@ under a domain you own works too, if every family network resolves it.
 networks, and the invite already carries the NAS's address, so leave
 it off and the hub needs no `network_mode: host`.
 
+### The house's devices: the `mine` service
+
+The hub and the example services keep to public addresses
+(`PYRTAN_EGRESS: public`); `mine` does not (`PYRTAN_EGRESS: any`), so a
+tree in `trees/` may reach the house: a PLC over Modbus, a building
+controller over BACnet, a UPS or a switch over SNMP, a sensor over CoAP,
+a Matter controller, any web page on the LAN, within the `hosts` (and,
+for discovery, the `networks`) it lists. Every hub in the family network
+may ask `mine` to run its trees, so put a tree there only if the family
+may use it.
+
+To find what to put in a tree, ask the network from the NAS. A scan works
+from inside the stack:
+
+```
+docker compose -p pyrtan exec mine pyrtan discover scan 192.168.1.0/24 --ports 22,80,443,502,1883,5540,47808 --names
+```
+
+mDNS, SSDP and BACnet Who-Is are multicast and broadcast, which do not
+cross Docker's NAT, so run those in a throwaway container on the NAS's own
+network:
+
+```
+docker run --rm --network host pyrtan:local discover mdns _matter._tcp
+docker run --rm --network host pyrtan:local discover mdns          # every service type on the network
+docker run --rm --network host pyrtan:local discover ssdp
+docker run --rm --network host pyrtan:local discover bacnet
+```
+
+A tree whose `discover` node uses mDNS, SSDP or BACnet needs `mine` on
+the NAS's network too. Give the `mine` service, in the compose file:
+
+```yaml
+    network_mode: host
+    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8702", "--name", "mine", "--hub", "http://127.0.0.1:8700", "--advertise", "http://<nas-ip>:8702", "--gaps", "/trees/.gaps.jsonl"]
+    environment:
+      <<: *env
+      PYRTAN_EGRESS: any
+      PYRTAN_PORT: "8702"        # what the health check asks
+```
+
+It then listens on the NAS's port 8702 (behind the token, as everything
+is) and the hub reaches it there; a scan and the field protocols work the
+same either way.
+
 ### Without the plugin
 
 Over SSH, from the checkout:

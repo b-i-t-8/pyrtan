@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Built, v0.7; memory in v0.27; the field protocols (Modbus TCP, BACnet/IP, SNMP, CoAP, Matter) in v0.37.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
+| **Status** | **Built, v0.7; memory in v0.27; the field protocols (Modbus TCP, BACnet/IP, SNMP, CoAP, Matter) in v0.37; discovery in v0.38.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
 | **Date** | 2026-10-25 |
 | **Decision** | A node names a *source* and what it wants from it; the tree lists what that source may reach; the runtime refuses anything outside the list before the adapter is asked; the adapter moves the bytes and leaves a plain table in state. Files, shells and serial lines are the box itself, and a hosted service keeps them closed. |
 | **Where** | `src/pyrtan/adapters.py` (the adapters, the allow-list matchers, the fixture keys), `src/pyrtan/tree.py` (the lists, `Tree.allowed`, the per-source checks), `src/pyrtan/runtime.py` (one path for every source), `src/pyrtan/transport.py` (fixtures answer for every source), `src/pyrtan/js/pyrtan.js` (the same on a member). |
@@ -41,6 +41,7 @@ trace line reads `source what -> brief`, the way an HTTP line reads
 | `bacnet` | `hosts` | `bacnet://host`, `object`, `property`, `index`; or `write` and `priority` | `ok`, `value`, `values`, `refused`, `body`, `json`; `written` |
 | `snmp` | `hosts` | `snmp://host`, `community`, `version`; `get`, `walk` (and `max`) or `set` | `ok`, `status`, `values`, `value`, `varbinds`, `body`, `json`; `written` |
 | `coap` | `hosts` | `coap://host/path`, `method`, `payload`, `format`, `accept` | `status` (`"2.05"`), `code`, `ok`, `format`, `body`, `json`, `elapsed_ms` |
+| `discover` | `networks` | `mdns`, `ssdp`, `bacnet = "who-is"` or `scan` (and `ports`), `wait` | `method`, `query`, `ok`, `found`, `devices`, `body`, `json` |
 | `matter` | `hosts` | a controller's `ws://…/ws`, `node`; `read`, `write` and `value`, or `command`, `cluster`, `endpoint`, `payload` | `ok`, `path`, `value`, `result`, `refused`, `body`, `json`; `written` |
 
 ## 2. The allow-lists
@@ -157,6 +158,7 @@ of them being present.
   or a serial line speaks, or on a clock (`watch.py`; the file is
   polled, the queue and the serial line are held open as streams,
   `adapters.mqtt_stream` and `adapters.serial_lines`).
+- **v0.38, built:** discovery (section 8).
 - **v0.37, built:** the field protocols (section 7).
 - **v0.27, built:** `memory`, what a tree keeps across runs, with `keys`
   (`memory.py`): the last reading, a count of checks in a row, whether
@@ -208,4 +210,38 @@ fixture key, and the standard library only (`modbus.py`, `bacnet.py`,
   to a PLC: the JavaScript runtime answers these sources from a fixture
   and otherwise says `source-unsupported`, as for a serial line. It
   builds the same fixture keys, so the vectors cover every example.
+
+## 8. Discovery
+
+A tree that talks to a device names it; a person writing that tree first
+has to find it. `discover` answers "what is on the network" the ways the
+network itself answers it (`discover.py`, standard library only):
+
+- **mDNS / DNS-SD** (RFC 6762, 6763): a PTR query for a service type
+  (`_matter._tcp`, `_hap._tcp`, `_ipp._tcp`), or for the service types
+  themselves. It is sent from an ephemeral port, so responders answer by
+  unicast (RFC 6762 6.7) and the box need not join the group on 5353.
+- **SSDP / UPnP**: an M-SEARCH, then each answer's description, for the
+  name, maker and model a person recognises.
+- **BACnet Who-Is**: broadcast to every network, through routers; the
+  I-Ams name each device's instance, address and vendor, and a routed
+  device's network and MAC, the `network` and `mac` a `bacnet` node takes.
+- **A TCP scan**: which hosts of a subnet are up and which ports accept a
+  connection. A refusal means up too. There is no ICMP: a ping needs a
+  raw socket, which a container does not have, and a connection says as
+  much for the ports that matter.
+
+The allow-list is `networks`, CIDRs: a scan's target must lie inside
+them, at load time and at run time, and a device answering from outside
+them is left out of what the node observes. Discovery is the box's own
+network, so `--egress public` refuses it, as it refuses files and
+programs. Limits keep a tree a tree, not a network scanner: 1,024 hosts
+(a /22) and 64 ports per scan, within the node's timeout; 30 seconds of
+listening; 32 UPnP descriptions.
+
+`pyrtan discover mdns|ssdp|bacnet|scan` asks the same from the command
+line, with no allow-list (the person at the command is the operator). In a
+container, multicast and broadcast stay inside Docker's network: the
+mDNS, SSDP and BACnet kinds need `network_mode: host` (the deploy README
+says how for the NAS); a scan does not.
 
