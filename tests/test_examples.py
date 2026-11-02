@@ -203,7 +203,8 @@ def test_package_versions(runner):
 def test_earthquakes(runner):
     out = runner.run_intent("any earthquakes today")
     assert out.output["count"] == 19 and out.output["latest"]["place"] == "7 km ENE of Pangyan, Philippines"
-    assert out.say.startswith("19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1")
+    assert out.say.startswith("19 earthquake(s) of magnitude 4.5+ in the past day: the strongest M5.4, on average M5.3. The latest: M5.1")
+    assert (out.output["strongest"], out.output["average"]) == (5.4, 5.3)  # pluck:properties | pluck:mag | max, and | average | round:1
 
 
 def test_iss_rounds_its_words_not_its_output(runner):
@@ -274,7 +275,7 @@ def test_uv_index_band(runner):
 
 def test_local_time_and_elevation_from_the_geocoder(runner):
     assert runner.run_intent("what time is it in La Paz").say == "It is 17:50 on Tuesday 2026-10-27 in La Paz, Mexico (America/Mazatlan)."
-    assert runner.run_intent("how high is La Paz").say == "La Paz, Mexico is 33 m above sea level."
+    assert runner.run_intent("how high is La Paz").say == "La Paz, Mexico is 33 m (108 ft) above sea level."
     assert runner.run_intent("how high is Oslo").reason == "no-height"  # this geocode carries no elevation
 
 

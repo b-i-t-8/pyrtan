@@ -1,8 +1,9 @@
 # How high a place is above the sea, from Open-Meteo's geocoder, which
-# carries each place's elevation with its name.
+# carries each place's elevation with its name, in metres; the feet are
+# the m_to_ft filter's, rounded with round:0.
 
 name = "elevation"
-version = 1
+version = 2
 namespace = "pyrtan"
 description = "How high a place is above sea level, from Open-Meteo's geocoder."
 tags = ["geography", "read-only"]
@@ -15,10 +16,22 @@ pattern = "how high (is|above sea level is) {place}"
 [[triggers]]
 pattern = "[the] (elevation|altitude) of {place}"
 
+[[tests]]
+name = "the mile-high city"
+sentence = "how high is Denver"
+fixture = "elevation.fixture.json"
+expect = { status = "done", say = "Denver, United States is 1609 m (5279 ft) above sea level.", output = { elevation_m = 1609, elevation_ft = 5279 } }
+
+[[tests]]
+name = "a place that is not there"
+sentence = "elevation of Nowhereville"
+fixture = "elevation.fixture.json"
+expect = { status = "failed", reason = "unknown-place", path = ["geocode", "found", "unknown-place"] }
+
 [nodes.reply]
 kind = "done"
-say = "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m above sea level."
-output = { place = "{{ state.name }}", country = "{{ state.country }}", elevation_m = "{{ state.height }}" }
+say = "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m ({{ state.height | m_to_ft | round:0 }} ft) above sea level."
+output = { place = "{{ state.name }}", country = "{{ state.country }}", elevation_m = "{{ state.height }}", elevation_ft = "{{ state.height | m_to_ft | round:0 }}" }
 
 [nodes.geocode]
 kind = "observe"

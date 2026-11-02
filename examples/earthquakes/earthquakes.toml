@@ -1,14 +1,29 @@
 # Earthquakes of magnitude 4.5 and up in the past day, from the USGS feed:
-# how many, and the most recent one. The feed lists the newest first.
+# how many, the strongest and the average, and the most recent one. The
+# feed lists the newest first. The strongest and the average are read with
+# filters, not code: pluck the magnitudes out of the list, then max, or
+# average and round.
 
 name = "earthquakes"
-version = 1
+version = 2
 namespace = "pyrtan"
 description = "Magnitude 4.5+ earthquakes worldwide in the past day, from the USGS: how many, and the latest."
 tags = ["science", "read-only"]
 license = "MIT"
 hosts = ["earthquake.usgs.gov"]
 start = "fetch"
+
+[[tests]]
+name = "a busy day"
+sentence = "any earthquakes today"
+fixture = "earthquakes.fixture.json"
+expect = { status = "done", path = ["fetch", "status", "any", "reply"], say = "3 earthquake(s) of magnitude 4.5+ in the past day: the strongest M6.1, on average M5.2. The latest: M4.6, 12 km SW of Hualien City, Taiwan. https://earthquake.usgs.gov/earthquakes/eventpage/us7000a001", output = { count = 3, strongest = 6.1, average = 5.2 } }
+
+[[tests]]
+name = "a quiet day"
+sentence = "latest earthquake"
+fixture = "earthquakes-quiet.fixture.json"
+expect = { status = "done", path = ["fetch", "status", "any", "none"], output = { count = 0 } }
 
 [[triggers]]
 pattern = "[any] [recent] earthquakes [today]"
@@ -23,6 +38,7 @@ http = { method = "GET", url = "https://earthquake.usgs.gov/earthquakes/feed/v1.
 into = "resp"
 extract = [
   { into = "count", json = "json.metadata.count" },
+  { into = "quakes", json = "json.features" },
   { into = "mag", json = "json.features[0].properties.mag" },
   { into = "place", json = "json.features[0].properties.place" },
   { into = "tsunami", json = "json.features[0].properties.tsunami" },
@@ -49,8 +65,8 @@ branches = [
 
 [nodes.reply]
 kind = "done"
-say = "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
-output = { count = "{{ state.count }}", latest = { magnitude = "{{ state.mag }}", place = "{{ state.place }}", tsunami = "{{ state.tsunami }}", url = "{{ state.url }}" } }
+say = "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day: the strongest M{{ state.quakes | pluck:properties | pluck:mag | max }}, on average M{{ state.quakes | pluck:properties | pluck:mag | average | round:1 }}. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
+output = { count = "{{ state.count }}", strongest = "{{ state.quakes | pluck:properties | pluck:mag | max }}", average = "{{ state.quakes | pluck:properties | pluck:mag | average | round:1 }}", latest = { magnitude = "{{ state.mag }}", place = "{{ state.place }}", tsunami = "{{ state.tsunami }}", url = "{{ state.url }}" } }
 
 [nodes.none]
 kind = "done"

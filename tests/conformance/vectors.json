@@ -710,7 +710,7 @@
        "[was there an] earthquake today",
        "latest earthquake"
       ],
-      "version": 1
+      "version": 2
      },
      {
       "description": "How high a place is above sea level, from Open-Meteo's geocoder.",
@@ -739,7 +739,7 @@
        "how high (is|above sea level is) {place}",
        "[the] (elevation|altitude) of {place}"
       ],
-      "version": 1
+      "version": 2
      },
      {
       "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",
@@ -13691,15 +13691,17 @@
    "expect": {
     "inputs": {},
     "output": {
+     "average": 5.3,
      "count": 19,
      "latest": {
       "magnitude": 5.1,
       "place": "7 km ENE of Pangyan, Philippines",
       "tsunami": 0,
       "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
-     }
+     },
+     "strongest": 5.4
     },
-    "say": "19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk",
+    "say": "19 earthquake(s) of magnitude 4.5+ in the past day: the strongest M5.4, on average M5.3. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk",
     "status": "done",
     "trace": {
      "gaps": [],
@@ -13726,10 +13728,28 @@
         "count": 19,
         "mag": 5.1,
         "place": "7 km ENE of Pangyan, Philippines",
+        "quakes": [
+         {
+          "properties": {
+           "mag": 5.1,
+           "place": "7 km ENE of Pangyan, Philippines",
+           "tsunami": 0,
+           "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+          }
+         },
+         {
+          "properties": {
+           "mag": 5.4,
+           "place": "197 km WSW of Merizo Village, Guam",
+           "tsunami": 0,
+           "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttke"
+          }
+         }
+        ],
         "tsunami": 0,
         "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
        },
-       "summary": "GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson -> 200; count=19, mag=5.1, place=7 km ENE of Pangyan, Philippines, tsunami=0, url=https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+       "summary": "GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson -> 200; count=19, quakes=[{'properties': {'mag': 5.1, 'place': '7 km ENE of Pangyan, Philippines', 'tsun…, mag=5.1, place=7 km ENE of Pangyan, Philippines, tsunami=0, url=https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
       },
       {
        "chosen": "eq 200",
@@ -13754,7 +13774,7 @@
        "kind": "done",
        "next": null,
        "node": "reply",
-       "summary": "19 earthquake(s) of magnitude 4.5+ in the past day. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
+       "summary": "19 earthquake(s) of magnitude 4.5+ in the past day: the strongest M5.4, on average M5.3. The latest: M5.1, 7 km ENE of Pangyan, Philippines. https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttkk"
       }
      ],
      "tree": "earthquakes"
@@ -15346,10 +15366,11 @@
     },
     "output": {
      "country": "Mexico",
+     "elevation_ft": 108,
      "elevation_m": 33.0,
      "place": "La Paz"
     },
-    "say": "La Paz, Mexico is 33 m above sea level.",
+    "say": "La Paz, Mexico is 33 m (108 ft) above sea level.",
     "status": "done",
     "trace": {
      "gaps": [],
@@ -15422,7 +15443,7 @@
        "kind": "done",
        "next": null,
        "node": "reply",
-       "summary": "La Paz, Mexico is 33 m above sea level."
+       "summary": "La Paz, Mexico is 33 m (108 ft) above sea level."
       }
      ],
      "tree": "elevation"
@@ -23771,6 +23792,10 @@
        "json": "json.metadata.count"
       },
       {
+       "into": "quakes",
+       "json": "json.features"
+      },
+      {
        "into": "mag",
        "json": "json.features[0].properties.mag"
       },
@@ -23805,15 +23830,17 @@
     "reply": {
      "kind": "done",
      "output": {
+      "average": "{{ state.quakes | pluck:properties | pluck:mag | average | round:1 }}",
       "count": "{{ state.count }}",
       "latest": {
        "magnitude": "{{ state.mag }}",
        "place": "{{ state.place }}",
        "tsunami": "{{ state.tsunami }}",
        "url": "{{ state.url }}"
-      }
+      },
+      "strongest": "{{ state.quakes | pluck:properties | pluck:mag | max }}"
      },
-     "say": "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
+     "say": "{{ state.count }} earthquake(s) of magnitude 4.5+ in the past day: the strongest M{{ state.quakes | pluck:properties | pluck:mag | max }}, on average M{{ state.quakes | pluck:properties | pluck:mag | average | round:1 }}. The latest: M{{ state.mag }}, {{ state.place }}. {{ state.url }}"
     },
     "status": {
      "branches": [
@@ -23841,6 +23868,45 @@
     "science",
     "read-only"
    ],
+   "tests": [
+    {
+     "expect": {
+      "output": {
+       "average": 5.2,
+       "count": 3,
+       "strongest": 6.1
+      },
+      "path": [
+       "fetch",
+       "status",
+       "any",
+       "reply"
+      ],
+      "say": "3 earthquake(s) of magnitude 4.5+ in the past day: the strongest M6.1, on average M5.2. The latest: M4.6, 12 km SW of Hualien City, Taiwan. https://earthquake.usgs.gov/earthquakes/eventpage/us7000a001",
+      "status": "done"
+     },
+     "fixture": "earthquakes.fixture.json",
+     "name": "a busy day",
+     "sentence": "any earthquakes today"
+    },
+    {
+     "expect": {
+      "output": {
+       "count": 0
+      },
+      "path": [
+       "fetch",
+       "status",
+       "any",
+       "none"
+      ],
+      "status": "done"
+     },
+     "fixture": "earthquakes-quiet.fixture.json",
+     "name": "a quiet day",
+     "sentence": "latest earthquake"
+    }
+   ],
    "triggers": [
     {
      "pattern": "[any] [recent] earthquakes [today]"
@@ -23852,7 +23918,7 @@
      "pattern": "latest earthquake"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "elevation": {
    "description": "How high a place is above sea level, from Open-Meteo's geocoder.",
@@ -23947,10 +24013,11 @@
      "kind": "done",
      "output": {
       "country": "{{ state.country }}",
+      "elevation_ft": "{{ state.height | m_to_ft | round:0 }}",
       "elevation_m": "{{ state.height }}",
       "place": "{{ state.name }}"
      },
-     "say": "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m above sea level."
+     "say": "{{ state.name }}, {{ state.country }} is {{ state.height | int }} m ({{ state.height | m_to_ft | round:0 }} ft) above sea level."
     },
     "unknown-place": {
      "kind": "fail",
@@ -23963,6 +24030,35 @@
     "geography",
     "read-only"
    ],
+   "tests": [
+    {
+     "expect": {
+      "output": {
+       "elevation_ft": 5279,
+       "elevation_m": 1609
+      },
+      "say": "Denver, United States is 1609 m (5279 ft) above sea level.",
+      "status": "done"
+     },
+     "fixture": "elevation.fixture.json",
+     "name": "the mile-high city",
+     "sentence": "how high is Denver"
+    },
+    {
+     "expect": {
+      "path": [
+       "geocode",
+       "found",
+       "unknown-place"
+      ],
+      "reason": "unknown-place",
+      "status": "failed"
+     },
+     "fixture": "elevation.fixture.json",
+     "name": "a place that is not there",
+     "sentence": "elevation of Nowhereville"
+    }
+   ],
    "triggers": [
     {
      "pattern": "how high (is|above sea level is) {place}"
@@ -23971,7 +24067,7 @@
      "pattern": "[the] (elevation|altitude) of {place}"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "exchange-rate": {
    "description": "An amount in another currency at today's European Central Bank reference rate, from Frankfurter.",

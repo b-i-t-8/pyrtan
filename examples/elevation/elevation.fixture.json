@@ -1,0 +1,23 @@
+{
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Denver&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "results": [
+        {
+          "name": "Denver",
+          "country": "United States",
+          "latitude": 39.73915,
+          "longitude": -104.9847,
+          "elevation": 1609.0,
+          "timezone": "America/Denver"
+        }
+      ]
+    }
+  },
+  "GET https://geocoding-api.open-meteo.com/v1/search?name=Nowhereville&count=1&language=en&format=json": {
+    "status": 200,
+    "body": {
+      "generationtime_ms": 0.5
+    }
+  }
+}
