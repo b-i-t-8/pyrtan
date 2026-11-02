@@ -1,0 +1,68 @@
+# How full a tank is, from the PLC that reads its level sensor, over Modbus
+# TCP. A modbus node reads one of a device's four tables (coil, discrete,
+# holding, input) from an address; `type` reads two registers as one
+# float32. Each tank's sensor is its own unit behind the gateway, so the
+# tank number from the sentence is the unit. A Modbus exception (no such
+# address, a gateway with nothing behind it) is the device's answer, so
+# the tree decides on it; `hosts` is the allow-list, as for HTTP.
+
+name = "tank-level"
+version = 1
+namespace = "pyrtan"
+description = "How full a tank is, read from a PLC over Modbus TCP."
+tags = ["industrial", "modbus", "read-only"]
+license = "MIT"
+hosts = ["plc.local"]
+start = "read"
+
+[[triggers]]
+pattern = "how full is tank {tank:int}"
+[[triggers]]
+pattern = "[what's the] level (in|of) tank {tank:int}"
+
+[inputs.tank]
+type = "int"
+min = 1
+max = 8
+description = "The tank's number, which is its sensor's Modbus unit"
+
+[nodes.read]
+kind = "observe"
+modbus = { url = "modbus://plc.local", unit = "{{ inputs.tank }}", read = "holding", address = 100, type = "float32" }
+into = "level"                # state.level = { url, unit, table, address, count, ok, raw, values, value, exception, body, json }
+timeout = 3
+next = "answered"
+
+[nodes.answered]
+kind = "decide"
+on = "level.ok"
+branches = [{ when = { eq = true }, then = "how-full" }, { else = "no-sensor" }]
+
+[nodes.how-full]
+kind = "decide"
+on = "level.value"
+branches = [
+  { when = { lt = 10 }, then = "low" },
+  { when = { gt = 95 }, then = "full" },
+  { when = { between = [10, 95] }, then = "fine" },
+]
+
+[nodes.low]
+kind = "done"
+say = "Tank {{ inputs.tank }} is at {{ state.level.value }}%: low."
+output = { tank = "{{ inputs.tank }}", percent = "{{ state.level.value }}", state = "low" }
+
+[nodes.fine]
+kind = "done"
+say = "Tank {{ inputs.tank }} is {{ state.level.value }}% full."
+output = { tank = "{{ inputs.tank }}", percent = "{{ state.level.value }}", state = "ok" }
+
+[nodes.full]
+kind = "done"
+say = "Tank {{ inputs.tank }} is at {{ state.level.value }}%: full."
+output = { tank = "{{ inputs.tank }}", percent = "{{ state.level.value }}", state = "full" }
+
+[nodes.no-sensor]
+kind = "fail"
+reason = "no-sensor"
+say = "Tank {{ inputs.tank }}'s sensor did not answer the PLC ({{ state.level.exception.name }})."

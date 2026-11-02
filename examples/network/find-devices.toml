@@ -1,0 +1,87 @@
+# What kind of device is on the network: Matter, HomeKit, printers and
+# Chromecasts by mDNS (DNS-SD), anything UPnP by SSDP, building controllers
+# by BACnet Who-Is. A discover node looks at the network the box sits on,
+# within the tree's `networks`; a device answering from outside them is
+# left out. A service started with --egress public does not look at all.
+# (In a container, mDNS, SSDP and BACnet need the host's network.)
+
+name = "find-devices"
+version = 1
+namespace = "pyrtan"
+description = "The devices of a kind on the local network: Matter, HomeKit, printers, Chromecasts, UPnP or BACnet."
+tags = ["home", "network", "discovery", "read-only"]
+license = "MIT"
+networks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+start = "kind"
+
+[[triggers]]
+pattern = "find {kind:word} devices"
+[[triggers]]
+pattern = "[what|which] {kind:word} devices are (on the network|there)"
+
+[inputs.kind]
+type = "str"
+one_of = ["matter", "homekit", "printer", "chromecast", "upnp", "bacnet"]
+
+[nodes.kind]
+kind = "decide"
+on = "inputs.kind"
+branches = [
+  { when = { eq = "matter" }, then = "matter" },
+  { when = { eq = "homekit" }, then = "homekit" },
+  { when = { eq = "printer" }, then = "printer" },
+  { when = { eq = "chromecast" }, then = "chromecast" },
+  { when = { eq = "upnp" }, then = "upnp" },
+  { when = { eq = "bacnet" }, then = "bacnet" },
+]
+
+[nodes.matter]
+kind = "observe"
+discover = { mdns = "_matter._tcp", wait = 3 }
+into = "found"                # state.found = { method, query, ok, found, devices: [{ name, service, host, address, port, txt }], body, json }
+next = "any"
+
+[nodes.homekit]
+kind = "observe"
+discover = { mdns = "_hap._tcp", wait = 3 }
+into = "found"
+next = "any"
+
+[nodes.printer]
+kind = "observe"
+discover = { mdns = "_ipp._tcp", wait = 3 }
+into = "found"
+next = "any"
+
+[nodes.chromecast]
+kind = "observe"
+discover = { mdns = "_googlecast._tcp", wait = 3 }
+into = "found"
+next = "any"
+
+[nodes.upnp]
+kind = "observe"
+discover = { ssdp = "upnp:rootdevice", wait = 3 }
+into = "found"                # devices: [{ address, location, server, st, usn, friendly_name, manufacturer, model }]
+next = "any"
+
+[nodes.bacnet]
+kind = "observe"
+discover = { bacnet = "who-is", wait = 3 }
+into = "found"                # devices: [{ instance, address, port, network, mac, vendor, max_apdu }]
+next = "any"
+
+[nodes.any]
+kind = "decide"
+on = "found.found"
+branches = [{ when = { eq = 0 }, then = "none" }, { else = "some" }]
+
+[nodes.some]
+kind = "done"
+say = "{{ state.found.found }} {{ inputs.kind }} device(s) on the network."
+output = { kind = "{{ inputs.kind }}", count = "{{ state.found.found }}", devices = "{{ state.found.devices }}" }
+
+[nodes.none]
+kind = "done"
+say = "No {{ inputs.kind }} devices answered."
+output = { kind = "{{ inputs.kind }}", count = 0, devices = [] }

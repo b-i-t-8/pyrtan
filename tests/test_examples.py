@@ -1,3 +1,4 @@
+import json
 """The example trees, end to end, against recorded responses."""
 
 import pytest
@@ -143,11 +144,151 @@ def test_modem_check_over_serial(runner):
     assert runner.run_intent("is the modem on /dev/ttyS0 up").reason == "device-not-allowed"
 
 
+def test_tank_level_over_modbus(runner):
+    out = runner.run_intent("how full is tank 1")
+    assert out.status == "done" and out.say == "Tank 1 is 48.5% full." and out.output == {"tank": 1, "percent": 48.5, "state": "ok"}
+    assert out.trace.steps[1].summary == "modbus holding 100 on unit 1 at modbus://plc.local -> 48.5"
+    assert runner.run_intent("level in tank 2").say == "Tank 2 is at 7.25%: low."
+    assert runner.run_intent("how full is tank 4").output["state"] == "full"
+    # A Modbus exception is the device's answer; silence is a transport error.
+    gone = runner.run_intent("what's the level of tank 3")
+    assert gone.status == "failed" and gone.reason == "no-sensor" and "gateway-target-failed-to-respond" in gone.say
+    assert runner.run_intent("how full is tank 5").reason == "transport"
+    assert runner.run_intent("how full is tank 9").reason == "bad-input"
+
+
+def test_zone_temperature_over_bacnet(runner):
+    assert runner.run_intent("temperature in zone 1").say == "Zone 1 is 21.5°C."
+    assert runner.run_intent("how warm is zone 2").say == "Zone 2 is 16.25°C: cold."
+    assert runner.run_intent("what's the temperature in zone 3").say == "Zone 3 is 26.5°C: warm."
+    assert runner.run_intent("temperature in zone 9").reason == "no-zone"  # BACnet's unknown-object
+    assert runner.run_intent("temperature in zone 4").reason == "unreadable"
+    assert runner.run_intent("temperature in zone 5").reason == "transport"
+
+
+def test_ups_battery_over_snmp(runner):
+    out = runner.run_intent("ups battery")
+    assert out.say == "ups is on mains, battery 100% (41 min)." and out.output == {"ups": "ups", "source": "on mains", "charge": 100, "minutes": 41}
+    assert out.trace.steps[1].summary == "snmp upsOutputSource.0, upsEstimatedChargeRemaining.0, upsEstimatedMinutesRemaining.0 at snmp://ups.local -> 3 values"
+    assert runner.run_intent("how is the ups battery on ups-2").say == "ups-2 is on battery and its battery is low: 18% (6 min)."
+    assert runner.run_intent("ups battery on ups-3").reason == "no-ups-mib"
+    assert runner.run_intent("ups battery on ups-4").reason == "host-not-allowed"
+
+
+def test_soil_moisture_over_coap(runner):
+    assert runner.run_intent("how dry is the bed-1").say == "The bed-1 is dry (22.5%): water it."
+    assert runner.run_intent("soil moisture in the herbs").output == {"bed": "herbs", "moisture": 55.5, "water": False}
+    assert runner.run_intent("how dry is the lawn").reason == "no-bed"  # 4.04
+    assert runner.run_intent("how dry is the shed").reason == "transport"
+
+
+def test_plugs_through_a_matter_controller(runner):
+    assert runner.run_intent("is the kettle plug on").say == "The kettle plug is on."
+    assert runner.run_intent("is the heater plug on").say == "The heater plug is off."
+    gone = runner.run_intent("is the fan plug on")
+    assert gone.reason == "unreachable" and gone.say.endswith("Node 7 is not (yet) available")
+    out = runner.run_intent("turn the heater plug off")
+    assert out.status == "done" and out.trace.steps[2].summary == "matter node 5 OnOff Off at ws://matter.local:5580/ws -> sent"
+    dry = runner.run_intent("turn on the kettle plug", dry_run=True)
+    assert dry.status == "asked" and dry.question == "Dry run: switch would send On to node 4 (OnOff) at ws://matter.local:5580/ws. Go ahead?"
+
+
+def test_find_devices_by_discovery(runner):
+    out = runner.run_intent("find matter devices")
+    assert out.status == "done" and out.say == "2 matter device(s) on the network." and [d["host"] for d in out.output["devices"]] == ["kettle-plug.local", "heater-plug.local"]
+    assert out.trace.steps[2].summary == "discover mdns _matter._tcp -> 2 found"
+    assert runner.run_intent("which homekit devices are on the network").say == "No homekit devices answered."
+    assert runner.run_intent("find upnp devices").output["devices"][0]["friendly_name"] == "Living room TV"
+    assert [d["instance"] for d in runner.run_intent("find bacnet devices").output["devices"]] == [1234, 77]
+    assert runner.run_intent("find toaster devices").reason == "bad-input"
+
+
+def test_network_scan_within_its_networks(runner):
+    out = runner.run_intent("scan 192.168.1.0/24")
+    assert out.say == "3 host(s) up on 192.168.1.0/24." and out.output["hosts"][2] == {"address": "192.168.1.50", "open": [22, 502]}
+    assert runner.run_intent("what is on 10.9.0.0/24").output["up"] == 0
+    refused = runner.run_intent("scan 8.8.8.0/24")  # a public network: refused before anything is sent
+    assert refused.reason == "network-not-allowed" and [s.kind for s in refused.trace.steps] == ["intent"]
+
+
+def test_device_offline_alerts_once_per_change(examples):
+    """First look, down (an alert), still down (none), back (an alert), up
+    (none), through real memory, a scripted scan and an ntfy that keeps
+    what it was sent; memory keeps since when, and the output says it."""
+    import datetime as _dt
+
+    from pyrtan import Runner
+    from pyrtan.adapters import LocalAdapters
+    from pyrtan.transport import Response
+
+    class Ntfy:
+        def __init__(self):
+            self.sent = []
+
+        def request(self, method, url, headers=None, body=None, timeout=10.0):
+            self.sent.append((method, url, json.loads(body)))
+            return Response(200, {}, "{}", url)
+
+    class Lan:
+        def __init__(self):
+            self.real = LocalAdapters()  # memory, in this process
+            self.up = True
+
+        def perform(self, source, spec, timeout, allowed=None):
+            if source == "discover":
+                assert allowed(spec["scan"])
+                devs = [{"address": spec["scan"], "open": [80]}] if self.up else []
+                return {"method": "scan", "query": spec["scan"], "ok": True, "found": len(devs), "devices": devs, "body": "", "json": devs}
+            return self.real.perform(source, spec, timeout, allowed)
+
+    clock = [_dt.datetime(2026, 11, 2, 8, 0, tzinfo=_dt.timezone.utc)]
+    ntfy, lan = Ntfy(), Lan()
+    runner = Runner(examples, ntfy, adapters=lan, env={"NTFY_TOPIC": "house-1234"}, clock=lambda: clock[0])
+
+    def run():
+        clock[0] += _dt.timedelta(minutes=1)
+        return runner.run_tree("device-offline", {"host": "192.168.1.50", "name": "The printer"})
+
+    first = run()
+    assert first.say == "The printer (192.168.1.50) is online." and first.output["since"] == "2026-11-02T08:01:00+00:00" and not ntfy.sent
+    assert run().say == "The printer (192.168.1.50) is online, since 2026-11-02T08:01:00+00:00."
+    lan.up = False
+    out = run()
+    assert out.say == "The printer (192.168.1.50) went offline; the alert is sent." and len(ntfy.sent) == 1
+    assert out.output == {"host": "192.168.1.50", "name": "The printer", "online": False, "since": "2026-11-02T08:03:00+00:00", "changed": True, "alerted": True}
+    method, url, body = ntfy.sent[0]
+    assert (method, url, body["topic"], body["title"], body["priority"]) == ("POST", "https://ntfy.sh/", "house-1234", "The printer is offline", 4)
+    assert all("house-1234" not in s.summary for s in out.trace.steps)  # the topic is in the body, not the trace
+    still = run()
+    assert still.say == "The printer (192.168.1.50) is still offline, since 2026-11-02T08:03:00+00:00." and len(ntfy.sent) == 1
+    lan.up = True
+    back = run()
+    assert back.say == "The printer (192.168.1.50) is back online; the alert is sent." and back.output["since"] == "2026-11-02T08:05:00+00:00"
+    assert ntfy.sent[1][2]["title"] == "The printer is back" and len(ntfy.sent) == 2
+    assert run().output["since"] == "2026-11-02T08:05:00+00:00" and len(ntfy.sent) == 2
+    # Without a topic it still notices, and sends nothing.
+    quiet = Runner(examples, ntfy, adapters=lan, clock=lambda: clock[0])
+    lan.up = False
+    assert quiet.run_tree("device-offline", {"host": "192.168.1.50", "name": "The printer"}).output["alerted"] is False
+    assert len(ntfy.sent) == 2
+
+
+def test_device_offline_from_fixtures(runner):
+    assert runner.run_intent("is 192.168.1.50 online").say == "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z."
+    assert runner.run_intent("is 192.168.1.51 offline").output["changed"] is False
+    assert runner.run_intent("is 192.168.1.52 online").say.endswith("went offline; no NTFY_TOPIC is set, so no alert was sent.")
+    back = runner.run_intent("is 192.168.1.53 online")
+    assert back.output["online"] is True and back.output["changed"] is True and back.output["alerted"] is False
+    assert runner.run_intent("is 8.8.8.8 online").reason == "network-not-allowed"
+
+
 def test_capabilities_name_the_sources_and_lists(examples):
     caps = {t["name"]: t for t in examples.capabilities()}
     assert caps["disk-space"]["sources"] == ["shell"] and caps["disk-space"]["commands"] == ["df"] and "paths" not in caps["disk-space"]
     assert caps["room-temperature"]["sources"] == ["queue"] and caps["room-temperature"]["topics"] == ["home/+/temperature"]
     assert caps["weather"]["sources"] == ["http"] and caps["modem-check"]["devices"] == ["/dev/ttyUSB*", "/dev/ttyACM*"]
+    for name, source in (("tank-level", "modbus"), ("zone-temperature", "bacnet"), ("ups-battery", "snmp"), ("soil-moisture", "coap"), ("plug-switch", "matter"), ("network-scan", "discover")):
+        assert caps[name]["sources"] == [source] and (caps[name]["hosts"] or caps[name]["networks"])
 
 
 # ---------------------------------------------------------------- trees that run in a browser too

@@ -17,7 +17,9 @@ runs four containers: a **hub** on port 8700, two example services
 (**news**: Hacker News and GitHub; **weather**: Open-Meteo and site status)
 that register with the hub over the compose network, and **mine**, which
 serves a folder of your own trees from a shared folder and reloads them
-when you edit a file.
+when you edit a file. `mine` runs on the NAS's own network (port 8702),
+so its trees can reach and discover the house's devices; see "The house's
+devices" below.
 
 1. **Install the plugin**, if it is not there: in OMV, *System › Plugins*,
    install `openmediavault-compose` (needs omv-extras on OMV 6/7). It
@@ -60,8 +62,9 @@ tree you dropped into `trees/` before it is live:
 `docker compose -p pyrtan exec mine pyrtan check /trees`. To see gaps the
 hub has met: `http://<nas-ip>:8700/gaps` (with the token, as everything else).
 
-The services do not expose their own ports; everything goes through the
-hub on 8700, and every request but `/health` and the console page needs
+The example services do not expose their own ports, and `mine`'s port
+8702 is the NAS's own; everything goes through the hub on 8700, and every
+request but `/health` and the console page needs
 the token (every container reads it from the compose file's `x-pyrtan`
 block, so the swarm shares it). The hub takes no `--cors`, so no page but
 its own console talks to it: the family uses `http://<nas-ip>:8700/`. Do
@@ -221,6 +224,72 @@ under a domain you own works too, if every family network resolves it.
 `PYRTAN_LAN` adds nothing here: hubs on the LAN only announce public
 networks, and the invite already carries the NAS's address, so leave
 it off and the hub needs no `network_mode: host`.
+
+### The house's devices: the `mine` service
+
+The hub and the example services keep to public addresses
+(`PYRTAN_EGRESS: public`); `mine` does not (`PYRTAN_EGRESS: any`), so a
+tree in `trees/` may reach the house: a PLC over Modbus, a building
+controller over BACnet, a UPS or a switch over SNMP, a sensor over CoAP,
+a Matter controller, any web page on the LAN, within the `hosts` (and,
+for discovery, the `networks`) it lists. Every hub in the family network
+may ask `mine` to run its trees, so put a tree there only if the family
+may use it.
+
+`mine` runs on the NAS's own network (`network_mode: host`), because the
+broadcast and multicast that discovery uses (mDNS, SSDP, BACnet Who-Is) do
+not cross Docker's NAT. It listens on the NAS's port 8702 (8701 is the
+bare demo's, below), behind the token like everything else; it registers
+with the hub at the port the hub publishes (`http://127.0.0.1:8700`), and
+the hub reaches it through the Docker host's gateway
+(`host.docker.internal`, which the compose file gives the hub). If the
+hub's page says 3/4 peers up, check that nothing else holds port 8702 and
+that the NAS's firewall lets the Docker network reach it.
+
+To find what to put in a tree, ask the network from the NAS:
+
+```
+docker compose -p pyrtan exec mine pyrtan discover scan 192.168.1.0/24 --ports 22,80,443,502,1883,5540,47808 --names
+docker compose -p pyrtan exec mine pyrtan discover mdns _matter._tcp
+docker compose -p pyrtan exec mine pyrtan discover mdns          # every service type on the network
+docker compose -p pyrtan exec mine pyrtan discover ssdp
+docker compose -p pyrtan exec mine pyrtan discover bacnet
+```
+
+A BACnet Who-Is listens on UDP 47808 for the I-Ams that come back; if
+another BACnet program on the NAS holds that port, only devices that
+answer by unicast are found.
+
+**An alert when a device goes offline.** `mine` runs the watches of the
+trees in `trees/` (`PYRTAN_WATCH`) and keeps what they remember in
+`trees/.memory.json` (`PYRTAN_MEMORY`). To have your phone told when a
+device stops answering, and when it is back:
+
+1. Install the ntfy app (or run your own ntfy server) and subscribe to a
+   long random topic: it is the only thing between your alerts and anyone
+   else, so treat it as a password.
+2. In the compose file, uncomment `PYRTAN_ENV_NTFY_TOPIC` on `mine` and
+   set it to that topic.
+3. `cp pyrtan/examples/device-offline/device-offline.toml pyrtan/trees/`,
+   then in the copy uncomment the `[[watches]]` block and set the device's
+   address and name (one block per device, each with its own `name`).
+4. *Down* and *Up*. `docker compose -p pyrtan exec mine pyrtan check /trees`
+   should pass, and the hub's console answers "is 192.168.1.50 online".
+
+It alerts once when a device stops answering and once when it comes back,
+not every minute in between. The console's **Devices** tab
+(`http://<nas-ip>:8700/#devices`) shows every watched device at a glance:
+online or offline, for how long, and when it was last checked, offline
+first, with a bar of its history and its uptime over the last 24 hours,
+7 days or 30 days. That history is each watch's timeline, which `mine`
+keeps in `trees/.watch-history.json` (`PYRTAN_WATCH_HISTORY`) so it
+survives a restart; time nobody checked (the stack was down) shows grey
+and does not count against uptime. Tap a device's name for its own page
+(`#devices/…`, a link you can keep): uptime over a day, a week and a
+month, its history as bars, and its recent outages, newest first, with
+when each began, when it ended and how long it lasted. A device is online when any of a dozen common
+TCP ports answers, even with a refusal; one that drops everything (a
+phone asleep, a strict firewall) looks offline.
 
 ### Without the plugin
 
