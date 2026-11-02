@@ -145,6 +145,30 @@ TEMPLATE = r"""<!doctype html>
   .mute { color:var(--mute) } .gap { color:var(--ask) }
   .link { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--mute) }
   .link.up { background:var(--ok) } .link.stale { background:var(--ask) } .link.down { background:var(--bad) }
+  .devices { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px }
+  .device { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--mute); border-radius:10px; padding:12px 14px; min-width:0 }
+  .device.up { border-left-color:var(--ok) } .device.down { border-left-color:var(--bad) } .device.stale { border-left-color:var(--ask) }
+  .device .name { font-weight:600; overflow-wrap:anywhere } .device .host { color:var(--mute); font-size:13px; font-family:ui-monospace,monospace }
+  .device .state { margin-top:8px; font-weight:600 } .device.up .state { color:var(--ok) } .device.down .state { color:var(--bad) } .device.stale .state { color:var(--ask) }
+  .device .when { color:var(--mute); font-size:13px } .devices-summary { font-weight:600; margin:0 }
+  .devices-head { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; justify-content:space-between; margin:0 0 12px }
+  .range { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden }
+  .range button { border:0; border-radius:0; background:var(--card); color:var(--fg); padding:4px 10px; font-size:13px; cursor:pointer; min-height:0 }
+  .range button + button { border-left:1px solid var(--line) } .range button[aria-pressed=true] { background:var(--soft); font-weight:600 }
+  .device .uptime { margin-top:10px; font-size:13px; display:flex; justify-content:space-between; gap:8px } .device .uptime b { font-variant-numeric:tabular-nums }
+  svg.bar { display:block; width:100%; height:14px; margin-top:4px; border-radius:3px; overflow:hidden; background:var(--soft) }
+  .bar .up, .key.up { fill:var(--ok); background:var(--ok) } .bar .down, .key.down { fill:var(--bad); background:var(--bad) } .bar .unknown, .key.unknown { fill:var(--line); background:var(--line) }
+  .axis { display:flex; justify-content:space-between; color:var(--mute); font-size:11px; margin-top:2px }
+  .key { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:-1px; margin-left:8px }
+  .device .name a { color:inherit; text-decoration:none } .device .name a:hover { text-decoration:underline } .device .name a::after { content:" ›"; color:var(--mute) }
+  .detail-head h3 { margin:0; font-size:20px; overflow-wrap:anywhere }
+  .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:0 0 14px }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-width:0 } .stat .big { font-size:clamp(18px,5vw,24px); font-weight:600; font-variant-numeric:tabular-nums } .stat .mute { font-size:12px }
+  .outages-sum { font-size:14px; margin:0 0 8px }
+  @media (max-width:560px) { table.outages td { display:flex; justify-content:space-between; gap:12px; padding:2px 0 } table.outages td::before { content:attr(data-label); color:var(--mute); font-weight:normal } }
+  .card h4 { margin:0 0 6px; font-size:14px } .card h4 + .mute { margin-top:-4px }
+  table.outages td { font-variant-numeric:tabular-nums } table.outages tr.ongoing td { color:var(--bad); font-weight:600 }
+  .back { display:inline-block; margin:0 0 12px; color:var(--accent) }
   .notice { border-left:3px solid var(--ask); padding:8px 12px; background:var(--soft); border-radius:6px; margin:0 0 14px; font-size:14px }
   .notice.bad { border-color:var(--bad) }
   .sync-code { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; margin:10px 0 }
@@ -207,6 +231,7 @@ TEMPLATE = r"""<!doctype html>
     <a href="#trees" data-tab="trees">Trees</a>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
     <a href="#watches" data-tab="watches" id="watches-tab">Watches</a>
+    <a href="#devices" data-tab="devices" id="devices-tab">Devices</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#agents" data-tab="agents">Agents</a>
@@ -255,6 +280,20 @@ TEMPLATE = r"""<!doctype html>
     <h2>Watches</h2>
     <p class="mute" style="font-size:14px;margin-top:0">Trees that run on their own: a clock, a file, a topic or a serial line starts them (<code>[[watches]]</code> in the tree, <code>--watch</code> on the service). Each row is what the watch last did; a path that changed between two runs of the same watch is how you learn a site changed before anyone asked.</p>
     <div class="card"><table id="watches"><thead><tr><th>Watch</th><th>On</th><th>Fired</th><th>Last run</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-devices" hidden>
+    <h2>Devices</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">The devices this swarm watches, from what each watch last said: a tree whose output names a <code>host</code> and whether it is <code>online</code> (<code>device-offline</code> does, with <code>since</code>). Refreshed every 30 seconds while this tab is open.</p>
+    <div id="device-detail" hidden></div>
+    <div id="devices-all">
+    <div class="devices-head"><p id="devices-summary" class="devices-summary"></p>
+      <div class="range" role="group" aria-label="History">
+        <button type="button" data-range="86400" aria-pressed="true">24 h</button><button type="button" data-range="604800" aria-pressed="false">7 d</button><button type="button" data-range="2592000" aria-pressed="false">30 d</button>
+      </div></div>
+    <div id="devices" class="devices"></div>
+    <p class="mute" style="font-size:13px">Uptime counts the time each device was checked; grey is time nobody checked (the service was down, or the watch had not started). <span class="key up"></span> online <span class="key down"></span> offline <span class="key unknown"></span> not checked</p>
+    </div>
   </section>
 
   <section id="tab-gaps" hidden>
@@ -847,6 +886,8 @@ function showTab(name) {
   if (name === "peers") loadPeers();
   if (name === "gaps") loadGaps();
   if (name === "watches") loadWatches();
+  clearInterval(devicesTimer);
+  if (name === "devices") { loadDevices(); devicesTimer = setInterval(() => { if (!document.hidden) loadDevices(); }, 30000); }
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
@@ -1012,6 +1053,7 @@ function showLocal(on) {
   sync.render();
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
+  $("#devices-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
   $("#api-help").innerHTML = on ? "Answered inside this page by <code>pyrtan.js</code>: the same paths and the same answers as a hub, with no server behind them. Join a hub and they go to the hub." : 'With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.';
   $("#trees-more").innerHTML = on ? (carried ? "These are the trees this console carries, so it needs no network to hold them; newer ones are in the <a href=\"https://pyrtan.com/catalog/\">catalog</a>." : `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees.`) + " Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them." : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
@@ -1118,6 +1160,152 @@ async function loadWatches() {
   if (!(w.watches || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nothing watched. Give a tree <code>[[watches]]</code> and start the service with <code>--watch</code>.</td></tr>`;
 }
 
+// ---------------------------------------------------------------- devices
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("#tab-devices .range button");
+  if (!b) return;
+  devicesRange = Number(b.dataset.range);
+  try { localStorage.setItem("pyrtan.devices.range", String(devicesRange)); } catch (err) {}
+  loadDevices();
+});
+// A watch whose last output says a host and whether it is online is a
+// device; device-offline's watches are, with since when. Offline first.
+let devicesTimer = null, devicesRange = 86400, deviceOpen = null;
+try { const r = Number(localStorage.getItem("pyrtan.devices.range")); if ([86400, 604800, 2592000].includes(r)) devicesRange = r; } catch (e) {}
+const STALE_AFTER = 10 * 60;  // seconds without a check before a device reads "not checked lately"
+function ago(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 1440) { const h = Math.floor(minutes / 60), m = minutes % 60; return m ? `${h} h ${m} min` : `${h} h`; }
+  const hours = Math.round(seconds / 3600), d = Math.floor(hours / 24), h = hours % 24;
+  return h ? `${d} d ${h} h` : `${d} d`;
+}
+// A watch's timeline as stretches of up, down and unknown within [from, now]:
+// a span holds its runs from its first to its last; the newest one reaches
+// now while its watch keeps time; anything else is time nobody checked.
+function stretches(spans, every, from, now) {
+  const out = [];
+  const add = (state, a, b) => {
+    a = Math.max(a, from); b = Math.min(b, now);
+    if (b <= a) return;
+    const last = out[out.length - 1];
+    if (last && last.state === state && Math.abs(last.b - a) < 1) last.b = b; else out.push({ state, a, b });
+  };
+  let t = from;
+  (spans || []).forEach((s, i) => {
+    const o = s.output || {};
+    const state = s.status === "done" && typeof o.online === "boolean" ? (o.online ? "up" : "down") : "unknown";
+    let b = s.to;
+    if (i === spans.length - 1 && every && now - s.to <= 2.5 * every) b = now;
+    if (s.from > t) add("unknown", t, s.from);
+    add(state, s.from, b);
+    t = Math.max(t, b);
+  });
+  if (t < now) add("unknown", t, now);
+  return out;
+}
+function uptimeOf(parts) {
+  let up = 0, down = 0;
+  for (const p of parts) { if (p.state === "up") up += p.b - p.a; else if (p.state === "down") down += p.b - p.a; }
+  return { up, down, known: up + down, pct: up + down ? (100 * up) / (up + down) : null };
+}
+function pctText(p) { return p === null ? "–" : p >= 99.95 ? "100%" : p > 99 ? p.toFixed(2) + "%" : p.toFixed(1) + "%"; }
+function barSvg(parts, from, now) {
+  const w = now - from, fmt = (t) => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const said = { up: "Online", down: "Offline", unknown: "Not checked" };
+  return `<svg class="bar" viewBox="0 0 1000 14" preserveAspectRatio="none" role="img" aria-label="History">` + parts.map((p) =>
+    `<rect class="${p.state}" x="${((p.a - from) / w * 1000).toFixed(2)}" y="0" width="${Math.max(0.6, (p.b - p.a) / w * 1000).toFixed(2)}" height="14"><title>${esc(said[p.state])} ${esc(fmt(p.a))} – ${esc(fmt(p.b))} (${esc(ago(p.b - p.a))})</title></rect>`).join("") + "</svg>";
+}
+function devicesFrom(watches, now) {
+  const out = [];
+  for (const x of watches || []) {
+    const o = (x.last && x.last.output) || {};
+    const isDevice = typeof o.online === "boolean" && o.host !== undefined;
+    if (!isDevice && x.tree !== "device-offline") continue;
+    const since = typeof o.since === "string" ? Date.parse(o.since) / 1000 : NaN;
+    const checked = x.last_at || null;
+    let state = !isDevice ? "stale" : o.online ? "up" : "down";
+    if (checked !== null && now - checked > STALE_AFTER) state = "stale";
+    out.push({ name: String(o.name || x.name || o.host || "?"), host: o.host !== undefined ? String(o.host) : "", state, online: isDevice ? o.online : null, since: Number.isNaN(since) ? null : since, checked, error: x.last_error || (x.last && x.last.status !== "done" ? x.last.say : null), peer: x.peer, key: `${x.peer || ""} ${x.tree} ${x.name}`, tree: x.tree, watch: x.name });
+  }
+  const rank = { down: 0, stale: 1, up: 2 };
+  return out.sort((a, b) => rank[a.state] - rank[b.state] || a.name.localeCompare(b.name));
+}
+// One device: its state, its uptime over a day, a week and a month, its
+// history as bars, and its outages (stretches it was seen offline), newest first.
+function outagesOf(parts, now) {
+  return parts.filter((p) => p.state === "down").map((p) => ({ a: p.a, b: p.b, ongoing: now - p.b < 1 })).reverse();
+}
+function renderDevice(d, t, haveHistory, now) {
+  const box = $("#device-detail");
+  const back = `<a class="back" href="#devices">‹ All devices</a>`;
+  if (!d) { box.innerHTML = back + `<div class="card mute">This device is not watched any more: its watch was removed, or its service is not answering.</div>`; return; }
+  const fmt = (s) => new Date(s * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const said = d.state === "up" ? "Online" : d.state === "down" ? "Offline" : d.online === null ? "Not checked yet" : `Not checked lately (last ${d.online ? "online" : "offline"})`;
+  const where = d.peer && d.peer !== "local" ? ` on <code>${esc(d.peer)}</code>` : "";
+  let html = back + `<div class="card device detail-head ${esc(d.state)}"><h3>${esc(d.name)}</h3><div class="host">${esc(d.host)}</div>` +
+    `<div class="state"><span class="link ${esc(d.state)}"></span>${esc(said)}${d.since !== null && d.state !== "stale" ? ` <span class="mute" style="font-weight:normal">for ${esc(ago(now - d.since))}, since ${esc(fmt(d.since))}</span>` : ""}</div>` +
+    `<div class="when">${d.checked ? `checked ${esc(ago(now - d.checked))} ago` : "not checked yet"}${t && t.every ? ` · every ${esc(ago(t.every))}` : ""} · watch <code>${esc(d.watch)}</code> of <code>${esc(d.tree)}</code>${where}</div>` +
+    (d.error ? `<div class="when">${esc(d.error)}</div>` : "") + `</div>`;
+  if (!t) {
+    box.innerHTML = html + `<div class="card mute">${haveHistory ? "No history for this watch yet." : "The service that watches this device keeps no history (it is older than 0.40): uptime and outages need it."}</div>`;
+    return;
+  }
+  const month = stretches(t.spans, t.every, now - 2592000, now);
+  const ranges = [[86400, "24 hours"], [604800, "7 days"], [2592000, "30 days"]];
+  html += `<div class="stats">` + ranges.map(([r, label]) => {
+    const parts = stretches(t.spans, t.every, now - r, now), u = uptimeOf(parts), n = outagesOf(parts, now).length;
+    return `<div class="stat"><div class="mute">Last ${esc(label)}</div><div class="big">${esc(pctText(u.pct))}</div><div class="mute">${n} outage${n === 1 ? "" : "s"}${u.known < r * 0.995 ? ` · ${esc(ago(u.known))} checked` : ""}</div></div>`;
+  }).join("") + `</div>`;
+  html += `<div class="card"><h4>Last 24 hours</h4>${barSvg(stretches(t.spans, t.every, now - 86400, now), now - 86400, now)}<div class="axis"><span>24 h ago</span><span>now</span></div>` +
+    `<h4 style="margin-top:14px">Last 30 days</h4>${barSvg(month, now - 2592000, now)}<div class="axis"><span>30 d ago</span><span>now</span></div></div>`;
+  const outages = outagesOf(month, now);
+  const total = outages.reduce((s, o) => s + (o.b - o.a), 0), longest = outages.reduce((m, o) => Math.max(m, o.b - o.a), 0);
+  const unknown = month.filter((p) => p.state === "unknown").reduce((s, p) => s + (p.b - p.a), 0);
+  html += `<div class="card"><h4>Recent outages</h4>`;
+  if (!outages.length) html += `<p class="mute" style="margin:0">No outages in the last 30 days.</p>`;
+  else {
+    html += `<p class="mute outages-sum">${outages.length} in the last 30 days · ${esc(ago(total))} offline in all · the longest ${esc(ago(longest))}</p>` +
+      `<table class="outages"><thead><tr><th>Went offline</th><th>Back</th><th>Lasted</th></tr></thead><tbody>` +
+      outages.slice(0, 50).map((o) => `<tr class="${o.ongoing ? "ongoing" : ""}"><td data-label="Went offline">${esc(fmt(o.a))}</td><td data-label="Back">${o.ongoing ? "still offline" : esc(fmt(o.b))}</td><td data-label="Lasted">${esc(ago(o.b - o.a))}${o.ongoing ? " so far" : ""}</td></tr>`).join("") + `</tbody></table>` +
+      (outages.length > 50 ? `<p class="mute">and ${outages.length - 50} more.</p>` : "");
+  }
+  html += `<p class="mute" style="font-size:13px;margin:8px 0 0">An outage runs from the last check that found the device online to the first that found it online again, so it is as exact as the watch is frequent.${unknown > 60 ? ` Nobody checked for ${esc(ago(unknown))} of the last 30 days (grey): what happened then is not known.` : ""}</p></div>`;
+  box.innerHTML = html;
+}
+
+async function loadDevices() {
+  let w, h = null; try { [w, h] = await Promise.all([json("watches"), json("watches/history").catch(() => null)]); } catch (e) { problem(e.message, true); return; }
+  const now = Date.now() / 1000, devices = devicesFrom(w.watches, now), from = now - devicesRange;
+  const timelines = new Map(((h && h.watches) || []).map((x) => [`${x.peer || ""} ${x.tree} ${x.name}`, x]));
+  $("#devices-all").hidden = deviceOpen !== null;
+  $("#device-detail").hidden = deviceOpen === null;
+  if (deviceOpen !== null) { renderDevice(devices.find((d) => d.key === deviceOpen), timelines.get(deviceOpen), h !== null, now); return; }
+  for (const b of document.querySelectorAll("#tab-devices .range button")) b.setAttribute("aria-pressed", String(Number(b.dataset.range) === devicesRange));
+  const rangeName = { 86400: "24 h", 604800: "7 d", 2592000: "30 d" }[devicesRange];
+  const grid = $("#devices"); grid.innerHTML = "";
+  const n = (s) => devices.filter((d) => d.state === s).length;
+  $("#devices-summary").textContent = devices.length ? [`${n("up")} online`, `${n("down")} offline`].concat(n("stale") ? [`${n("stale")} not checked lately`] : []).join(" · ") : "";
+  for (const d of devices) {
+    const card = document.createElement("div");
+    card.className = `device ${d.state}`;
+    const said = d.state === "up" ? "Online" : d.state === "down" ? "Offline" : d.online === null ? "Not checked yet" : `Not checked lately (last ${d.online ? "online" : "offline"})`;
+    const since = d.since !== null && d.state !== "stale" ? `for ${ago(now - d.since)}` : "";
+    card.innerHTML = `<div class="name"><a href="#devices/${esc(encodeURIComponent(d.key))}">${esc(d.name)}</a></div><div class="host">${esc(d.host)}</div><div class="state"><span class="link ${esc(d.state)}"></span>${esc(said)}${since ? ` <span class="mute" style="font-weight:normal">${esc(since)}</span>` : ""}</div>` +
+      `<div class="when">${d.checked ? `checked ${esc(ago(now - d.checked))} ago` : "not checked yet"}</div>` + (d.error ? `<div class="when">${esc(d.error)}</div>` : "");
+    const t = timelines.get(d.key);
+    if (t) {
+      const parts = stretches(t.spans, t.every, from, now), u = uptimeOf(parts);
+      const covered = u.known < devicesRange * 0.995 ? ` <span class="mute">of ${esc(ago(u.known))} checked</span>` : "";
+      card.insertAdjacentHTML("beforeend", `<div class="uptime"><span><b>${esc(pctText(u.pct))}</b> up${covered}</span><span class="mute range-name">${esc(rangeName)}</span></div>${barSvg(parts, from, now)}<div class="axis"><span>${esc(ago(devicesRange))} ago</span><span>now</span></div>`);
+    }
+    grid.appendChild(card);
+  }
+  if (!devices.length) grid.innerHTML = `<div class="card mute" style="grid-column:1/-1">No devices watched yet. Copy <code>examples/device-offline</code> into a service's trees, give it a <code>[[watches]]</code> block per device, and start the service with <code>--watch</code>.</div>`;
+}
+
 async function loadGaps() {
   let g; try { g = await json("gaps"); } catch (e) { problem(e.message, true); return; }
   const body = $("#gaps tbody"); body.innerHTML = "";
@@ -1147,6 +1335,8 @@ function tabFromHash() {
     pair.answer(decodeURIComponent(h.slice(5)));
     return "identity";
   }
+  if (h.startsWith("devices/")) { deviceOpen = decodeURIComponent(h.slice(8)); return "devices"; }
+  if (h === "devices") deviceOpen = null;
   return h || "ask";
 }
 const sync = {

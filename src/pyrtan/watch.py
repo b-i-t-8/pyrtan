@@ -12,6 +12,17 @@ and the *path* the run took: the sequence of nodes. When the path of a
 scheduled run differs from the last one, the watch records that too.
 That is how a person learns a site has changed before anyone asks.
 
+Each watch also keeps a *timeline*: what its runs came to over the last
+month, as spans of runs that ended the same way (the same status and the
+same output). A device watched every minute that stays up for a week is
+one span; each change starts another. A clock watch's spans abut when the
+watch kept time (the change happened between two runs); a gap longer than
+two and a half intervals (the service was down) is left as a gap, which a
+reader shows as unknown. :class:`Timelines` keeps them, in a JSON file
+when the service is given one (``--watch-history``), and ``GET
+/watches/history`` serves them; the console's Devices tab draws uptime
+from them.
+
 The trace of a watched run begins with a ``watch`` step, as an asked
 run's begins with ``intent``. Watches are static: a path, a topic, a
 device is literal in the file and checked against the tree's lists by
@@ -26,10 +37,12 @@ file and no serial line, as it reads none.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 from . import adapters
@@ -44,6 +57,77 @@ SYNC_EVERY = 10.0      # how often the watcher looks for trees that changed on d
 FILE_POLL = 2.0        # how often a file watch looks at the file
 RETRY_AFTER = 5.0      # after a stream fails, before reconnecting
 HISTORY = 20           # fires remembered per watch
+TIMELINE_DAYS = 31     # how far back a timeline reaches
+TIMELINE_SPANS = 5000  # spans kept per watch, at most
+TIMELINE_OUTPUT = 2048 # an output larger than this (as JSON) is compared, not kept
+TIMELINE_SAVE = 60.0   # seconds between saves while nothing changes
+CONTIGUOUS = 2.5       # intervals between two runs of a clock watch that still count as one stretch
+
+
+class Timelines:
+    """What each watch's runs came to, over time: per watch, a list of
+    spans ``{from, to, n, status, output, h}`` (``h`` a digest of status and
+    output, ``n`` the runs it holds). Kept in ``path`` when given, written
+    whole and atomically: at once when a span starts, else at most every
+    minute, so a restart loses at most a minute of a span's end."""
+
+    def __init__(self, path: str | Path | None = None, note: Callable[[str], None] | None = None) -> None:
+        self.path = Path(path) if path else None
+        self.note = note or (lambda text: None)
+        self.data: dict[str, list[dict[str, Any]]] = {}
+        self.error: str | None = None
+        self._saved = 0.0
+        self._lock = threading.Lock()
+        if self.path is not None and self.path.exists():
+            try:
+                raw = json.loads(self.path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict) and isinstance(raw.get("timelines"), dict):
+                    self.data = {str(k): [s for s in v if isinstance(s, dict)] for k, v in raw["timelines"].items() if isinstance(v, list)}
+            except (OSError, ValueError) as e:
+                self.error = f"{self.path}: {e}"
+                self.note(f"watch history: {self.error}; starting afresh")
+
+    def record(self, key: str, at: float, status: str, output: Any, interval: float | None) -> None:
+        sig = json.dumps([status, output], sort_keys=True, ensure_ascii=False, default=str)
+        h = hashlib.sha256(sig.encode("utf-8")).hexdigest()[:16]
+        with self._lock:
+            spans = self.data.setdefault(key, [])
+            last = spans[-1] if spans else None
+            contiguous = last is not None and (interval is None or at - float(last["to"]) <= CONTIGUOUS * interval)
+            started = False
+            if last is not None and contiguous and last.get("h") == h:
+                last["to"] = at
+                last["n"] = int(last.get("n", 1)) + 1
+            else:
+                span: dict[str, Any] = {"from": float(last["to"]) if contiguous and last is not None else at, "to": at, "n": 1, "status": status, "h": h}
+                if len(sig) <= TIMELINE_OUTPUT:
+                    span["output"] = output
+                spans.append(span)
+                started = True
+            cutoff = at - TIMELINE_DAYS * 86400
+            while spans and float(spans[0]["to"]) < cutoff:
+                spans.pop(0)
+            del spans[:-TIMELINE_SPANS]
+            if started or at - self._saved >= TIMELINE_SAVE:
+                self._save(at)
+
+    def spans(self, key: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(s) for s in self.data.get(key, [])]
+
+    def _save(self, at: float) -> None:
+        self._saved = at
+        if self.path is None:
+            return
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            tmp.write_text(json.dumps({"pyrtan-watch-history": 1, "timelines": self.data}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            os.replace(tmp, self.path)
+            self.error = None
+        except OSError as e:
+            if self.error is None:
+                self.note(f"watch history: {self.path}: {e.strerror or e}; kept in memory only")
+            self.error = f"{self.path}: {e.strerror or e}"
 
 
 def every_seconds(value: Any) -> int:
@@ -66,6 +150,8 @@ class Watch:
         self.kind = next(k for k in ("every", "file", "queue", "serial") if k in spec)
         self.name = str(spec.get("name") or f"{tree_name}#{index}")
         self.key = json.dumps([tree_name, index, spec], sort_keys=True, default=str)
+        self.timeline = f"{tree_name}/{self.name}"   # outlives an edit to the watch, so its history does too
+        self.interval = every_seconds(spec["every"]) if self.kind == "every" else None
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
         self.fires = 0
@@ -178,6 +264,8 @@ class Watch:
             self.last_path = path
             self.history.append({"at": now, "status": outcome.status, "say": outcome.say, "path": path, "event": _observed(event)})
             del self.history[:-HISTORY]
+            last = self.last_outcome
+        self.watcher.timelines.record(self.timeline, now, last.get("status", ""), last.get("output"), self.interval)
         self.watcher.after(self, event, outcome)
         return outcome
 
@@ -197,7 +285,7 @@ class Watcher:
     gives its own, so gaps are counted and delegations route); ``after``
     is told about each fire."""
 
-    def __init__(self, registry: Any, run: Callable[[Tree, dict[str, Any], Trace], Outcome], *, env: dict[str, Any] | None = None, egress: str = "any", clock: Callable[[], _dt.datetime] | None = None, after: Callable[["Watch", dict[str, Any], Outcome], None] | None = None, note: Callable[[str], None] | None = None) -> None:
+    def __init__(self, registry: Any, run: Callable[[Tree, dict[str, Any], Trace], Outcome], *, env: dict[str, Any] | None = None, egress: str = "any", clock: Callable[[], _dt.datetime] | None = None, after: Callable[["Watch", dict[str, Any], Outcome], None] | None = None, note: Callable[[str], None] | None = None, timelines: Timelines | None = None) -> None:
         self.registry = registry
         self.run = run
         self.env = env or {}
@@ -205,6 +293,7 @@ class Watcher:
         self.clock = clock or (lambda: _dt.datetime.now(_dt.timezone.utc))
         self.after = after or (lambda w, e, o: None)
         self.note = note or (lambda text: None)
+        self.timelines = timelines if timelines is not None else Timelines(note=self.note)
         self.watches: dict[str, Watch] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -258,6 +347,14 @@ class Watcher:
             watches = [w.to_dict() for w in self.watches.values()]
         watches.sort(key=lambda w: (w["tree"], w["index"]))
         return {"count": len(watches), "watches": watches}
+
+    def history(self) -> dict[str, Any]:
+        """Each watch's timeline (``GET /watches/history``)."""
+        with self._lock:
+            current = list(self.watches.values())
+        out = [{"tree": w.tree_name, "index": w.index, "name": w.name, "kind": w.kind, "every": w.interval, "spans": self.timelines.spans(w.timeline)} for w in current]
+        out.sort(key=lambda w: (w["tree"], w["index"]))
+        return {"count": len(out), "days": TIMELINE_DAYS, "watches": out, **({"error": self.timelines.error} if self.timelines.error else {})}
 
     def __len__(self) -> int:
         return len(self.watches)

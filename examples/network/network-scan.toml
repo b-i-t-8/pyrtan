@@ -1,0 +1,48 @@
+# Which hosts of a network are up, and which of a few well-known ports
+# each accepts: SSH, the web, Modbus, MQTT, Matter, BACnet. A discover
+# scan opens TCP connections (a host that refuses one is up too; there is
+# no ping), up to a /22 at once, within the node's timeout. The network
+# from the sentence must lie inside `networks`, checked before anything
+# is sent.
+
+name = "network-scan"
+version = 1
+namespace = "pyrtan"
+description = "Which hosts of a local network are up, and which well-known ports they accept."
+tags = ["network", "discovery", "ops", "read-only"]
+license = "MIT"
+networks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+start = "scan"
+
+[[triggers]]
+pattern = "scan {network:word}"
+[[triggers]]
+pattern = "what is (on|up on) {network:word}"
+
+[inputs.network]
+type = "str"
+pattern = "^[0-9.]+(/[0-9]{1,2})?$"
+description = "An address or a network such as 192.168.1.0/24"
+
+[nodes.scan]
+kind = "observe"
+discover = { scan = "{{ inputs.network }}", ports = [22, 80, 443, 502, 1883, 5540, 8080] }
+into = "lan"                  # state.lan = { method, query, ok, found, devices: [{ address, open }], body, json }
+timeout = 30
+retries = 0
+next = "any"
+
+[nodes.any]
+kind = "decide"
+on = "lan.found"
+branches = [{ when = { eq = 0 }, then = "none" }, { else = "some" }]
+
+[nodes.some]
+kind = "done"
+say = "{{ state.lan.found }} host(s) up on {{ inputs.network }}."
+output = { network = "{{ inputs.network }}", up = "{{ state.lan.found }}", hosts = "{{ state.lan.devices }}" }
+
+[nodes.none]
+kind = "done"
+say = "Nothing on {{ inputs.network }} answered on 22, 80, 443, 502, 1883, 5540 or 8080."
+output = { network = "{{ inputs.network }}", up = 0, hosts = [] }

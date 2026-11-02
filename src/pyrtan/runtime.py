@@ -282,7 +282,8 @@ class Runner:
                 call = lambda: self.transport.request(method, url, headers, body, timeout).to_state()  # noqa: E731
             else:
                 label = f"{source_name} {what(source_name, spec)}"
-                call = lambda: self.adapters.perform(source_name, spec, timeout, tree.host_allowed)  # noqa: E731
+                within = tree.address_allowed if source_name == "discover" else tree.host_allowed  # what a page may navigate to; where a device may answer from
+                call = lambda: self.adapters.perform(source_name, spec, timeout, within)  # noqa: E731
             attempts = 1 + int(node.get("retries", DEFAULT_RETRIES)) if retry else 1
             last_error: str | None = None
             observed = None
