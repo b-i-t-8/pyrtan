@@ -413,7 +413,7 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.45, built: every route, listed.** `pyrtan paths` walks a tree
+19. **v0.46, built: every route, listed.** `pyrtan paths` walks a tree
     without running it and lists each route from its start: the branch
     taken at each `decide` in a trace's words, what the route reads,
     does and asks as written, and how it ends, including the gaps a
@@ -421,7 +421,7 @@ Five trees, all against real public APIs, all tested offline:
     branch the order check proves is never taken is marked. Trees do not
     loop, so the list is finite: the audit, and the documentation, of
     what a tree can do (`paths.py`).
-20. **v0.50, built: which routes the tests take.** `pyrtan paths
+20. **v0.51, built: which routes the tests take.** `pyrtan paths
     --covered` runs a tree's own `[[tests]]` and matches each run's route,
     node by node and choice by choice as its trace records them, to one
     of the routes from the tree's start: each route says which tests take

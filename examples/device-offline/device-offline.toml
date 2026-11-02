@@ -1,11 +1,12 @@
-# Tell a phone when a device on the LAN goes offline, and when it comes
-# back. A discover scan of the one address (a host that refuses a
-# connection is up too, so any device with a TCP stack counts; one that
-# drops everything looks offline), memory to know what it was last time,
-# and an alert through ntfy (https://ntfy.sh, or your own ntfy server)
-# only when that changes: one alert per outage, not one a minute. Memory
-# keeps the state and since when; the console's Devices tab shows every
-# watched device from what this tree last said.
+# Tell a phone when a device on the LAN goes offline, when it comes back,
+# and when its uptime over the last day drops below 99%. A discover scan
+# of the one address (a host that refuses a connection is up too, so any
+# device with a TCP stack counts; one that drops everything looks
+# offline), memory to know what it was last time, and an alert through
+# ntfy (https://ntfy.sh, or your own ntfy server) only when that changes:
+# one alert per outage, not one a minute. Memory keeps the state and since
+# when; the console's Devices tab shows every watched device from what
+# this tree last said.
 #
 # To use it, copy it into your own trees (the NAS's trees/ folder), set
 # the host in the watch below and uncomment it, and give the service the
@@ -15,19 +16,29 @@
 # The topic travels in the request's body, never in its URL, so it stays
 # out of the trace. Without one, the tree still notices and says so, and
 # sends nothing. For your own ntfy server, put its host in `hosts` and its
-# URL in the two alert nodes. A watched service also wants --memory (or
-# $PYRTAN_MEMORY), so a restart does not forget an outage.
+# URL in the alert nodes. A watched service also wants --memory (or
+# $PYRTAN_MEMORY), so a restart does not forget an outage, and
+# --watch-history ($PYRTAN_WATCH_HISTORY), so uptime counts across one.
+#
+# Uptime comes from the watch's own history: the watch hands it in as
+# `uptime = "{{ event.uptime.day }}"` (or .week, .month), the percentage
+# of the checked time the device was online, given once an hour has been
+# checked. Below 99% it alerts once; it alerts again only after uptime has
+# been back to 99.5% or more, so a device hovering at the line does not
+# alert every minute. The two numbers are in `uptime-level` below: change
+# them in your copy (a decision compares with what is written in the tree,
+# so a reader can see the line).
 
 name = "device-offline"
-version = 2
+version = 3
 namespace = "pyrtan"
-description = "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back."
+description = "Alerts (through ntfy) when a device on the LAN goes offline, when it comes back, and when its uptime drops below 99%."
 tags = ["home", "network", "monitoring", "alert"]
 license = "MIT"
 hosts = ["ntfy.sh"]
 networks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 keys = ["device-offline/*"]
-start = "probe"
+start = "begin"
 
 [[triggers]]
 pattern = "is {host:word} online"
@@ -44,11 +55,21 @@ type = "str"
 default = "The device"
 description = "What the alert calls it"
 
+[inputs.uptime]
+type = "float"
+required = false
+description = "Its uptime over a window, in percent, from the watch: {{ event.uptime.day }}"
+
 # Every minute, for one device (uncomment, with its address and a name):
 # [[watches]]
 # name = "printer"
 # every = "1m"
-# inputs = { host = "192.168.1.50", name = "The printer" }
+# inputs = { host = "192.168.1.50", name = "The printer", uptime = "{{ event.uptime.day }}" }
+
+[nodes.begin]
+kind = "set"
+set = { uptime_note = "" }
+next = "probe"
 
 [nodes.probe]
 kind = "observe"
@@ -102,19 +123,19 @@ into = "sent"
 next = "down"
 
 [nodes.down]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ now.iso }}", changed = true, alerted = true }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent.", online = false, since = "{{ now.iso }}", changed = true, alerted = true }
+next = "uptime"
 
 [nodes.down-unsent]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ now.iso }}", changed = true, alerted = false }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent.", online = false, since = "{{ now.iso }}", changed = true, alerted = false }
+next = "uptime"
 
 [nodes.still-down]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ state.was.value.since }}", changed = false, alerted = false }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}.", online = false, since = "{{ state.was.value.since }}", changed = false, alerted = false }
+next = "uptime"
 
 # ---------------------------------------------------------------- online now
 
@@ -134,14 +155,14 @@ into = "kept"
 next = "first-up"
 
 [nodes.first-up]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is online."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = false }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) is online.", online = true, since = "{{ now.iso }}", changed = true, alerted = false }
+next = "uptime"
 
 [nodes.up]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ state.was.value.since }}", changed = false, alerted = false }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}.", online = true, since = "{{ state.was.value.since }}", changed = false, alerted = false }
+next = "uptime"
 
 [nodes.mark-back]
 kind = "act"
@@ -161,11 +182,95 @@ into = "sent"
 next = "back"
 
 [nodes.back]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = true }
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent.", online = true, since = "{{ now.iso }}", changed = true, alerted = true }
+next = "uptime"
 
 [nodes.back-unsent]
+kind = "set"
+set = { said = "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent.", online = true, since = "{{ now.iso }}", changed = true, alerted = false }
+next = "uptime"
+
+# ---------------------------------------------------------------- uptime
+# Only when the watch handed one in (a question asked by hand has none).
+
+[nodes.uptime]
+kind = "decide"
+on = "inputs.uptime"
+branches = [{ when = { type = "number" }, then = "uptime-level" }, { else = "finish" }]
+
+[nodes.uptime-level]
+kind = "decide"
+on = "inputs.uptime"
+branches = [
+  { when = { lt = 99 }, then = "recall-low" },     # the line
+  { when = { gte = 99.5 }, then = "recall-ok" },   # back, with room: alert again next time it drops
+  { else = "finish" },                             # in between: as it was
+]
+
+[nodes.recall-low]
+kind = "observe"
+memory = { key = "device-offline/{{ inputs.host }}/uptime-low" }
+into = "low"
+next = "low-known"
+
+[nodes.low-known]
+kind = "decide"
+on = "low.exists"
+branches = [{ when = { eq = true }, then = "finish" }, { else = "mark-low" }]   # already said: once per drop
+
+[nodes.mark-low]
+kind = "act"
+memory = { key = "device-offline/{{ inputs.host }}/uptime-low", write = "{{ now.iso }}" }
+into = "lowkept"
+next = "can-alert-low"
+
+[nodes.can-alert-low]
+kind = "decide"
+on = "env.NTFY_TOPIC"
+branches = [{ when = { exists = true }, then = "alert-low" }, { else = "low-unsent" }]
+
+[nodes.alert-low]
+kind = "act"
+http = { method = "POST", url = "https://ntfy.sh/", body = { topic = "{{ env.NTFY_TOPIC }}", title = "{{ inputs.name }}: uptime {{ inputs.uptime }}%", message = "{{ inputs.name }} ({{ inputs.host }}) was online {{ inputs.uptime }}% of the time it was checked, below 99%.", priority = 3, tags = ["chart_with_downwards_trend"] } }
+into = "sentlow"
+next = "low-sent"
+
+[nodes.low-sent]
+kind = "set"
+set = { uptime_note = " Uptime is {{ inputs.uptime }}%, below 99%; the alert is sent." }
+next = "finish"
+
+[nodes.low-unsent]
+kind = "set"
+set = { uptime_note = " Uptime is {{ inputs.uptime }}%, below 99%; no NTFY_TOPIC is set, so no alert was sent." }
+next = "finish"
+
+[nodes.recall-ok]
+kind = "observe"
+memory = { key = "device-offline/{{ inputs.host }}/uptime-low" }
+into = "low"
+next = "was-low"
+
+[nodes.was-low]
+kind = "decide"
+on = "low.exists"
+branches = [{ when = { eq = true }, then = "clear-low" }, { else = "finish" }]
+
+[nodes.clear-low]
+kind = "act"
+memory = { key = "device-offline/{{ inputs.host }}/uptime-low", delete = true }
+into = "cleared"
+next = "recovered"
+
+[nodes.recovered]
+kind = "set"
+set = { uptime_note = " Uptime is back to {{ inputs.uptime }}%." }
+next = "finish"
+
+# ---------------------------------------------------------------- the answer
+
+[nodes.finish]
 kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
-output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = false }
+say = "{{ state.said }}{{ state.uptime_note }}"
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = "{{ state.online }}", since = "{{ state.since }}", changed = "{{ state.changed }}", alerted = "{{ state.alerted }}" }
