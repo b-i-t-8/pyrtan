@@ -152,11 +152,11 @@ extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
 | `queue = { url, topic }` or `{ …, publish }` | `hosts`, `topics` | [`room-temperature`](examples/room-temperature/room-temperature.toml): a sensor's last reading over MQTT |
 | `browser = { url, wait_for, actions }` | `hosts` | [`rendered-headline`](examples/rendered-headline/rendered-headline.toml): the heading of a page that needs a script to render |
 | `memory = { key }` or `{ key, write / add / delete, ttl }` | `keys` | what a tree keeps across runs: the last reading, a count of checks in a row, whether it already said so |
-| `modbus = { url, unit, read, address, count, type }` or `{ …, write, value }` | `hosts` | a tank's level from a PLC's holding registers |
-| `bacnet = { url, object, property }` or `{ …, write, priority }` | `hosts` | a zone's temperature from a building controller |
-| `snmp = { url, get }`, `{ url, walk }` or `{ url, set }` | `hosts` | a UPS's power source, charge and minutes left |
-| `coap = { url, method, payload }` | `hosts` | a garden sensor over the small-device web |
-| `matter = { url, node, read }`, `{ …, write, value }` or `{ …, cluster, command }` | `hosts` | a smart plug, through a Matter controller |
+| `modbus = { url, unit, read, address, count, type }` or `{ …, write, value }` | `hosts` | [`tank-level`](examples/tank-level/tank-level.toml): a tank's level from a PLC's holding registers |
+| `bacnet = { url, object, property }` or `{ …, write, priority }` | `hosts` | [`zone-temperature`](examples/zone-temperature/zone-temperature.toml): a zone's temperature from a building controller |
+| `snmp = { url, get }`, `{ url, walk }` or `{ url, set }` | `hosts` | [`ups-battery`](examples/ups-battery/ups-battery.toml): a UPS's power source, charge and minutes left |
+| `coap = { url, method, payload }` | `hosts` | [`soil-moisture`](examples/soil-moisture/soil-moisture.toml): a garden sensor over the small-device web |
+| `matter = { url, node, read }`, `{ …, write, value }` or `{ …, cluster, command }` | `hosts` | [`plug-status`](examples/plugs/plug-status.toml), [`plug-switch`](examples/plugs/plug-switch.toml): a smart plug, through a Matter controller |
 
 The trace reads the same whichever source a node used (`shell df -P / ->
 exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
