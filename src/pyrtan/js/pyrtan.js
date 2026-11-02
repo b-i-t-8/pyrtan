@@ -482,8 +482,8 @@
   // answers for them. The allow-list checks and the fixture keys are the
   // Python ones.
   const FIELD_SOURCES = ["modbus", "bacnet", "snmp", "coap", "matter"];
-  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue", "memory"].concat(FIELD_SOURCES);
-  const LIST_NAMES = ["paths", "commands", "devices", "topics", "keys"];
+  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue", "memory"].concat(FIELD_SOURCES, ["discover"]);
+  const LIST_NAMES = ["paths", "commands", "devices", "topics", "keys", "networks"];
   const MQTT_PORTS = { mqtt: 1883, mqtts: 8883 };
   function absolutePath(path) {
     path = String(path);
@@ -533,6 +533,26 @@
     return false;
   }
   const keyAllowed = (keys, key) => keys.some((k) => k === "*" || globMatch(k, String(key)));
+  // discover.network_allowed, for IPv4: an address or a CIDR inside one of the networks.
+  function ipv4Net(text) {
+    const m = /^\s*(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?\s*$/.exec(String(text));
+    if (!m || m.slice(1, 5).some((o) => Number(o) > 255) || (m[5] !== undefined && Number(m[5]) > 32)) return null;
+    const bits = m[5] === undefined ? 32 : Number(m[5]);
+    const addr = m.slice(1, 5).reduce((a, o) => a * 256 + Number(o), 0);
+    const size = 2 ** (32 - bits);
+    return [addr - (addr % size), bits];
+  }
+  function networkAllowed(networks, target) {
+    const t = ipv4Net(target);
+    if (!t) return false;
+    for (const entry of networks) {
+      if (entry === "*") return true;
+      const n = ipv4Net(entry);
+      if (n && t[1] >= n[1] && t[0] - (t[0] % 2 ** (32 - n[1])) === n[0]) return true;
+    }
+    return false;
+  }
+  const discoverMethod = (spec) => ["mdns", "ssdp", "bacnet", "scan"].find((m) => m in spec) || "?";
   function broker(url) {
     const m = /^(mqtts?):\/\/([^/:?#]+)(?::(\d+))?/.exec(String(url));
     if (!m) throw new Error(`${pyrepr(String(url))} is not mqtt://host[:port] or mqtts://host[:port]`);
@@ -577,6 +597,7 @@
       if (mode === "command") return `matter command ${pyStr(spec.url)} node ${pyStr(spec.node)} ${pyStr(dflt(spec.endpoint, 1))}/${pyStr(spec.cluster)} ${pyStr(spec.command)}`;
       return `matter ${mode === "write" ? "write " : ""}${pyStr(spec.url)} node ${pyStr(spec.node)} ${pyStr(spec[mode])}`;
     }
+    if (source === "discover") return `discover ${what(source, spec)}`;
     throw new Error(source);
   }
   function what(source, spec) {
@@ -601,10 +622,14 @@
       if (mode === "command") return `node ${pyStr(spec.node)} ${pyStr(spec.cluster)} ${pyStr(spec.command)} at ${pyStr(spec.url)}`;
       return `node ${pyStr(spec.node)} ${pyStr(spec[mode])} at ${pyStr(spec.url)}`;
     }
+    if (source === "discover") {
+      const method = discoverMethod(spec);
+      return `${method} ${pyStr(spec[method])}`.trimEnd() + (method === "scan" && Array.isArray(spec.ports) ? " ports " + spec.ports.map(pyStr).join(",") : "");
+    }
     return String(spec.url);
   }
   // A good answer is the one a node's expect describes (adapters.good).
-  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists", modbus: "ok", bacnet: "ok", snmp: "ok", coap: "ok", matter: "ok" };
+  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists", modbus: "ok", bacnet: "ok", snmp: "ok", coap: "ok", matter: "ok", discover: "ok" };
   const good = (source, observed) => { const key = GOOD[source || ""]; return key === undefined ? true : observed[key] === true; };
   // What an act is about to do, in the words a confirmation asks with (adapters.would).
   function would(source, spec) {
@@ -655,6 +680,7 @@
       if (!("path" in observed)) return "sent";
       return "written" in observed ? "written" : short(observed.value);
     }
+    if (source === "discover") return `${pyStr(observed.found === undefined ? null : observed.found)} found`;
     return "ok";
   }
 
@@ -1322,6 +1348,7 @@
         try { [scheme, host, port] = fieldEndpoint(source, spec.url === undefined ? "" : spec.url); } catch (e) { return ["host-not-allowed", e.message]; }
         return this.hostAllowed(`${scheme}://${host}:${port}/`) ? null : ["host-not-allowed", `${host} is outside this tree's hosts ${pyrepr(this.hosts)}.`];
       }
+      if (source === "discover" && "scan" in spec) { const target = pyStr(spec.scan); return networkAllowed(this.networks, target) ? null : ["network-not-allowed", `${target} is outside this tree's networks ${pyrepr(this.networks)}.`]; }
       return null;
     }
     sources() {
@@ -1609,7 +1636,7 @@
           call = async () => (await this.transport.request(method, url, headers, body === undefined ? null : body, timeout)).toState();
         } else {
           label = `${sourceName} ${what(sourceName, spec)}`;
-          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : FIELD_SOURCES.includes(sourceName) ? "line to a device on the network" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : sourceName === "memory" ? "memory" : "devices")}.` });
+          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : FIELD_SOURCES.includes(sourceName) ? "line to a device on the network" : sourceName === "discover" ? "view of the network a box sits on" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : sourceName === "memory" ? "memory" : "devices")}.` });
           call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
         }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;

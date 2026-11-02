@@ -39,6 +39,7 @@ is what makes the trace a complete account of the run; repetition is
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import tomllib
 import urllib.parse
@@ -175,6 +176,7 @@ class Tree:
     devices: list[str] = field(default_factory=list)    # what ``serial`` nodes may open
     topics: list[str] = field(default_factory=list)     # what ``queue`` nodes may subscribe to or publish on
     keys: list[str] = field(default_factory=list)       # what ``memory`` nodes may read and write
+    networks: list[str] = field(default_factory=list)   # what ``discover`` nodes may look at: CIDRs
     tests: list[dict[str, Any]] = field(default_factory=list)  # the tree's own tests: a sentence or inputs, a recording, what the run must come to
 
     def node(self, node_id: str) -> Node:
@@ -182,6 +184,12 @@ class Tree:
             return self.nodes[node_id]
         except KeyError:
             raise TreeError(f"{self.name}: no node {node_id!r}") from None
+
+    def address_allowed(self, address: str) -> bool:
+        """Whether an address (or a network) lies inside this tree's ``networks``."""
+        from .discover import network_allowed
+
+        return network_allowed(self.networks, address)
 
     def host_allowed(self, url: str) -> bool:
         host = (urllib.parse.urlsplit(url).hostname or "").lower()
@@ -239,6 +247,9 @@ class Tree:
             except ValueError as e:
                 return ("host-not-allowed", str(e))
             return None if self.host_allowed(f"{scheme}://{host}:{port}/") else ("host-not-allowed", f"{host} is outside this tree's hosts {self.hosts}.")
+        if source == "discover" and "scan" in spec:
+            target = str(spec.get("scan", ""))
+            return None if self.address_allowed(target) else ("network-not-allowed", f"{target} is outside this tree's networks {self.networks}.")
         return None
 
     def watch_kinds(self) -> list[str]:
@@ -274,7 +285,7 @@ class Tree:
             "description": self.description,
             "tags": self.tags,
             "hosts": self.hosts,
-            **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys") if getattr(self, k)},
+            **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys", "networks") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
             "license": self.license,
@@ -320,11 +331,17 @@ def build(raw: dict[str, Any], source: str | None = None) -> Tree:
     if not isinstance(hosts, list) or not all(isinstance(h, str) and h for h in hosts):
         raise TreeError(f"{name}: 'hosts' must be a list of host names")
     lists: dict[str, list[str]] = {}
-    for key, noun in (("paths", "paths or globs"), ("commands", "program names"), ("devices", "device paths or globs"), ("topics", "topic filters"), ("keys", "memory keys or globs")):
+    for key, noun in (("paths", "paths or globs"), ("commands", "program names"), ("devices", "device paths or globs"), ("topics", "topic filters"), ("keys", "memory keys or globs"), ("networks", "networks such as \"192.168.1.0/24\"")):
         value = raw.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
             raise TreeError(f"{name}: '{key}' must be a list of {noun}")
         lists[key] = value
+    for net in lists["networks"]:
+        if net != "*":
+            try:
+                ipaddress.ip_network(net, strict=False)
+            except ValueError:
+                raise TreeError(f"{name}: 'networks' holds {net!r}, which is not a network such as \"192.168.1.0/24\"") from None
     tags = raw.get("tags", [])
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
         raise TreeError(f"{name}: 'tags' must be a list of strings")
@@ -678,7 +695,7 @@ def check(tree: Tree) -> list[Problem]:
     return problems
 
 
-_NEEDS = {"hosts": {"http", "browser", "queue", *adapters.FIELD_SOURCES}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}}
+_NEEDS = {"hosts": {"http", "browser", "queue", *adapters.FIELD_SOURCES}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}, "networks": {"discover"}}
 WATCH_KINDS = ("every", "file", "queue", "serial")
 WATCH_ROOTS = ("event", "env", "now")
 
@@ -1207,8 +1224,56 @@ def _check_matter(tree: Tree, node: Node, spec: Any, err, warn) -> None:
     _check_device_url(tree, where, "matter", spec["url"], err, warn)
 
 
+def _check_discover(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import discover
+
+    where = f"nodes.{node.id}.discover"
+    if not isinstance(spec, dict):
+        err(where, "'discover' is a table with one of mdns (a service such as \"_matter._tcp\"), ssdp (a search target), bacnet = \"who-is\" or scan (a network)")
+        return
+    unknown = sorted(set(spec) - {*discover.METHODS, "wait", "ports", "connect", "names", "low", "high"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    methods = [m for m in discover.METHODS if m in spec]
+    if len(methods) != 1:
+        err(where, f"exactly one of {', '.join(discover.METHODS)}")
+        return
+    method = methods[0]
+    if node.kind == "act":
+        warn(where, "discovery changes nothing; an observe node would retry it safely")
+    if method == "bacnet" and spec["bacnet"] != "who-is":
+        err(where, "'bacnet' is \"who-is\"")
+    if ("low" in spec or "high" in spec) and (method != "bacnet" or not ("low" in spec and "high" in spec)):
+        err(where, "'low' and 'high' go together, with bacnet: the device instances asked for")
+    if ("ports" in spec or "connect" in spec or "names" in spec) and method != "scan":
+        err(where, "'ports', 'connect' and 'names' go with scan")
+    if "ports" in spec:
+        ports = spec["ports"]
+        if not isinstance(ports, list) or not ports or len(ports) > discover.MAX_PORTS or not all(isinstance(p, int) and 0 < p < 65536 for p in ports):
+            err(where, f"'ports' is a list of 1 to {discover.MAX_PORTS} port numbers")
+    wait = spec.get("wait")
+    if wait is not None and not (isinstance(wait, (int, float)) and not isinstance(wait, bool) and 0 < wait <= discover.MAX_WAIT):
+        err(where, f"'wait' is seconds to listen, up to {discover.MAX_WAIT:g}")
+    if method == "scan":
+        target = spec["scan"]
+        if not isinstance(target, str):
+            err(where, "'scan' is an address or a network such as \"192.168.1.0/24\"")
+        elif _is_template(target):
+            warn(where, "the network is decided at run time; the runtime refuses networks outside the list")
+        else:
+            try:
+                net = ipaddress.ip_network(target, strict=False)
+            except ValueError:
+                err(where, f"{target!r} is not an address or a network such as \"192.168.1.0/24\"")
+            else:
+                if net.num_addresses > discover.MAX_HOSTS + 2:
+                    err(where, f"{target} is more hosts than a tree scans at once ({discover.MAX_HOSTS}, a /22)")
+                if tree.networks and not tree.address_allowed(target):
+                    err(where, f"{target} is not inside this tree's networks")
+
+
 _SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue, "memory": _check_memory,
-                  "modbus": _check_modbus, "bacnet": _check_bacnet, "snmp": _check_snmp, "coap": _check_coap, "matter": _check_matter}
+                  "modbus": _check_modbus, "bacnet": _check_bacnet, "snmp": _check_snmp, "coap": _check_coap, "matter": _check_matter, "discover": _check_discover}
 
 
 def _check_order(where: str, kind: str, ordered: list[tuple[int, dict[str, Any]]], fallback: bool, warn) -> str | None:
