@@ -127,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("test", help="run each tree's [[tests]] against their recordings; exit 1 if any fails")
     p.add_argument("paths", nargs="*")
     p.add_argument("--tree", action="append", default=[], help="only this tree's tests (repeatable)")
+    p.add_argument("--min-coverage", type=_percent, metavar="N", help="also exit 1 if a tree's tests take under N%% of the routes it can take (pyrtan paths --covered)")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("diff", help="what an edit to a tree changes: every test either version carries, run on both; exit 1 if any run changed")
@@ -716,9 +717,22 @@ def cmd_run(args: argparse.Namespace) -> int:
     return _report(outcome, args.json, not args.no_trace)
 
 
+def _percent(text: str) -> float:
+    try:
+        n = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if not 0 <= n <= 100:
+        raise argparse.ArgumentTypeError(f"{text} is not a percentage from 0 to 100")
+    return n
+
+
 def cmd_test(args: argparse.Namespace) -> int:
     """Run every tree's own tests. Each answers from its recording, with its
-    clock, so a pass means the same path as when it was written."""
+    clock, so a pass means the same path as when it was written. With
+    ``--min-coverage N``, each tree's runs must also take at least N% of
+    the routes from its start that can be taken, as ``pyrtan paths
+    --covered`` counts them; a tree without tests is not judged."""
     from .cases import cases, failures, run_case
 
     reg = Registry.from_paths(_paths(args.paths))
@@ -728,13 +742,17 @@ def cmd_test(args: argparse.Namespace) -> int:
     if not trees:
         print("pyrtan test: no tree here carries [[tests]]", file=sys.stderr)
         return 2
+    minimum = getattr(args, "min_coverage", None)
     report, failed, total = [], 0, 0
+    coverage_report: list[dict[str, Any]] = []
     for tree in trees:
         if not args.json:
             print(f"{tree.name}: {len(tree.tests)} test(s)")
+        ran = []
         for case in cases(tree):
             total += 1
             outcome = run_case(case, tree, reg)
+            ran.append((case.name, outcome))
             missed = failures(case, outcome)
             failed += bool(missed)
             report.append({"tree": tree.name, "test": case.name, "ok": not missed, "failures": missed, "outcome": outcome.to_dict(with_trace=False)})
@@ -742,11 +760,33 @@ def cmd_test(args: argparse.Namespace) -> int:
                 print(f"  {'ok  ' if not missed else 'FAIL'}  {case.name}")
                 for m in missed:
                     print(f"        {m}")
+        if minimum is not None:
+            from . import paths as pathsmod
+
+            found, _ = pathsmod.routes(tree)
+            got = pathsmod.coverage(tree, reg.trees(), found, ran=ran)
+            took, can = got.counts(found)
+            percent = 100.0 * took / can if can else 100.0
+            below = took * 100 < minimum * can
+            coverage_report.append({"tree": tree.name, "tested": took, "routes": can, "percent": round(percent, 1), "below": below,
+                                    "untested": [pathsmod.describe(r) for r in got.untested(found)]})
+            if not args.json:
+                print(f"  coverage: {took} of {can} route(s), {percent:.0f}%{f', below {minimum:g}%' if below else ''}")
+                if below:
+                    for r in got.untested(found):
+                        print(f"        untested: {pathsmod.describe(r)}")
+    under = [c for c in coverage_report if c["below"]]
     if args.json:
-        print(json.dumps({"passed": total - failed, "failed": failed, "tests": report}, indent=2, ensure_ascii=False, default=str))
+        out: dict[str, Any] = {"passed": total - failed, "failed": failed, "tests": report}
+        if minimum is not None:
+            out["coverage"] = {"min": minimum, "trees": coverage_report, "below": [c["tree"] for c in under], "untested_trees": len(reg.trees()) - len(trees) if not args.tree else 0}
+        print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
     else:
         print(f"{total - failed}/{total} passed")
-    return 1 if failed or reg.errors else 0
+        if minimum is not None:
+            untested = len(reg.trees()) - len(trees) if not args.tree else 0
+            print(f"coverage: {len(trees) - len(under)} of {len(trees)} tree(s) at {minimum:g}% or more" + (f"; {untested} tree(s) carry no tests and are not judged" if untested else ""))
+    return 1 if failed or reg.errors or under else 0
 
 
 def cmd_diff(args: argparse.Namespace) -> int:

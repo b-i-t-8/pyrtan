@@ -584,7 +584,12 @@ the run with a `transport` error that names it.
 
 Because a run is deterministic given its observations, the path is as
 much a result as the answer. `pyrtan test [PATH …]` runs every tree's
-tests and exits 1 if any misses. `pyrtan diff FILE` runs every test the
+tests and exits 1 if any misses. With `--min-coverage N` it also exits 1
+when a tree's tests take under N% of the routes from its start that can
+be taken (as `pyrtan paths --covered` counts them: a branch the order
+check proves is never taken is not one, and an `each` sub-flow's routes
+are not counted), and lists the routes they miss; a tree with no
+`[[tests]]` is not judged. `pyrtan diff FILE` runs every test the
 file and its last committed version carry (`--against REF` for another
 revision, `--old FILE` for a file) on both, against the same recordings,
 and names each run whose outcome, answer or path changed, whatever

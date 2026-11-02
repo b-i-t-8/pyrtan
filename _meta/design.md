@@ -428,7 +428,13 @@ Five trees, all against real public APIs, all tested offline:
     it or that none does, a test that stops on the way (a transport, a
     drift) says where, and the tree says how many of the routes that can
     be taken are tested (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+21. **v0.53, built: a coverage the tests are held to.** `pyrtan test
+    --min-coverage N` matches each run to its route as `paths --covered`
+    does, from the runs it has just made, and fails a tree whose tests
+    take under N% of the routes it can take, naming the routes they miss.
+    A catalog can hold its trees to a number in CI; trees with no tests
+    are counted, not judged (`cli.py`, `paths.py`).
+22. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
