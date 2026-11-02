@@ -1,0 +1,71 @@
+# How dry a garden bed is, from the bed's sensor over CoAP, the small-device
+# web: a GET to coap://host/path, and the answer's status ("2.05" is
+# Content), format and body, as an HTTP node reads them.
+
+name = "soil-moisture"
+version = 1
+namespace = "pyrtan"
+description = "How dry a garden bed is, from its sensor over CoAP."
+tags = ["home", "garden", "coap", "read-only"]
+license = "MIT"
+hosts = ["garden.local"]
+start = "read"
+
+[[triggers]]
+pattern = "how dry is the {bed:word}"
+[[triggers]]
+pattern = "soil moisture in the {bed:word}"
+
+[inputs.bed]
+type = "str"
+pattern = "^[a-z0-9-]+$"
+
+[nodes.read]
+kind = "observe"
+coap = { url = "coap://garden.local/sensors/{{ inputs.bed }}/moisture" }
+into = "soil"                 # state.soil = { url, status, code, ok, format, body, json, elapsed_ms }
+timeout = 5
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "soil.status"
+branches = [
+  { when = { eq = "2.05" }, then = "how-wet" },
+  { when = { eq = "4.04" }, then = "no-bed" },
+  { else = "unexpected" },
+]
+
+[nodes.how-wet]
+kind = "decide"
+on = "soil.json.moisture"
+branches = [
+  { when = { lt = 30 }, then = "dry" },
+  { when = { lt = 70 }, then = "fine" },
+  { when = { gte = 70 }, then = "wet" },
+]
+
+[nodes.dry]
+kind = "done"
+say = "The {{ inputs.bed }} is dry ({{ state.soil.json.moisture }}%): water it."
+output = { bed = "{{ inputs.bed }}", moisture = "{{ state.soil.json.moisture }}", water = true }
+
+[nodes.fine]
+kind = "done"
+say = "The {{ inputs.bed }} is fine ({{ state.soil.json.moisture }}%)."
+output = { bed = "{{ inputs.bed }}", moisture = "{{ state.soil.json.moisture }}", water = false }
+
+[nodes.wet]
+kind = "done"
+say = "The {{ inputs.bed }} is wet ({{ state.soil.json.moisture }}%)."
+output = { bed = "{{ inputs.bed }}", moisture = "{{ state.soil.json.moisture }}", water = false }
+
+[nodes.no-bed]
+kind = "fail"
+reason = "no-bed"
+say = "The garden has no sensor in the {{ inputs.bed }}."
+
+[nodes.unexpected]
+kind = "fail"
+reason = "unexpected-response"
+say = "The {{ inputs.bed }} sensor answered {{ state.soil.status }}."
