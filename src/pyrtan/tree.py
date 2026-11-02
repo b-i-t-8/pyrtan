@@ -232,6 +232,13 @@ class Tree:
         if source == "memory":
             key = str(spec.get("key", ""))
             return None if adapters.key_allowed(self.keys, key) else ("key-not-allowed", f"{key!r} is outside this tree's keys {self.keys}.")
+        if source in adapters.FIELD_SOURCES:
+            url = str(spec.get("url", ""))
+            try:
+                scheme, host, port = adapters.field_endpoint(source, url)
+            except ValueError as e:
+                return ("host-not-allowed", str(e))
+            return None if self.host_allowed(f"{scheme}://{host}:{port}/") else ("host-not-allowed", f"{host} is outside this tree's hosts {self.hosts}.")
         return None
 
     def watch_kinds(self) -> list[str]:
@@ -671,7 +678,7 @@ def check(tree: Tree) -> list[Problem]:
     return problems
 
 
-_NEEDS = {"hosts": {"http", "browser", "queue"}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}}
+_NEEDS = {"hosts": {"http", "browser", "queue", *adapters.FIELD_SOURCES}, "paths": {"file"}, "commands": {"shell"}, "devices": {"serial"}, "topics": {"queue"}, "keys": {"memory"}}
 WATCH_KINDS = ("every", "file", "queue", "serial")
 WATCH_ROOTS = ("event", "env", "now")
 
@@ -994,7 +1001,214 @@ def _check_memory(tree: Tree, node: Node, spec: Any, err, warn) -> None:
             err(where, f"{key!r} is not in this tree's keys")
 
 
-_SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue, "memory": _check_memory}
+def _check_device_url(tree: Tree, where: str, source: str, url: str, err, warn) -> None:
+    """A field protocol's URL: its scheme, and its host against ``hosts`` when that much is literal."""
+    if _is_template(url):
+        head = PLACEHOLDER.split(url, 1)[0]
+        if "://" not in head or "/" not in head.split("://", 1)[1]:
+            warn(where, "the device is decided at run time; the runtime refuses hosts outside the list")
+            return
+        url = head
+    try:
+        scheme, host, port = adapters.field_endpoint(source, url)
+    except ValueError as e:
+        err(where, str(e))
+        return
+    if tree.hosts and not tree.host_allowed(f"{scheme}://{host}:{port}/"):
+        err(where, f"host {host!r} is not in this tree's hosts")
+
+
+def _is_template(value: Any) -> bool:
+    return isinstance(value, str) and bool(PLACEHOLDER.search(value))
+
+
+def _int_like(value: Any) -> bool:
+    return (isinstance(value, int) and not isinstance(value, bool)) or _is_template(value)
+
+
+def _changes(where: str, node: Node, changes: bool, what: str, err, warn) -> None:
+    if changes and node.kind == "observe":
+        err(where, f"{what} changes things; make this an act node")
+    if not changes and node.kind == "act":
+        warn(where, "an act that only reads; an observe node would retry it safely")
+
+
+def _check_modbus(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import modbus
+
+    where = f"nodes.{node.id}.modbus"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str):
+        err(where, "'modbus' is a table with 'url' (modbus://host[:port]), 'unit', 'address' and either 'read' (which table, and 'count', 'type') or 'write' (which table) and 'value'")
+        return
+    unknown = sorted(set(spec) - {"url", "unit", "read", "write", "address", "count", "value", "type", "word_order", "scale"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    if "read" in spec and "write" in spec:
+        err(where, "'read' or 'write', not both")
+    writing = "write" in spec
+    _changes(where, node, writing, "a write", err, warn)
+    table = spec.get("write" if writing else "read", "holding")
+    if not _is_template(table):
+        if table not in modbus.TABLES:
+            err(where, f"'{'write' if writing else 'read'}' is one of {', '.join(modbus.TABLES)}, got {table!r}")
+        elif writing and table not in modbus.WRITABLE:
+            err(where, f"{table} is read-only; a write goes to a coil or a holding register")
+    if writing and "value" not in spec:
+        err(where, "a write needs 'value': one value or a list")
+    if not writing and "value" in spec:
+        err(where, "'value' goes with 'write'")
+    for key in ("unit", "address", "count"):
+        if key in spec and not _int_like(spec[key]):
+            err(where, f"'{key}' is a number")
+    if "address" not in spec:
+        err(where, "needs 'address': the first coil or register, counted from 0")
+    if "type" in spec and not _is_template(spec["type"]) and spec["type"] not in modbus.TYPES:
+        err(where, f"'type' is one of {', '.join(modbus.TYPES)}")
+    if spec.get("word_order", "big") not in ("big", "little"):
+        err(where, "'word_order' is \"big\" (most significant word first) or \"little\"")
+    _check_device_url(tree, where, "modbus", spec["url"], err, warn)
+
+
+def _check_bacnet(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import bacnet
+
+    where = f"nodes.{node.id}.bacnet"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str) or not isinstance(spec.get("object"), str):
+        err(where, "'bacnet' is a table with 'url' (bacnet://host[:port]), 'object' (analog-input:3) and optionally 'property', 'index'; to change it, 'write' and 'priority'")
+        return
+    unknown = sorted(set(spec) - {"url", "object", "property", "index", "write", "priority", "type", "network", "mac"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    _changes(where, node, "write" in spec, "a write", err, warn)
+    if not _is_template(spec["object"]):
+        try:
+            bacnet.object_id(spec["object"])
+        except ValueError as e:
+            err(where, str(e))
+    prop = spec.get("property", "present-value")
+    if not _is_template(prop):
+        try:
+            bacnet.property_id(prop)
+        except ValueError as e:
+            err(where, str(e))
+    if "priority" in spec and not _is_template(spec["priority"]) and not (isinstance(spec["priority"], int) and 1 <= spec["priority"] <= 16):
+        err(where, "'priority' is 1 to 16")
+    if "priority" in spec and "write" not in spec:
+        err(where, "'priority' goes with 'write'")
+    if "type" in spec and spec["type"] not in bacnet.APP_TAGS:
+        err(where, f"'type' is one of {', '.join(bacnet.APP_TAGS)}")
+    if ("network" in spec) != ("mac" in spec):
+        err(where, "'network' and 'mac' go together: the remote network and the device's address on it")
+    _check_device_url(tree, where, "bacnet", spec["url"], err, warn)
+
+
+def _check_snmp(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import snmp
+
+    where = f"nodes.{node.id}.snmp"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str):
+        err(where, "'snmp' is a table with 'url' (snmp://host[:port]) and one of 'get' (an OID or a list), 'walk' (an OID) or 'set' ({ oid, value, type })")
+        return
+    unknown = sorted(set(spec) - {"url", "community", "version", "get", "walk", "max", "set"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    modes = [m for m in ("get", "walk", "set") if m in spec]
+    if len(modes) != 1:
+        err(where, "exactly one of 'get', 'walk' or 'set'")
+        return
+    _changes(where, node, modes[0] == "set", "a set", err, warn)
+    if str(spec.get("version", "2c")) not in ("1", "2c"):
+        err(where, "'version' is \"2c\" or \"1\" (SNMPv3 is not spoken)")
+    if modes[0] == "set":
+        target = spec["set"]
+        if not isinstance(target, dict) or "oid" not in target or "value" not in target:
+            err(where, "'set' is a table with 'oid', 'value' and optionally 'type'")
+            return
+        oids = [target["oid"]]
+        if "type" in target and target["type"] not in snmp.SET_TYPES:
+            err(where, f"'type' is one of {', '.join(snmp.SET_TYPES)}")
+    else:
+        value = spec[modes[0]]
+        oids = value if isinstance(value, list) and modes[0] == "get" else [value]
+    for o in oids:
+        if not isinstance(o, str):
+            err(where, f"an OID is a string such as \"sysName.0\", got {o!r}")
+        elif not _is_template(o):
+            try:
+                snmp.oid(o)
+            except ValueError as e:
+                err(where, str(e))
+    if "community" in spec and not _is_template(spec["community"]) and spec["community"] not in ("public",):
+        warn(where, "a community string is a password; {{ env.SNMP_COMMUNITY }} keeps it out of the tree")
+    _check_device_url(tree, where, "snmp", spec["url"], err, warn)
+
+
+def _check_coap(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import coap
+
+    where = f"nodes.{node.id}.coap"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str):
+        err(where, "'coap' is a table with 'url' (coap://host[:port]/path) and optionally 'method', 'payload', 'format', 'accept'")
+        return
+    unknown = sorted(set(spec) - {"url", "method", "payload", "format", "accept"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    method = str(spec.get("method", "GET")).upper()
+    if method not in coap.METHODS:
+        err(where, f"'method' is one of {', '.join(coap.METHODS)}")
+    elif node.kind == "observe" and method != "GET":
+        err(where, f"{method} changes things; make this an act node")
+    elif node.kind == "act" and method == "GET":
+        warn(where, "GET is a read; an observe node would retry it safely")
+    for key in ("format", "accept"):
+        v = spec.get(key)
+        if v is not None and not (isinstance(v, int) and not isinstance(v, bool)) and str(v).lower() not in coap.FORMATS:
+            err(where, f"'{key}' is one of {', '.join(coap.FORMATS)} or a number")
+    _check_device_url(tree, where, "coap", spec["url"], err, warn)
+
+
+def _check_matter(tree: Tree, node: Node, spec: Any, err, warn) -> None:
+    from . import matter
+
+    where = f"nodes.{node.id}.matter"
+    if not isinstance(spec, dict) or not isinstance(spec.get("url"), str) or "node" not in spec:
+        err(where, "'matter' is a table with 'url' (the controller's ws://…/ws), 'node' and one of 'read' (endpoint/cluster/attribute), 'write' and 'value', or 'command' with 'cluster', 'endpoint' and 'payload'")
+        return
+    unknown = sorted(set(spec) - {"url", "node", "read", "write", "value", "command", "endpoint", "cluster", "payload", "scale"})
+    if unknown:
+        err(where, f"unknown keys {unknown}")
+    modes = [m for m in ("read", "write", "command") if m in spec]
+    if len(modes) != 1:
+        err(where, "exactly one of 'read', 'write' or 'command'")
+        return
+    mode = modes[0]
+    _changes(where, node, mode != "read", f"a {mode}", err, warn)
+    if not _int_like(spec["node"]):
+        err(where, "'node' is the node id the controller gave the device, a number")
+    if mode in ("read", "write") and not _is_template(spec[mode]):
+        try:
+            matter.attribute_path(spec[mode])
+        except ValueError as e:
+            err(where, str(e))
+    if mode == "write" and "value" not in spec:
+        err(where, "a write needs 'value'")
+    if mode == "command":
+        if "cluster" not in spec:
+            err(where, "a command needs 'cluster' (OnOff, LevelControl, … or a number)")
+        elif not _is_template(spec["cluster"]):
+            try:
+                matter.cluster_id(spec["cluster"])
+            except ValueError as e:
+                err(where, str(e))
+        if "payload" in spec and not isinstance(spec["payload"], dict):
+            err(where, "'payload' is a table of the command's fields")
+        if "endpoint" in spec and not _int_like(spec["endpoint"]):
+            err(where, "'endpoint' is a number")
+    _check_device_url(tree, where, "matter", spec["url"], err, warn)
+
+
+_SOURCE_CHECKS = {"http": _check_http, "browser": _check_browser, "file": _check_file, "shell": _check_shell, "serial": _check_serial, "queue": _check_queue, "memory": _check_memory,
+                  "modbus": _check_modbus, "bacnet": _check_bacnet, "snmp": _check_snmp, "coap": _check_coap, "matter": _check_matter}
 
 
 def _check_order(where: str, kind: str, ordered: list[tuple[int, dict[str, Any]]], fallback: bool, warn) -> str | None:

@@ -1,4 +1,5 @@
-"""The other forms of I/O: a browser, a file, a shell, a serial line, a queue, memory.
+"""The other forms of I/O: a browser, a file, a shell, a serial line, a queue,
+memory, and the field protocols: Modbus TCP, BACnet/IP, SNMP, CoAP and Matter.
 
 HTTP is the form the core spoke first (``transport.py``). Every other form
 arrives here by the same rule: a node names a *source* and what it wants
@@ -15,12 +16,18 @@ the same whichever source a node used.
     [nodes.page]    observe   browser = { url = "https://example.com/app", wait_for = "h1", actions = [{ click = "#more" }] }
     [nodes.last]    observe   memory = { key = "disk-space/root" }
     [nodes.keep]    act       memory = { key = "disk-space/root", write = "{{ state.percent }}", ttl = "1 day" }
+    [nodes.tank]    observe   modbus = { url = "modbus://plc.local", unit = 1, read = "holding", address = 100, type = "float32" }
+    [nodes.zone]    observe   bacnet = { url = "bacnet://bms.local", object = "analog-input:3", property = "present-value" }
+    [nodes.ups]     observe   snmp   = { url = "snmp://ups.local", get = ["upsEstimatedChargeRemaining.0"] }
+    [nodes.soil]    observe   coap   = { url = "coap://garden.local/sensors/bed-1/moisture" }
+    [nodes.lamp]    act       matter = { url = "ws://matter.local:5580/ws", node = 4, endpoint = 1, cluster = "OnOff", command = "On" }
 
 and at the top of the tree the allow-list of the same kind: ``hosts`` for
 ``http``, ``browser`` and a queue's broker; ``paths`` for ``file``;
 ``commands`` for ``shell``; ``devices`` for ``serial``; ``topics`` for
-``queue``; ``keys`` for ``memory``. A tree without the list cannot use the
-source; ``pyrtan check`` says so.
+``queue``; ``keys`` for ``memory``; ``hosts`` again for the field protocols,
+whose URL names the device (or, for Matter, the controller). A tree
+without the list cannot use the source; ``pyrtan check`` says so.
 
 What each source leaves in state (the node's ``into``):
 
@@ -37,12 +44,22 @@ What each source leaves in state (the node's ``into``):
 ``memory``  ``key``, ``exists``, ``value``, ``json``, ``body``, ``written``, ``expires``;
             after a ``write``, ``add`` or ``delete``, ``previous`` and ``existed``
             as well (``memory.py``).
+``modbus``  ``url``, ``unit``, ``table``, ``address``, ``count``, ``ok``, ``raw``, ``values``,
+            ``value``, ``exception``, ``body``, ``json``; after a write, ``written`` (``modbus.py``).
+``bacnet``  ``url``, ``object``, ``property``, ``ok``, ``value``, ``values``, ``refused``,
+            ``body``, ``json``; after a write, ``written`` (``bacnet.py``).
+``snmp``    ``url``, ``ok``, ``status``, ``values``, ``value``, ``varbinds``, ``body``, ``json``;
+            after a set, ``written`` (``snmp.py``).
+``coap``    ``url``, ``status`` (``"2.05"``), ``code``, ``ok``, ``format``, ``body``, ``json``,
+            ``elapsed_ms`` (``coap.py``).
+``matter``  ``url``, ``node``, ``ok``, ``refused``, ``path``, ``value``, ``result``, ``body``,
+            ``json`` (``matter.py``).
 
 Files, shells, serial lines and memory are on the box the service runs on. A
 service started with ``--egress public`` refuses them outright, the way it
 refuses private addresses: an operator hosting other people's trees does
 not lend them the box. A queue's broker and a browser's page go through the
-same egress check as an HTTP request.
+same egress check as an HTTP request, and so do the field protocols' devices.
 
 The browser adapter needs Playwright (``pip install 'pyrtan[browser]'``),
 the one optional dependency; everything else here is the standard library.
@@ -74,9 +91,10 @@ from typing import Any, Callable
 
 from .transport import EgressRefused, TransportError, check_egress
 
-SOURCES = ("http", "browser", "file", "shell", "serial", "queue", "memory")
+FIELD_SOURCES = ("modbus", "bacnet", "snmp", "coap", "matter")  # a device on the network, named by a URL
+SOURCES = ("http", "browser", "file", "shell", "serial", "queue", "memory") + FIELD_SOURCES
 LOCAL_SOURCES = ("file", "shell", "serial", "memory")  # on the box itself
-ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics"), "memory": ("keys",)}
+ALLOW_LISTS = {"http": ("hosts",), "browser": ("hosts",), "file": ("paths",), "shell": ("commands",), "serial": ("devices",), "queue": ("hosts", "topics"), "memory": ("keys",), **{s: ("hosts",) for s in FIELD_SOURCES}}
 LIST_NAMES = ("hosts", "paths", "commands", "devices", "topics", "keys")
 MAX_READ = 8 * 1024 * 1024                              # a file or a command's output larger than this is refused
 TAIL_WINDOW = 1024 * 1024                               # how far back a tail looks
@@ -166,6 +184,31 @@ def broker(url: str) -> tuple[str, str, int]:
     return parsed.scheme, parsed.hostname, parsed.port or MQTT_PORTS[parsed.scheme]
 
 
+def field_endpoint(source: str, url: str) -> tuple[str, str, int]:
+    """``(scheme, host, port)`` of a field protocol's URL (``modbus://plc.local``,
+    ``ws://matter.local:5580/ws``), or a :class:`ValueError` that says what it should be."""
+    return _field_module(source).endpoint(url)
+
+
+def _field_module(source: str) -> Any:
+    from . import bacnet, coap, matter, modbus, snmp
+
+    return {"modbus": modbus, "bacnet": bacnet, "snmp": snmp, "coap": coap, "matter": matter}[source]
+
+
+def _modbus_mode(spec: dict[str, Any]) -> tuple[str, str]:
+    return ("write", str(spec["write"])) if "write" in spec else ("read", str(spec.get("read", "holding")))
+
+
+def _snmp_oids(spec: dict[str, Any]) -> list[str]:
+    get = spec.get("get")
+    return [str(o) for o in (get if isinstance(get, list) else [get])]
+
+
+def _matter_mode(spec: dict[str, Any]) -> str:
+    return "command" if "command" in spec else "write" if "write" in spec else "read"
+
+
 # ---------------------------------------------------------------- keys and words
 
 
@@ -188,6 +231,26 @@ def adapter_key(source: str, spec: dict[str, Any]) -> str:
     if source == "memory":
         what = next((m for m in ("write", "add", "delete") if m in spec), None)
         return f"memory {what + ' ' if what else ''}{spec.get('key')}"
+    if source == "modbus":
+        mode, table = _modbus_mode(spec)
+        count = str(spec.get("count", 1))
+        return f"modbus {'write ' if mode == 'write' else ''}{spec.get('url')} unit {spec.get('unit', 1)} {table} {spec.get('address', 0)}" + (f" x{count}" if mode == "read" and count != "1" else "")
+    if source == "bacnet":
+        index = spec.get("index")
+        return f"bacnet {'write ' if 'write' in spec else ''}{spec.get('url')} {spec.get('object')} {spec.get('property', 'present-value')}" + (f"[{index}]" if index is not None else "")
+    if source == "snmp":
+        if "set" in spec:
+            return f"snmp set {spec.get('url')} {(spec.get('set') or {}).get('oid')}"
+        if "walk" in spec:
+            return f"snmp walk {spec.get('url')} {spec.get('walk')}"
+        return f"snmp {spec.get('url')} " + " ".join(_snmp_oids(spec))
+    if source == "coap":
+        return f"coap {str(spec.get('method', 'GET')).upper()} {spec.get('url')}"
+    if source == "matter":
+        mode = _matter_mode(spec)
+        if mode == "command":
+            return f"matter command {spec.get('url')} node {spec.get('node')} {spec.get('endpoint', 1)}/{spec.get('cluster')} {spec.get('command')}"
+        return f"matter {'write ' if mode == 'write' else ''}{spec.get('url')} node {spec.get('node')} {spec.get(mode)}"
     raise ValueError(source)
 
 
@@ -207,6 +270,26 @@ def what(source: str, spec: dict[str, Any]) -> str:
         return f"{spec.get('topic')} at {spec.get('url')}"
     if source == "memory":
         return str(spec.get("key"))
+    if source == "modbus":
+        mode, table = _modbus_mode(spec)
+        count = str(spec.get("count", 1))
+        return f"{table} {spec.get('address', 0)}" + (f" x{count}" if mode == "read" and count != "1" else "") + f" on unit {spec.get('unit', 1)} at {spec.get('url')}"
+    if source == "bacnet":
+        index = spec.get("index")
+        return f"{spec.get('object')} {spec.get('property', 'present-value')}" + (f"[{index}]" if index is not None else "") + f" at {spec.get('url')}"
+    if source == "snmp":
+        if "set" in spec:
+            return f"{(spec.get('set') or {}).get('oid')} at {spec.get('url')}"
+        if "walk" in spec:
+            return f"walk {spec.get('walk')} at {spec.get('url')}"
+        return ", ".join(_snmp_oids(spec)) + f" at {spec.get('url')}"
+    if source == "coap":
+        return f"{str(spec.get('method', 'GET')).upper()} {spec.get('url')}"
+    if source == "matter":
+        mode = _matter_mode(spec)
+        if mode == "command":
+            return f"node {spec.get('node')} {spec.get('cluster')} {spec.get('command')} at {spec.get('url')}"
+        return f"node {spec.get('node')} {spec.get(mode)} at {spec.get('url')}"
     return str(spec.get("url"))
 
 
@@ -235,6 +318,22 @@ def would(source: str, spec: dict[str, Any]) -> str:
         for mode in ("write", "add", "delete"):
             if mode in spec:
                 return f"forget {spec.get('key')}" if mode == "delete" else f"{mode} {carried(spec[mode])} {'to' if mode == 'add' else 'at'} {spec.get('key')}"
+    if source == "modbus" and "write" in spec:
+        return f"write {carried(spec.get('value'))} to {what(source, spec)}"
+    if source == "bacnet" and "write" in spec:
+        priority = spec.get("priority")
+        return f"write {carried(spec['write'])} to {what(source, spec)}" + (f" at priority {priority}" if priority is not None else "")
+    if source == "snmp" and "set" in spec:
+        target = spec.get("set") or {}
+        return f"set {target.get('oid')} to {carried(target.get('value'))} at {spec.get('url')}"
+    if source == "coap" and str(spec.get("method", "GET")).upper() != "GET":
+        payload = spec.get("payload")
+        return what(source, spec) + (f" with {carried(payload)}" if payload is not None else "")
+    if source == "matter" and _matter_mode(spec) == "command":
+        payload = spec.get("payload")
+        return f"send {spec.get('command')} to node {spec.get('node')} ({spec.get('cluster')}) at {spec.get('url')}" + (f" with {carried(payload)}" if payload else "")
+    if source == "matter" and _matter_mode(spec) == "write":
+        return f"write {carried(spec.get('value'))} to {what(source, spec)}"
     return f"{source} {what(source, spec)}"
 
 
@@ -258,10 +357,40 @@ def brief_result(source: str, observed: dict[str, Any]) -> str:
         if "previous" in observed:
             return f"now {json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}, was {json.dumps(observed.get('previous'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "forgotten"
         return f"{json.dumps(observed.get('value'), ensure_ascii=False, default=str)[:60]}" if observed.get("exists") else "nothing kept"
+
+    def short(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, default=str)[:60]
+
+    if source == "modbus":
+        if observed.get("exception"):
+            return f"exception {observed['exception'].get('name')}"
+        if "written" in observed:
+            return f"wrote {observed['written']}"
+        values = observed.get("values") or []
+        return short(observed.get("value") if len(values) <= 1 else values)
+    if source == "bacnet":
+        if observed.get("refused"):
+            return str(observed["refused"].get("code"))
+        return "written" if observed.get("written") else short(observed.get("value"))
+    if source == "snmp":
+        if observed.get("status") not in (None, "noError"):
+            return str(observed["status"])
+        if "written" in observed:
+            return "set"
+        values = observed.get("values") or {}
+        return short(observed.get("value")) if len(values) == 1 else f"{len(values)} values"
+    if source == "coap":
+        return str(observed.get("status"))
+    if source == "matter":
+        if observed.get("refused"):
+            return f"refused ({observed['refused'].get('code')})"
+        if "path" not in observed:
+            return "sent"
+        return "written" if "written" in observed else short(observed.get("value"))
     return "ok"
 
 
-GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists"}
+GOOD = {"http": "ok", "browser": "ok", "shell": "ok", "file": "exists", "queue": "received", "serial": "complete", "memory": "exists", **{s: "ok" for s in FIELD_SOURCES}}
 
 
 def good(source: str | None, observed: dict[str, Any]) -> bool:
@@ -318,6 +447,8 @@ class LocalAdapters:
             return mqtt(spec, timeout, self.egress)
         if source == "memory":
             return self.memory.perform(spec)
+        if source in FIELD_SOURCES:
+            return _field_module(source).perform(spec, timeout, self.egress)
         if source == "browser":
             with self._lock:
                 if self._browser is None:
