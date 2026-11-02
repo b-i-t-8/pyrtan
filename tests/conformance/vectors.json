@@ -1678,6 +1678,75 @@
       "version": 1
      },
      {
+      "budget": [
+       {
+        "host": "plc.local",
+        "per": 3600,
+        "requests": 2
+       }
+      ],
+      "description": "reads unit 1 of the PLC, within the device's budget",
+      "hosts": [
+       "plc.local"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "plc-1",
+      "sources": [
+       "modbus"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
+      "budget": [
+       {
+        "host": "plc.local",
+        "per": 3600,
+        "requests": 2
+       }
+      ],
+      "description": "reads unit 2 of the PLC, within the device's budget",
+      "hosts": [
+       "plc.local"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "plc-2",
+      "sources": [
+       "modbus"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
+      "budget": [
+       {
+        "host": "matter.local",
+        "per": 3600,
+        "requests": 1
+       }
+      ],
+      "description": "reads a plug through its controller, within the controller's budget",
+      "hosts": [
+       "matter.local"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "plug-share",
+      "sources": [
+       "matter"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
       "description": "Whether a smart plug is on, from a Matter controller.",
       "hosts": [
        "matter.local"
@@ -5757,6 +5826,180 @@
   },
   {
    "body": {
+    "tree": "plc-1"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "unit 1: 48.5",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "summary": "modbus holding 100 on unit 1 at modbus://plc.local -> 48.5"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "unit 1: 48.5"
+      }
+     ],
+     "tree": "plc-1"
+    },
+    "tree": "plc-1"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "plc-2"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "unit 2: 7.25",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "summary": "modbus holding 100 on unit 2 at modbus://plc.local -> 7.25"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "unit 2: 7.25"
+      }
+     ],
+     "tree": "plc-2"
+    },
+    "tree": "plc-2"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "plc-1"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "budget": {
+      "host": "plc.local",
+      "per": 3600,
+      "requests": 2,
+      "retry_after": 3600
+     }
+    },
+    "reason": "budget",
+    "say": "get: the budget of 2 requests per 1 hour for plc.local, which every tree here naming it shares, is spent; the next is allowed in 3600 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "get",
+       "summary": "modbus holding 100 on unit 1 at modbus://plc.local: not sent; the budget of 2 requests per 1 hour for plc.local is spent, the next in 3600 s"
+      }
+     ],
+     "tree": "plc-1"
+    },
+    "tree": "plc-1"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "plug-share"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "plug: True",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "summary": "matter node 4 1/OnOff/OnOff at ws://matter.local:5580/ws -> true"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "plug: True"
+      }
+     ],
+     "tree": "plug-share"
+    },
+    "tree": "plug-share"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "plug-share"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "budget": {
+      "host": "matter.local",
+      "per": 3600,
+      "requests": 1,
+      "retry_after": 3600
+     }
+    },
+    "reason": "budget",
+    "say": "get: the budget of 1 requests per 1 hour for matter.local, which every tree here naming it shares, is spent; the next is allowed in 3600 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "get",
+       "summary": "matter node 4 1/OnOff/OnOff at ws://matter.local:5580/ws: not sent; the budget of 1 requests per 1 hour for matter.local is spent, the next in 3600 s"
+      }
+     ],
+     "tree": "plug-share"
+    },
+    "tree": "plug-share"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
     "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
@@ -6322,7 +6565,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 43,
+    "runs": 48,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -6375,6 +6618,9 @@
      "panel",
      "people-in-space",
      "ping",
+     "plc-1",
+     "plc-2",
+     "plug-share",
      "plug-status",
      "plug-switch",
      "pokemon",
@@ -7053,6 +7299,98 @@
     "said": {
      "kind": "done",
      "say": "{{ state.title }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": {
+    "host": "plc.local",
+    "per": "1 hour",
+    "requests": 2
+   },
+   "description": "reads unit 1 of the PLC, within the device's budget",
+   "hosts": [
+    "plc.local"
+   ],
+   "name": "plc-1",
+   "nodes": {
+    "get": {
+     "into": "r",
+     "kind": "observe",
+     "modbus": {
+      "address": 100,
+      "read": "holding",
+      "unit": 1,
+      "url": "modbus://plc.local"
+     },
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "unit 1: {{ state.r.value }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": {
+    "host": "plc.local",
+    "per": "1 hour",
+    "requests": 2
+   },
+   "description": "reads unit 2 of the PLC, within the device's budget",
+   "hosts": [
+    "plc.local"
+   ],
+   "name": "plc-2",
+   "nodes": {
+    "get": {
+     "into": "r",
+     "kind": "observe",
+     "modbus": {
+      "address": 100,
+      "read": "holding",
+      "unit": 2,
+      "url": "modbus://plc.local"
+     },
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "unit 2: {{ state.r.value }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": {
+    "host": "matter.local",
+    "per": "1 hour",
+    "requests": 1
+   },
+   "description": "reads a plug through its controller, within the controller's budget",
+   "hosts": [
+    "matter.local"
+   ],
+   "name": "plug-share",
+   "nodes": {
+    "get": {
+     "into": "r",
+     "kind": "observe",
+     "matter": {
+      "node": 4,
+      "read": "1/OnOff/OnOff",
+      "url": "ws://matter.local:5580/ws"
+     },
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "plug: {{ state.r.value }}"
     }
    },
    "start": "get",
