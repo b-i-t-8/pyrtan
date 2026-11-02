@@ -424,6 +424,22 @@ class Hub:
                 out.extend({**w, "peer": peer.url} for w in body.get("watches", []))
         return {"count": len(out), "watches": out}
 
+    def watch_history(self) -> dict[str, Any]:
+        """Each watch's timeline: this hub's own trees', then each service's."""
+        out: list[dict[str, Any]] = []
+        if self.local is not None and self.local.service.watcher is not None:
+            out.extend({**w, "peer": "local"} for w in self.local.service.watcher.history()["watches"])
+        for peer in list(self.peers.values()):
+            if peer.link == "down":
+                continue
+            try:
+                status, body = http_json("GET", f"{peer.url}/watches/history", timeout=10.0, token=self.token, egress="any")
+            except Exception:
+                continue
+            if status == 200 and isinstance(body, dict):  # a service from before 0.40 answers 404: no history, nothing drawn
+                out.extend({**w, "peer": peer.url} for w in body.get("watches", []))
+        return {"count": len(out), "watches": out}
+
     # ------------------------------------------------------------ lookup
 
     def holders(self) -> list[Local | Peer | Remote]:
@@ -812,6 +828,8 @@ class Hub:
             return build_answer(body)
         if method == "GET" and path == "/watches":
             return 200, self.watches()
+        if method == "GET" and path == "/watches/history":
+            return 200, self.watch_history()
         if is_chat_path(path):
             if self.lobby is None:
                 return 404, {"status": "error", "reason": "no-chat", "say": "This hub keeps no lobby; start it with --chat."}
@@ -827,7 +845,7 @@ class Hub:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
+            endpoints = ["/health", "/peers", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches", "/watches/history", "/register", "/allow", "/disallow", "/identity", "/.well-known/pyrtan/id/{id}.json", "/.well-known/pyrtan/name/{name}.json", "/.well-known/pyrtan/names.json"]
             if self.lobby is not None:
                 endpoints += ["/chat", "/chat/start", "/chat/poll", "/chat/say", "/chat/typing", "/chat/settings", "/chat/guess", "/chat/next", "/chat/leave"]
             if fed is not None:
@@ -954,6 +972,7 @@ def serve_hub(
     unanswered: str | Path | None = None,
     watch: bool = False,
     memory: str | Path | None = None,
+    watch_history: str | Path | None = None,
     lan: bool = False,
     chat_reach: int = 0,
     chat: bool = False,
@@ -978,7 +997,7 @@ def serve_hub(
     for who, may in specs:
         granted.allow(who, may)
     set_egress(egress)  # the hub's own requests to hosts it did not choose (followed hubs, the hub list, identity documents) under the same policy as its trees
-    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch, memory=memory) if trees else None
+    local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch, memory=memory, watch_history=watch_history) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
     server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True, users=users).start()
     hub._audience = (advertise or server.url).rstrip("/")

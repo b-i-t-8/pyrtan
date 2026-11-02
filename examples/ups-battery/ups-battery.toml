@@ -1,0 +1,72 @@
+# How a UPS is doing, over SNMP: where its power comes from, how charged its
+# battery is and how long it would last, from the standard UPS-MIB (RFC
+# 1628). An snmp node gets OIDs by name or number; `values` keys each by
+# the name the node asked with. The community is "public" unless the node
+# says otherwise ({{ env.SNMP_COMMUNITY }} keeps a real one out of the tree).
+
+name = "ups-battery"
+version = 1
+namespace = "pyrtan"
+description = "Whether a UPS is on mains or battery, its charge and minutes left, over SNMP."
+tags = ["ops", "snmp", "power", "read-only"]
+license = "MIT"
+hosts = ["ups.local", "ups-2.local", "ups-3.local"]
+start = "ask"
+
+[[triggers]]
+pattern = "how is the ups"
+[[triggers]]
+pattern = "ups battery"
+[[triggers]]
+pattern = "[how is the] ups battery on {ups:word}"
+
+[inputs.ups]
+type = "str"
+default = "ups"
+pattern = "^ups(-[0-9]+)?$"
+
+[nodes.ask]
+kind = "observe"
+snmp = { url = "snmp://{{ inputs.ups }}.local", get = ["upsOutputSource.0", "upsEstimatedChargeRemaining.0", "upsEstimatedMinutesRemaining.0"] }
+into = "ups"                  # state.ups = { url, ok, status, values, value, varbinds, body, json }
+timeout = 4
+next = "answered"
+
+[nodes.answered]
+kind = "decide"
+on = "ups.ok"
+branches = [{ when = { eq = true }, then = "source" }, { else = "no-ups-mib" }]
+
+[nodes.source]
+kind = "lookup"
+on = 'ups.values["upsOutputSource.0"]'
+into = "source"
+table = [
+  { eq = 3, value = "on mains" },
+  { eq = 4, value = "on bypass" },
+  { eq = 5, value = "on battery" },
+  { eq = 6, value = "boosting" },
+  { eq = 7, value = "reducing" },
+]
+default = "with its output off"
+next = "charge"
+
+[nodes.charge]
+kind = "decide"
+on = 'ups.values["upsEstimatedChargeRemaining.0"]'
+branches = [{ when = { lt = 25 }, then = "low" }, { else = "reply" }]
+
+[nodes.reply]
+kind = "done"
+say = '{{ inputs.ups }} is {{ state.source }}, battery {{ state.ups.values["upsEstimatedChargeRemaining.0"] }}% ({{ state.ups.values["upsEstimatedMinutesRemaining.0"] }} min).'
+output = { ups = "{{ inputs.ups }}", source = "{{ state.source }}", charge = '{{ state.ups.values["upsEstimatedChargeRemaining.0"] }}', minutes = '{{ state.ups.values["upsEstimatedMinutesRemaining.0"] }}' }
+
+[nodes.low]
+kind = "done"
+say = '{{ inputs.ups }} is {{ state.source }} and its battery is low: {{ state.ups.values["upsEstimatedChargeRemaining.0"] }}% ({{ state.ups.values["upsEstimatedMinutesRemaining.0"] }} min).'
+output = { ups = "{{ inputs.ups }}", source = "{{ state.source }}", charge = '{{ state.ups.values["upsEstimatedChargeRemaining.0"] }}', minutes = '{{ state.ups.values["upsEstimatedMinutesRemaining.0"] }}', low = true }
+
+[nodes.no-ups-mib]
+kind = "fail"
+reason = "no-ups-mib"
+say = "{{ inputs.ups }} answers SNMP but not the UPS-MIB ({{ state.ups.status }})."

@@ -221,6 +221,7 @@ class Service:
         watch: bool = False,
         suggestions: str | Path | None = None,
         memory: Any = None,
+        watch_history: str | Path | None = None,
     ) -> None:
         self.registry = registry
         self.name = name
@@ -238,7 +239,10 @@ class Service:
         self._lock = threading.Lock()
         self.watcher: Watcher | None = None
         if watch:
-            self.watcher = Watcher(registry, self.run_watched, env=env or {}, egress=egress, after=None, note=lambda text: print(f"pyrtan: {text}", file=sys.stderr)).start()
+            from .watch import Timelines
+
+            note = lambda text: print(f"pyrtan: {text}", file=sys.stderr)  # noqa: E731
+            self.watcher = Watcher(registry, self.run_watched, env=env or {}, egress=egress, after=None, note=note, timelines=Timelines(watch_history, note=note)).start()
 
     def run_watched(self, tree: Tree, inputs: dict[str, Any], trace: Trace) -> Outcome:
         """How a watch runs a tree: through the same runner and the same
@@ -325,6 +329,8 @@ class Service:
             return self.suggestions.route(method, body)
         if method == "GET" and path == "/watches":
             return 200, self.watcher.status() if self.watcher else {"count": 0, "watches": [], "watching": False}
+        if method == "GET" and path == "/watches/history":
+            return 200, self.watcher.history() if self.watcher else {"count": 0, "watches": [], "watching": False}
         if method == "GET" and path in ("/", "/index.html", "/console"):
             return 200, default_page()
         if method == "GET" and path == "/manifest.webmanifest":
@@ -334,7 +340,7 @@ class Service:
         if method == "GET" and path == "/pyrtan.js":
             return 200, ("text/javascript; charset=utf-8", PYRTAN_JS)
         if method == "GET" and path == "/api":
-            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches"]}
+            return 200, {"pyrtan": "service", "name": self.name, "version": __version__, "auth": "bearer" if self.token else "none", "endpoints": ["/health", "/capabilities", "/intent", "/run", "/resume", "/gaps", "/unanswered", "/build", "/suggestions", "/watches", "/watches/history"]}
         if method == "POST" and path == "/intent":
             return 200, self.intent(body)
         if method == "POST" and path == "/run":
@@ -629,10 +635,11 @@ def serve(
     suggestions: str | Path | None = None,
     memory: str | Path | None = None,
     users: LdapUsers | None = None,
+    watch_history: str | Path | None = None,
 ) -> tuple[Service, Server]:
     registry = Registry.from_paths(paths)
     set_egress(egress)  # the service's own requests (its hub) under the same policy as its trees
-    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions, memory=memory)
+    service = Service(registry, name=name, hub=hub, env=env, advertise=advertise, token=token, gaps=gaps, egress=egress, unanswered=unanswered, watch=watch, suggestions=suggestions, memory=memory, watch_history=watch_history)
     server = Server(service.route, host, port, quiet, token=token, cors=cors, users=users).start()
     # The server is already answering when it registers: the hub checks a new
     # peer's /capabilities inside /register, and would otherwise wait on a
