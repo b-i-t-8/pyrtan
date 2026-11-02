@@ -145,6 +145,12 @@ TEMPLATE = r"""<!doctype html>
   .mute { color:var(--mute) } .gap { color:var(--ask) }
   .link { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--mute) }
   .link.up { background:var(--ok) } .link.stale { background:var(--ask) } .link.down { background:var(--bad) }
+  .devices { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px }
+  .device { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--mute); border-radius:10px; padding:12px 14px; min-width:0 }
+  .device.up { border-left-color:var(--ok) } .device.down { border-left-color:var(--bad) } .device.stale { border-left-color:var(--ask) }
+  .device .name { font-weight:600; overflow-wrap:anywhere } .device .host { color:var(--mute); font-size:13px; font-family:ui-monospace,monospace }
+  .device .state { margin-top:8px; font-weight:600 } .device.up .state { color:var(--ok) } .device.down .state { color:var(--bad) } .device.stale .state { color:var(--ask) }
+  .device .when { color:var(--mute); font-size:13px } .devices-summary { font-weight:600; margin:0 0 12px }
   .notice { border-left:3px solid var(--ask); padding:8px 12px; background:var(--soft); border-radius:6px; margin:0 0 14px; font-size:14px }
   .notice.bad { border-color:var(--bad) }
   .sync-code { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; margin:10px 0 }
@@ -207,6 +213,7 @@ TEMPLATE = r"""<!doctype html>
     <a href="#trees" data-tab="trees">Trees</a>
     <a href="#peers" data-tab="peers" id="peers-tab" hidden>Peers</a>
     <a href="#watches" data-tab="watches" id="watches-tab">Watches</a>
+    <a href="#devices" data-tab="devices" id="devices-tab">Devices</a>
     <a href="#gaps" data-tab="gaps">Gaps</a>
     <a href="#unanswered" data-tab="unanswered">Unanswered</a>
     <a href="#agents" data-tab="agents">Agents</a>
@@ -255,6 +262,13 @@ TEMPLATE = r"""<!doctype html>
     <h2>Watches</h2>
     <p class="mute" style="font-size:14px;margin-top:0">Trees that run on their own: a clock, a file, a topic or a serial line starts them (<code>[[watches]]</code> in the tree, <code>--watch</code> on the service). Each row is what the watch last did; a path that changed between two runs of the same watch is how you learn a site changed before anyone asked.</p>
     <div class="card"><table id="watches"><thead><tr><th>Watch</th><th>On</th><th>Fired</th><th>Last run</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-devices" hidden>
+    <h2>Devices</h2>
+    <p class="mute" style="font-size:14px;margin-top:0">The devices this swarm watches, from what each watch last said: a tree whose output names a <code>host</code> and whether it is <code>online</code> (<code>device-offline</code> does, with <code>since</code>). Refreshed every 30 seconds while this tab is open.</p>
+    <p id="devices-summary" class="devices-summary"></p>
+    <div id="devices" class="devices"></div>
   </section>
 
   <section id="tab-gaps" hidden>
@@ -847,6 +861,8 @@ function showTab(name) {
   if (name === "peers") loadPeers();
   if (name === "gaps") loadGaps();
   if (name === "watches") loadWatches();
+  clearInterval(devicesTimer);
+  if (name === "devices") { loadDevices(); devicesTimer = setInterval(() => { if (!document.hidden) loadDevices(); }, 30000); }
   if (name === "unanswered") loadUnanswered();
   if (name === "directory") loadDirectory();
   if (name === "member") member.render();
@@ -1012,6 +1028,7 @@ function showLocal(on) {
   sync.render();
   $("#connect-go").textContent = on ? "Join" : "Connect";
   $("#watches-tab").hidden = on;
+  $("#devices-tab").hidden = on;
   $("#unanswered-lede").innerHTML = on ? "Sentences nobody answered, each with the tree that would. Each command writes that tree's file; serve it from a hub and join the hub here, or publish it to the catalog and this page will hold it too." : 'Sentences nobody answered, each with the tree that would. <code>pyrtan unanswered --at <span class="at">URL</span> --scaffold DIR</code> writes the files.';
   $("#api-help").innerHTML = on ? "Answered inside this page by <code>pyrtan.js</code>: the same paths and the same answers as a hub, with no server behind them. Join a hub and they go to the hub." : 'With a token: <code>Authorization: Bearer …</code>. From the command line: <code>pyrtan ask "…" --at <span class="at">URL</span></code>, <code>pyrtan gaps --at <span class="at">URL</span></code>.';
   $("#trees-more").innerHTML = on ? (carried ? "These are the trees this console carries, so it needs no network to hold them; newer ones are in the <a href=\"https://pyrtan.com/catalog/\">catalog</a>." : `These are the <a href="${esc(catalog || "https://pyrtan.com/catalog/")}">catalog</a>'s trees.`) + " Rows marked <em>needs a hub</em> reach what a page cannot; a service runs them." : 'Need a tree that is not here? Browse the <a href="https://pyrtan.com/catalog/" id="catalog-link">catalog</a>, then <code>pyrtan pull NAME</code> into a folder a service serves.';
@@ -1116,6 +1133,52 @@ async function loadWatches() {
     body.appendChild(tr);
   }
   if (!(w.watches || []).length) body.innerHTML = `<tr><td colspan="4" class="mute">Nothing watched. Give a tree <code>[[watches]]</code> and start the service with <code>--watch</code>.</td></tr>`;
+}
+
+// ---------------------------------------------------------------- devices
+// A watch whose last output says a host and whether it is online is a
+// device; device-offline's watches are, with since when. Offline first.
+let devicesTimer = null;
+const STALE_AFTER = 10 * 60;  // seconds without a check before a device reads "not checked lately"
+function ago(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  if (seconds < 86400) { const h = Math.floor(seconds / 3600), m = Math.round((seconds % 3600) / 60); return m ? `${h} h ${m} min` : `${h} h`; }
+  const d = Math.floor(seconds / 86400), h = Math.round((seconds % 86400) / 3600);
+  return h ? `${d} d ${h} h` : `${d} d`;
+}
+function devicesFrom(watches, now) {
+  const out = [];
+  for (const x of watches || []) {
+    const o = (x.last && x.last.output) || {};
+    const isDevice = typeof o.online === "boolean" && o.host !== undefined;
+    if (!isDevice && x.tree !== "device-offline") continue;
+    const since = typeof o.since === "string" ? Date.parse(o.since) / 1000 : NaN;
+    const checked = x.last_at || null;
+    let state = !isDevice ? "stale" : o.online ? "up" : "down";
+    if (checked !== null && now - checked > STALE_AFTER) state = "stale";
+    out.push({ name: String(o.name || x.name || o.host || "?"), host: o.host !== undefined ? String(o.host) : "", state, online: isDevice ? o.online : null, since: Number.isNaN(since) ? null : since, checked, error: x.last_error || (x.last && x.last.status !== "done" ? x.last.say : null), peer: x.peer });
+  }
+  const rank = { down: 0, stale: 1, up: 2 };
+  return out.sort((a, b) => rank[a.state] - rank[b.state] || a.name.localeCompare(b.name));
+}
+async function loadDevices() {
+  let w; try { w = await json("watches"); } catch (e) { problem(e.message, true); return; }
+  const now = Date.now() / 1000, devices = devicesFrom(w.watches, now);
+  const grid = $("#devices"); grid.innerHTML = "";
+  const n = (s) => devices.filter((d) => d.state === s).length;
+  $("#devices-summary").textContent = devices.length ? [`${n("up")} online`, `${n("down")} offline`].concat(n("stale") ? [`${n("stale")} not checked lately`] : []).join(" · ") : "";
+  for (const d of devices) {
+    const card = document.createElement("div");
+    card.className = `device ${d.state}`;
+    const said = d.state === "up" ? "Online" : d.state === "down" ? "Offline" : d.online === null ? "Not checked yet" : `Not checked lately (last ${d.online ? "online" : "offline"})`;
+    const since = d.since !== null && d.state !== "stale" ? `for ${ago(now - d.since)}` : "";
+    card.innerHTML = `<div class="name">${esc(d.name)}</div><div class="host">${esc(d.host)}</div><div class="state"><span class="link ${esc(d.state)}"></span>${esc(said)}${since ? ` <span class="mute" style="font-weight:normal">${esc(since)}</span>` : ""}</div>` +
+      `<div class="when">${d.checked ? `checked ${esc(ago(now - d.checked))} ago` : "not checked yet"}</div>` + (d.error ? `<div class="when">${esc(d.error)}</div>` : "");
+    grid.appendChild(card);
+  }
+  if (!devices.length) grid.innerHTML = `<div class="card mute" style="grid-column:1/-1">No devices watched yet. Copy <code>examples/device-offline</code> into a service's trees, give it a <code>[[watches]]</code> block per device, and start the service with <code>--watch</code>.</div>`;
 }
 
 async function loadGaps() {

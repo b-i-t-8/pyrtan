@@ -212,8 +212,11 @@ def test_network_scan_within_its_networks(runner):
 
 
 def test_device_offline_alerts_once_per_change(examples):
-    """Up, down (an alert), still down (none), back (an alert), through real
-    memory, a scripted scan and an ntfy that keeps what it was sent."""
+    """First look, down (an alert), still down (none), back (an alert), up
+    (none), through real memory, a scripted scan and an ntfy that keeps
+    what it was sent; memory keeps since when, and the output says it."""
+    import datetime as _dt
+
     from pyrtan import Runner
     from pyrtan.adapters import LocalAdapters
     from pyrtan.transport import Response
@@ -238,32 +241,44 @@ def test_device_offline_alerts_once_per_change(examples):
                 return {"method": "scan", "query": spec["scan"], "ok": True, "found": len(devs), "devices": devs, "body": "", "json": devs}
             return self.real.perform(source, spec, timeout, allowed)
 
+    clock = [_dt.datetime(2026, 11, 2, 8, 0, tzinfo=_dt.timezone.utc)]
     ntfy, lan = Ntfy(), Lan()
-    runner = Runner(examples, ntfy, adapters=lan, env={"NTFY_TOPIC": "house-1234"})
-    inputs = {"host": "192.168.1.50", "name": "The printer"}
-    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is online."
+    runner = Runner(examples, ntfy, adapters=lan, env={"NTFY_TOPIC": "house-1234"}, clock=lambda: clock[0])
+
+    def run():
+        clock[0] += _dt.timedelta(minutes=1)
+        return runner.run_tree("device-offline", {"host": "192.168.1.50", "name": "The printer"})
+
+    first = run()
+    assert first.say == "The printer (192.168.1.50) is online." and first.output["since"] == "2026-11-02T08:01:00+00:00" and not ntfy.sent
+    assert run().say == "The printer (192.168.1.50) is online, since 2026-11-02T08:01:00+00:00."
     lan.up = False
-    out = runner.run_tree("device-offline", inputs)
+    out = run()
     assert out.say == "The printer (192.168.1.50) went offline; the alert is sent." and len(ntfy.sent) == 1
+    assert out.output == {"host": "192.168.1.50", "name": "The printer", "online": False, "since": "2026-11-02T08:03:00+00:00", "changed": True, "alerted": True}
     method, url, body = ntfy.sent[0]
     assert (method, url, body["topic"], body["title"], body["priority"]) == ("POST", "https://ntfy.sh/", "house-1234", "The printer is offline", 4)
     assert all("house-1234" not in s.summary for s in out.trace.steps)  # the topic is in the body, not the trace
-    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is still offline." and len(ntfy.sent) == 1
+    still = run()
+    assert still.say == "The printer (192.168.1.50) is still offline, since 2026-11-02T08:03:00+00:00." and len(ntfy.sent) == 1
     lan.up = True
-    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is back online; the alert is sent."
+    back = run()
+    assert back.say == "The printer (192.168.1.50) is back online; the alert is sent." and back.output["since"] == "2026-11-02T08:05:00+00:00"
     assert ntfy.sent[1][2]["title"] == "The printer is back" and len(ntfy.sent) == 2
+    assert run().output["since"] == "2026-11-02T08:05:00+00:00" and len(ntfy.sent) == 2
     # Without a topic it still notices, and sends nothing.
-    quiet = Runner(examples, ntfy, adapters=lan)
+    quiet = Runner(examples, ntfy, adapters=lan, clock=lambda: clock[0])
     lan.up = False
-    assert quiet.run_tree("device-offline", inputs).output == {"host": "192.168.1.50", "online": False, "changed": True, "alerted": False}
+    assert quiet.run_tree("device-offline", {"host": "192.168.1.50", "name": "The printer"}).output["alerted"] is False
     assert len(ntfy.sent) == 2
 
 
 def test_device_offline_from_fixtures(runner):
-    assert runner.run_intent("is 192.168.1.50 online").say == "The device (192.168.1.50) is online."
+    assert runner.run_intent("is 192.168.1.50 online").say == "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z."
     assert runner.run_intent("is 192.168.1.51 offline").output["changed"] is False
     assert runner.run_intent("is 192.168.1.52 online").say.endswith("went offline; no NTFY_TOPIC is set, so no alert was sent.")
-    assert runner.run_intent("is 192.168.1.53 online").output == {"host": "192.168.1.53", "online": True, "changed": True, "alerted": False}
+    back = runner.run_intent("is 192.168.1.53 online")
+    assert back.output["online"] is True and back.output["changed"] is True and back.output["alerted"] is False
     assert runner.run_intent("is 8.8.8.8 online").reason == "network-not-allowed"
 
 

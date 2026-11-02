@@ -277,7 +277,10 @@ device stops answering, and when it is back:
    should pass, and the hub's console answers "is 192.168.1.50 online".
 
 It alerts once when a device stops answering and once when it comes back,
-not every minute in between. A device is online when any of a dozen common
+not every minute in between. The console's **Devices** tab
+(`http://<nas-ip>:8700/#devices`) shows every watched device at a glance:
+online or offline, for how long, and when it was last checked, offline
+first. A device is online when any of a dozen common
 TCP ports answers, even with a refusal; one that drops everything (a
 phone asleep, a strict firewall) looks offline.
 
