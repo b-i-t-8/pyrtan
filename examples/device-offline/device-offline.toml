@@ -1,0 +1,140 @@
+# Tell a phone when a device on the LAN goes offline, and when it comes
+# back. A discover scan of the one address (a host that refuses a
+# connection is up too, so any device with a TCP stack counts; one that
+# drops everything looks offline), memory to know what it was last time,
+# and an alert through ntfy (https://ntfy.sh, or your own ntfy server)
+# only when that changes: one alert per outage, not one a minute.
+#
+# To use it, copy it into your own trees (the NAS's trees/ folder), set
+# the host in the watch below and uncomment it, and give the service the
+# ntfy topic your phone subscribes to:
+#   PYRTAN_ENV_NTFY_TOPIC: "<a long random topic>"     (compose environment)
+#   pyrtan serve … --env NTFY_TOPIC=<topic> --watch      (command line)
+# The topic travels in the request's body, never in its URL, so it stays
+# out of the trace. Without one, the tree still notices and says so, and
+# sends nothing. For your own ntfy server, put its host in `hosts` and its
+# URL in the two alert nodes. A watched service also wants --memory (or
+# $PYRTAN_MEMORY), so a restart does not forget an outage.
+
+name = "device-offline"
+version = 1
+namespace = "pyrtan"
+description = "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back."
+tags = ["home", "network", "monitoring", "alert"]
+license = "MIT"
+hosts = ["ntfy.sh"]
+networks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+keys = ["device-offline/*"]
+start = "probe"
+
+[[triggers]]
+pattern = "is {host:word} online"
+[[triggers]]
+pattern = "is {host:word} offline"
+
+[inputs.host]
+type = "str"
+pattern = "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$"
+description = "The device's address on the LAN"
+
+[inputs.name]
+type = "str"
+default = "The device"
+description = "What the alert calls it"
+
+# Every minute, for one device (uncomment, with its address and a name):
+# [[watches]]
+# name = "printer"
+# every = "1m"
+# inputs = { host = "192.168.1.50", name = "The printer" }
+
+[nodes.probe]
+kind = "observe"
+discover = { scan = "{{ inputs.host }}", ports = [22, 53, 80, 443, 445, 502, 554, 1883, 5540, 8008, 8080, 8443, 9100, 62078] }
+into = "probe"                # state.probe = { method, query, ok, found, devices: [{ address, open }], body, json }
+timeout = 10
+retries = 1                   # a second look before calling it offline
+next = "seen"
+
+[nodes.seen]
+kind = "decide"
+on = "probe.found"
+branches = [{ when = { eq = 0 }, then = "mark-down" }, { else = "mark-up" }]
+
+# ---------------------------------------------------------------- offline
+
+[nodes.mark-down]
+kind = "act"
+memory = { key = "device-offline/{{ inputs.host }}", write = "down" }
+into = "was"                  # state.was.previous: what it was last time (none the first time)
+next = "went-down"
+
+[nodes.went-down]
+kind = "decide"
+on = "was.previous"
+branches = [{ when = { eq = "down" }, then = "still-down" }, { else = "can-alert-down" }]
+
+[nodes.can-alert-down]
+kind = "decide"
+on = "env.NTFY_TOPIC"
+branches = [{ when = { exists = true }, then = "alert-down" }, { else = "down-unsent" }]
+
+[nodes.alert-down]
+kind = "act"
+http = { method = "POST", url = "https://ntfy.sh/", body = { topic = "{{ env.NTFY_TOPIC }}", title = "{{ inputs.name }} is offline", message = "{{ inputs.name }} ({{ inputs.host }}) stopped answering at {{ now.iso }}.", priority = 4, tags = ["warning"] } }
+into = "sent"
+next = "down"
+
+[nodes.down]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
+output = { host = "{{ inputs.host }}", online = false, changed = true, alerted = true }
+
+[nodes.down-unsent]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
+output = { host = "{{ inputs.host }}", online = false, changed = true, alerted = false }
+
+[nodes.still-down]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is still offline."
+output = { host = "{{ inputs.host }}", online = false, changed = false, alerted = false }
+
+# ---------------------------------------------------------------- online
+
+[nodes.mark-up]
+kind = "act"
+memory = { key = "device-offline/{{ inputs.host }}", write = "up" }
+into = "was"
+next = "came-back"
+
+[nodes.came-back]
+kind = "decide"
+on = "was.previous"
+branches = [{ when = { eq = "down" }, then = "can-alert-up" }, { else = "up" }]
+
+[nodes.can-alert-up]
+kind = "decide"
+on = "env.NTFY_TOPIC"
+branches = [{ when = { exists = true }, then = "alert-up" }, { else = "back-unsent" }]
+
+[nodes.alert-up]
+kind = "act"
+http = { method = "POST", url = "https://ntfy.sh/", body = { topic = "{{ env.NTFY_TOPIC }}", title = "{{ inputs.name }} is back", message = "{{ inputs.name }} ({{ inputs.host }}) answered again at {{ now.iso }}.", tags = ["white_check_mark"] } }
+into = "sent"
+next = "back"
+
+[nodes.back]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
+output = { host = "{{ inputs.host }}", online = true, changed = true, alerted = true }
+
+[nodes.back-unsent]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
+output = { host = "{{ inputs.host }}", online = true, changed = true, alerted = false }
+
+[nodes.up]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is online."
+output = { host = "{{ inputs.host }}", online = true, changed = false, alerted = false }

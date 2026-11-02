@@ -1,3 +1,4 @@
+import json
 """The example trees, end to end, against recorded responses."""
 
 import pytest
@@ -208,6 +209,62 @@ def test_network_scan_within_its_networks(runner):
     assert runner.run_intent("what is on 10.9.0.0/24").output["up"] == 0
     refused = runner.run_intent("scan 8.8.8.0/24")  # a public network: refused before anything is sent
     assert refused.reason == "network-not-allowed" and [s.kind for s in refused.trace.steps] == ["intent"]
+
+
+def test_device_offline_alerts_once_per_change(examples):
+    """Up, down (an alert), still down (none), back (an alert), through real
+    memory, a scripted scan and an ntfy that keeps what it was sent."""
+    from pyrtan import Runner
+    from pyrtan.adapters import LocalAdapters
+    from pyrtan.transport import Response
+
+    class Ntfy:
+        def __init__(self):
+            self.sent = []
+
+        def request(self, method, url, headers=None, body=None, timeout=10.0):
+            self.sent.append((method, url, json.loads(body)))
+            return Response(200, {}, "{}", url)
+
+    class Lan:
+        def __init__(self):
+            self.real = LocalAdapters()  # memory, in this process
+            self.up = True
+
+        def perform(self, source, spec, timeout, allowed=None):
+            if source == "discover":
+                assert allowed(spec["scan"])
+                devs = [{"address": spec["scan"], "open": [80]}] if self.up else []
+                return {"method": "scan", "query": spec["scan"], "ok": True, "found": len(devs), "devices": devs, "body": "", "json": devs}
+            return self.real.perform(source, spec, timeout, allowed)
+
+    ntfy, lan = Ntfy(), Lan()
+    runner = Runner(examples, ntfy, adapters=lan, env={"NTFY_TOPIC": "house-1234"})
+    inputs = {"host": "192.168.1.50", "name": "The printer"}
+    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is online."
+    lan.up = False
+    out = runner.run_tree("device-offline", inputs)
+    assert out.say == "The printer (192.168.1.50) went offline; the alert is sent." and len(ntfy.sent) == 1
+    method, url, body = ntfy.sent[0]
+    assert (method, url, body["topic"], body["title"], body["priority"]) == ("POST", "https://ntfy.sh/", "house-1234", "The printer is offline", 4)
+    assert all("house-1234" not in s.summary for s in out.trace.steps)  # the topic is in the body, not the trace
+    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is still offline." and len(ntfy.sent) == 1
+    lan.up = True
+    assert runner.run_tree("device-offline", inputs).say == "The printer (192.168.1.50) is back online; the alert is sent."
+    assert ntfy.sent[1][2]["title"] == "The printer is back" and len(ntfy.sent) == 2
+    # Without a topic it still notices, and sends nothing.
+    quiet = Runner(examples, ntfy, adapters=lan)
+    lan.up = False
+    assert quiet.run_tree("device-offline", inputs).output == {"host": "192.168.1.50", "online": False, "changed": True, "alerted": False}
+    assert len(ntfy.sent) == 2
+
+
+def test_device_offline_from_fixtures(runner):
+    assert runner.run_intent("is 192.168.1.50 online").say == "The device (192.168.1.50) is online."
+    assert runner.run_intent("is 192.168.1.51 offline").output["changed"] is False
+    assert runner.run_intent("is 192.168.1.52 online").say.endswith("went offline; no NTFY_TOPIC is set, so no alert was sent.")
+    assert runner.run_intent("is 192.168.1.53 online").output == {"host": "192.168.1.53", "online": True, "changed": True, "alerted": False}
+    assert runner.run_intent("is 8.8.8.8 online").reason == "network-not-allowed"
 
 
 def test_capabilities_name_the_sources_and_lists(examples):

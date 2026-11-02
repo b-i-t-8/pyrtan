@@ -260,6 +260,27 @@ A BACnet Who-Is listens on UDP 47808 for the I-Ams that come back; if
 another BACnet program on the NAS holds that port, only devices that
 answer by unicast are found.
 
+**An alert when a device goes offline.** `mine` runs the watches of the
+trees in `trees/` (`PYRTAN_WATCH`) and keeps what they remember in
+`trees/.memory.json` (`PYRTAN_MEMORY`). To have your phone told when a
+device stops answering, and when it is back:
+
+1. Install the ntfy app (or run your own ntfy server) and subscribe to a
+   long random topic: it is the only thing between your alerts and anyone
+   else, so treat it as a password.
+2. In the compose file, uncomment `PYRTAN_ENV_NTFY_TOPIC` on `mine` and
+   set it to that topic.
+3. `cp pyrtan/examples/device-offline/device-offline.toml pyrtan/trees/`,
+   then in the copy uncomment the `[[watches]]` block and set the device's
+   address and name (one block per device, each with its own `name`).
+4. *Down* and *Up*. `docker compose -p pyrtan exec mine pyrtan check /trees`
+   should pass, and the hub's console answers "is 192.168.1.50 online".
+
+It alerts once when a device stops answering and once when it comes back,
+not every minute in between. A device is online when any of a dozen common
+TCP ports answers, even with a refusal; one that drops everything (a
+phone asleep, a strict firewall) looks offline.
+
 ### Without the plugin
 
 Over SSH, from the checkout:

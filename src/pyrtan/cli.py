@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--record", help="save every response (HTTP and the other sources) to this fixture")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
     p.add_argument("--hub", help="forward trees not held here to this hub or service")
-    p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
+    p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable); $PYRTAN_ENV_K does the same")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
     _token_arg(p, "the token the hub (--hub) requires, if any", sign=False)
 
@@ -612,6 +612,16 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0 if not reg.errors else 1
 
 
+def _env(items: list[str]) -> dict[str, Any]:
+    """What trees read as ``{{ env.NAME }}``: each ``PYRTAN_ENV_NAME`` in the
+    environment (so a compose file or a unit can hold a token without
+    putting it on the command line), then each ``--env NAME=VALUE``, which
+    wins."""
+    out = {k[len("PYRTAN_ENV_"):]: v for k, v in os.environ.items() if k.startswith("PYRTAN_ENV_") and len(k) > len("PYRTAN_ENV_")}
+    out.update(_kv(items))
+    return out
+
+
 def _kv(items: list[str]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for item in items:
@@ -638,7 +648,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.record:
         recorder = RecordingTransport(transport, adapters)
         transport = adapters = recorder
-    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_kv(args.env), adapters=adapters)
+    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_env(args.env), adapters=adapters)
     if args.tree:
         outcome = runner.run_tree(args.tree, _kv(args.input), dry_run=args.dry_run)
     else:
@@ -1134,7 +1144,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
     users = _ldap_users(args)
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_env(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -1156,7 +1166,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     reg = Registry.from_paths(paths)
     for path, err in reg.errors.items():
         print(f"pyrtan: {path}: {err}", file=sys.stderr)
-    service = Service(reg, name="watch", hub=args.hub, env=_kv(args.env), token=args.token, gaps=args.gaps, egress=args.egress, memory=args.memory)
+    service = Service(reg, name="watch", hub=args.hub, env=_env(args.env), token=args.token, gaps=args.gaps, egress=args.egress, memory=args.memory)
     from .watch import Watcher
 
     def after(w, event, outcome):
@@ -1166,7 +1176,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             changed = " (the path changed)" if w.path_changed_at and w.last_at == w.path_changed_at else ""
             print(f"{time.strftime('%H:%M:%S')} {w.name}: {outcome.status}" + (f" ({outcome.reason})" if outcome.reason else "") + (f": {outcome.say}" if outcome.say else "") + changed, flush=True)
 
-    watcher = Watcher(reg, service.run_watched, env=_kv(args.env), egress=args.egress, after=after, note=lambda text: print(f"pyrtan: {text}", file=sys.stderr, flush=True)).start()
+    watcher = Watcher(reg, service.run_watched, env=_env(args.env), egress=args.egress, after=after, note=lambda text: print(f"pyrtan: {text}", file=sys.stderr, flush=True)).start()
     if not len(watcher):
         print("pyrtan watch: no tree here has [[watches]]; nothing to do", file=sys.stderr)
         watcher.stop()
@@ -1469,7 +1479,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
             federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan or args.chat_reach > 0, advertise=args.advertise, federation_secret=args.federation_secret,
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
-            trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
+            trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_env(args.env), gaps=args.gaps, egress=args.egress,
             store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, memory=args.memory, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
             allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain, users=users,
         )

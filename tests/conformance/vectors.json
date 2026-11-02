@@ -588,6 +588,52 @@
       "version": 1
      },
      {
+      "description": "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back.",
+      "hosts": [
+       "ntfy.sh"
+      ],
+      "inputs": {
+       "host": {
+        "description": "The device's address on the LAN",
+        "required": true,
+        "type": "str"
+       },
+       "name": {
+        "default": "The device",
+        "description": "What the alert calls it",
+        "type": "str"
+       }
+      },
+      "keys": [
+       "device-offline/*"
+      ],
+      "language": {},
+      "license": "MIT",
+      "name": "device-offline",
+      "namespace": "pyrtan",
+      "networks": [
+       "10.0.0.0/8",
+       "172.16.0.0/12",
+       "192.168.0.0/16"
+      ],
+      "sources": [
+       "discover",
+       "http",
+       "memory"
+      ],
+      "tags": [
+       "home",
+       "network",
+       "monitoring",
+       "alert"
+      ],
+      "triggers": [
+       "is {host:word} online",
+       "is {host:word} offline"
+      ],
+      "version": 1
+     },
+     {
       "commands": [
        "df"
       ],
@@ -5854,6 +5900,7 @@
      "crypto-price",
      "dad-joke",
      "define",
+     "device-offline",
      "disk-space",
      "dns",
      "earthquakes",
@@ -14023,6 +14070,388 @@
    },
    "intent": "scan 8.8.8.0/24",
    "tree": "network-scan"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "192.168.1.50",
+     "name": "The device"
+    },
+    "output": {
+     "alerted": false,
+     "changed": false,
+     "host": "192.168.1.50",
+     "online": true
+    },
+    "say": "The device (192.168.1.50) is online.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is 192.168.1.50 online",
+        "inputs": {
+         "host": "192.168.1.50"
+        },
+        "steps": [],
+        "trigger": "is {host:word} online"
+       },
+       "summary": "'is 192.168.1.50 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "seen",
+       "node": "probe",
+       "summary": "discover scan 192.168.1.50 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078 -> 1 found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "mark-up",
+       "node": "seen",
+       "observed": 1,
+       "summary": "state.probe.found = 1"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "came-back",
+       "node": "mark-up",
+       "summary": "memory device-offline/192.168.1.50 -> now \"up\", was \"up\""
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "up",
+       "node": "came-back",
+       "observed": "up",
+       "summary": "state.was.previous = up"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "up",
+       "summary": "The device (192.168.1.50) is online."
+      }
+     ],
+     "tree": "device-offline"
+    },
+    "tree": "device-offline"
+   },
+   "inputs": {
+    "host": "192.168.1.50"
+   },
+   "intent": "is 192.168.1.50 online",
+   "tree": "device-offline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "192.168.1.51",
+     "name": "The device"
+    },
+    "output": {
+     "alerted": false,
+     "changed": false,
+     "host": "192.168.1.51",
+     "online": false
+    },
+    "say": "The device (192.168.1.51) is still offline.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is 192.168.1.51 offline",
+        "inputs": {
+         "host": "192.168.1.51"
+        },
+        "steps": [],
+        "trigger": "is {host:word} offline"
+       },
+       "summary": "'is 192.168.1.51 offline'; device-offline via 'is {host:word} offline' (9 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "seen",
+       "node": "probe",
+       "summary": "discover scan 192.168.1.51 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078 -> 0 found"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "mark-down",
+       "node": "seen",
+       "observed": 0,
+       "summary": "state.probe.found = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "went-down",
+       "node": "mark-down",
+       "summary": "memory device-offline/192.168.1.51 -> now \"down\", was \"down\""
+      },
+      {
+       "chosen": "eq 'down'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "still-down",
+       "node": "went-down",
+       "observed": "down",
+       "summary": "state.was.previous = down"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "still-down",
+       "summary": "The device (192.168.1.51) is still offline."
+      }
+     ],
+     "tree": "device-offline"
+    },
+    "tree": "device-offline"
+   },
+   "inputs": {
+    "host": "192.168.1.51"
+   },
+   "intent": "is 192.168.1.51 offline",
+   "tree": "device-offline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "192.168.1.52",
+     "name": "The device"
+    },
+    "output": {
+     "alerted": false,
+     "changed": true,
+     "host": "192.168.1.52",
+     "online": false
+    },
+    "say": "The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was sent.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is 192.168.1.52 online",
+        "inputs": {
+         "host": "192.168.1.52"
+        },
+        "steps": [],
+        "trigger": "is {host:word} online"
+       },
+       "summary": "'is 192.168.1.52 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "seen",
+       "node": "probe",
+       "summary": "discover scan 192.168.1.52 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078 -> 0 found"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "mark-down",
+       "node": "seen",
+       "observed": 0,
+       "summary": "state.probe.found = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "went-down",
+       "node": "mark-down",
+       "summary": "memory device-offline/192.168.1.52 -> now \"down\", was \"up\""
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "can-alert-down",
+       "node": "went-down",
+       "observed": "up",
+       "summary": "state.was.previous = up"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "down-unsent",
+       "node": "can-alert-down",
+       "summary": "env.NTFY_TOPIC = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "down-unsent",
+       "summary": "The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was sent."
+      }
+     ],
+     "tree": "device-offline"
+    },
+    "tree": "device-offline"
+   },
+   "inputs": {
+    "host": "192.168.1.52"
+   },
+   "intent": "is 192.168.1.52 online",
+   "tree": "device-offline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "192.168.1.53",
+     "name": "The device"
+    },
+    "output": {
+     "alerted": false,
+     "changed": true,
+     "host": "192.168.1.53",
+     "online": true
+    },
+    "say": "The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was sent.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is 192.168.1.53 online",
+        "inputs": {
+         "host": "192.168.1.53"
+        },
+        "steps": [],
+        "trigger": "is {host:word} online"
+       },
+       "summary": "'is 192.168.1.53 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "seen",
+       "node": "probe",
+       "summary": "discover scan 192.168.1.53 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078 -> 1 found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "mark-up",
+       "node": "seen",
+       "observed": 1,
+       "summary": "state.probe.found = 1"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "came-back",
+       "node": "mark-up",
+       "summary": "memory device-offline/192.168.1.53 -> now \"up\", was \"down\""
+      },
+      {
+       "chosen": "eq 'down'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "can-alert-up",
+       "node": "came-back",
+       "observed": "down",
+       "summary": "state.was.previous = down"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "back-unsent",
+       "node": "can-alert-up",
+       "summary": "env.NTFY_TOPIC = <missing>"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "back-unsent",
+       "summary": "The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was sent."
+      }
+     ],
+     "tree": "device-offline"
+    },
+    "tree": "device-offline"
+   },
+   "inputs": {
+    "host": "192.168.1.53"
+   },
+   "intent": "is 192.168.1.53 online",
+   "tree": "device-offline"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "host": "8.8.8.8",
+     "name": "The device"
+    },
+    "reason": "network-not-allowed",
+    "say": "probe: 8.8.8.8 is outside this tree's networks ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "probe",
+       "node": "intent",
+       "observed": {
+        "cleaned": "is 8.8.8.8 online",
+        "inputs": {
+         "host": "8.8.8.8"
+        },
+        "steps": [],
+        "trigger": "is {host:word} online"
+       },
+       "summary": "'is 8.8.8.8 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      }
+     ],
+     "tree": "device-offline"
+    },
+    "tree": "device-offline"
+   },
+   "inputs": {
+    "host": "8.8.8.8"
+   },
+   "intent": "is 8.8.8.8 online",
+   "tree": "device-offline"
   },
   {
    "expect": {
@@ -25081,6 +25510,267 @@
     },
     {
      "pattern": "[the] (meaning|definition) of {word:word}"
+    }
+   ],
+   "version": 1
+  },
+  "device-offline": {
+   "description": "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back.",
+   "hosts": [
+    "ntfy.sh"
+   ],
+   "inputs": {
+    "host": {
+     "description": "The device's address on the LAN",
+     "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$",
+     "type": "str"
+    },
+    "name": {
+     "default": "The device",
+     "description": "What the alert calls it",
+     "type": "str"
+    }
+   },
+   "keys": [
+    "device-offline/*"
+   ],
+   "license": "MIT",
+   "name": "device-offline",
+   "namespace": "pyrtan",
+   "networks": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+   ],
+   "nodes": {
+    "alert-down": {
+     "http": {
+      "body": {
+       "message": "{{ inputs.name }} ({{ inputs.host }}) stopped answering at {{ now.iso }}.",
+       "priority": 4,
+       "tags": [
+        "warning"
+       ],
+       "title": "{{ inputs.name }} is offline",
+       "topic": "{{ env.NTFY_TOPIC }}"
+      },
+      "method": "POST",
+      "url": "https://ntfy.sh/"
+     },
+     "into": "sent",
+     "kind": "act",
+     "next": "down"
+    },
+    "alert-up": {
+     "http": {
+      "body": {
+       "message": "{{ inputs.name }} ({{ inputs.host }}) answered again at {{ now.iso }}.",
+       "tags": [
+        "white_check_mark"
+       ],
+       "title": "{{ inputs.name }} is back",
+       "topic": "{{ env.NTFY_TOPIC }}"
+      },
+      "method": "POST",
+      "url": "https://ntfy.sh/"
+     },
+     "into": "sent",
+     "kind": "act",
+     "next": "back"
+    },
+    "back": {
+     "kind": "done",
+     "output": {
+      "alerted": true,
+      "changed": true,
+      "host": "{{ inputs.host }}",
+      "online": true
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
+    },
+    "back-unsent": {
+     "kind": "done",
+     "output": {
+      "alerted": false,
+      "changed": true,
+      "host": "{{ inputs.host }}",
+      "online": true
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
+    },
+    "came-back": {
+     "branches": [
+      {
+       "then": "can-alert-up",
+       "when": {
+        "eq": "down"
+       }
+      },
+      {
+       "else": "up"
+      }
+     ],
+     "kind": "decide",
+     "on": "was.previous"
+    },
+    "can-alert-down": {
+     "branches": [
+      {
+       "then": "alert-down",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "down-unsent"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.NTFY_TOPIC"
+    },
+    "can-alert-up": {
+     "branches": [
+      {
+       "then": "alert-up",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "back-unsent"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.NTFY_TOPIC"
+    },
+    "down": {
+     "kind": "done",
+     "output": {
+      "alerted": true,
+      "changed": true,
+      "host": "{{ inputs.host }}",
+      "online": false
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
+    },
+    "down-unsent": {
+     "kind": "done",
+     "output": {
+      "alerted": false,
+      "changed": true,
+      "host": "{{ inputs.host }}",
+      "online": false
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
+    },
+    "mark-down": {
+     "into": "was",
+     "kind": "act",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}",
+      "write": "down"
+     },
+     "next": "went-down"
+    },
+    "mark-up": {
+     "into": "was",
+     "kind": "act",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}",
+      "write": "up"
+     },
+     "next": "came-back"
+    },
+    "probe": {
+     "discover": {
+      "ports": [
+       22,
+       53,
+       80,
+       443,
+       445,
+       502,
+       554,
+       1883,
+       5540,
+       8008,
+       8080,
+       8443,
+       9100,
+       62078
+      ],
+      "scan": "{{ inputs.host }}"
+     },
+     "into": "probe",
+     "kind": "observe",
+     "next": "seen",
+     "retries": 1,
+     "timeout": 10
+    },
+    "seen": {
+     "branches": [
+      {
+       "then": "mark-down",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "else": "mark-up"
+      }
+     ],
+     "kind": "decide",
+     "on": "probe.found"
+    },
+    "still-down": {
+     "kind": "done",
+     "output": {
+      "alerted": false,
+      "changed": false,
+      "host": "{{ inputs.host }}",
+      "online": false
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is still offline."
+    },
+    "up": {
+     "kind": "done",
+     "output": {
+      "alerted": false,
+      "changed": false,
+      "host": "{{ inputs.host }}",
+      "online": true
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is online."
+    },
+    "went-down": {
+     "branches": [
+      {
+       "then": "still-down",
+       "when": {
+        "eq": "down"
+       }
+      },
+      {
+       "else": "can-alert-down"
+      }
+     ],
+     "kind": "decide",
+     "on": "was.previous"
+    }
+   },
+   "start": "probe",
+   "tags": [
+    "home",
+    "network",
+    "monitoring",
+    "alert"
+   ],
+   "triggers": [
+    {
+     "pattern": "is {host:word} online"
+    },
+    {
+     "pattern": "is {host:word} offline"
     }
    ],
    "version": 1
