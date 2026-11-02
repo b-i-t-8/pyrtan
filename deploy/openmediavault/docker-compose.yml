@@ -38,9 +38,9 @@ x-pyrtan: &pyrtan
     PYRTAN_TOKEN: "CHANGE-ME-to-a-long-random-string"
     # Hubs that follow this one (the family's other hubs) may ask it to run
     # trees, so no tree may reach the LAN, files, programs or serial lines
-    # on their behalf. If a tree of yours in trees/ needs those, give the
-    # `mine` service PYRTAN_EGRESS: any; every hub in the family network can
-    # then ask for it.
+    # on their behalf: the hub and the example services keep to public
+    # addresses. The `mine` service below overrides this with any, so the
+    # trees you put in trees/ can reach the house's devices.
     PYRTAN_EGRESS: public
     # PYRTAN_WATCH: "true"              # run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run
     PYRTAN_UNANSWERED: /state/unanswered.jsonl   # sentences nobody answered, kept across restarts (the hub's; services with a hub leave the record to it)
@@ -90,6 +90,9 @@ services:
       PYRTAN_CLOSED: "true"
     ports:
       - "8700:8700"
+    # How the hub reaches `mine`, which runs on the NAS's own network.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - hub-state:/state
       # - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/handout:/handout   # with PYRTAN_HANDOUT above: trees the phones run
@@ -118,9 +121,39 @@ services:
   #   docker compose -p pyrtan exec mine pyrtan check /trees
   # Gaps are kept in /trees/.gaps.jsonl (the one file the service writes),
   # so the list of branches to write survives a restart.
+  #
+  # This one reaches the LAN (PYRTAN_EGRESS: any): a tree here may talk to
+  # the house's devices (Modbus, BACnet, SNMP, CoAP, a Matter controller,
+  # anything on a private address) and look for them (discover), within the
+  # hosts and networks it lists. Every hub in the family network may ask it
+  # to run its trees, so put a tree here only if the family may use it.
+  #
+  # It runs on the NAS's own network (network_mode: host), not the compose
+  # network, because the broadcast and multicast that discovery uses (mDNS,
+  # SSDP, BACnet Who-Is) do not cross Docker's NAT. So it listens on the
+  # NAS's port 8702 (8701 is the bare demo's, ../README.md), behind the
+  # token like everything else; it reaches the hub at the port the hub
+  # publishes, and the hub reaches it through the Docker host's gateway
+  # (host.docker.internal, given to the hub below).
   mine:
     <<: *pyrtan
-    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701", "--gaps", "/trees/.gaps.jsonl"]
+    network_mode: host
+    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8702", "--name", "mine", "--hub", "http://127.0.0.1:8700", "--advertise", "http://host.docker.internal:8702", "--gaps", "/trees/.gaps.jsonl"]
+    environment:
+      <<: *env
+      PYRTAN_EGRESS: any
+      PYRTAN_PORT: "8702"        # what the health check asks
+      # Run the [[watches]] of the trees in trees/ (a device-offline check
+      # every minute, say), and keep what memory nodes remember in a file
+      # there, so a restart does not forget an outage.
+      PYRTAN_WATCH: "true"
+      PYRTAN_MEMORY: /trees/.memory.json
+      # Each watch's timeline (a month of what its runs came to), which the
+      # console's Devices tab draws as uptime; kept across restarts.
+      PYRTAN_WATCH_HISTORY: /trees/.watch-history.json
+      # What trees read as {{ env.NAME }}: the ntfy topic your phone
+      # subscribes to, for device-offline's alerts. A secret: keep it here.
+      # PYRTAN_ENV_NTFY_TOPIC: "CHANGE-ME-to-a-long-random-topic"
     volumes:
       - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]
