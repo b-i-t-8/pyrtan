@@ -171,3 +171,14 @@ def test_a_secret_on_the_command_line_is_warned_about(capsys):
     assert "set $PYRTAN_FEDERATION_SECRET instead" in err
     _warn_secret_flags(["peers", "--at", "http://x"])
     assert capsys.readouterr().err == ""
+
+
+def test_env_from_the_environment(tmp_path, monkeypatch, capsys):
+    """PYRTAN_ENV_NAME is what trees read as {{ env.NAME }}; --env NAME=… wins."""
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "greet.toml").write_text('name = "greet"\nstart = "say"\n[nodes.say]\nkind = "done"\nsay = "{{ env.WHO }}"\n')
+    monkeypatch.setenv("PYRTAN_ENV_WHO", "from the environment")
+    assert main(["run", "--tree", "greet", "--trees", str(tmp_path / "t"), "--json", "--no-trace"]) == 0
+    assert json.loads(capsys.readouterr().out)["say"] == "from the environment"
+    assert main(["run", "--tree", "greet", "--trees", str(tmp_path / "t"), "--env", "WHO=flag", "--json", "--no-trace"]) == 0
+    assert json.loads(capsys.readouterr().out)["say"] == "flag"

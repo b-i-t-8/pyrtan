@@ -1,0 +1,74 @@
+# The temperature in a zone of a building, from its BACnet controller. A
+# bacnet node reads one property (present-value unless it says otherwise)
+# of one object; each zone's sensor is an analog-input whose instance is
+# the zone's number. A BACnet Error is the device's answer, not a failure
+# to reach it: `unknown-object` means there is no such zone.
+
+name = "zone-temperature"
+version = 1
+namespace = "pyrtan"
+description = "The temperature in a zone of a building, from its BACnet/IP controller."
+tags = ["building", "bacnet", "read-only"]
+license = "MIT"
+hosts = ["bms.local"]
+start = "read"
+
+[[triggers]]
+pattern = "[what's the] temperature in zone {zone:int}"
+[[triggers]]
+pattern = "how warm is zone {zone:int}"
+
+[inputs.zone]
+type = "int"
+min = 0
+
+[nodes.read]
+kind = "observe"
+bacnet = { url = "bacnet://bms.local", object = "analog-input:{{ inputs.zone }}", property = "present-value" }
+into = "t"                    # state.t = { url, object, property, ok, value, values, refused, body, json }
+timeout = 5
+next = "answered"
+
+[nodes.answered]
+kind = "decide"
+on = "t.ok"
+branches = [{ when = { eq = true }, then = "reading" }, { else = "refused" }]
+
+[nodes.refused]
+kind = "decide"
+on = "t.refused.code"
+branches = [{ when = { eq = "unknown-object" }, then = "no-zone" }, { else = "unreadable" }]
+
+[nodes.reading]
+kind = "decide"
+on = "t.value"
+branches = [
+  { when = { lt = 18 }, then = "cold" },
+  { when = { lt = 25 }, then = "fine" },
+  { when = { gte = 25 }, then = "warm" },
+]
+
+[nodes.cold]
+kind = "done"
+say = "Zone {{ inputs.zone }} is {{ state.t.value }}°C: cold."
+output = { zone = "{{ inputs.zone }}", temperature = "{{ state.t.value }}" }
+
+[nodes.fine]
+kind = "done"
+say = "Zone {{ inputs.zone }} is {{ state.t.value }}°C."
+output = { zone = "{{ inputs.zone }}", temperature = "{{ state.t.value }}" }
+
+[nodes.warm]
+kind = "done"
+say = "Zone {{ inputs.zone }} is {{ state.t.value }}°C: warm."
+output = { zone = "{{ inputs.zone }}", temperature = "{{ state.t.value }}" }
+
+[nodes.no-zone]
+kind = "fail"
+reason = "no-zone"
+say = "The building has no zone {{ inputs.zone }}."
+
+[nodes.unreadable]
+kind = "fail"
+reason = "unreadable"
+say = "The controller would not say zone {{ inputs.zone }}'s temperature ({{ state.t.refused.code }})."

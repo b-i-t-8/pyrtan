@@ -413,7 +413,7 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.41, built: a question is answered once.** A paused run's
+19. **v0.46, built: a question is answered once.** A paused run's
     snapshot carries an id, and the runner that paused it keeps the first
     answer's outcome: a second answer to the same snapshot gets that
     outcome back and does nothing again, so a double-clicked yes, or a

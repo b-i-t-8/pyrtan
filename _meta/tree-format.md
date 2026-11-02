@@ -9,12 +9,13 @@ A tree is one TOML file. This is the whole of it.
 | `name` | yes | Lowercase letters, digits and dashes. The tree's identity in the swarm. |
 | `description` | should | One line. Shown by `pyrtan list` and in `/capabilities`. |
 | `version` | no | Positive integer, default 1. |
-| `hosts` | if any node speaks HTTP, drives a browser or talks to a queue | The hosts the tree may reach: exact names, `*.example.com`, or `*` for a tree whose host comes from its input. |
+| `hosts` | if any node speaks HTTP, drives a browser, talks to a queue or reaches a device (Modbus, BACnet, SNMP, CoAP, a Matter controller) | The hosts the tree may reach: exact names, `*.example.com`, or `*` for a tree whose host comes from its input. |
 | `paths` | if any node reads or writes a file | Absolute paths or globs (`/var/log/*`); a directory covers everything under it; `*` is everything. |
 | `commands` | if any node runs a program | Program names (`df`) or full paths (`/usr/bin/df`); `*` is everything. |
 | `devices` | if any node opens a serial line | Device paths or globs (`/dev/ttyUSB*`). |
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
+| `networks` | if any node discovers | Networks (CIDRs) a `discover` node may look at (`192.168.1.0/24`); a scan's target must be inside them and devices answering from outside are left out. `*` is everything. |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -129,7 +130,11 @@ Exactly one of `every`, `file`, `queue`, `serial`. A watch is static:
 no template reaches a path, a topic or a device, and `pyrtan check`
 holds each against the tree's `paths`, `hosts` and `topics`, `devices`.
 Every required input must be given or have a default. A watched run's
-trace begins with a `watch` step. `--watch` on a service or hub runs
+trace begins with a `watch` step. Each watch keeps a timeline, a month of
+what its runs came to as spans of runs that ended alike (`GET
+/watches/history`; `--watch-history FILE` keeps it across restarts): an
+output that names a `host` and whether it is `online` is drawn as a
+device's uptime in the console's Devices tab. `--watch` on a service or hub runs
 them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs
@@ -238,6 +243,20 @@ queue  = { url = "mqtt://broker.local", topic = "home/kitchen/light", publish = 
 browser = { url = "https://app.example/", wait_for = "h1", actions = [{ click = "#more" }, { fill = { selector = "#q", value = "x" } }] }  # url, status, ok, title, body (rendered), elapsed_ms
 memory = { key = "disk-space/root" }                                        # observe: key, exists, value, json, body, written, expires
 memory = { key = "disk-space/root", write = "{{ state.percent }}", ttl = "1 day" }   # act: … plus previous, existed  (or add = 1, or delete = true)
+modbus = { url = "modbus://plc.local", unit = 1, read = "holding", address = 100, count = 1, type = "float32" }   # url, unit, table, address, count, ok, raw, values, value, exception, body, json
+modbus = { url = "modbus://plc.local", unit = 1, write = "coil", address = 3, value = true }                      # act: … plus written
+bacnet = { url = "bacnet://bms.local", object = "analog-input:3", property = "present-value" }   # url, object, property, ok, value, values, refused, body, json
+bacnet = { url = "bacnet://bms.local", object = "analog-value:12", write = 21.5, priority = 8 }  # act: … plus written
+snmp   = { url = "snmp://ups.local", get = ["sysName.0", "upsEstimatedChargeRemaining.0"] }      # url, ok, status, values, value, varbinds, body, json  (or walk = "ifDescr", max = 48)
+snmp   = { url = "snmp://switch.local", set = { oid = "sysLocation.0", value = "rack 4" } }      # act: … plus written
+coap   = { url = "coap://garden.local/sensors/bed-1/moisture" }                                  # url, status ("2.05"), code, ok, format, body, json, elapsed_ms
+coap   = { url = "coap://garden.local/valves/1", method = "PUT", payload = "open" }              # act
+matter = { url = "ws://matter.local:5580/ws", node = 4, read = "1/OnOff/OnOff" }                 # url, node, path, ok, value, result, refused, body, json
+matter = { url = "ws://matter.local:5580/ws", node = 4, endpoint = 1, cluster = "OnOff", command = "On" }   # act (or write = "1/LevelControl/OnLevel", value = 128)
+discover = { mdns = "_matter._tcp" }                                     # method, query, ok, found, devices [{ name, service, host, address, port, txt }], body, json
+discover = { ssdp = "ssdp:all", wait = 3 }                               # devices [{ address, location, server, st, usn, friendly_name, manufacturer, model }]
+discover = { bacnet = "who-is" }                                         # devices [{ instance, address, port, network, mac, vendor, max_apdu }]  (low, high: an instance range)
+discover = { scan = "192.168.1.0/24", ports = [22, 80, 443, 502] }       # devices [{ address, open }]: hosts that answered, the ports that accepted  (names = true: reverse DNS)
 ```
 
 `shell` runs one program with its arguments as a list; no shell reads the
@@ -259,6 +278,35 @@ keeps memory reads like any other observation, so a fixture answers
 them and a run stays deterministic given its observations. A service
 started with `--egress public` refuses `file`, `shell`, `serial` and
 `memory` altogether.
+
+The field protocols name a device by URL, and its host goes through
+`hosts` and the egress check like an HTTP request's. `modbus` reads one
+of the four tables (`coil`, `discrete`, `holding`, `input`) or writes a
+coil or holding register; `type` reads and writes registers as `uint16`
+(the default), `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`
+or `float64` (`word_order = "little"` for devices that put the low word
+first), and `scale` multiplies what is read. `bacnet` reads or writes one
+property of one object (`analog-input:3`, `ai:3`, `0:3`); `network` and
+`mac` reach a device behind a BACnet router. `snmp` is v1 or v2c, with
+`community` (`public` unless given; `{{ env.SNMP_COMMUNITY }}` keeps a
+real one out of the tree) and OIDs by number or by name (`sysName.0`,
+`ifDescr`, `upsEstimatedChargeRemaining.0`). `coap` is plain CoAP (no
+DTLS): GET in an observe, POST, PUT or DELETE in an act. `matter` talks to
+a Matter controller (python-matter-server's WebSocket), which holds the
+fabric; paths are `endpoint/cluster/attribute` by number or name. A
+device's own refusal is an answer a decide reads, not a transport error:
+a Modbus `exception`, a BACnet `refused` (`unknown-object`), an SNMP
+`status` (`noSuchName`), a CoAP `4.04`, a Matter `refused` (the node is not
+reachable). The details are in [`io.md`](io.md).
+
+`discover` looks at the network the box sits on, within the tree's
+`networks`: an `mdns` browse (`""` lists the service types), an `ssdp`
+search (each device's description read for its name, maker and model), a
+BACnet `who-is`, or a TCP `scan` of up to 1,024 hosts and 64 ports within
+the node's `timeout` (a host that refuses a connection is up too; there is
+no ICMP). `wait` is how long to listen for answers. A service started
+with `--egress public` refuses it. In a container, mDNS, SSDP and BACnet
+need the host's network; a scan does not.
 
 ### `act`: change
 
@@ -468,7 +516,8 @@ the run, since the run is over.
 `{{ path }}` with optional filters: `{{ inputs.city | url }}`. Roots:
 `inputs`, `state`, `item`, `index` (inside `each`), `tree` (`name`,
 `version`), `now` (`iso`, `date`, `epoch`, `year`), `env` (values the
-service was started with, for tokens). Paths take `.key`, `[0]`, `[-1]`,
+service was started with, for tokens: `--env NAME=VALUE`, or
+`PYRTAN_ENV_NAME` in its environment). Paths take `.key`, `[0]`, `[-1]`,
 `["key"]`.
 
 An `env` value is the operator's, so it stays out of the trace: a
