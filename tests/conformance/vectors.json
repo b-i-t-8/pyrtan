@@ -631,7 +631,7 @@
        "is {host:word} online",
        "is {host:word} offline"
       ],
-      "version": 1
+      "version": 2
      },
      {
       "commands": [
@@ -14081,9 +14081,11 @@
      "alerted": false,
      "changed": false,
      "host": "192.168.1.50",
-     "online": true
+     "name": "The device",
+     "online": true,
+     "since": "2026-10-24T08:00:00Z"
     },
-    "say": "The device (192.168.1.50) is online.",
+    "say": "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z.",
     "status": "done",
     "trace": {
      "gaps": [],
@@ -14114,33 +14116,33 @@
        "chosen": "else",
        "depth": 0,
        "kind": "decide",
-       "next": "mark-up",
+       "next": "recall-up",
        "node": "seen",
        "observed": 1,
        "summary": "state.probe.found = 1"
       },
       {
        "depth": 0,
-       "kind": "act",
-       "next": "came-back",
-       "node": "mark-up",
-       "summary": "memory device-offline/192.168.1.50 -> now \"up\", was \"up\""
+       "kind": "observe",
+       "next": "was-up",
+       "node": "recall-up",
+       "summary": "memory device-offline/192.168.1.50 -> {\"state\": \"up\", \"since\": \"2026-10-24T08:00:00Z\"}"
       },
       {
-       "chosen": "else",
+       "chosen": "eq 'up'",
        "depth": 0,
        "kind": "decide",
        "next": "up",
-       "node": "came-back",
+       "node": "was-up",
        "observed": "up",
-       "summary": "state.was.previous = up"
+       "summary": "state.was.value.state = up"
       },
       {
        "depth": 0,
        "kind": "done",
        "next": null,
        "node": "up",
-       "summary": "The device (192.168.1.50) is online."
+       "summary": "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z."
       }
      ],
      "tree": "device-offline"
@@ -14163,9 +14165,11 @@
      "alerted": false,
      "changed": false,
      "host": "192.168.1.51",
-     "online": false
+     "name": "The device",
+     "online": false,
+     "since": "2026-10-25T11:15:00Z"
     },
-    "say": "The device (192.168.1.51) is still offline.",
+    "say": "The device (192.168.1.51) is still offline, since 2026-10-25T11:15:00Z.",
     "status": "done",
     "trace": {
      "gaps": [],
@@ -14196,33 +14200,33 @@
        "chosen": "eq 0",
        "depth": 0,
        "kind": "decide",
-       "next": "mark-down",
+       "next": "recall-down",
        "node": "seen",
        "observed": 0,
        "summary": "state.probe.found = 0"
       },
       {
        "depth": 0,
-       "kind": "act",
-       "next": "went-down",
-       "node": "mark-down",
-       "summary": "memory device-offline/192.168.1.51 -> now \"down\", was \"down\""
+       "kind": "observe",
+       "next": "was-down",
+       "node": "recall-down",
+       "summary": "memory device-offline/192.168.1.51 -> {\"state\": \"down\", \"since\": \"2026-10-25T11:15:00Z\"}"
       },
       {
        "chosen": "eq 'down'",
        "depth": 0,
        "kind": "decide",
        "next": "still-down",
-       "node": "went-down",
+       "node": "was-down",
        "observed": "down",
-       "summary": "state.was.previous = down"
+       "summary": "state.was.value.state = down"
       },
       {
        "depth": 0,
        "kind": "done",
        "next": null,
        "node": "still-down",
-       "summary": "The device (192.168.1.51) is still offline."
+       "summary": "The device (192.168.1.51) is still offline, since 2026-10-25T11:15:00Z."
       }
      ],
      "tree": "device-offline"
@@ -14245,7 +14249,9 @@
      "alerted": false,
      "changed": true,
      "host": "192.168.1.52",
-     "online": false
+     "name": "The device",
+     "online": false,
+     "since": "2026-10-25T12:00:00+00:00"
     },
     "say": "The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was sent.",
     "status": "done",
@@ -14278,26 +14284,33 @@
        "chosen": "eq 0",
        "depth": 0,
        "kind": "decide",
-       "next": "mark-down",
+       "next": "recall-down",
        "node": "seen",
        "observed": 0,
        "summary": "state.probe.found = 0"
       },
       {
        "depth": 0,
-       "kind": "act",
-       "next": "went-down",
-       "node": "mark-down",
-       "summary": "memory device-offline/192.168.1.52 -> now \"down\", was \"up\""
+       "kind": "observe",
+       "next": "was-down",
+       "node": "recall-down",
+       "summary": "memory device-offline/192.168.1.52 -> {\"state\": \"up\", \"since\": \"2026-10-20T00:00:00Z\"}"
       },
       {
        "chosen": "else",
        "depth": 0,
        "kind": "decide",
-       "next": "can-alert-down",
-       "node": "went-down",
+       "next": "mark-down",
+       "node": "was-down",
        "observed": "up",
-       "summary": "state.was.previous = up"
+       "summary": "state.was.value.state = up"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "can-alert-down",
+       "node": "mark-down",
+       "summary": "memory device-offline/192.168.1.52 -> now {\"state\": \"down\", \"since\": \"2026-10-25T12:00:00Z\"}, was {\"state\": \"up\", \"since\": \"2026-10-20T00:00:00Z\"}"
       },
       {
        "chosen": "else",
@@ -14335,7 +14348,9 @@
      "alerted": false,
      "changed": true,
      "host": "192.168.1.53",
-     "online": true
+     "name": "The device",
+     "online": true,
+     "since": "2026-10-25T12:00:00+00:00"
     },
     "say": "The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was sent.",
     "status": "done",
@@ -14368,26 +14383,33 @@
        "chosen": "else",
        "depth": 0,
        "kind": "decide",
-       "next": "mark-up",
+       "next": "recall-up",
        "node": "seen",
        "observed": 1,
        "summary": "state.probe.found = 1"
       },
       {
        "depth": 0,
-       "kind": "act",
-       "next": "came-back",
-       "node": "mark-up",
-       "summary": "memory device-offline/192.168.1.53 -> now \"up\", was \"down\""
+       "kind": "observe",
+       "next": "was-up",
+       "node": "recall-up",
+       "summary": "memory device-offline/192.168.1.53 -> {\"state\": \"down\", \"since\": \"2026-10-25T10:00:00Z\"}"
       },
       {
        "chosen": "eq 'down'",
        "depth": 0,
        "kind": "decide",
-       "next": "can-alert-up",
-       "node": "came-back",
+       "next": "mark-back",
+       "node": "was-up",
        "observed": "down",
-       "summary": "state.was.previous = down"
+       "summary": "state.was.value.state = down"
+      },
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "can-alert-up",
+       "node": "mark-back",
+       "summary": "memory device-offline/192.168.1.53 -> now {\"state\": \"up\", \"since\": \"2026-10-25T12:00:00Z\"}, was {\"state\": \"down\", \"since\": \"2026-10-25T10:00:00Z\"}"
       },
       {
        "chosen": "else",
@@ -25584,7 +25606,9 @@
       "alerted": true,
       "changed": true,
       "host": "{{ inputs.host }}",
-      "online": true
+      "name": "{{ inputs.name }}",
+      "online": true,
+      "since": "{{ now.iso }}"
      },
      "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
     },
@@ -25594,24 +25618,11 @@
       "alerted": false,
       "changed": true,
       "host": "{{ inputs.host }}",
-      "online": true
+      "name": "{{ inputs.name }}",
+      "online": true,
+      "since": "{{ now.iso }}"
      },
      "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
-    },
-    "came-back": {
-     "branches": [
-      {
-       "then": "can-alert-up",
-       "when": {
-        "eq": "down"
-       }
-      },
-      {
-       "else": "up"
-      }
-     ],
-     "kind": "decide",
-     "on": "was.previous"
     },
     "can-alert-down": {
      "branches": [
@@ -25649,7 +25660,9 @@
       "alerted": true,
       "changed": true,
       "host": "{{ inputs.host }}",
-      "online": false
+      "name": "{{ inputs.name }}",
+      "online": false,
+      "since": "{{ now.iso }}"
      },
      "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
     },
@@ -25659,27 +25672,59 @@
       "alerted": false,
       "changed": true,
       "host": "{{ inputs.host }}",
-      "online": false
+      "name": "{{ inputs.name }}",
+      "online": false,
+      "since": "{{ now.iso }}"
      },
      "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
     },
-    "mark-down": {
-     "into": "was",
+    "first-up": {
+     "kind": "done",
+     "output": {
+      "alerted": false,
+      "changed": true,
+      "host": "{{ inputs.host }}",
+      "name": "{{ inputs.name }}",
+      "online": true,
+      "since": "{{ now.iso }}"
+     },
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is online."
+    },
+    "mark-back": {
+     "into": "kept",
      "kind": "act",
      "memory": {
       "key": "device-offline/{{ inputs.host }}",
-      "write": "down"
+      "write": {
+       "since": "{{ now.iso }}",
+       "state": "up"
+      }
      },
-     "next": "went-down"
+     "next": "can-alert-up"
+    },
+    "mark-down": {
+     "into": "kept",
+     "kind": "act",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}",
+      "write": {
+       "since": "{{ now.iso }}",
+       "state": "down"
+      }
+     },
+     "next": "can-alert-down"
     },
     "mark-up": {
-     "into": "was",
+     "into": "kept",
      "kind": "act",
      "memory": {
       "key": "device-offline/{{ inputs.host }}",
-      "write": "up"
+      "write": {
+       "since": "{{ now.iso }}",
+       "state": "up"
+      }
      },
-     "next": "came-back"
+     "next": "first-up"
     },
     "probe": {
      "discover": {
@@ -25707,16 +25752,32 @@
      "retries": 1,
      "timeout": 10
     },
+    "recall-down": {
+     "into": "was",
+     "kind": "observe",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}"
+     },
+     "next": "was-down"
+    },
+    "recall-up": {
+     "into": "was",
+     "kind": "observe",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}"
+     },
+     "next": "was-up"
+    },
     "seen": {
      "branches": [
       {
-       "then": "mark-down",
+       "then": "recall-down",
        "when": {
         "eq": 0
        }
       },
       {
-       "else": "mark-up"
+       "else": "recall-up"
       }
      ],
      "kind": "decide",
@@ -25728,9 +25789,11 @@
       "alerted": false,
       "changed": false,
       "host": "{{ inputs.host }}",
-      "online": false
+      "name": "{{ inputs.name }}",
+      "online": false,
+      "since": "{{ state.was.value.since }}"
      },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is still offline."
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}."
     },
     "up": {
      "kind": "done",
@@ -25738,11 +25801,13 @@
       "alerted": false,
       "changed": false,
       "host": "{{ inputs.host }}",
-      "online": true
+      "name": "{{ inputs.name }}",
+      "online": true,
+      "since": "{{ state.was.value.since }}"
      },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is online."
+     "say": "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}."
     },
-    "went-down": {
+    "was-down": {
      "branches": [
       {
        "then": "still-down",
@@ -25751,11 +25816,32 @@
        }
       },
       {
-       "else": "can-alert-down"
+       "else": "mark-down"
       }
      ],
      "kind": "decide",
-     "on": "was.previous"
+     "on": "was.value.state"
+    },
+    "was-up": {
+     "branches": [
+      {
+       "then": "up",
+       "when": {
+        "eq": "up"
+       }
+      },
+      {
+       "then": "mark-back",
+       "when": {
+        "eq": "down"
+       }
+      },
+      {
+       "else": "mark-up"
+      }
+     ],
+     "kind": "decide",
+     "on": "was.value.state"
     }
    },
    "start": "probe",
@@ -25773,7 +25859,7 @@
      "pattern": "is {host:word} offline"
     }
    ],
-   "version": 1
+   "version": 2
   },
   "disk-space": {
    "commands": [

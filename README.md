@@ -157,7 +157,7 @@ extract = [{ into = "percent", regex = "(\\d+)%", group = 1 }]
 | `snmp = { url, get }`, `{ url, walk }` or `{ url, set }` | `hosts` | [`ups-battery`](examples/ups-battery/ups-battery.toml): a UPS's power source, charge and minutes left |
 | `coap = { url, method, payload }` | `hosts` | [`soil-moisture`](examples/soil-moisture/soil-moisture.toml): a garden sensor over the small-device web |
 | `matter = { url, node, read }`, `{ …, write, value }` or `{ …, cluster, command }` | `hosts` | [`plug-status`](examples/plugs/plug-status.toml), [`plug-switch`](examples/plugs/plug-switch.toml): a smart plug, through a Matter controller |
-| `discover = { mdns }`, `{ ssdp }`, `{ bacnet = "who-is" }` or `{ scan, ports }` | `networks` | [`find-devices`](examples/network/find-devices.toml), [`network-scan`](examples/network/network-scan.toml), [`device-offline`](examples/device-offline/device-offline.toml) (a phone alert, through ntfy, when a device stops answering and when it is back): what is on the network: DNS-SD services (Matter, HomeKit, printers), UPnP devices, BACnet devices, or which hosts of a subnet answer on which ports |
+| `discover = { mdns }`, `{ ssdp }`, `{ bacnet = "who-is" }` or `{ scan, ports }` | `networks` | [`find-devices`](examples/network/find-devices.toml), [`network-scan`](examples/network/network-scan.toml), [`device-offline`](examples/device-offline/device-offline.toml) (a phone alert, through ntfy, when a device stops answering and when it is back; the console's Devices tab shows each watched device's state and since when): what is on the network: DNS-SD services (Matter, HomeKit, printers), UPnP devices, BACnet devices, or which hosts of a subnet answer on which ports |
 
 The trace reads the same whichever source a node used (`shell df -P / ->
 exit 0`, `file /var/log/syslog -> 48213 B`), and one fixture file answers
@@ -935,7 +935,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.38.0. The core, the service, the hub, the command, the console (which
+0.39.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

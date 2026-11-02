@@ -3,7 +3,9 @@
 # connection is up too, so any device with a TCP stack counts; one that
 # drops everything looks offline), memory to know what it was last time,
 # and an alert through ntfy (https://ntfy.sh, or your own ntfy server)
-# only when that changes: one alert per outage, not one a minute.
+# only when that changes: one alert per outage, not one a minute. Memory
+# keeps the state and since when; the console's Devices tab shows every
+# watched device from what this tree last said.
 #
 # To use it, copy it into your own trees (the NAS's trees/ folder), set
 # the host in the watch below and uncomment it, and give the service the
@@ -17,7 +19,7 @@
 # $PYRTAN_MEMORY), so a restart does not forget an outage.
 
 name = "device-offline"
-version = 1
+version = 2
 namespace = "pyrtan"
 description = "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back."
 tags = ["home", "network", "monitoring", "alert"]
@@ -59,20 +61,34 @@ next = "seen"
 [nodes.seen]
 kind = "decide"
 on = "probe.found"
-branches = [{ when = { eq = 0 }, then = "mark-down" }, { else = "mark-up" }]
+branches = [{ when = { eq = 0 }, then = "recall-down" }, { else = "recall-up" }]
 
-# ---------------------------------------------------------------- offline
+# What it was last time: { state = "up" | "down", since = "…" }, or nothing yet.
+
+[nodes.recall-down]
+kind = "observe"
+memory = { key = "device-offline/{{ inputs.host }}" }
+into = "was"
+next = "was-down"
+
+[nodes.recall-up]
+kind = "observe"
+memory = { key = "device-offline/{{ inputs.host }}" }
+into = "was"
+next = "was-up"
+
+# ---------------------------------------------------------------- offline now
+
+[nodes.was-down]
+kind = "decide"
+on = "was.value.state"
+branches = [{ when = { eq = "down" }, then = "still-down" }, { else = "mark-down" }]
 
 [nodes.mark-down]
 kind = "act"
-memory = { key = "device-offline/{{ inputs.host }}", write = "down" }
-into = "was"                  # state.was.previous: what it was last time (none the first time)
-next = "went-down"
-
-[nodes.went-down]
-kind = "decide"
-on = "was.previous"
-branches = [{ when = { eq = "down" }, then = "still-down" }, { else = "can-alert-down" }]
+memory = { key = "device-offline/{{ inputs.host }}", write = { state = "down", since = "{{ now.iso }}" } }
+into = "kept"
+next = "can-alert-down"
 
 [nodes.can-alert-down]
 kind = "decide"
@@ -88,30 +104,50 @@ next = "down"
 [nodes.down]
 kind = "done"
 say = "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
-output = { host = "{{ inputs.host }}", online = false, changed = true, alerted = true }
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ now.iso }}", changed = true, alerted = true }
 
 [nodes.down-unsent]
 kind = "done"
 say = "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
-output = { host = "{{ inputs.host }}", online = false, changed = true, alerted = false }
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ now.iso }}", changed = true, alerted = false }
 
 [nodes.still-down]
 kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is still offline."
-output = { host = "{{ inputs.host }}", online = false, changed = false, alerted = false }
+say = "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}."
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = false, since = "{{ state.was.value.since }}", changed = false, alerted = false }
 
-# ---------------------------------------------------------------- online
+# ---------------------------------------------------------------- online now
+
+[nodes.was-up]
+kind = "decide"
+on = "was.value.state"
+branches = [
+  { when = { eq = "up" }, then = "up" },
+  { when = { eq = "down" }, then = "mark-back" },
+  { else = "mark-up" },                          # nothing kept yet: the first look
+]
 
 [nodes.mark-up]
 kind = "act"
-memory = { key = "device-offline/{{ inputs.host }}", write = "up" }
-into = "was"
-next = "came-back"
+memory = { key = "device-offline/{{ inputs.host }}", write = { state = "up", since = "{{ now.iso }}" } }
+into = "kept"
+next = "first-up"
 
-[nodes.came-back]
-kind = "decide"
-on = "was.previous"
-branches = [{ when = { eq = "down" }, then = "can-alert-up" }, { else = "up" }]
+[nodes.first-up]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is online."
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = false }
+
+[nodes.up]
+kind = "done"
+say = "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}."
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ state.was.value.since }}", changed = false, alerted = false }
+
+[nodes.mark-back]
+kind = "act"
+memory = { key = "device-offline/{{ inputs.host }}", write = { state = "up", since = "{{ now.iso }}" } }
+into = "kept"
+next = "can-alert-up"
 
 [nodes.can-alert-up]
 kind = "decide"
@@ -127,14 +163,9 @@ next = "back"
 [nodes.back]
 kind = "done"
 say = "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
-output = { host = "{{ inputs.host }}", online = true, changed = true, alerted = true }
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = true }
 
 [nodes.back-unsent]
 kind = "done"
 say = "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
-output = { host = "{{ inputs.host }}", online = true, changed = true, alerted = false }
-
-[nodes.up]
-kind = "done"
-say = "{{ inputs.name }} ({{ inputs.host }}) is online."
-output = { host = "{{ inputs.host }}", online = true, changed = false, alerted = false }
+output = { host = "{{ inputs.host }}", name = "{{ inputs.name }}", online = true, since = "{{ now.iso }}", changed = true, alerted = false }

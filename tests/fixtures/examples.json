@@ -2239,17 +2239,6 @@
       }
     ]
   },
-  "memory write device-offline/192.168.1.50": {
-    "key": "device-offline/192.168.1.50",
-    "exists": true,
-    "value": "up",
-    "json": "up",
-    "body": "up",
-    "written": "2026-10-25T12:00:00Z",
-    "expires": null,
-    "existed": true,
-    "previous": "up"
-  },
   "discover scan 192.168.1.51 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
     "method": "scan",
     "query": "192.168.1.51",
@@ -2258,17 +2247,6 @@
     "devices": [],
     "body": "[]",
     "json": []
-  },
-  "memory write device-offline/192.168.1.51": {
-    "key": "device-offline/192.168.1.51",
-    "exists": true,
-    "value": "down",
-    "json": "down",
-    "body": "down",
-    "written": "2026-10-25T12:00:00Z",
-    "expires": null,
-    "existed": true,
-    "previous": "down"
   },
   "discover scan 192.168.1.52 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
     "method": "scan",
@@ -2282,13 +2260,22 @@
   "memory write device-offline/192.168.1.52": {
     "key": "device-offline/192.168.1.52",
     "exists": true,
-    "value": "down",
-    "json": "down",
-    "body": "down",
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T12:00:00Z\"}",
     "written": "2026-10-25T12:00:00Z",
     "expires": null,
     "existed": true,
-    "previous": "up"
+    "previous": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    }
   },
   "discover scan 192.168.1.53 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
     "method": "scan",
@@ -2312,12 +2299,81 @@
   "memory write device-offline/192.168.1.53": {
     "key": "device-offline/192.168.1.53",
     "exists": true,
-    "value": "up",
-    "json": "up",
-    "body": "up",
+    "value": {
+      "state": "up",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-25T12:00:00Z\"}",
     "written": "2026-10-25T12:00:00Z",
     "expires": null,
     "existed": true,
-    "previous": "down"
+    "previous": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    }
+  },
+  "memory device-offline/192.168.1.50": {
+    "key": "device-offline/192.168.1.50",
+    "exists": true,
+    "value": {
+      "state": "up",
+      "since": "2026-10-24T08:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-24T08:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-24T08:00:00Z\"}",
+    "written": "2026-10-24T08:00:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.51": {
+    "key": "device-offline/192.168.1.51",
+    "exists": true,
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T11:15:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T11:15:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T11:15:00Z\"}",
+    "written": "2026-10-25T11:15:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.52": {
+    "key": "device-offline/192.168.1.52",
+    "exists": true,
+    "value": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-20T00:00:00Z\"}",
+    "written": "2026-10-20T00:00:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.53": {
+    "key": "device-offline/192.168.1.53",
+    "exists": true,
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T10:00:00Z\"}",
+    "written": "2026-10-25T10:00:00Z",
+    "expires": null
   }
 }
