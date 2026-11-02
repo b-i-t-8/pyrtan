@@ -125,3 +125,95 @@ def test_the_devices_tab_shows_what_each_watched_device_last_said(tmp_path):
         assert kettle_card["uptime"].replace("\n", " ").startswith("100% up of ") and printer_card["uptime"].startswith("0.0% up of ")
         assert kettle_card["bar"][0] == "unknown" and kettle_card["bar"][-1] == "up" and printer_card["bar"][-1] == "down"
         assert view["pressed"] == ["false", "true", "false"]
+
+
+PRINTER = """
+name = "printer-check"
+description = "a printer that is up now"
+start = "say"
+
+[[watches]]
+name = "printer"
+every = 60
+
+[nodes.say]
+kind = "done"
+say = "up"
+output = { host = "192.168.1.50", name = "The printer", online = true, since = "2026-11-01T00:00:00Z" }
+"""
+
+DETAIL = r"""
+const { chromium } = require("playwright");
+(async () => {
+  const browser = await chromium.launch(process.env.PYRTAN_BROWSER ? { executablePath: process.env.PYRTAN_BROWSER } : {});
+  const out = {};
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(process.argv[2] + "/#devices");
+    await page.waitForSelector("#devices .device .name a");
+    await page.click("#devices .device .name a");
+    await page.waitForSelector("#device-detail .stats");
+    const read = async () => ({
+      hash: await page.evaluate(() => decodeURIComponent(location.hash)),
+      title: (await page.textContent("#device-detail h3")).trim(),
+      stats: await page.$$eval("#device-detail .stat", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim())),
+      summary: await page.$eval("#device-detail table.outages", (t) => t.previousElementSibling.textContent.trim()),
+      rows: await page.$$eval("#device-detail table.outages tbody tr", (rs) => rs.map((r) => [...r.cells].map((c) => c.textContent.trim()))),
+      grid: await page.isVisible("#devices-all"),
+      overflow: await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
+    });
+    out.clicked = await read();
+    await page.goBack();
+    await page.waitForSelector("#devices-all", { state: "visible" });
+    out.back = { grid: await page.isVisible("#devices-all"), detail: await page.isVisible("#device-detail") };
+    await page.goto(process.argv[2] + "/" + out.clicked.hash.replace(/^#devices\//, "#devices/" ).replace(/ /g, "%20"));
+    await page.reload();
+    await page.waitForSelector("#device-detail .stats");
+    out.linked = (await page.textContent("#device-detail h3")).trim();
+    out.errors = errors;
+  } finally { await browser.close(); }
+  console.log(JSON.stringify(out));
+})().catch((e) => { console.log(JSON.stringify({ error: String(e) })); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(not _node_playwright(), reason="needs node with playwright, and a Chromium")
+def test_a_device_page_shows_its_uptime_and_outages(tmp_path):
+    now, H, D = time.time(), 3600, 86400
+
+    def span(a, b, online):
+        return {"from": now - a, "to": now - b, "n": 1, "status": "done", "h": f"{online}{a}", "output": {"host": "192.168.1.50", "name": "The printer", "online": online}}
+
+    history = tmp_path / "history.json"
+    history.write_text(json.dumps({"pyrtan-watch-history": 1, "timelines": {"printer-check/printer": [
+        span(20 * D, 3 * D, True), span(3 * D, 3 * D - 2 * H, False), span(3 * D - 2 * H, 5 * H, True),
+        span(5 * H, 4.5 * H, False), span(4.5 * H, 0, True)]}}))
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "printer-check.toml").write_text(PRINTER)
+    hub, srv = serve_hub(port=0, quiet=True, trees=[tmp_path / "t"], watch=True, poll_every=60, watch_history=history)
+    url = srv.url.rstrip("/")
+    try:
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            with urllib.request.urlopen(url + "/watches", timeout=5) as r:
+                if all(x["last"] for x in json.load(r)["watches"]):
+                    break
+            time.sleep(0.2)
+        (tmp_path / "d.cjs").write_text(DETAIL)
+        run = subprocess.run(["node", str(tmp_path / "d.cjs"), url], capture_output=True, text=True, timeout=120)
+        got = json.loads(run.stdout.strip().splitlines()[-1])
+    finally:
+        hub.stop()
+        srv.stop()
+    assert "error" not in got and got["errors"] == [], got
+    c = got["clicked"]
+    assert c["hash"] == "#devices/local printer-check printer" and c["title"] == "The printer" and c["grid"] is False and c["overflow"] is False
+    # 24 h: the half-hour outage; 7 and 30 d: both (and only 20 of the 30 days were checked).
+    assert [s.split(" ")[3] for s in c["stats"]] == ["97.9%", "98.5%", "99.48%"], c["stats"]
+    assert c["stats"][0].endswith("1 outage") and "2 outages" in c["stats"][1] and c["stats"][2].endswith("checked")
+    assert c["summary"] == "2 in the last 30 days · 2 h 30 min offline in all · the longest 2 h"
+    assert [row[2] for row in c["rows"]] == ["30 min", "2 h"]  # newest first
+    assert got["back"] == {"grid": True, "detail": False}
+    assert got["linked"] == "The printer"  # a device's page is a link of its own
