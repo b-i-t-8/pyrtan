@@ -69,11 +69,14 @@ const { chromium } = require("playwright");
       await page.goto(process.argv[2] + "/#devices");
       await page.waitForSelector("#devices .device");
       out[label] = {
-        cards: await page.$$eval("#devices .device", (els) => els.map((e) => ({ cls: e.className, text: e.innerText.replace(/\s+/g, " ").trim() }))),
+        cards: await page.$$eval("#devices .device", (els) => els.map((e) => ({ cls: e.className, text: e.innerText.replace(/\s+/g, " ").trim(), uptime: (e.querySelector(".uptime") || {}).innerText, bar: [...e.querySelectorAll("svg.bar rect")].map((r) => r.getAttribute("class")) }))),
         summary: (await page.textContent("#devices-summary")).trim(),
         overflow: await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
         errors,
       };
+      await page.click('#tab-devices .range button[data-range="604800"]');
+      await page.waitForFunction(() => document.querySelector("#devices .device .range-name").textContent === "7 d");
+      out[label].pressed = await page.$$eval("#tab-devices .range button", (bs) => bs.map((b) => b.getAttribute("aria-pressed")));
       await page.close();
     }
   } finally { await browser.close(); }
@@ -117,3 +120,8 @@ def test_the_devices_tab_shows_what_each_watched_device_last_said(tmp_path):
         printer, kettle = (c["text"] for c in view["cards"])
         assert printer.startswith("The printer 192.168.1.50 Offline for ") and "checked " in printer
         assert kettle.startswith("Kettle plug 192.168.1.40 Online for ")
+        # A few seconds of history: all of it up for the kettle, down for the printer, the rest of the day unchecked.
+        kettle_card, printer_card = view["cards"][1], view["cards"][0]
+        assert kettle_card["uptime"].replace("\n", " ").startswith("100% up of ") and printer_card["uptime"].startswith("0.0% up of ")
+        assert kettle_card["bar"][0] == "unknown" and kettle_card["bar"][-1] == "up" and printer_card["bar"][-1] == "down"
+        assert view["pressed"] == ["false", "true", "false"]
