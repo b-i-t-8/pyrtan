@@ -130,7 +130,11 @@ Exactly one of `every`, `file`, `queue`, `serial`. A watch is static:
 no template reaches a path, a topic or a device, and `pyrtan check`
 holds each against the tree's `paths`, `hosts` and `topics`, `devices`.
 Every required input must be given or have a default. A watched run's
-trace begins with a `watch` step. `--watch` on a service or hub runs
+trace begins with a `watch` step. Each watch keeps a timeline, a month of
+what its runs came to as spans of runs that ended alike (`GET
+/watches/history`; `--watch-history FILE` keeps it across restarts): an
+output that names a `host` and whether it is `online` is drawn as a
+device's uptime in the console's Devices tab. `--watch` on a service or hub runs
 them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs

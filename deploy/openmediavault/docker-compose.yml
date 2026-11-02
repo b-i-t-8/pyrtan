@@ -148,6 +148,9 @@ services:
       # there, so a restart does not forget an outage.
       PYRTAN_WATCH: "true"
       PYRTAN_MEMORY: /trees/.memory.json
+      # Each watch's timeline (a month of what its runs came to), which the
+      # console's Devices tab draws as uptime; kept across restarts.
+      PYRTAN_WATCH_HISTORY: /trees/.watch-history.json
       # What trees read as {{ env.NAME }}: the ntfy topic your phone
       # subscribes to, for device-offline's alerts. A secret: keep it here.
       # PYRTAN_ENV_NTFY_TOPIC: "CHANGE-ME-to-a-long-random-topic"

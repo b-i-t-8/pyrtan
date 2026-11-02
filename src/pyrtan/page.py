@@ -150,7 +150,16 @@ TEMPLATE = r"""<!doctype html>
   .device.up { border-left-color:var(--ok) } .device.down { border-left-color:var(--bad) } .device.stale { border-left-color:var(--ask) }
   .device .name { font-weight:600; overflow-wrap:anywhere } .device .host { color:var(--mute); font-size:13px; font-family:ui-monospace,monospace }
   .device .state { margin-top:8px; font-weight:600 } .device.up .state { color:var(--ok) } .device.down .state { color:var(--bad) } .device.stale .state { color:var(--ask) }
-  .device .when { color:var(--mute); font-size:13px } .devices-summary { font-weight:600; margin:0 0 12px }
+  .device .when { color:var(--mute); font-size:13px } .devices-summary { font-weight:600; margin:0 }
+  .devices-head { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; justify-content:space-between; margin:0 0 12px }
+  .range { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden }
+  .range button { border:0; border-radius:0; background:var(--card); color:var(--fg); padding:4px 10px; font-size:13px; cursor:pointer; min-height:0 }
+  .range button + button { border-left:1px solid var(--line) } .range button[aria-pressed=true] { background:var(--soft); font-weight:600 }
+  .device .uptime { margin-top:10px; font-size:13px; display:flex; justify-content:space-between; gap:8px } .device .uptime b { font-variant-numeric:tabular-nums }
+  .device svg.bar { display:block; width:100%; height:14px; margin-top:4px; border-radius:3px; overflow:hidden; background:var(--soft) }
+  .bar .up, .key.up { fill:var(--ok); background:var(--ok) } .bar .down, .key.down { fill:var(--bad); background:var(--bad) } .bar .unknown, .key.unknown { fill:var(--line); background:var(--line) }
+  .device .axis { display:flex; justify-content:space-between; color:var(--mute); font-size:11px; margin-top:2px }
+  .key { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:-1px; margin-left:8px }
   .notice { border-left:3px solid var(--ask); padding:8px 12px; background:var(--soft); border-radius:6px; margin:0 0 14px; font-size:14px }
   .notice.bad { border-color:var(--bad) }
   .sync-code { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; margin:10px 0 }
@@ -267,8 +276,12 @@ TEMPLATE = r"""<!doctype html>
   <section id="tab-devices" hidden>
     <h2>Devices</h2>
     <p class="mute" style="font-size:14px;margin-top:0">The devices this swarm watches, from what each watch last said: a tree whose output names a <code>host</code> and whether it is <code>online</code> (<code>device-offline</code> does, with <code>since</code>). Refreshed every 30 seconds while this tab is open.</p>
-    <p id="devices-summary" class="devices-summary"></p>
+    <div class="devices-head"><p id="devices-summary" class="devices-summary"></p>
+      <div class="range" role="group" aria-label="History">
+        <button type="button" data-range="86400" aria-pressed="true">24 h</button><button type="button" data-range="604800" aria-pressed="false">7 d</button><button type="button" data-range="2592000" aria-pressed="false">30 d</button>
+      </div></div>
     <div id="devices" class="devices"></div>
+    <p class="mute" style="font-size:13px">Uptime counts the time each device was checked; grey is time nobody checked (the service was down, or the watch had not started). <span class="key up"></span> online <span class="key down"></span> offline <span class="key unknown"></span> not checked</p>
   </section>
 
   <section id="tab-gaps" hidden>
@@ -1136,17 +1149,62 @@ async function loadWatches() {
 }
 
 // ---------------------------------------------------------------- devices
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("#tab-devices .range button");
+  if (!b) return;
+  devicesRange = Number(b.dataset.range);
+  try { localStorage.setItem("pyrtan.devices.range", String(devicesRange)); } catch (err) {}
+  loadDevices();
+});
 // A watch whose last output says a host and whether it is online is a
 // device; device-offline's watches are, with since when. Offline first.
-let devicesTimer = null;
+let devicesTimer = null, devicesRange = 86400;
+try { const r = Number(localStorage.getItem("pyrtan.devices.range")); if ([86400, 604800, 2592000].includes(r)) devicesRange = r; } catch (e) {}
 const STALE_AFTER = 10 * 60;  // seconds without a check before a device reads "not checked lately"
 function ago(seconds) {
   seconds = Math.max(0, Math.round(seconds));
   if (seconds < 60) return `${seconds} s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
-  if (seconds < 86400) { const h = Math.floor(seconds / 3600), m = Math.round((seconds % 3600) / 60); return m ? `${h} h ${m} min` : `${h} h`; }
-  const d = Math.floor(seconds / 86400), h = Math.round((seconds % 86400) / 3600);
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 1440) { const h = Math.floor(minutes / 60), m = minutes % 60; return m ? `${h} h ${m} min` : `${h} h`; }
+  const hours = Math.round(seconds / 3600), d = Math.floor(hours / 24), h = hours % 24;
   return h ? `${d} d ${h} h` : `${d} d`;
+}
+// A watch's timeline as stretches of up, down and unknown within [from, now]:
+// a span holds its runs from its first to its last; the newest one reaches
+// now while its watch keeps time; anything else is time nobody checked.
+function stretches(spans, every, from, now) {
+  const out = [];
+  const add = (state, a, b) => {
+    a = Math.max(a, from); b = Math.min(b, now);
+    if (b <= a) return;
+    const last = out[out.length - 1];
+    if (last && last.state === state && Math.abs(last.b - a) < 1) last.b = b; else out.push({ state, a, b });
+  };
+  let t = from;
+  (spans || []).forEach((s, i) => {
+    const o = s.output || {};
+    const state = s.status === "done" && typeof o.online === "boolean" ? (o.online ? "up" : "down") : "unknown";
+    let b = s.to;
+    if (i === spans.length - 1 && every && now - s.to <= 2.5 * every) b = now;
+    if (s.from > t) add("unknown", t, s.from);
+    add(state, s.from, b);
+    t = Math.max(t, b);
+  });
+  if (t < now) add("unknown", t, now);
+  return out;
+}
+function uptimeOf(parts) {
+  let up = 0, down = 0;
+  for (const p of parts) { if (p.state === "up") up += p.b - p.a; else if (p.state === "down") down += p.b - p.a; }
+  return { up, down, known: up + down, pct: up + down ? (100 * up) / (up + down) : null };
+}
+function pctText(p) { return p === null ? "–" : p >= 99.95 ? "100%" : p > 99 ? p.toFixed(2) + "%" : p.toFixed(1) + "%"; }
+function barSvg(parts, from, now) {
+  const w = now - from, fmt = (t) => new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const said = { up: "Online", down: "Offline", unknown: "Not checked" };
+  return `<svg class="bar" viewBox="0 0 1000 14" preserveAspectRatio="none" role="img" aria-label="History">` + parts.map((p) =>
+    `<rect class="${p.state}" x="${((p.a - from) / w * 1000).toFixed(2)}" y="0" width="${Math.max(0.6, (p.b - p.a) / w * 1000).toFixed(2)}" height="14"><title>${esc(said[p.state])} ${esc(fmt(p.a))} – ${esc(fmt(p.b))} (${esc(ago(p.b - p.a))})</title></rect>`).join("") + "</svg>";
 }
 function devicesFrom(watches, now) {
   const out = [];
@@ -1158,14 +1216,17 @@ function devicesFrom(watches, now) {
     const checked = x.last_at || null;
     let state = !isDevice ? "stale" : o.online ? "up" : "down";
     if (checked !== null && now - checked > STALE_AFTER) state = "stale";
-    out.push({ name: String(o.name || x.name || o.host || "?"), host: o.host !== undefined ? String(o.host) : "", state, online: isDevice ? o.online : null, since: Number.isNaN(since) ? null : since, checked, error: x.last_error || (x.last && x.last.status !== "done" ? x.last.say : null), peer: x.peer });
+    out.push({ name: String(o.name || x.name || o.host || "?"), host: o.host !== undefined ? String(o.host) : "", state, online: isDevice ? o.online : null, since: Number.isNaN(since) ? null : since, checked, error: x.last_error || (x.last && x.last.status !== "done" ? x.last.say : null), peer: x.peer, key: `${x.peer || ""} ${x.tree} ${x.name}` });
   }
   const rank = { down: 0, stale: 1, up: 2 };
   return out.sort((a, b) => rank[a.state] - rank[b.state] || a.name.localeCompare(b.name));
 }
 async function loadDevices() {
-  let w; try { w = await json("watches"); } catch (e) { problem(e.message, true); return; }
-  const now = Date.now() / 1000, devices = devicesFrom(w.watches, now);
+  let w, h = null; try { [w, h] = await Promise.all([json("watches"), json("watches/history").catch(() => null)]); } catch (e) { problem(e.message, true); return; }
+  const now = Date.now() / 1000, devices = devicesFrom(w.watches, now), from = now - devicesRange;
+  const timelines = new Map(((h && h.watches) || []).map((x) => [`${x.peer || ""} ${x.tree} ${x.name}`, x]));
+  for (const b of document.querySelectorAll("#tab-devices .range button")) b.setAttribute("aria-pressed", String(Number(b.dataset.range) === devicesRange));
+  const rangeName = { 86400: "24 h", 604800: "7 d", 2592000: "30 d" }[devicesRange];
   const grid = $("#devices"); grid.innerHTML = "";
   const n = (s) => devices.filter((d) => d.state === s).length;
   $("#devices-summary").textContent = devices.length ? [`${n("up")} online`, `${n("down")} offline`].concat(n("stale") ? [`${n("stale")} not checked lately`] : []).join(" · ") : "";
@@ -1176,6 +1237,12 @@ async function loadDevices() {
     const since = d.since !== null && d.state !== "stale" ? `for ${ago(now - d.since)}` : "";
     card.innerHTML = `<div class="name">${esc(d.name)}</div><div class="host">${esc(d.host)}</div><div class="state"><span class="link ${esc(d.state)}"></span>${esc(said)}${since ? ` <span class="mute" style="font-weight:normal">${esc(since)}</span>` : ""}</div>` +
       `<div class="when">${d.checked ? `checked ${esc(ago(now - d.checked))} ago` : "not checked yet"}</div>` + (d.error ? `<div class="when">${esc(d.error)}</div>` : "");
+    const t = timelines.get(d.key);
+    if (t) {
+      const parts = stretches(t.spans, t.every, from, now), u = uptimeOf(parts);
+      const covered = u.known < devicesRange * 0.995 ? ` <span class="mute">of ${esc(ago(u.known))} checked</span>` : "";
+      card.insertAdjacentHTML("beforeend", `<div class="uptime"><span><b>${esc(pctText(u.pct))}</b> up${covered}</span><span class="mute range-name">${esc(rangeName)}</span></div>${barSvg(parts, from, now)}<div class="axis"><span>${esc(ago(devicesRange))} ago</span><span>now</span></div>`);
+    }
     grid.appendChild(card);
   }
   if (!devices.length) grid.innerHTML = `<div class="card mute" style="grid-column:1/-1">No devices watched yet. Copy <code>examples/device-offline</code> into a service's trees, give it a <code>[[watches]]</code> block per device, and start the service with <code>--watch</code>.</div>`;
