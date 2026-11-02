@@ -1585,5 +1585,419 @@
   "POST https://lights.example/kitchen": {
     "status": 204,
     "body": ""
+  },
+  "modbus modbus://plc.local unit 1 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 1,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      16962,
+      0
+    ],
+    "values": [
+      48.5
+    ],
+    "value": 48.5,
+    "exception": null,
+    "body": "[48.5]",
+    "json": [
+      48.5
+    ]
+  },
+  "modbus modbus://plc.local unit 2 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 2,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      16616,
+      0
+    ],
+    "values": [
+      7.25
+    ],
+    "value": 7.25,
+    "exception": null,
+    "body": "[7.25]",
+    "json": [
+      7.25
+    ]
+  },
+  "modbus modbus://plc.local unit 4 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 4,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      17091,
+      0
+    ],
+    "values": [
+      97.5
+    ],
+    "value": 97.5,
+    "exception": null,
+    "body": "[97.5]",
+    "json": [
+      97.5
+    ]
+  },
+  "modbus modbus://plc.local unit 3 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 3,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": false,
+    "raw": [],
+    "values": [],
+    "value": null,
+    "exception": {
+      "code": 11,
+      "name": "gateway-target-failed-to-respond"
+    },
+    "body": "[]",
+    "json": []
+  },
+  "modbus modbus://plc.local unit 5 holding 100": {
+    "error": "modbus://plc.local: no answer within the timeout"
+  },
+  "bacnet bacnet://bms.local analog-input:1 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:1",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 21.5,
+    "values": [
+      21.5
+    ],
+    "body": "21.5",
+    "json": 21.5
+  },
+  "bacnet bacnet://bms.local analog-input:2 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:2",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 16.25,
+    "values": [
+      16.25
+    ],
+    "body": "16.25",
+    "json": 16.25
+  },
+  "bacnet bacnet://bms.local analog-input:3 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:3",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 26.5,
+    "values": [
+      26.5
+    ],
+    "body": "26.5",
+    "json": 26.5
+  },
+  "bacnet bacnet://bms.local analog-input:9 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:9",
+    "property": "present-value",
+    "ok": false,
+    "refused": {
+      "kind": "error",
+      "class": "object",
+      "code": "unknown-object"
+    },
+    "value": null,
+    "values": [],
+    "body": "",
+    "json": null
+  },
+  "bacnet bacnet://bms.local analog-input:4 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:4",
+    "property": "present-value",
+    "ok": false,
+    "refused": {
+      "kind": "error",
+      "class": "property",
+      "code": "read-access-denied"
+    },
+    "value": null,
+    "values": [],
+    "body": "",
+    "json": null
+  },
+  "snmp snmp://ups.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups.local",
+    "ok": true,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": 3,
+      "upsEstimatedChargeRemaining.0": 100,
+      "upsEstimatedMinutesRemaining.0": 41
+    },
+    "value": 3,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "integer",
+        "value": 3
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "integer",
+        "value": 100
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "integer",
+        "value": 41
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": 3, \"upsEstimatedChargeRemaining.0\": 100, \"upsEstimatedMinutesRemaining.0\": 41}",
+    "json": {
+      "upsOutputSource.0": 3,
+      "upsEstimatedChargeRemaining.0": 100,
+      "upsEstimatedMinutesRemaining.0": 41
+    }
+  },
+  "snmp snmp://ups-2.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups-2.local",
+    "ok": true,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": 5,
+      "upsEstimatedChargeRemaining.0": 18,
+      "upsEstimatedMinutesRemaining.0": 6
+    },
+    "value": 5,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "integer",
+        "value": 5
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "integer",
+        "value": 18
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "integer",
+        "value": 6
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": 5, \"upsEstimatedChargeRemaining.0\": 18, \"upsEstimatedMinutesRemaining.0\": 6}",
+    "json": {
+      "upsOutputSource.0": 5,
+      "upsEstimatedChargeRemaining.0": 18,
+      "upsEstimatedMinutesRemaining.0": 6
+    }
+  },
+  "snmp snmp://ups-3.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups-3.local",
+    "ok": false,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": null,
+      "upsEstimatedChargeRemaining.0": null,
+      "upsEstimatedMinutesRemaining.0": null
+    },
+    "value": null,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "noSuchObject",
+        "value": null
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "noSuchObject",
+        "value": null
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "noSuchObject",
+        "value": null
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": null, \"upsEstimatedChargeRemaining.0\": null, \"upsEstimatedMinutesRemaining.0\": null}",
+    "json": {
+      "upsOutputSource.0": null,
+      "upsEstimatedChargeRemaining.0": null,
+      "upsEstimatedMinutesRemaining.0": null
+    }
+  },
+  "coap GET coap://garden.local/sensors/bed-1/moisture": {
+    "url": "coap://garden.local/sensors/bed-1/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 22.5}",
+    "json": {
+      "moisture": 22.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/herbs/moisture": {
+    "url": "coap://garden.local/sensors/herbs/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 55.5}",
+    "json": {
+      "moisture": 55.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/roses/moisture": {
+    "url": "coap://garden.local/sensors/roses/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 81.5}",
+    "json": {
+      "moisture": 81.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/lawn/moisture": {
+    "url": "coap://garden.local/sensors/lawn/moisture",
+    "status": "4.04",
+    "code": 132,
+    "ok": false,
+    "format": null,
+    "body": "",
+    "json": null,
+    "elapsed_ms": 9
+  },
+  "coap GET coap://garden.local/sensors/shed/moisture": {
+    "error": "coap://garden.local/sensors/shed/moisture: no answer within 5 s"
+  },
+  "matter ws://matter.local:5580/ws node 4 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "path": "1/6/0",
+    "ok": true,
+    "refused": null,
+    "value": true,
+    "result": {
+      "1/6/0": true
+    },
+    "body": "true",
+    "json": true
+  },
+  "matter ws://matter.local:5580/ws node 5 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "path": "1/6/0",
+    "ok": true,
+    "refused": null,
+    "value": false,
+    "result": {
+      "1/6/0": false
+    },
+    "body": "false",
+    "json": false
+  },
+  "matter ws://matter.local:5580/ws node 7 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 7,
+    "path": "1/6/0",
+    "ok": false,
+    "refused": {
+      "code": 5,
+      "details": "Node 7 is not (yet) available"
+    },
+    "value": null,
+    "result": null,
+    "body": "",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 4 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 4 1/OnOff Off": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "Off",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 5 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 5 1/OnOff Off": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "Off",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 7 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 7,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": false,
+    "refused": {
+      "code": 5,
+      "details": "Node 7 is not (yet) available"
+    },
+    "value": null,
+    "result": null,
+    "body": "",
+    "json": null
+  },
+  "bacnet bacnet://bms.local analog-input:5 present-value": {
+    "error": "bacnet://bms.local: no answer from analog-input:5 within 5 s"
   }
 }

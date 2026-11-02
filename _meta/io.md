@@ -1,8 +1,8 @@
-# Design — Forms of I/O: file, shell, serial, queue, browser, memory
+# Design — Forms of I/O: file, shell, serial, queue, browser, memory, and the field protocols
 
 | | |
 |---|---|
-| **Status** | **Built, v0.7; memory in v0.27.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
+| **Status** | **Built, v0.7; memory in v0.27; the field protocols (Modbus TCP, BACnet/IP, SNMP, CoAP, Matter) in v0.37.** Five sources beside `http` (six with `memory`), each a node table with an allow-list of its own kind, the same retry rule, the same trace, the same fixtures; the examples cover each; the JavaScript runtime refuses them on a member and answers them from a fixture. |
 | **Date** | 2026-10-25 |
 | **Decision** | A node names a *source* and what it wants from it; the tree lists what that source may reach; the runtime refuses anything outside the list before the adapter is asked; the adapter moves the bytes and leaves a plain table in state. Files, shells and serial lines are the box itself, and a hosted service keeps them closed. |
 | **Where** | `src/pyrtan/adapters.py` (the adapters, the allow-list matchers, the fixture keys), `src/pyrtan/tree.py` (the lists, `Tree.allowed`, the per-source checks), `src/pyrtan/runtime.py` (one path for every source), `src/pyrtan/transport.py` (fixtures answer for every source), `src/pyrtan/js/pyrtan.js` (the same on a member). |
@@ -37,6 +37,11 @@ trace line reads `source what -> brief`, the way an HTTP line reads
 | `serial` | `devices` | a device, `baud`, `write`, `read_until` or `read` | `device`, `baud`, `sent`, `body`, `bytes`, `complete`, `json`, `lines` |
 | `queue` | `hosts` and `topics` | a broker URL and a topic; `publish` | `received`, `message` (`topic`, `body`, `json`), `body`, `json`; `published` |
 | `memory` | `keys` | a key; `write`, `add` or `delete`, and `ttl` | `key`, `exists`, `value`, `json`, `body`, `written`, `expires`; `previous`, `existed` |
+| `modbus` | `hosts` | `modbus://host`, `unit`, a table to `read` from `address` (`count`, `type`, `scale`); or `write` and `value` | `ok`, `raw`, `values`, `value`, `exception`, `body`, `json`; `written` |
+| `bacnet` | `hosts` | `bacnet://host`, `object`, `property`, `index`; or `write` and `priority` | `ok`, `value`, `values`, `refused`, `body`, `json`; `written` |
+| `snmp` | `hosts` | `snmp://host`, `community`, `version`; `get`, `walk` (and `max`) or `set` | `ok`, `status`, `values`, `value`, `varbinds`, `body`, `json`; `written` |
+| `coap` | `hosts` | `coap://host/path`, `method`, `payload`, `format`, `accept` | `status` (`"2.05"`), `code`, `ok`, `format`, `body`, `json`, `elapsed_ms` |
+| `matter` | `hosts` | a controller's `ws://…/ws`, `node`; `read`, `write` and `value`, or `command`, `cluster`, `endpoint`, `payload` | `ok`, `path`, `value`, `result`, `refused`, `body`, `json`; `written` |
 
 ## 2. The allow-lists
 
@@ -152,9 +157,55 @@ of them being present.
   or a serial line speaks, or on a clock (`watch.py`; the file is
   polled, the queue and the serial line are held open as streams,
   `adapters.mqtt_stream` and `adapters.serial_lines`).
+- **v0.37, built:** the field protocols (section 7).
 - **v0.27, built:** `memory`, what a tree keeps across runs, with `keys`
   (`memory.py`): the last reading, a count of checks in a row, whether
   it already said so. With `[[watches]]`, that is debouncing and
   alerting once, decided by nodes a reader can follow.
 - **Later:** a serial line held open across the nodes of one run, for
   devices with a session.
+
+## 7. The field protocols
+
+Most of what a building, a plant floor or a home is made of does not
+speak HTTP. Five protocols cover most of it, and each arrives the way the
+others did: a node table, an allow-list, a plain table in state, a
+fixture key, and the standard library only (`modbus.py`, `bacnet.py`,
+`snmp.py`, `coap.py`, `matter.py`).
+
+- **The allow-list is `hosts`.** Each names its device by a URL
+  (`modbus://plc.local`, `bacnet://bms.local`, `snmp://ups.local`,
+  `coap://garden.local/…`, `ws://matter.local:5580/ws`), and its host is
+  held to `hosts` at load time and run time, and to the egress policy,
+  exactly as an HTTP request's is. A finer list (registers, objects,
+  OIDs) was considered and left out: a tree that may reach a PLC may read
+  what the PLC serves, as a tree that may reach an API may call its
+  paths; what changes things is an `act`, which `confirm` and a dry run
+  already hold.
+- **A device's refusal is an answer.** A Modbus exception, a BACnet
+  Error, Reject or Abort, an SNMP error-status, a CoAP 4.xx or 5.xx and a
+  Matter controller's error are tables a decide reads (`exception`,
+  `refused`, `status`, `ok`), so `unknown-object` can mean "no such zone"
+  in the tree's own words. Only silence, a closed connection or a reply
+  that is not the protocol is a transport error, retried by an observe.
+  (`error` is the one key a fixture keeps for a transport failure, so no
+  source leaves it in state.)
+- **Matter goes through a controller.** A Matter device lives on a
+  fabric: commissioning, operational certificates, CASE sessions. That is
+  a controller's job, and python-matter-server (the one Home Assistant
+  runs) already does it and serves a WebSocket API; `matter` speaks that
+  API (`read_attribute`, `write_attribute`, `device_command`) with a
+  small RFC 6455 client of its own. The controller's host is the one in
+  `hosts`.
+- **What is not here.** Modbus RTU and Modbus over TLS; BACnet
+  segmentation (a property too large for one packet is read by `index`),
+  Who-Is, COV and BBMD registration; SNMPv3 (its privacy needs ciphers
+  the standard library does not carry); CoAP over DTLS and Observe;
+  Matter without a controller. Watches over these (a BACnet COV, a CoAP
+  observe, a Matter subscription) are the natural next step; until then
+  a clock watch polls them.
+- **Members do not reach devices.** A browser or a phone has no socket
+  to a PLC: the JavaScript runtime answers these sources from a fixture
+  and otherwise says `source-unsupported`, as for a serial line. It
+  builds the same fixture keys, so the vectors cover every example.
+
