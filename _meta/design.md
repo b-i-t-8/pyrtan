@@ -413,7 +413,7 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.47, built: what a tree returns, and who relies on it.** A tree
+19. **v0.48, built: what a tree returns, and who relies on it.** A tree
     may declare `returns`, the fields and types its output promises.
     `pyrtan check` holds its own `done` nodes to it and, over several
     trees, holds every caller that reads a delegated tree's output to it;

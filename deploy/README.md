@@ -273,11 +273,18 @@ device stops answering, and when it is back:
 3. `cp pyrtan/examples/device-offline/device-offline.toml pyrtan/trees/`,
    then in the copy uncomment the `[[watches]]` block and set the device's
    address and name (one block per device, each with its own `name`).
+   Keep `uptime = "{{ event.uptime.day }}"` in its inputs for the uptime
+   alert (below).
 4. *Down* and *Up*. `docker compose -p pyrtan exec mine pyrtan check /trees`
    should pass, and the hub's console answers "is 192.168.1.50 online".
 
 It alerts once when a device stops answering and once when it comes back,
-not every minute in between. The console's **Devices** tab
+not every minute in between. It also alerts once when a device's uptime
+over the last day falls below 99% (counted over the time it was checked,
+once an hour has been), and again only after it has been back to 99.5% or
+more; the two numbers are in the tree's `uptime-level` node, for you to
+change in your copy (`.week` or `.month` instead of `.day` for a longer
+window). The console's **Devices** tab
 (`http://<nas-ip>:8700/#devices`) shows every watched device at a glance:
 online or offline, for how long, and when it was last checked, offline
 first, with a bar of its history and its uptime over the last 24 hours,

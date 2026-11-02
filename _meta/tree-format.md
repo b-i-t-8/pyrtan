@@ -161,7 +161,11 @@ trace begins with a `watch` step. Each watch keeps a timeline, a month of
 what its runs came to as spans of runs that ended alike (`GET
 /watches/history`; `--watch-history FILE` keeps it across restarts): an
 output that names a `host` and whether it is `online` is drawn as a
-device's uptime in the console's Devices tab. `--watch` on a service or hub runs
+device's uptime in the console's Devices tab. A clock watch's event
+carries that uptime for its tree to decide on: `event.uptime.day`,
+`.week` and `.month`, the percentage of the checked time its runs said
+`online = true`, or `None` before an hour has been checked
+(`inputs = { uptime = "{{ event.uptime.day }}" }`). `--watch` on a service or hub runs
 them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs
