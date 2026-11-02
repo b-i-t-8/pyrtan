@@ -499,7 +499,8 @@ the run, since the run is over.
 `{{ path }}` with optional filters: `{{ inputs.city | url }}`. Roots:
 `inputs`, `state`, `item`, `index` (inside `each`), `tree` (`name`,
 `version`), `now` (`iso`, `date`, `epoch`, `year`), `env` (values the
-service was started with, for tokens). Paths take `.key`, `[0]`, `[-1]`,
+service was started with, for tokens: `--env NAME=VALUE`, or
+`PYRTAN_ENV_NAME` in its environment). Paths take `.key`, `[0]`, `[-1]`,
 `["key"]`.
 
 An `env` value is the operator's, so it stays out of the trace: a

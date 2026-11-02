@@ -143,6 +143,14 @@ services:
       <<: *env
       PYRTAN_EGRESS: any
       PYRTAN_PORT: "8702"        # what the health check asks
+      # Run the [[watches]] of the trees in trees/ (a device-offline check
+      # every minute, say), and keep what memory nodes remember in a file
+      # there, so a restart does not forget an outage.
+      PYRTAN_WATCH: "true"
+      PYRTAN_MEMORY: /trees/.memory.json
+      # What trees read as {{ env.NAME }}: the ntfy topic your phone
+      # subscribes to, for device-offline's alerts. A secret: keep it here.
+      # PYRTAN_ENV_NTFY_TOPIC: "CHANGE-ME-to-a-long-random-topic"
     volumes:
       - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]

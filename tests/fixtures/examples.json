@@ -2213,5 +2213,111 @@
     "devices": [],
     "body": "[]",
     "json": []
+  },
+  "discover scan 192.168.1.50 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.50",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.50",
+        "open": [
+          80,
+          9100
+        ]
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.50\", \"open\": [80, 9100]}]",
+    "json": [
+      {
+        "address": "192.168.1.50",
+        "open": [
+          80,
+          9100
+        ]
+      }
+    ]
+  },
+  "memory write device-offline/192.168.1.50": {
+    "key": "device-offline/192.168.1.50",
+    "exists": true,
+    "value": "up",
+    "json": "up",
+    "body": "up",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": "up"
+  },
+  "discover scan 192.168.1.51 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.51",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "memory write device-offline/192.168.1.51": {
+    "key": "device-offline/192.168.1.51",
+    "exists": true,
+    "value": "down",
+    "json": "down",
+    "body": "down",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": "down"
+  },
+  "discover scan 192.168.1.52 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.52",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "memory write device-offline/192.168.1.52": {
+    "key": "device-offline/192.168.1.52",
+    "exists": true,
+    "value": "down",
+    "json": "down",
+    "body": "down",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": "up"
+  },
+  "discover scan 192.168.1.53 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.53",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.53",
+        "open": []
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.53\", \"open\": []}]",
+    "json": [
+      {
+        "address": "192.168.1.53",
+        "open": []
+      }
+    ]
+  },
+  "memory write device-offline/192.168.1.53": {
+    "key": "device-offline/192.168.1.53",
+    "exists": true,
+    "value": "up",
+    "json": "up",
+    "body": "up",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": "down"
   }
 }
