@@ -413,13 +413,13 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.43, built: calendar watches.** A watch's clock was only `every`;
+19. **v0.44, built: calendar watches.** A watch's clock was only `every`;
     `at = "mon-fri 09:00, 17:30"` with an optional `tz` runs a tree at
     times of day, on the days named. The grammar is fixed (day names,
     ranges, `weekdays`, `weekends`, `daily`; times as `nlp.parse_time`
     reads them), a change of clocks has one stated rule, and a missed slot
     is not made up (`schedule.py`).
-20. **v0.48, built: days of the month, and every other week.** A
+20. **v0.49, built: days of the month, and every other week.** A
     calendar watch may name days of the month (`1st,15th`, `last`), passed
     over in a month without them, or run every N weeks counted from the
     week of a `from` date it must give, so "every other Monday" says
