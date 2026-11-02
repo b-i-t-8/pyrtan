@@ -1585,5 +1585,795 @@
   "POST https://lights.example/kitchen": {
     "status": 204,
     "body": ""
+  },
+  "modbus modbus://plc.local unit 1 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 1,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      16962,
+      0
+    ],
+    "values": [
+      48.5
+    ],
+    "value": 48.5,
+    "exception": null,
+    "body": "[48.5]",
+    "json": [
+      48.5
+    ]
+  },
+  "modbus modbus://plc.local unit 2 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 2,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      16616,
+      0
+    ],
+    "values": [
+      7.25
+    ],
+    "value": 7.25,
+    "exception": null,
+    "body": "[7.25]",
+    "json": [
+      7.25
+    ]
+  },
+  "modbus modbus://plc.local unit 4 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 4,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": true,
+    "raw": [
+      17091,
+      0
+    ],
+    "values": [
+      97.5
+    ],
+    "value": 97.5,
+    "exception": null,
+    "body": "[97.5]",
+    "json": [
+      97.5
+    ]
+  },
+  "modbus modbus://plc.local unit 3 holding 100": {
+    "url": "modbus://plc.local",
+    "unit": 3,
+    "table": "holding",
+    "address": 100,
+    "count": 1,
+    "ok": false,
+    "raw": [],
+    "values": [],
+    "value": null,
+    "exception": {
+      "code": 11,
+      "name": "gateway-target-failed-to-respond"
+    },
+    "body": "[]",
+    "json": []
+  },
+  "modbus modbus://plc.local unit 5 holding 100": {
+    "error": "modbus://plc.local: no answer within the timeout"
+  },
+  "bacnet bacnet://bms.local analog-input:1 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:1",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 21.5,
+    "values": [
+      21.5
+    ],
+    "body": "21.5",
+    "json": 21.5
+  },
+  "bacnet bacnet://bms.local analog-input:2 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:2",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 16.25,
+    "values": [
+      16.25
+    ],
+    "body": "16.25",
+    "json": 16.25
+  },
+  "bacnet bacnet://bms.local analog-input:3 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:3",
+    "property": "present-value",
+    "ok": true,
+    "refused": null,
+    "value": 26.5,
+    "values": [
+      26.5
+    ],
+    "body": "26.5",
+    "json": 26.5
+  },
+  "bacnet bacnet://bms.local analog-input:9 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:9",
+    "property": "present-value",
+    "ok": false,
+    "refused": {
+      "kind": "error",
+      "class": "object",
+      "code": "unknown-object"
+    },
+    "value": null,
+    "values": [],
+    "body": "",
+    "json": null
+  },
+  "bacnet bacnet://bms.local analog-input:4 present-value": {
+    "url": "bacnet://bms.local",
+    "object": "analog-input:4",
+    "property": "present-value",
+    "ok": false,
+    "refused": {
+      "kind": "error",
+      "class": "property",
+      "code": "read-access-denied"
+    },
+    "value": null,
+    "values": [],
+    "body": "",
+    "json": null
+  },
+  "snmp snmp://ups.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups.local",
+    "ok": true,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": 3,
+      "upsEstimatedChargeRemaining.0": 100,
+      "upsEstimatedMinutesRemaining.0": 41
+    },
+    "value": 3,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "integer",
+        "value": 3
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "integer",
+        "value": 100
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "integer",
+        "value": 41
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": 3, \"upsEstimatedChargeRemaining.0\": 100, \"upsEstimatedMinutesRemaining.0\": 41}",
+    "json": {
+      "upsOutputSource.0": 3,
+      "upsEstimatedChargeRemaining.0": 100,
+      "upsEstimatedMinutesRemaining.0": 41
+    }
+  },
+  "snmp snmp://ups-2.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups-2.local",
+    "ok": true,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": 5,
+      "upsEstimatedChargeRemaining.0": 18,
+      "upsEstimatedMinutesRemaining.0": 6
+    },
+    "value": 5,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "integer",
+        "value": 5
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "integer",
+        "value": 18
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "integer",
+        "value": 6
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": 5, \"upsEstimatedChargeRemaining.0\": 18, \"upsEstimatedMinutesRemaining.0\": 6}",
+    "json": {
+      "upsOutputSource.0": 5,
+      "upsEstimatedChargeRemaining.0": 18,
+      "upsEstimatedMinutesRemaining.0": 6
+    }
+  },
+  "snmp snmp://ups-3.local upsOutputSource.0 upsEstimatedChargeRemaining.0 upsEstimatedMinutesRemaining.0": {
+    "url": "snmp://ups-3.local",
+    "ok": false,
+    "status": "noError",
+    "values": {
+      "upsOutputSource.0": null,
+      "upsEstimatedChargeRemaining.0": null,
+      "upsEstimatedMinutesRemaining.0": null
+    },
+    "value": null,
+    "varbinds": [
+      {
+        "oid": "1.3.6.1.2.1.33.1.4.1.0",
+        "type": "noSuchObject",
+        "value": null
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.4.0",
+        "type": "noSuchObject",
+        "value": null
+      },
+      {
+        "oid": "1.3.6.1.2.1.33.1.2.3.0",
+        "type": "noSuchObject",
+        "value": null
+      }
+    ],
+    "body": "{\"upsOutputSource.0\": null, \"upsEstimatedChargeRemaining.0\": null, \"upsEstimatedMinutesRemaining.0\": null}",
+    "json": {
+      "upsOutputSource.0": null,
+      "upsEstimatedChargeRemaining.0": null,
+      "upsEstimatedMinutesRemaining.0": null
+    }
+  },
+  "coap GET coap://garden.local/sensors/bed-1/moisture": {
+    "url": "coap://garden.local/sensors/bed-1/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 22.5}",
+    "json": {
+      "moisture": 22.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/herbs/moisture": {
+    "url": "coap://garden.local/sensors/herbs/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 55.5}",
+    "json": {
+      "moisture": 55.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/roses/moisture": {
+    "url": "coap://garden.local/sensors/roses/moisture",
+    "status": "2.05",
+    "code": 69,
+    "ok": true,
+    "format": "json",
+    "body": "{\"moisture\": 81.5}",
+    "json": {
+      "moisture": 81.5
+    },
+    "elapsed_ms": 12
+  },
+  "coap GET coap://garden.local/sensors/lawn/moisture": {
+    "url": "coap://garden.local/sensors/lawn/moisture",
+    "status": "4.04",
+    "code": 132,
+    "ok": false,
+    "format": null,
+    "body": "",
+    "json": null,
+    "elapsed_ms": 9
+  },
+  "coap GET coap://garden.local/sensors/shed/moisture": {
+    "error": "coap://garden.local/sensors/shed/moisture: no answer within 5 s"
+  },
+  "matter ws://matter.local:5580/ws node 4 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "path": "1/6/0",
+    "ok": true,
+    "refused": null,
+    "value": true,
+    "result": {
+      "1/6/0": true
+    },
+    "body": "true",
+    "json": true
+  },
+  "matter ws://matter.local:5580/ws node 5 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "path": "1/6/0",
+    "ok": true,
+    "refused": null,
+    "value": false,
+    "result": {
+      "1/6/0": false
+    },
+    "body": "false",
+    "json": false
+  },
+  "matter ws://matter.local:5580/ws node 7 1/OnOff/OnOff": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 7,
+    "path": "1/6/0",
+    "ok": false,
+    "refused": {
+      "code": 5,
+      "details": "Node 7 is not (yet) available"
+    },
+    "value": null,
+    "result": null,
+    "body": "",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 4 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 4 1/OnOff Off": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 4,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "Off",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 5 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 5 1/OnOff Off": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 5,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "Off",
+    "ok": true,
+    "refused": null,
+    "value": null,
+    "result": null,
+    "body": "null",
+    "json": null
+  },
+  "matter command ws://matter.local:5580/ws node 7 1/OnOff On": {
+    "url": "ws://matter.local:5580/ws",
+    "node": 7,
+    "endpoint": 1,
+    "cluster": 6,
+    "command": "On",
+    "ok": false,
+    "refused": {
+      "code": 5,
+      "details": "Node 7 is not (yet) available"
+    },
+    "value": null,
+    "result": null,
+    "body": "",
+    "json": null
+  },
+  "bacnet bacnet://bms.local analog-input:5 present-value": {
+    "error": "bacnet://bms.local: no answer from analog-input:5 within 5 s"
+  },
+  "discover mdns _matter._tcp": {
+    "method": "mdns",
+    "query": "_matter._tcp",
+    "ok": true,
+    "found": 2,
+    "devices": [
+      {
+        "name": "ABCD1234-0000000000000004",
+        "service": "_matter._tcp.local",
+        "host": "kettle-plug.local",
+        "address": "192.168.1.40",
+        "addresses": [
+          "192.168.1.40"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      },
+      {
+        "name": "ABCD1234-0000000000000005",
+        "service": "_matter._tcp.local",
+        "host": "heater-plug.local",
+        "address": "192.168.1.41",
+        "addresses": [
+          "192.168.1.41"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      }
+    ],
+    "body": "[{\"name\": \"ABCD1234-0000000000000004\", \"service\": \"_matter._tcp.local\", \"host\": \"kettle-plug.local\", \"address\": \"192.168.1.40\", \"addresses\": [\"192.168.1.40\"], \"port\": 5540, \"txt\": {\"SII\": \"5000\"}}, {\"name\": \"ABCD1234-0000000000000005\", \"service\": \"_matter._tcp.local\", \"host\": \"heater-plug.local\", \"address\": \"192.168.1.41\", \"addresses\": [\"192.168.1.41\"], \"port\": 5540, \"txt\": {\"SII\": \"5000\"}}]",
+    "json": [
+      {
+        "name": "ABCD1234-0000000000000004",
+        "service": "_matter._tcp.local",
+        "host": "kettle-plug.local",
+        "address": "192.168.1.40",
+        "addresses": [
+          "192.168.1.40"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      },
+      {
+        "name": "ABCD1234-0000000000000005",
+        "service": "_matter._tcp.local",
+        "host": "heater-plug.local",
+        "address": "192.168.1.41",
+        "addresses": [
+          "192.168.1.41"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      }
+    ]
+  },
+  "discover mdns _hap._tcp": {
+    "method": "mdns",
+    "query": "_hap._tcp",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "discover ssdp upnp:rootdevice": {
+    "method": "ssdp",
+    "query": "upnp:rootdevice",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.30",
+        "location": "http://192.168.1.30:49152/desc.xml",
+        "server": "Linux UPnP/1.0",
+        "st": "upnp:rootdevice",
+        "usn": "uuid:tv::upnp:rootdevice",
+        "friendly_name": "Living room TV",
+        "manufacturer": "Acme",
+        "model": "TV-9"
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.30\", \"location\": \"http://192.168.1.30:49152/desc.xml\", \"server\": \"Linux UPnP/1.0\", \"st\": \"upnp:rootdevice\", \"usn\": \"uuid:tv::upnp:rootdevice\", \"friendly_name\": \"Living room TV\", \"manufacturer\": \"Acme\", \"model\": \"TV-9\"}]",
+    "json": [
+      {
+        "address": "192.168.1.30",
+        "location": "http://192.168.1.30:49152/desc.xml",
+        "server": "Linux UPnP/1.0",
+        "st": "upnp:rootdevice",
+        "usn": "uuid:tv::upnp:rootdevice",
+        "friendly_name": "Living room TV",
+        "manufacturer": "Acme",
+        "model": "TV-9"
+      }
+    ]
+  },
+  "discover bacnet who-is": {
+    "method": "bacnet",
+    "query": "who-is",
+    "ok": true,
+    "found": 2,
+    "devices": [
+      {
+        "instance": 1234,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": null,
+        "mac": null,
+        "max_apdu": 1476,
+        "segmentation": 3,
+        "vendor": 5
+      },
+      {
+        "instance": 77,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": 5,
+        "mac": "0c",
+        "max_apdu": 480,
+        "segmentation": 3,
+        "vendor": 24
+      }
+    ],
+    "body": "[{\"instance\": 1234, \"address\": \"192.168.1.60\", \"port\": 47808, \"network\": null, \"mac\": null, \"max_apdu\": 1476, \"segmentation\": 3, \"vendor\": 5}, {\"instance\": 77, \"address\": \"192.168.1.60\", \"port\": 47808, \"network\": 5, \"mac\": \"0c\", \"max_apdu\": 480, \"segmentation\": 3, \"vendor\": 24}]",
+    "json": [
+      {
+        "instance": 1234,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": null,
+        "mac": null,
+        "max_apdu": 1476,
+        "segmentation": 3,
+        "vendor": 5
+      },
+      {
+        "instance": 77,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": 5,
+        "mac": "0c",
+        "max_apdu": 480,
+        "segmentation": 3,
+        "vendor": 24
+      }
+    ]
+  },
+  "discover scan 192.168.1.0/24 ports 22,80,443,502,1883,5540,8080": {
+    "method": "scan",
+    "query": "192.168.1.0/24",
+    "ok": true,
+    "found": 3,
+    "devices": [
+      {
+        "address": "192.168.1.1",
+        "open": [
+          80,
+          443
+        ]
+      },
+      {
+        "address": "192.168.1.40",
+        "open": [
+          5540
+        ]
+      },
+      {
+        "address": "192.168.1.50",
+        "open": [
+          22,
+          502
+        ]
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.1\", \"open\": [80, 443]}, {\"address\": \"192.168.1.40\", \"open\": [5540]}, {\"address\": \"192.168.1.50\", \"open\": [22, 502]}]",
+    "json": [
+      {
+        "address": "192.168.1.1",
+        "open": [
+          80,
+          443
+        ]
+      },
+      {
+        "address": "192.168.1.40",
+        "open": [
+          5540
+        ]
+      },
+      {
+        "address": "192.168.1.50",
+        "open": [
+          22,
+          502
+        ]
+      }
+    ]
+  },
+  "discover scan 10.9.0.0/24 ports 22,80,443,502,1883,5540,8080": {
+    "method": "scan",
+    "query": "10.9.0.0/24",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "discover scan 192.168.1.50 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.50",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.50",
+        "open": [
+          80,
+          9100
+        ]
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.50\", \"open\": [80, 9100]}]",
+    "json": [
+      {
+        "address": "192.168.1.50",
+        "open": [
+          80,
+          9100
+        ]
+      }
+    ]
+  },
+  "discover scan 192.168.1.51 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.51",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "discover scan 192.168.1.52 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.52",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "memory write device-offline/192.168.1.52": {
+    "key": "device-offline/192.168.1.52",
+    "exists": true,
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T12:00:00Z\"}",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    }
+  },
+  "discover scan 192.168.1.53 ports 22,53,80,443,445,502,554,1883,5540,8008,8080,8443,9100,62078": {
+    "method": "scan",
+    "query": "192.168.1.53",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.53",
+        "open": []
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.53\", \"open\": []}]",
+    "json": [
+      {
+        "address": "192.168.1.53",
+        "open": []
+      }
+    ]
+  },
+  "memory write device-offline/192.168.1.53": {
+    "key": "device-offline/192.168.1.53",
+    "exists": true,
+    "value": {
+      "state": "up",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-25T12:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-25T12:00:00Z\"}",
+    "written": "2026-10-25T12:00:00Z",
+    "expires": null,
+    "existed": true,
+    "previous": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    }
+  },
+  "memory device-offline/192.168.1.50": {
+    "key": "device-offline/192.168.1.50",
+    "exists": true,
+    "value": {
+      "state": "up",
+      "since": "2026-10-24T08:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-24T08:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-24T08:00:00Z\"}",
+    "written": "2026-10-24T08:00:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.51": {
+    "key": "device-offline/192.168.1.51",
+    "exists": true,
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T11:15:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T11:15:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T11:15:00Z\"}",
+    "written": "2026-10-25T11:15:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.52": {
+    "key": "device-offline/192.168.1.52",
+    "exists": true,
+    "value": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    },
+    "json": {
+      "state": "up",
+      "since": "2026-10-20T00:00:00Z"
+    },
+    "body": "{\"state\": \"up\", \"since\": \"2026-10-20T00:00:00Z\"}",
+    "written": "2026-10-20T00:00:00Z",
+    "expires": null
+  },
+  "memory device-offline/192.168.1.53": {
+    "key": "device-offline/192.168.1.53",
+    "exists": true,
+    "value": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    },
+    "json": {
+      "state": "down",
+      "since": "2026-10-25T10:00:00Z"
+    },
+    "body": "{\"state\": \"down\", \"since\": \"2026-10-25T10:00:00Z\"}",
+    "written": "2026-10-25T10:00:00Z",
+    "expires": null
   }
 }
