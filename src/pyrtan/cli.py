@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--record", help="save every response (HTTP and the other sources) to this fixture")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
     p.add_argument("--hub", help="forward trees not held here to this hub or service")
-    p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable)")
+    p.add_argument("--env", action="append", default=[], metavar="K=V", help="a value trees may read as {{ env.K }} (repeatable); $PYRTAN_ENV_K does the same")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default="any", help="'public' refuses private, loopback and link-local addresses")
     _token_arg(p, "the token the hub (--hub) requires, if any", sign=False)
 
@@ -136,6 +136,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("memory", help="what memory nodes keep across runs: every key, its value and when it was written; --forget KEY drops one")
     p.add_argument("file", nargs="?", default=os.environ.get("PYRTAN_MEMORY"), help="the --memory file (default $PYRTAN_MEMORY)")
     p.add_argument("--forget", action="append", default=[], metavar="KEY", help="forget this key (repeatable)")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("discover", help="what is on this box's network: mDNS services, UPnP devices, BACnet devices, or a TCP scan of a network")
+    p.add_argument("method", choices=["mdns", "ssdp", "bacnet", "scan"], help="mdns: DNS-SD (a service such as _matter._tcp, or none for the service types); ssdp: UPnP; bacnet: Who-Is; scan: which hosts of a network answer on which ports")
+    p.add_argument("query", nargs="?", default=None, help="the mdns service, the ssdp search target (ssdp:all), or the network to scan (192.168.1.0/24)")
+    p.add_argument("--ports", default=None, help="scan: comma-separated ports (default " + ",".join(str(x) for x in (22, 80, 443, 502, 1883, 5540, 8080, 47808)) + ")")
+    p.add_argument("--wait", type=float, default=3.0, help="seconds to listen for answers (default 3)")
+    p.add_argument("--timeout", type=float, default=30.0, help="scan: seconds for the whole scan (default 30)")
+    p.add_argument("--names", action="store_true", help="scan: look up each host's name")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("match", help="how a sentence reads against the trees: the rewrites, every trigger's verdict, the winner")
@@ -176,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file (JSON lines) so they survive a restart (default $PYRTAN_UNANSWERED)")
     p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file (JSON lines) across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
+    p.add_argument("--watch-history", metavar="FILE", default=os.environ.get("PYRTAN_WATCH_HISTORY"), help="where each watch's timeline (a month of what its runs came to) is kept across restarts (default $PYRTAN_WATCH_HISTORY; in this process otherwise)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the trees' [[watches]]: a clock, a file, a topic or a serial line starts a run (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="'public' refuses private, loopback and link-local addresses (default $PYRTAN_EGRESS or any)")
     _access_args(p)
@@ -186,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--env", action="append", default=[], metavar="K=V")
     p.add_argument("--gaps", metavar="FILE", help="keep gaps in this file")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
+    p.add_argument("--watch-history", metavar="FILE", default=os.environ.get("PYRTAN_WATCH_HISTORY"), help="where each watch's timeline (a month of what its runs came to) is kept across restarts (default $PYRTAN_WATCH_HISTORY; in this process otherwise)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"))
     p.add_argument("--hub", help="delegate to this hub what the trees here do not hold")
     p.add_argument("--json", action="store_true", help="one JSON outcome per line instead of prose")
@@ -219,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--unanswered", metavar="FILE", default=os.environ.get("PYRTAN_UNANSWERED"), help="keep unanswered sentences in this file across restarts (default $PYRTAN_UNANSWERED)")
     p.add_argument("--suggestions", metavar="FILE", default=os.environ.get("PYRTAN_SUGGESTIONS"), help="keep what agents suggest in this file across restarts (default $PYRTAN_SUGGESTIONS)")
     p.add_argument("--memory", metavar="FILE", default=os.environ.get("PYRTAN_MEMORY"), help="where the hub's own trees' memory nodes keep what they remember across runs (default $PYRTAN_MEMORY; in this process otherwise)")
+    p.add_argument("--watch-history", metavar="FILE", default=os.environ.get("PYRTAN_WATCH_HISTORY"), help="where each of the hub's own watches keeps its timeline across restarts (default $PYRTAN_WATCH_HISTORY; in this process otherwise)")
     p.add_argument("--watch", action="store_true", default=os.environ.get("PYRTAN_WATCH", "").lower() in ("1", "true", "yes"), help="run the hub's own trees' [[watches]] (default $PYRTAN_WATCH)")
     p.add_argument("--egress", choices=EGRESS_POLICIES, default=os.environ.get("PYRTAN_EGRESS", "any"), help="for the hub's own trees, and for its requests to hosts it did not choose (followed hubs and their followers, the hub list, identity documents; never --peer or a service registered with the token): 'public' refuses private addresses")
     p.add_argument("--peer", action="append", default=[], help="a service URL to start with (repeatable; services may also register themselves)")
@@ -457,7 +469,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _warn_secret_flags(sys.argv[1:] if argv is None else argv)
     commands = {
-        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
+        "check": cmd_check, "list": cmd_list, "run": cmd_run, "test": cmd_test, "diff": cmd_diff, "memory": cmd_memory, "discover": cmd_discover, "match": cmd_match, "ask": cmd_ask, "chat": cmd_chat, "serve": cmd_serve, "hub": cmd_hub, "gaps": cmd_gaps, "unanswered": cmd_unanswered, "new": cmd_new, "build": cmd_build,
         "watch": cmd_watch, "watches": cmd_watches, "grow": cmd_grow, "suggestions": cmd_suggestions,
         "search": cmd_search, "pull": cmd_pull, "index": cmd_index, "publish": cmd_publish, "console": cmd_console,
         "follow": cmd_follow, "join": cmd_join, "network": cmd_network, "unfollow": cmd_unfollow, "drop": cmd_drop, "peers": cmd_peers, "directory": cmd_directory, "reports": cmd_reports,
@@ -607,6 +619,16 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0 if not reg.errors else 1
 
 
+def _env(items: list[str]) -> dict[str, Any]:
+    """What trees read as ``{{ env.NAME }}``: each ``PYRTAN_ENV_NAME`` in the
+    environment (so a compose file or a unit can hold a token without
+    putting it on the command line), then each ``--env NAME=VALUE``, which
+    wins."""
+    out = {k[len("PYRTAN_ENV_"):]: v for k, v in os.environ.items() if k.startswith("PYRTAN_ENV_") and len(k) > len("PYRTAN_ENV_")}
+    out.update(_kv(items))
+    return out
+
+
 def _kv(items: list[str]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for item in items:
@@ -633,7 +655,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.record:
         recorder = RecordingTransport(transport, adapters)
         transport = adapters = recorder
-    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_kv(args.env), adapters=adapters)
+    runner = Runner(reg, transport, resolver=RemoteResolver(args.hub, args.token) if args.hub else None, env=_env(args.env), adapters=adapters)
     if args.tree:
         outcome = runner.run_tree(args.tree, _kv(args.input), dry_run=args.dry_run)
     else:
@@ -737,6 +759,57 @@ def cmd_diff(args: argparse.Namespace) -> int:
         print(c.render())
     print(f"{new.name}: {len(result.changed)} of {total} test run(s) changed against {label}")
     return 1 if result.changed else 0
+
+
+def cmd_discover(args: argparse.Namespace) -> int:
+    """What is on this box's network, for the person writing trees: the
+    addresses and services to put in a tree's hosts, networks and nodes.
+    The person at the command is the operator, so no allow-list applies."""
+    from . import discover
+    from .transport import TransportError
+
+    spec: dict[str, Any] = {"wait": args.wait}
+    if args.method == "scan":
+        if not args.query:
+            print("pyrtan discover scan: name the network, such as 192.168.1.0/24", file=sys.stderr)
+            return 2
+        spec["scan"] = args.query
+        if args.ports:
+            try:
+                spec["ports"] = [int(x) for x in args.ports.split(",") if x.strip()]
+            except ValueError:
+                print("pyrtan discover: --ports is numbers separated by commas", file=sys.stderr)
+                return 2
+        spec["names"] = args.names
+    elif args.method == "bacnet":
+        spec["bacnet"] = "who-is"
+    else:
+        spec[args.method] = args.query or ("" if args.method == "mdns" else "ssdp:all")
+    try:
+        out = discover.perform(spec, args.timeout if args.method == "scan" else args.wait + 1)
+    except TransportError as e:
+        print(f"pyrtan discover: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(out["devices"], indent=2, ensure_ascii=False))
+        return 0
+    if not out["devices"]:
+        print("nothing answered" + (" (in a container, multicast and broadcast need the host's network)" if args.method != "scan" else ""))
+        return 0
+    for d in out["devices"]:
+        if args.method == "scan":
+            print(f"{d['address']:<16} " + (", ".join(str(x) for x in d["open"]) or "up, nothing open") + (f"  ({d['name']})" if d.get("name") else ""))
+        elif args.method == "bacnet":
+            where = f"{d['address']}:{d['port']}" + (f" network {d['network']} mac {d['mac']}" if d.get("network") is not None else "")
+            print(f"device:{d['instance']:<10} {where}  vendor {d['vendor']}")
+        elif args.method == "ssdp":
+            name = " / ".join(x for x in (d.get("friendly_name"), d.get("manufacturer"), d.get("model")) if x) or d.get("server") or ""
+            print(f"{d['address']:<16} {name}  {d['st']}")
+        elif "name" in d:
+            print(f"{d['address'] or '?':<16} {d['name']}  {d['host']}:{d['port']}" + (f"  {d['txt']}" if d.get("txt") else ""))
+        else:
+            print(d["service"])
+    return 0
 
 
 def cmd_memory(args: argparse.Namespace) -> int:
@@ -1078,7 +1151,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
     users = _ldap_users(args)
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_kv(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_env(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users, watch_history=args.watch_history)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -1100,8 +1173,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
     reg = Registry.from_paths(paths)
     for path, err in reg.errors.items():
         print(f"pyrtan: {path}: {err}", file=sys.stderr)
-    service = Service(reg, name="watch", hub=args.hub, env=_kv(args.env), token=args.token, gaps=args.gaps, egress=args.egress, memory=args.memory)
-    from .watch import Watcher
+    service = Service(reg, name="watch", hub=args.hub, env=_env(args.env), token=args.token, gaps=args.gaps, egress=args.egress, memory=args.memory)
+    from .watch import Timelines, Watcher
 
     def after(w, event, outcome):
         if args.json:
@@ -1110,7 +1183,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
             changed = " (the path changed)" if w.path_changed_at and w.last_at == w.path_changed_at else ""
             print(f"{time.strftime('%H:%M:%S')} {w.name}: {outcome.status}" + (f" ({outcome.reason})" if outcome.reason else "") + (f": {outcome.say}" if outcome.say else "") + changed, flush=True)
 
-    watcher = Watcher(reg, service.run_watched, env=_kv(args.env), egress=args.egress, after=after, note=lambda text: print(f"pyrtan: {text}", file=sys.stderr, flush=True)).start()
+    note = lambda text: print(f"pyrtan: {text}", file=sys.stderr, flush=True)  # noqa: E731
+    watcher = Watcher(reg, service.run_watched, env=_env(args.env), egress=args.egress, after=after, note=note, timelines=Timelines(args.watch_history, note=note)).start()
     if not len(watcher):
         print("pyrtan watch: no tree here has [[watches]]; nothing to do", file=sys.stderr)
         watcher.stop()
@@ -1413,8 +1487,8 @@ def cmd_hub(args: argparse.Namespace) -> int:
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
             federate=args.federate or bool(args.advertise) or bool(follow) or bool(join) or args.listed or args.lan or args.chat_reach > 0, advertise=args.advertise, federation_secret=args.federation_secret,
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
-            trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_kv(args.env), gaps=args.gaps, egress=args.egress,
-            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, memory=args.memory, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
+            trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_env(args.env), gaps=args.gaps, egress=args.egress,
+            store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, memory=args.memory, watch_history=args.watch_history, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
             allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain, users=users,
         )
     except IdentityError as e:
