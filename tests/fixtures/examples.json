@@ -1999,5 +1999,219 @@
   },
   "bacnet bacnet://bms.local analog-input:5 present-value": {
     "error": "bacnet://bms.local: no answer from analog-input:5 within 5 s"
+  },
+  "discover mdns _matter._tcp": {
+    "method": "mdns",
+    "query": "_matter._tcp",
+    "ok": true,
+    "found": 2,
+    "devices": [
+      {
+        "name": "ABCD1234-0000000000000004",
+        "service": "_matter._tcp.local",
+        "host": "kettle-plug.local",
+        "address": "192.168.1.40",
+        "addresses": [
+          "192.168.1.40"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      },
+      {
+        "name": "ABCD1234-0000000000000005",
+        "service": "_matter._tcp.local",
+        "host": "heater-plug.local",
+        "address": "192.168.1.41",
+        "addresses": [
+          "192.168.1.41"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      }
+    ],
+    "body": "[{\"name\": \"ABCD1234-0000000000000004\", \"service\": \"_matter._tcp.local\", \"host\": \"kettle-plug.local\", \"address\": \"192.168.1.40\", \"addresses\": [\"192.168.1.40\"], \"port\": 5540, \"txt\": {\"SII\": \"5000\"}}, {\"name\": \"ABCD1234-0000000000000005\", \"service\": \"_matter._tcp.local\", \"host\": \"heater-plug.local\", \"address\": \"192.168.1.41\", \"addresses\": [\"192.168.1.41\"], \"port\": 5540, \"txt\": {\"SII\": \"5000\"}}]",
+    "json": [
+      {
+        "name": "ABCD1234-0000000000000004",
+        "service": "_matter._tcp.local",
+        "host": "kettle-plug.local",
+        "address": "192.168.1.40",
+        "addresses": [
+          "192.168.1.40"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      },
+      {
+        "name": "ABCD1234-0000000000000005",
+        "service": "_matter._tcp.local",
+        "host": "heater-plug.local",
+        "address": "192.168.1.41",
+        "addresses": [
+          "192.168.1.41"
+        ],
+        "port": 5540,
+        "txt": {
+          "SII": "5000"
+        }
+      }
+    ]
+  },
+  "discover mdns _hap._tcp": {
+    "method": "mdns",
+    "query": "_hap._tcp",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
+  },
+  "discover ssdp upnp:rootdevice": {
+    "method": "ssdp",
+    "query": "upnp:rootdevice",
+    "ok": true,
+    "found": 1,
+    "devices": [
+      {
+        "address": "192.168.1.30",
+        "location": "http://192.168.1.30:49152/desc.xml",
+        "server": "Linux UPnP/1.0",
+        "st": "upnp:rootdevice",
+        "usn": "uuid:tv::upnp:rootdevice",
+        "friendly_name": "Living room TV",
+        "manufacturer": "Acme",
+        "model": "TV-9"
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.30\", \"location\": \"http://192.168.1.30:49152/desc.xml\", \"server\": \"Linux UPnP/1.0\", \"st\": \"upnp:rootdevice\", \"usn\": \"uuid:tv::upnp:rootdevice\", \"friendly_name\": \"Living room TV\", \"manufacturer\": \"Acme\", \"model\": \"TV-9\"}]",
+    "json": [
+      {
+        "address": "192.168.1.30",
+        "location": "http://192.168.1.30:49152/desc.xml",
+        "server": "Linux UPnP/1.0",
+        "st": "upnp:rootdevice",
+        "usn": "uuid:tv::upnp:rootdevice",
+        "friendly_name": "Living room TV",
+        "manufacturer": "Acme",
+        "model": "TV-9"
+      }
+    ]
+  },
+  "discover bacnet who-is": {
+    "method": "bacnet",
+    "query": "who-is",
+    "ok": true,
+    "found": 2,
+    "devices": [
+      {
+        "instance": 1234,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": null,
+        "mac": null,
+        "max_apdu": 1476,
+        "segmentation": 3,
+        "vendor": 5
+      },
+      {
+        "instance": 77,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": 5,
+        "mac": "0c",
+        "max_apdu": 480,
+        "segmentation": 3,
+        "vendor": 24
+      }
+    ],
+    "body": "[{\"instance\": 1234, \"address\": \"192.168.1.60\", \"port\": 47808, \"network\": null, \"mac\": null, \"max_apdu\": 1476, \"segmentation\": 3, \"vendor\": 5}, {\"instance\": 77, \"address\": \"192.168.1.60\", \"port\": 47808, \"network\": 5, \"mac\": \"0c\", \"max_apdu\": 480, \"segmentation\": 3, \"vendor\": 24}]",
+    "json": [
+      {
+        "instance": 1234,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": null,
+        "mac": null,
+        "max_apdu": 1476,
+        "segmentation": 3,
+        "vendor": 5
+      },
+      {
+        "instance": 77,
+        "address": "192.168.1.60",
+        "port": 47808,
+        "network": 5,
+        "mac": "0c",
+        "max_apdu": 480,
+        "segmentation": 3,
+        "vendor": 24
+      }
+    ]
+  },
+  "discover scan 192.168.1.0/24 ports 22,80,443,502,1883,5540,8080": {
+    "method": "scan",
+    "query": "192.168.1.0/24",
+    "ok": true,
+    "found": 3,
+    "devices": [
+      {
+        "address": "192.168.1.1",
+        "open": [
+          80,
+          443
+        ]
+      },
+      {
+        "address": "192.168.1.40",
+        "open": [
+          5540
+        ]
+      },
+      {
+        "address": "192.168.1.50",
+        "open": [
+          22,
+          502
+        ]
+      }
+    ],
+    "body": "[{\"address\": \"192.168.1.1\", \"open\": [80, 443]}, {\"address\": \"192.168.1.40\", \"open\": [5540]}, {\"address\": \"192.168.1.50\", \"open\": [22, 502]}]",
+    "json": [
+      {
+        "address": "192.168.1.1",
+        "open": [
+          80,
+          443
+        ]
+      },
+      {
+        "address": "192.168.1.40",
+        "open": [
+          5540
+        ]
+      },
+      {
+        "address": "192.168.1.50",
+        "open": [
+          22,
+          502
+        ]
+      }
+    ]
+  },
+  "discover scan 10.9.0.0/24 ports 22,80,443,502,1883,5540,8080": {
+    "method": "scan",
+    "query": "10.9.0.0/24",
+    "ok": true,
+    "found": 0,
+    "devices": [],
+    "body": "[]",
+    "json": []
   }
 }

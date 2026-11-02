@@ -192,13 +192,31 @@ def test_plugs_through_a_matter_controller(runner):
     assert dry.status == "asked" and dry.question == "Dry run: switch would send On to node 4 (OnOff) at ws://matter.local:5580/ws. Go ahead?"
 
 
+def test_find_devices_by_discovery(runner):
+    out = runner.run_intent("find matter devices")
+    assert out.status == "done" and out.say == "2 matter device(s) on the network." and [d["host"] for d in out.output["devices"]] == ["kettle-plug.local", "heater-plug.local"]
+    assert out.trace.steps[2].summary == "discover mdns _matter._tcp -> 2 found"
+    assert runner.run_intent("which homekit devices are on the network").say == "No homekit devices answered."
+    assert runner.run_intent("find upnp devices").output["devices"][0]["friendly_name"] == "Living room TV"
+    assert [d["instance"] for d in runner.run_intent("find bacnet devices").output["devices"]] == [1234, 77]
+    assert runner.run_intent("find toaster devices").reason == "bad-input"
+
+
+def test_network_scan_within_its_networks(runner):
+    out = runner.run_intent("scan 192.168.1.0/24")
+    assert out.say == "3 host(s) up on 192.168.1.0/24." and out.output["hosts"][2] == {"address": "192.168.1.50", "open": [22, 502]}
+    assert runner.run_intent("what is on 10.9.0.0/24").output["up"] == 0
+    refused = runner.run_intent("scan 8.8.8.0/24")  # a public network: refused before anything is sent
+    assert refused.reason == "network-not-allowed" and [s.kind for s in refused.trace.steps] == ["intent"]
+
+
 def test_capabilities_name_the_sources_and_lists(examples):
     caps = {t["name"]: t for t in examples.capabilities()}
     assert caps["disk-space"]["sources"] == ["shell"] and caps["disk-space"]["commands"] == ["df"] and "paths" not in caps["disk-space"]
     assert caps["room-temperature"]["sources"] == ["queue"] and caps["room-temperature"]["topics"] == ["home/+/temperature"]
     assert caps["weather"]["sources"] == ["http"] and caps["modem-check"]["devices"] == ["/dev/ttyUSB*", "/dev/ttyACM*"]
-    for name, source in (("tank-level", "modbus"), ("zone-temperature", "bacnet"), ("ups-battery", "snmp"), ("soil-moisture", "coap"), ("plug-switch", "matter")):
-        assert caps[name]["sources"] == [source] and caps[name]["hosts"]
+    for name, source in (("tank-level", "modbus"), ("zone-temperature", "bacnet"), ("ups-battery", "snmp"), ("soil-moisture", "coap"), ("plug-switch", "matter"), ("network-scan", "discover")):
+        assert caps[name]["sources"] == [source] and (caps[name]["hosts"] or caps[name]["networks"])
 
 
 # ---------------------------------------------------------------- trees that run in a browser too
