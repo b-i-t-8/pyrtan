@@ -481,8 +481,9 @@
   // live on a service; a member refuses them unless a recorded fixture
   // answers for them. The allow-list checks and the fixture keys are the
   // Python ones.
-  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue", "memory"];
-  const LIST_NAMES = ["paths", "commands", "devices", "topics", "keys"];
+  const FIELD_SOURCES = ["modbus", "bacnet", "snmp", "coap", "matter"];
+  const SOURCES = ["http", "browser", "file", "shell", "serial", "queue", "memory"].concat(FIELD_SOURCES, ["discover"]);
+  const LIST_NAMES = ["paths", "commands", "devices", "topics", "keys", "networks"];
   const MQTT_PORTS = { mqtt: 1883, mqtts: 8883 };
   function absolutePath(path) {
     path = String(path);
@@ -532,11 +533,46 @@
     return false;
   }
   const keyAllowed = (keys, key) => keys.some((k) => k === "*" || globMatch(k, String(key)));
+  // discover.network_allowed, for IPv4: an address or a CIDR inside one of the networks.
+  function ipv4Net(text) {
+    const m = /^\s*(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?\s*$/.exec(String(text));
+    if (!m || m.slice(1, 5).some((o) => Number(o) > 255) || (m[5] !== undefined && Number(m[5]) > 32)) return null;
+    const bits = m[5] === undefined ? 32 : Number(m[5]);
+    const addr = m.slice(1, 5).reduce((a, o) => a * 256 + Number(o), 0);
+    const size = 2 ** (32 - bits);
+    return [addr - (addr % size), bits];
+  }
+  function networkAllowed(networks, target) {
+    const t = ipv4Net(target);
+    if (!t) return false;
+    for (const entry of networks) {
+      if (entry === "*") return true;
+      const n = ipv4Net(entry);
+      if (n && t[1] >= n[1] && t[0] - (t[0] % 2 ** (32 - n[1])) === n[0]) return true;
+    }
+    return false;
+  }
+  const discoverMethod = (spec) => ["mdns", "ssdp", "bacnet", "scan"].find((m) => m in spec) || "?";
   function broker(url) {
     const m = /^(mqtts?):\/\/([^/:?#]+)(?::(\d+))?/.exec(String(url));
     if (!m) throw new Error(`${pyrepr(String(url))} is not mqtt://host[:port] or mqtts://host[:port]`);
     return [m[1], m[2], m[3] ? Number(m[3]) : MQTT_PORTS[m[1]]];
   }
+  // A field protocol's URL names the device (adapters.field_endpoint and each protocol's endpoint()).
+  const FIELD_SCHEMES = { modbus: { modbus: 502 }, bacnet: { bacnet: 47808 }, snmp: { snmp: 161 }, coap: { coap: 5683 }, matter: { ws: 80, wss: 443 } };
+  const FIELD_SHAPES = { modbus: "modbus://host[:port]", bacnet: "bacnet://host[:port]", snmp: "snmp://host[:port]", coap: "coap://host[:port]/path", matter: "ws://host[:port]/path or wss://…, a Matter controller's WebSocket" };
+  function fieldEndpoint(source, url) {
+    const m = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/(?:[^@/?#]*@)?([^/:?#]*)(?::(\d+))?/.exec(String(url));
+    const scheme = m ? m[1].toLowerCase() : "", host = m ? m[2].toLowerCase() : "";
+    if (source === "coap" && scheme === "coaps") throw new Error(`${pyrepr(String(url))}: coaps:// needs DTLS, which this does not speak; use coap://`);
+    const ports = FIELD_SCHEMES[source];
+    if (!m || !(scheme in ports) || !host) throw new Error(`${pyrepr(String(url))} is not ${FIELD_SHAPES[source]}`);
+    return [scheme, host, m[3] ? Number(m[3]) : ports[scheme]];
+  }
+  const modbusMode = (spec) => ("write" in spec ? ["write", String(spec.write)] : ["read", String(spec.read === undefined ? "holding" : spec.read)]);
+  const snmpOids = (spec) => (Array.isArray(spec.get) ? spec.get : [spec.get]).map((o) => pyStr(o));
+  const matterMode = (spec) => ("command" in spec ? "command" : "write" in spec ? "write" : "read");
+  const dflt = (v, d) => (v === undefined ? d : v);
   const arg = (a) => (typeof a === "string" ? a : pyJson(a));
   function adapterKey(source, spec) {
     if (source === "file") return `file ${"write" in spec ? "write " : "append" in spec ? "append " : ""}${spec.path}`;
@@ -545,6 +581,23 @@
     if (source === "queue") return `queue ${"publish" in spec ? "publish " : ""}${spec.url} ${spec.topic}`;
     if (source === "browser") return `browser ${spec.url}`;
     if (source === "memory") { const m = ["write", "add", "delete"].find((k) => k in spec); return `memory ${m ? m + " " : ""}${spec.key}`; }
+    if (source === "modbus") {
+      const [mode, table] = modbusMode(spec), count = pyStr(dflt(spec.count, 1));
+      return `modbus ${mode === "write" ? "write " : ""}${pyStr(spec.url)} unit ${pyStr(dflt(spec.unit, 1))} ${table} ${pyStr(dflt(spec.address, 0))}` + (mode === "read" && count !== "1" ? ` x${count}` : "");
+    }
+    if (source === "bacnet") return `bacnet ${"write" in spec ? "write " : ""}${pyStr(spec.url)} ${pyStr(spec.object)} ${pyStr(dflt(spec.property, "present-value"))}` + (spec.index !== undefined && spec.index !== null ? `[${pyStr(spec.index)}]` : "");
+    if (source === "snmp") {
+      if ("set" in spec) return `snmp set ${pyStr(spec.url)} ${pyStr((spec.set || {}).oid)}`;
+      if ("walk" in spec) return `snmp walk ${pyStr(spec.url)} ${pyStr(spec.walk)}`;
+      return `snmp ${pyStr(spec.url)} ` + snmpOids(spec).join(" ");
+    }
+    if (source === "coap") return `coap ${String(dflt(spec.method, "GET")).toUpperCase()} ${pyStr(spec.url)}`;
+    if (source === "matter") {
+      const mode = matterMode(spec);
+      if (mode === "command") return `matter command ${pyStr(spec.url)} node ${pyStr(spec.node)} ${pyStr(dflt(spec.endpoint, 1))}/${pyStr(spec.cluster)} ${pyStr(spec.command)}`;
+      return `matter ${mode === "write" ? "write " : ""}${pyStr(spec.url)} node ${pyStr(spec.node)} ${pyStr(spec[mode])}`;
+    }
+    if (source === "discover") return `discover ${what(source, spec)}`;
     throw new Error(source);
   }
   function what(source, spec) {
@@ -553,10 +606,30 @@
     if (source === "serial") return String(spec.device);
     if (source === "queue") return `${spec.topic} at ${spec.url}`;
     if (source === "memory") return String(spec.key);
+    if (source === "modbus") {
+      const [mode, table] = modbusMode(spec), count = pyStr(dflt(spec.count, 1));
+      return `${table} ${pyStr(dflt(spec.address, 0))}` + (mode === "read" && count !== "1" ? ` x${count}` : "") + ` on unit ${pyStr(dflt(spec.unit, 1))} at ${pyStr(spec.url)}`;
+    }
+    if (source === "bacnet") return `${pyStr(spec.object)} ${pyStr(dflt(spec.property, "present-value"))}` + (spec.index !== undefined && spec.index !== null ? `[${pyStr(spec.index)}]` : "") + ` at ${pyStr(spec.url)}`;
+    if (source === "snmp") {
+      if ("set" in spec) return `${pyStr((spec.set || {}).oid)} at ${pyStr(spec.url)}`;
+      if ("walk" in spec) return `walk ${pyStr(spec.walk)} at ${pyStr(spec.url)}`;
+      return snmpOids(spec).join(", ") + ` at ${pyStr(spec.url)}`;
+    }
+    if (source === "coap") return `${String(dflt(spec.method, "GET")).toUpperCase()} ${pyStr(spec.url)}`;
+    if (source === "matter") {
+      const mode = matterMode(spec);
+      if (mode === "command") return `node ${pyStr(spec.node)} ${pyStr(spec.cluster)} ${pyStr(spec.command)} at ${pyStr(spec.url)}`;
+      return `node ${pyStr(spec.node)} ${pyStr(spec[mode])} at ${pyStr(spec.url)}`;
+    }
+    if (source === "discover") {
+      const method = discoverMethod(spec);
+      return `${method} ${pyStr(spec[method])}`.trimEnd() + (method === "scan" && Array.isArray(spec.ports) ? " ports " + spec.ports.map(pyStr).join(",") : "");
+    }
     return String(spec.url);
   }
   // A good answer is the one a node's expect describes (adapters.good).
-  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists" };
+  const GOOD = { http: "ok", browser: "ok", shell: "ok", file: "exists", queue: "received", serial: "complete", memory: "exists", modbus: "ok", bacnet: "ok", snmp: "ok", coap: "ok", matter: "ok", discover: "ok" };
   const good = (source, observed) => { const key = GOOD[source || ""]; return key === undefined ? true : observed[key] === true; };
   // What an act is about to do, in the words a confirmation asks with (adapters.would).
   function would(source, spec) {
@@ -566,6 +639,12 @@
     if (source === "queue" && "publish" in spec) return `publish ${carried(spec.publish)} to ${spec.topic} at ${spec.url}`;
     if (source === "serial" && spec.write !== undefined && spec.write !== null && spec.write !== "") return `send ${carried(spec.write)} to ${spec.device}`;
     if (source === "memory") for (const mode of ["write", "add", "delete"]) if (mode in spec) return mode === "delete" ? `forget ${spec.key}` : `${mode} ${carried(spec[mode])} ${mode === "add" ? "to" : "at"} ${spec.key}`;
+    if (source === "modbus" && "write" in spec) return `write ${carried(dflt(spec.value, null))} to ${what(source, spec)}`;
+    if (source === "bacnet" && "write" in spec) return `write ${carried(spec.write)} to ${what(source, spec)}` + (spec.priority !== undefined && spec.priority !== null ? ` at priority ${pyStr(spec.priority)}` : "");
+    if (source === "snmp" && "set" in spec) { const t = spec.set || {}; return `set ${pyStr(t.oid)} to ${carried(dflt(t.value, null))} at ${pyStr(spec.url)}`; }
+    if (source === "coap" && String(dflt(spec.method, "GET")).toUpperCase() !== "GET") return what(source, spec) + (spec.payload !== undefined && spec.payload !== null ? ` with ${carried(spec.payload)}` : "");
+    if (source === "matter" && matterMode(spec) === "command") { const p = spec.payload; return `send ${pyStr(spec.command)} to node ${pyStr(spec.node)} (${pyStr(spec.cluster)}) at ${pyStr(spec.url)}` + (p && (typeof p !== "object" || Object.keys(p).length) ? ` with ${carried(p)}` : ""); }
+    if (source === "matter" && matterMode(spec) === "write") return `write ${carried(dflt(spec.value, null))} to ${what(source, spec)}`;
     return `${source} ${what(source, spec)}`;
   }
   const YES = new Set(["yes", "y", "true", "1", "on", "ok", "okay", "go", "go ahead", "sure", "do it", "confirm"]);
@@ -581,6 +660,27 @@
       if ("previous" in observed) return observed.exists ? `now ${j(observed.value)}, was ${j(observed.previous)}` : "forgotten";
       return observed.exists ? j(observed.value) : "nothing kept";
     }
+    const short = (v) => [...pyJson(v === undefined ? null : v)].slice(0, 60).join("");
+    if (source === "modbus") {
+      if (observed.exception) return `exception ${pyStr(observed.exception.name)}`;
+      if ("written" in observed) return `wrote ${observed.written}`;
+      const values = observed.values || [];
+      return short(values.length <= 1 ? observed.value : values);
+    }
+    if (source === "bacnet") { if (observed.refused) return pyStr(observed.refused.code); return observed.written ? "written" : short(observed.value); }
+    if (source === "snmp") {
+      if (observed.status !== undefined && observed.status !== null && observed.status !== "noError") return pyStr(observed.status);
+      if ("written" in observed) return "set";
+      const n = Object.keys(observed.values || {}).length;
+      return n === 1 ? short(observed.value) : `${n} values`;
+    }
+    if (source === "coap") return pyStr(observed.status === undefined ? null : observed.status);
+    if (source === "matter") {
+      if (observed.refused) return `refused (${pyStr(observed.refused.code === undefined ? null : observed.refused.code)})`;
+      if (!("path" in observed)) return "sent";
+      return "written" in observed ? "written" : short(observed.value);
+    }
+    if (source === "discover") return `${pyStr(observed.found === undefined ? null : observed.found)} found`;
     return "ok";
   }
 
@@ -1244,6 +1344,12 @@
         return topicAllowed(this.topics, topic) ? null : ["topic-not-allowed", `${pyrepr(topic)} is outside this tree's topics ${pyrepr(this.topics)}.`];
       }
       if (source === "memory") { const key = String(spec.key === undefined ? "" : spec.key); return keyAllowed(this.keys, key) ? null : ["key-not-allowed", `${pyrepr(key)} is outside this tree's keys ${pyrepr(this.keys)}.`]; }
+      if (FIELD_SOURCES.includes(source)) {
+        let scheme, host, port;
+        try { [scheme, host, port] = fieldEndpoint(source, spec.url === undefined ? "" : spec.url); } catch (e) { return ["host-not-allowed", e.message]; }
+        return this.hostAllowed(`${scheme}://${host}:${port}/`) ? null : ["host-not-allowed", `${host} is outside this tree's hosts ${pyrepr(this.hosts)}.`];
+      }
+      if (source === "discover" && "scan" in spec) { const target = pyStr(spec.scan); return networkAllowed(this.networks, target) ? null : ["network-not-allowed", `${target} is outside this tree's networks ${pyrepr(this.networks)}.`]; }
       return null;
     }
     sources() {
@@ -1570,7 +1676,7 @@
           call = async () => (await this.transport.request(method, url, headers, body === undefined ? null : body, timeout)).toState();
         } else {
           label = `${sourceName} ${what(sourceName, spec)}`;
-          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : sourceName === "memory" ? "memory" : "devices")}.` });
+          if (!this.adapters) return outcome("error", tree.name, { reason: "source-unsupported", say: `${node.id}: a ${sourceName} node runs on a service, not here; this device has no ${sourceName === "browser" ? "browser of its own to drive" : sourceName === "queue" ? "socket to a broker" : FIELD_SOURCES.includes(sourceName) ? "line to a device on the network" : sourceName === "discover" ? "view of the network a box sits on" : "access to the box's " + (sourceName === "file" ? "files" : sourceName === "shell" ? "programs" : sourceName === "memory" ? "memory" : "devices")}.` });
           call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
         }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
