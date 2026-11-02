@@ -777,6 +777,39 @@
       "version": 1
      },
      {
+      "description": "The devices of a kind on the local network: Matter, HomeKit, printers, Chromecasts, UPnP or BACnet.",
+      "hosts": [],
+      "inputs": {
+       "kind": {
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "find-devices",
+      "namespace": "pyrtan",
+      "networks": [
+       "10.0.0.0/8",
+       "172.16.0.0/12",
+       "192.168.0.0/16"
+      ],
+      "sources": [
+       "discover"
+      ],
+      "tags": [
+       "home",
+       "network",
+       "discovery",
+       "read-only"
+      ],
+      "triggers": [
+       "find {kind:word} devices",
+       "[what|which] {kind:word} devices are (on the network|there)"
+      ],
+      "version": 1
+     },
+     {
       "description": "echo for fixed",
       "hosts": [],
       "inputs": {
@@ -1348,6 +1381,40 @@
       "triggers": [
        "[current] natural events",
        "what natural (events|disasters) are happening [now]"
+      ],
+      "version": 1
+     },
+     {
+      "description": "Which hosts of a local network are up, and which well-known ports they accept.",
+      "hosts": [],
+      "inputs": {
+       "network": {
+        "description": "An address or a network such as 192.168.1.0/24",
+        "required": true,
+        "type": "str"
+       }
+      },
+      "language": {},
+      "license": "MIT",
+      "name": "network-scan",
+      "namespace": "pyrtan",
+      "networks": [
+       "10.0.0.0/8",
+       "172.16.0.0/12",
+       "192.168.0.0/16"
+      ],
+      "sources": [
+       "discover"
+      ],
+      "tags": [
+       "network",
+       "discovery",
+       "ops",
+       "read-only"
+      ],
+      "triggers": [
+       "scan {network:word}",
+       "what is (on|up on) {network:word}"
       ],
       "version": 1
      },
@@ -5793,6 +5860,7 @@
      "elevation",
      "exchange-rate",
      "f1-results",
+     "find-devices",
      "fixed",
      "food-barcode",
      "forecast",
@@ -5813,6 +5881,7 @@
      "modem-check",
      "my-ip",
      "natural-events",
+     "network-scan",
      "next-launch",
      "npm-downloads",
      "npm-package",
@@ -13501,6 +13570,459 @@
    },
    "intent": "turn on the fan plug",
    "tree": "plug-switch"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "kind": "matter"
+    },
+    "output": {
+     "count": 2,
+     "devices": [
+      {
+       "address": "192.168.1.40",
+       "addresses": [
+        "192.168.1.40"
+       ],
+       "host": "kettle-plug.local",
+       "name": "ABCD1234-0000000000000004",
+       "port": 5540,
+       "service": "_matter._tcp.local",
+       "txt": {
+        "SII": "5000"
+       }
+      },
+      {
+       "address": "192.168.1.41",
+       "addresses": [
+        "192.168.1.41"
+       ],
+       "host": "heater-plug.local",
+       "name": "ABCD1234-0000000000000005",
+       "port": 5540,
+       "service": "_matter._tcp.local",
+       "txt": {
+        "SII": "5000"
+       }
+      }
+     ],
+     "kind": "matter"
+    },
+    "say": "2 matter device(s) on the network.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "kind",
+       "node": "intent",
+       "observed": {
+        "cleaned": "find matter devices",
+        "inputs": {
+         "kind": "matter"
+        },
+        "steps": [],
+        "trigger": "find {kind:word} devices"
+       },
+       "summary": "'find matter devices'; find-devices via 'find {kind:word} devices' (11 literal chars)"
+      },
+      {
+       "chosen": "eq 'matter'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "matter",
+       "node": "kind",
+       "observed": "matter",
+       "summary": "inputs.kind = matter"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "matter",
+       "summary": "discover mdns _matter._tcp -> 2 found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "some",
+       "node": "any",
+       "observed": 2,
+       "summary": "state.found.found = 2"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "some",
+       "summary": "2 matter device(s) on the network."
+      }
+     ],
+     "tree": "find-devices"
+    },
+    "tree": "find-devices"
+   },
+   "inputs": {
+    "kind": "matter"
+   },
+   "intent": "find matter devices",
+   "tree": "find-devices"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "kind": "homekit"
+    },
+    "output": {
+     "count": 0,
+     "devices": [],
+     "kind": "homekit"
+    },
+    "say": "No homekit devices answered.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "kind",
+       "node": "intent",
+       "observed": {
+        "cleaned": "which homekit devices are on the network",
+        "inputs": {
+         "kind": "homekit"
+        },
+        "steps": [],
+        "trigger": "[what|which] {kind:word} devices are (on the network|there)"
+       },
+       "summary": "'which homekit devices are on the network'; find-devices via '[what|which] {kind:word} devices are (on the network|there)' (36 literal chars)"
+      },
+      {
+       "chosen": "eq 'homekit'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "homekit",
+       "node": "kind",
+       "observed": "homekit",
+       "summary": "inputs.kind = homekit"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "homekit",
+       "summary": "discover mdns _hap._tcp -> 0 found"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": 0,
+       "summary": "state.found.found = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "none",
+       "summary": "No homekit devices answered."
+      }
+     ],
+     "tree": "find-devices"
+    },
+    "tree": "find-devices"
+   },
+   "inputs": {
+    "kind": "homekit"
+   },
+   "intent": "which homekit devices are on the network",
+   "tree": "find-devices"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "kind": "bacnet"
+    },
+    "output": {
+     "count": 2,
+     "devices": [
+      {
+       "address": "192.168.1.60",
+       "instance": 1234,
+       "mac": null,
+       "max_apdu": 1476,
+       "network": null,
+       "port": 47808,
+       "segmentation": 3,
+       "vendor": 5
+      },
+      {
+       "address": "192.168.1.60",
+       "instance": 77,
+       "mac": "0c",
+       "max_apdu": 480,
+       "network": 5,
+       "port": 47808,
+       "segmentation": 3,
+       "vendor": 24
+      }
+     ],
+     "kind": "bacnet"
+    },
+    "say": "2 bacnet device(s) on the network.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "kind",
+       "node": "intent",
+       "observed": {
+        "cleaned": "find bacnet devices",
+        "inputs": {
+         "kind": "bacnet"
+        },
+        "steps": [],
+        "trigger": "find {kind:word} devices"
+       },
+       "summary": "'find bacnet devices'; find-devices via 'find {kind:word} devices' (11 literal chars)"
+      },
+      {
+       "chosen": "eq 'bacnet'",
+       "depth": 0,
+       "kind": "decide",
+       "next": "bacnet",
+       "node": "kind",
+       "observed": "bacnet",
+       "summary": "inputs.kind = bacnet"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "bacnet",
+       "summary": "discover bacnet who-is -> 2 found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "some",
+       "node": "any",
+       "observed": 2,
+       "summary": "state.found.found = 2"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "some",
+       "summary": "2 bacnet device(s) on the network."
+      }
+     ],
+     "tree": "find-devices"
+    },
+    "tree": "find-devices"
+   },
+   "inputs": {
+    "kind": "bacnet"
+   },
+   "intent": "find bacnet devices",
+   "tree": "find-devices"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "network": "192.168.1.0/24"
+    },
+    "output": {
+     "hosts": [
+      {
+       "address": "192.168.1.1",
+       "open": [
+        80,
+        443
+       ]
+      },
+      {
+       "address": "192.168.1.40",
+       "open": [
+        5540
+       ]
+      },
+      {
+       "address": "192.168.1.50",
+       "open": [
+        22,
+        502
+       ]
+      }
+     ],
+     "network": "192.168.1.0/24",
+     "up": 3
+    },
+    "say": "3 host(s) up on 192.168.1.0/24.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "scan",
+       "node": "intent",
+       "observed": {
+        "cleaned": "scan 192.168.1.0/24",
+        "inputs": {
+         "network": "192.168.1.0/24"
+        },
+        "steps": [],
+        "trigger": "scan {network:word}"
+       },
+       "summary": "'scan 192.168.1.0/24'; network-scan via 'scan {network:word}' (4 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "scan",
+       "summary": "discover scan 192.168.1.0/24 ports 22,80,443,502,1883,5540,8080 -> 3 found"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "some",
+       "node": "any",
+       "observed": 3,
+       "summary": "state.lan.found = 3"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "some",
+       "summary": "3 host(s) up on 192.168.1.0/24."
+      }
+     ],
+     "tree": "network-scan"
+    },
+    "tree": "network-scan"
+   },
+   "inputs": {
+    "network": "192.168.1.0/24"
+   },
+   "intent": "scan 192.168.1.0/24",
+   "tree": "network-scan"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "network": "10.9.0.0/24"
+    },
+    "output": {
+     "hosts": [],
+     "network": "10.9.0.0/24",
+     "up": 0
+    },
+    "say": "Nothing on 10.9.0.0/24 answered on 22, 80, 443, 502, 1883, 5540 or 8080.",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "scan",
+       "node": "intent",
+       "observed": {
+        "cleaned": "what is on 10.9.0.0/24",
+        "inputs": {
+         "network": "10.9.0.0/24"
+        },
+        "steps": [],
+        "trigger": "what is (on|up on) {network:word}"
+       },
+       "summary": "'what is on 10.9.0.0/24'; network-scan via 'what is (on|up on) {network:word}' (12 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "any",
+       "node": "scan",
+       "summary": "discover scan 10.9.0.0/24 ports 22,80,443,502,1883,5540,8080 -> 0 found"
+      },
+      {
+       "chosen": "eq 0",
+       "depth": 0,
+       "kind": "decide",
+       "next": "none",
+       "node": "any",
+       "observed": 0,
+       "summary": "state.lan.found = 0"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "none",
+       "summary": "Nothing on 10.9.0.0/24 answered on 22, 80, 443, 502, 1883, 5540 or 8080."
+      }
+     ],
+     "tree": "network-scan"
+    },
+    "tree": "network-scan"
+   },
+   "inputs": {
+    "network": "10.9.0.0/24"
+   },
+   "intent": "what is on 10.9.0.0/24",
+   "tree": "network-scan"
+  },
+  {
+   "expect": {
+    "inputs": {
+     "network": "8.8.8.0/24"
+    },
+    "reason": "network-not-allowed",
+    "say": "scan: 8.8.8.0/24 is outside this tree's networks ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "intent",
+       "next": "scan",
+       "node": "intent",
+       "observed": {
+        "cleaned": "scan 8.8.8.0/24",
+        "inputs": {
+         "network": "8.8.8.0/24"
+        },
+        "steps": [],
+        "trigger": "scan {network:word}"
+       },
+       "summary": "'scan 8.8.8.0/24'; network-scan via 'scan {network:word}' (4 literal chars)"
+      }
+     ],
+     "tree": "network-scan"
+    },
+    "tree": "network-scan"
+   },
+   "inputs": {
+    "network": "8.8.8.0/24"
+   },
+   "intent": "scan 8.8.8.0/24",
+   "tree": "network-scan"
   },
   {
    "expect": {
@@ -25370,6 +25892,177 @@
    ],
    "version": 1
   },
+  "find-devices": {
+   "description": "The devices of a kind on the local network: Matter, HomeKit, printers, Chromecasts, UPnP or BACnet.",
+   "inputs": {
+    "kind": {
+     "one_of": [
+      "matter",
+      "homekit",
+      "printer",
+      "chromecast",
+      "upnp",
+      "bacnet"
+     ],
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "find-devices",
+   "namespace": "pyrtan",
+   "networks": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+   ],
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "else": "some"
+      }
+     ],
+     "kind": "decide",
+     "on": "found.found"
+    },
+    "bacnet": {
+     "discover": {
+      "bacnet": "who-is",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    },
+    "chromecast": {
+     "discover": {
+      "mdns": "_googlecast._tcp",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    },
+    "homekit": {
+     "discover": {
+      "mdns": "_hap._tcp",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    },
+    "kind": {
+     "branches": [
+      {
+       "then": "matter",
+       "when": {
+        "eq": "matter"
+       }
+      },
+      {
+       "then": "homekit",
+       "when": {
+        "eq": "homekit"
+       }
+      },
+      {
+       "then": "printer",
+       "when": {
+        "eq": "printer"
+       }
+      },
+      {
+       "then": "chromecast",
+       "when": {
+        "eq": "chromecast"
+       }
+      },
+      {
+       "then": "upnp",
+       "when": {
+        "eq": "upnp"
+       }
+      },
+      {
+       "then": "bacnet",
+       "when": {
+        "eq": "bacnet"
+       }
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.kind"
+    },
+    "matter": {
+     "discover": {
+      "mdns": "_matter._tcp",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "count": 0,
+      "devices": [],
+      "kind": "{{ inputs.kind }}"
+     },
+     "say": "No {{ inputs.kind }} devices answered."
+    },
+    "printer": {
+     "discover": {
+      "mdns": "_ipp._tcp",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    },
+    "some": {
+     "kind": "done",
+     "output": {
+      "count": "{{ state.found.found }}",
+      "devices": "{{ state.found.devices }}",
+      "kind": "{{ inputs.kind }}"
+     },
+     "say": "{{ state.found.found }} {{ inputs.kind }} device(s) on the network."
+    },
+    "upnp": {
+     "discover": {
+      "ssdp": "upnp:rootdevice",
+      "wait": 3
+     },
+     "into": "found",
+     "kind": "observe",
+     "next": "any"
+    }
+   },
+   "start": "kind",
+   "tags": [
+    "home",
+    "network",
+    "discovery",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "find {kind:word} devices"
+    },
+    {
+     "pattern": "[what|which] {kind:word} devices are (on the network|there)"
+    }
+   ],
+   "version": 1
+  },
   "food-barcode": {
    "description": "A food product by its barcode: name, brand, size and Nutri-Score, from Open Food Facts.",
    "hosts": [
@@ -27446,6 +28139,94 @@
     },
     {
      "pattern": "what natural (events|disasters) are happening [now]"
+    }
+   ],
+   "version": 1
+  },
+  "network-scan": {
+   "description": "Which hosts of a local network are up, and which well-known ports they accept.",
+   "inputs": {
+    "network": {
+     "description": "An address or a network such as 192.168.1.0/24",
+     "pattern": "^[0-9.]+(/[0-9]{1,2})?$",
+     "type": "str"
+    }
+   },
+   "license": "MIT",
+   "name": "network-scan",
+   "namespace": "pyrtan",
+   "networks": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+   ],
+   "nodes": {
+    "any": {
+     "branches": [
+      {
+       "then": "none",
+       "when": {
+        "eq": 0
+       }
+      },
+      {
+       "else": "some"
+      }
+     ],
+     "kind": "decide",
+     "on": "lan.found"
+    },
+    "none": {
+     "kind": "done",
+     "output": {
+      "hosts": [],
+      "network": "{{ inputs.network }}",
+      "up": 0
+     },
+     "say": "Nothing on {{ inputs.network }} answered on 22, 80, 443, 502, 1883, 5540 or 8080."
+    },
+    "scan": {
+     "discover": {
+      "ports": [
+       22,
+       80,
+       443,
+       502,
+       1883,
+       5540,
+       8080
+      ],
+      "scan": "{{ inputs.network }}"
+     },
+     "into": "lan",
+     "kind": "observe",
+     "next": "any",
+     "retries": 0,
+     "timeout": 30
+    },
+    "some": {
+     "kind": "done",
+     "output": {
+      "hosts": "{{ state.lan.devices }}",
+      "network": "{{ inputs.network }}",
+      "up": "{{ state.lan.found }}"
+     },
+     "say": "{{ state.lan.found }} host(s) up on {{ inputs.network }}."
+    }
+   },
+   "start": "scan",
+   "tags": [
+    "network",
+    "discovery",
+    "ops",
+    "read-only"
+   ],
+   "triggers": [
+    {
+     "pattern": "scan {network:word}"
+    },
+    {
+     "pattern": "what is (on|up on) {network:word}"
     }
    ],
    "version": 1
