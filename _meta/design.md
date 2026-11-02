@@ -413,14 +413,14 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.44, built: declared budgets.** `budget = { requests = 30, per =
+19. **v0.45, built: declared budgets.** `budget = { requests = 30, per =
     "1 hour" }` holds a tree to so many requests in any window, across
     the runs a service makes of it. The one that would go past is not
     sent: the run stops with reason `budget` and says when the next may
     go. The window slides by the runner's clock, so a recording gives the
     same refusal every time; `github-release` spends GitHub's hourly
     allowance slowly enough to refuse before GitHub does (`runtime.py`).
-20. **v0.49, built: a host's budget, shared.** A budget may name a host:
+20. **v0.50, built: a host's budget, shared.** A budget may name a host:
     one count of the requests that reach it, kept across every tree on
     the service that names it, since a rate limit is the address's and
     not the tree's. A request must fit every budget that applies, and one
