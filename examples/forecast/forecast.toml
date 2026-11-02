@@ -1,8 +1,9 @@
 # Tomorrow's weather for a place, from Open-Meteo: the sky, the high and
-# low, and the chance of rain, in the place's own day.
+# low, and the chance of rain, in the place's own day. Under pyrtan watch
+# it also runs on its own, at six each evening in Oslo, for Oslo.
 
 name = "forecast"
-version = 1
+version = 2
 namespace = "pyrtan"
 description = "Tomorrow's weather for a place: sky, high and low, and chance of rain, from Open-Meteo."
 tags = ["weather", "read-only"]
@@ -16,6 +17,14 @@ pattern = "[what's the] weather (in|for) {place} tomorrow"
 pattern = "[what's the] weather tomorrow (in|for) {place}"
 [[triggers]]
 pattern = "will it rain tomorrow in {place}"
+
+# A calendar watch: days and times of day, in tz. "daily" is every day;
+# "mon-fri 07:30" or "sat,sun 09:00" would be days of the week.
+[[watches]]
+name = "Oslo, the evening before"
+at = "daily 18:00"
+tz = "Europe/Oslo"
+inputs = { place = "Oslo" }
 
 [nodes.tomorrow]
 kind = "observe"

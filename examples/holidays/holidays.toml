@@ -1,8 +1,10 @@
 # The next public holiday in a country, from Nager.Date. The country is its
 # two-letter ISO code; the API answers an unknown one with an error status.
+# Under pyrtan watch it also runs on its own on the first of each month,
+# for Norway.
 
 name = "holidays"
-version = 1
+version = 2
 namespace = "pyrtan"
 description = "The next public holiday in a country (by its two-letter code), from Nager.Date."
 tags = ["calendar", "read-only"]
@@ -14,6 +16,13 @@ start = "fetch"
 pattern = "[when is the] next [public|bank] holiday in {country:word}"
 [[triggers]]
 pattern = "[public|bank] holidays in {country:word}"
+
+# Days of the month: "1st,15th 09:00", or "last" for the month's last day.
+[[watches]]
+name = "Norway, each month"
+at = "1st 08:00"
+tz = "Europe/Oslo"
+inputs = { country = "NO" }
 
 [inputs.country]
 type = "str"
