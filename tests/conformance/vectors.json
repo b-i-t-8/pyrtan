@@ -617,7 +617,7 @@
       "version": 1
      },
      {
-      "description": "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back.",
+      "description": "Alerts (through ntfy) when a device on the LAN goes offline, when it comes back, and when its uptime drops below 99%.",
       "hosts": [
        "ntfy.sh"
       ],
@@ -631,6 +631,10 @@
         "default": "The device",
         "description": "What the alert calls it",
         "type": "str"
+       },
+       "uptime": {
+        "description": "Its uptime over a window, in percent, from the watch: {{ event.uptime.day }}",
+        "type": "float"
        }
       },
       "keys": [
@@ -660,7 +664,7 @@
        "is {host:word} online",
        "is {host:word} offline"
       ],
-      "version": 2
+      "version": 3
      },
      {
       "commands": [
@@ -14444,7 +14448,8 @@
    "expect": {
     "inputs": {
      "host": "192.168.1.50",
-     "name": "The device"
+     "name": "The device",
+     "uptime": null
     },
     "output": {
      "alerted": false,
@@ -14462,7 +14467,7 @@
       {
        "depth": 0,
        "kind": "intent",
-       "next": "probe",
+       "next": "begin",
        "node": "intent",
        "observed": {
         "cleaned": "is 192.168.1.50 online",
@@ -14473,6 +14478,16 @@
         "trigger": "is {host:word} online"
        },
        "summary": "'is 192.168.1.50 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "probe",
+       "node": "begin",
+       "observed": {
+        "uptime_note": ""
+       },
+       "summary": "uptime_note="
       },
       {
        "depth": 0,
@@ -14508,9 +14523,31 @@
       },
       {
        "depth": 0,
+       "kind": "set",
+       "next": "uptime",
+       "node": "up",
+       "observed": {
+        "alerted": false,
+        "changed": false,
+        "online": true,
+        "said": "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z.",
+        "since": "2026-10-24T08:00:00Z"
+       },
+       "summary": "said=The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z., online=True, since=2026-10-24T08:00:00Z, changed=False, alerted=False"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "finish",
+       "node": "uptime",
+       "summary": "inputs.uptime = None"
+      },
+      {
+       "depth": 0,
        "kind": "done",
        "next": null,
-       "node": "up",
+       "node": "finish",
        "summary": "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z."
       }
      ],
@@ -14528,7 +14565,8 @@
    "expect": {
     "inputs": {
      "host": "192.168.1.51",
-     "name": "The device"
+     "name": "The device",
+     "uptime": null
     },
     "output": {
      "alerted": false,
@@ -14546,7 +14584,7 @@
       {
        "depth": 0,
        "kind": "intent",
-       "next": "probe",
+       "next": "begin",
        "node": "intent",
        "observed": {
         "cleaned": "is 192.168.1.51 offline",
@@ -14557,6 +14595,16 @@
         "trigger": "is {host:word} offline"
        },
        "summary": "'is 192.168.1.51 offline'; device-offline via 'is {host:word} offline' (9 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "probe",
+       "node": "begin",
+       "observed": {
+        "uptime_note": ""
+       },
+       "summary": "uptime_note="
       },
       {
        "depth": 0,
@@ -14592,9 +14640,31 @@
       },
       {
        "depth": 0,
+       "kind": "set",
+       "next": "uptime",
+       "node": "still-down",
+       "observed": {
+        "alerted": false,
+        "changed": false,
+        "online": false,
+        "said": "The device (192.168.1.51) is still offline, since 2026-10-25T11:15:00Z.",
+        "since": "2026-10-25T11:15:00Z"
+       },
+       "summary": "said=The device (192.168.1.51) is still offline, since 2026-10-25T11:15:00Z., online=False, since=2026-10-25T11:15:00Z, changed=False, alerted=False"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "finish",
+       "node": "uptime",
+       "summary": "inputs.uptime = None"
+      },
+      {
+       "depth": 0,
        "kind": "done",
        "next": null,
-       "node": "still-down",
+       "node": "finish",
        "summary": "The device (192.168.1.51) is still offline, since 2026-10-25T11:15:00Z."
       }
      ],
@@ -14612,7 +14682,8 @@
    "expect": {
     "inputs": {
      "host": "192.168.1.52",
-     "name": "The device"
+     "name": "The device",
+     "uptime": null
     },
     "output": {
      "alerted": false,
@@ -14630,7 +14701,7 @@
       {
        "depth": 0,
        "kind": "intent",
-       "next": "probe",
+       "next": "begin",
        "node": "intent",
        "observed": {
         "cleaned": "is 192.168.1.52 online",
@@ -14641,6 +14712,16 @@
         "trigger": "is {host:word} online"
        },
        "summary": "'is 192.168.1.52 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "probe",
+       "node": "begin",
+       "observed": {
+        "uptime_note": ""
+       },
+       "summary": "uptime_note="
       },
       {
        "depth": 0,
@@ -14691,9 +14772,31 @@
       },
       {
        "depth": 0,
+       "kind": "set",
+       "next": "uptime",
+       "node": "down-unsent",
+       "observed": {
+        "alerted": false,
+        "changed": true,
+        "online": false,
+        "said": "The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was sent.",
+        "since": "2026-10-25T12:00:00+00:00"
+       },
+       "summary": "said=The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was s…, online=False, since=2026-10-25T12:00:00+00:00, changed=True, alerted=False"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "finish",
+       "node": "uptime",
+       "summary": "inputs.uptime = None"
+      },
+      {
+       "depth": 0,
        "kind": "done",
        "next": null,
-       "node": "down-unsent",
+       "node": "finish",
        "summary": "The device (192.168.1.52) went offline; no NTFY_TOPIC is set, so no alert was sent."
       }
      ],
@@ -14711,7 +14814,8 @@
    "expect": {
     "inputs": {
      "host": "192.168.1.53",
-     "name": "The device"
+     "name": "The device",
+     "uptime": null
     },
     "output": {
      "alerted": false,
@@ -14729,7 +14833,7 @@
       {
        "depth": 0,
        "kind": "intent",
-       "next": "probe",
+       "next": "begin",
        "node": "intent",
        "observed": {
         "cleaned": "is 192.168.1.53 online",
@@ -14740,6 +14844,16 @@
         "trigger": "is {host:word} online"
        },
        "summary": "'is 192.168.1.53 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "probe",
+       "node": "begin",
+       "observed": {
+        "uptime_note": ""
+       },
+       "summary": "uptime_note="
       },
       {
        "depth": 0,
@@ -14790,9 +14904,31 @@
       },
       {
        "depth": 0,
+       "kind": "set",
+       "next": "uptime",
+       "node": "back-unsent",
+       "observed": {
+        "alerted": false,
+        "changed": true,
+        "online": true,
+        "said": "The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was sent.",
+        "since": "2026-10-25T12:00:00+00:00"
+       },
+       "summary": "said=The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was…, online=True, since=2026-10-25T12:00:00+00:00, changed=True, alerted=False"
+      },
+      {
+       "chosen": "else",
+       "depth": 0,
+       "kind": "decide",
+       "next": "finish",
+       "node": "uptime",
+       "summary": "inputs.uptime = None"
+      },
+      {
+       "depth": 0,
        "kind": "done",
        "next": null,
-       "node": "back-unsent",
+       "node": "finish",
        "summary": "The device (192.168.1.53) is back online; no NTFY_TOPIC is set, so no alert was sent."
       }
      ],
@@ -14810,7 +14946,8 @@
    "expect": {
     "inputs": {
      "host": "8.8.8.8",
-     "name": "The device"
+     "name": "The device",
+     "uptime": null
     },
     "reason": "network-not-allowed",
     "say": "probe: 8.8.8.8 is outside this tree's networks ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].",
@@ -14821,7 +14958,7 @@
       {
        "depth": 0,
        "kind": "intent",
-       "next": "probe",
+       "next": "begin",
        "node": "intent",
        "observed": {
         "cleaned": "is 8.8.8.8 online",
@@ -14832,6 +14969,16 @@
         "trigger": "is {host:word} online"
        },
        "summary": "'is 8.8.8.8 online'; device-offline via 'is {host:word} online' (8 literal chars)"
+      },
+      {
+       "depth": 0,
+       "kind": "set",
+       "next": "probe",
+       "node": "begin",
+       "observed": {
+        "uptime_note": ""
+       },
+       "summary": "uptime_note="
       }
      ],
      "tree": "device-offline"
@@ -25927,7 +26074,7 @@
    "version": 1
   },
   "device-offline": {
-   "description": "Alerts (through ntfy) when a device on the LAN goes offline, and when it comes back.",
+   "description": "Alerts (through ntfy) when a device on the LAN goes offline, when it comes back, and when its uptime drops below 99%.",
    "hosts": [
     "ntfy.sh"
    ],
@@ -25941,6 +26088,11 @@
      "default": "The device",
      "description": "What the alert calls it",
      "type": "str"
+    },
+    "uptime": {
+     "description": "Its uptime over a window, in percent, from the watch: {{ event.uptime.day }}",
+     "required": false,
+     "type": "float"
     }
    },
    "keys": [
@@ -25973,6 +26125,24 @@
      "kind": "act",
      "next": "down"
     },
+    "alert-low": {
+     "http": {
+      "body": {
+       "message": "{{ inputs.name }} ({{ inputs.host }}) was online {{ inputs.uptime }}% of the time it was checked, below 99%.",
+       "priority": 3,
+       "tags": [
+        "chart_with_downwards_trend"
+       ],
+       "title": "{{ inputs.name }}: uptime {{ inputs.uptime }}%",
+       "topic": "{{ env.NTFY_TOPIC }}"
+      },
+      "method": "POST",
+      "url": "https://ntfy.sh/"
+     },
+     "into": "sentlow",
+     "kind": "act",
+     "next": "low-sent"
+    },
     "alert-up": {
      "http": {
       "body": {
@@ -25991,28 +26161,33 @@
      "next": "back"
     },
     "back": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": true,
       "changed": true,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": true,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent.",
       "since": "{{ now.iso }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; the alert is sent."
+     }
     },
     "back-unsent": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": false,
       "changed": true,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": true,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent.",
       "since": "{{ now.iso }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is back online; no NTFY_TOPIC is set, so no alert was sent."
+     }
+    },
+    "begin": {
+     "kind": "set",
+     "next": "probe",
+     "set": {
+      "uptime_note": ""
+     }
     },
     "can-alert-down": {
      "branches": [
@@ -26024,6 +26199,21 @@
       },
       {
        "else": "down-unsent"
+      }
+     ],
+     "kind": "decide",
+     "on": "env.NTFY_TOPIC"
+    },
+    "can-alert-low": {
+     "branches": [
+      {
+       "then": "alert-low",
+       "when": {
+        "exists": true
+       }
+      },
+      {
+       "else": "low-unsent"
       }
      ],
      "kind": "decide",
@@ -26044,41 +26234,88 @@
      "kind": "decide",
      "on": "env.NTFY_TOPIC"
     },
+    "clear-low": {
+     "into": "cleared",
+     "kind": "act",
+     "memory": {
+      "delete": true,
+      "key": "device-offline/{{ inputs.host }}/uptime-low"
+     },
+     "next": "recovered"
+    },
     "down": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": true,
       "changed": true,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": false,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent.",
       "since": "{{ now.iso }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; the alert is sent."
+     }
     },
     "down-unsent": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": false,
       "changed": true,
+      "online": false,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent.",
+      "since": "{{ now.iso }}"
+     }
+    },
+    "finish": {
+     "kind": "done",
+     "output": {
+      "alerted": "{{ state.alerted }}",
+      "changed": "{{ state.changed }}",
       "host": "{{ inputs.host }}",
       "name": "{{ inputs.name }}",
-      "online": false,
-      "since": "{{ now.iso }}"
+      "online": "{{ state.online }}",
+      "since": "{{ state.since }}"
      },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) went offline; no NTFY_TOPIC is set, so no alert was sent."
+     "say": "{{ state.said }}{{ state.uptime_note }}"
     },
     "first-up": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": false,
       "changed": true,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": true,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) is online.",
       "since": "{{ now.iso }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is online."
+     }
+    },
+    "low-known": {
+     "branches": [
+      {
+       "then": "finish",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "mark-low"
+      }
+     ],
+     "kind": "decide",
+     "on": "low.exists"
+    },
+    "low-sent": {
+     "kind": "set",
+     "next": "finish",
+     "set": {
+      "uptime_note": " Uptime is {{ inputs.uptime }}%, below 99%; the alert is sent."
+     }
+    },
+    "low-unsent": {
+     "kind": "set",
+     "next": "finish",
+     "set": {
+      "uptime_note": " Uptime is {{ inputs.uptime }}%, below 99%; no NTFY_TOPIC is set, so no alert was sent."
+     }
     },
     "mark-back": {
      "into": "kept",
@@ -26103,6 +26340,15 @@
       }
      },
      "next": "can-alert-down"
+    },
+    "mark-low": {
+     "into": "lowkept",
+     "kind": "act",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}/uptime-low",
+      "write": "{{ now.iso }}"
+     },
+     "next": "can-alert-low"
     },
     "mark-up": {
      "into": "kept",
@@ -26150,6 +26396,22 @@
      },
      "next": "was-down"
     },
+    "recall-low": {
+     "into": "low",
+     "kind": "observe",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}/uptime-low"
+     },
+     "next": "low-known"
+    },
+    "recall-ok": {
+     "into": "low",
+     "kind": "observe",
+     "memory": {
+      "key": "device-offline/{{ inputs.host }}/uptime-low"
+     },
+     "next": "was-low"
+    },
     "recall-up": {
      "into": "was",
      "kind": "observe",
@@ -26157,6 +26419,13 @@
       "key": "device-offline/{{ inputs.host }}"
      },
      "next": "was-up"
+    },
+    "recovered": {
+     "kind": "set",
+     "next": "finish",
+     "set": {
+      "uptime_note": " Uptime is back to {{ inputs.uptime }}%."
+     }
     },
     "seen": {
      "branches": [
@@ -26174,28 +26443,62 @@
      "on": "probe.found"
     },
     "still-down": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": false,
       "changed": false,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": false,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}.",
       "since": "{{ state.was.value.since }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is still offline, since {{ state.was.value.since }}."
+     }
     },
     "up": {
-     "kind": "done",
-     "output": {
+     "kind": "set",
+     "next": "uptime",
+     "set": {
       "alerted": false,
       "changed": false,
-      "host": "{{ inputs.host }}",
-      "name": "{{ inputs.name }}",
       "online": true,
+      "said": "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}.",
       "since": "{{ state.was.value.since }}"
-     },
-     "say": "{{ inputs.name }} ({{ inputs.host }}) is online, since {{ state.was.value.since }}."
+     }
+    },
+    "uptime": {
+     "branches": [
+      {
+       "then": "uptime-level",
+       "when": {
+        "type": "number"
+       }
+      },
+      {
+       "else": "finish"
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.uptime"
+    },
+    "uptime-level": {
+     "branches": [
+      {
+       "then": "recall-low",
+       "when": {
+        "lt": 99
+       }
+      },
+      {
+       "then": "recall-ok",
+       "when": {
+        "gte": 99.5
+       }
+      },
+      {
+       "else": "finish"
+      }
+     ],
+     "kind": "decide",
+     "on": "inputs.uptime"
     },
     "was-down": {
      "branches": [
@@ -26211,6 +26514,21 @@
      ],
      "kind": "decide",
      "on": "was.value.state"
+    },
+    "was-low": {
+     "branches": [
+      {
+       "then": "clear-low",
+       "when": {
+        "eq": true
+       }
+      },
+      {
+       "else": "finish"
+      }
+     ],
+     "kind": "decide",
+     "on": "low.exists"
     },
     "was-up": {
      "branches": [
@@ -26234,7 +26552,7 @@
      "on": "was.value.state"
     }
    },
-   "start": "probe",
+   "start": "begin",
    "tags": [
     "home",
     "network",
@@ -26249,7 +26567,7 @@
      "pattern": "is {host:word} offline"
     }
    ],
-   "version": 2
+   "version": 3
   },
   "disk-space": {
    "commands": [

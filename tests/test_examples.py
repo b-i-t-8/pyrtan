@@ -273,6 +273,45 @@ def test_device_offline_alerts_once_per_change(examples):
     assert len(ntfy.sent) == 2
 
 
+def test_device_offline_alerts_once_when_uptime_drops_below_the_line(examples):
+    """Below 99% over the day: one alert, then quiet until uptime is back to
+    99.5% or more; between the two lines nothing changes."""
+    from pyrtan import Runner
+    from pyrtan.adapters import LocalAdapters
+    from pyrtan.transport import Response
+
+    sent = []
+
+    class Ntfy:
+        def request(self, method, url, headers=None, body=None, timeout=10.0):
+            sent.append(json.loads(body))
+            return Response(200, {}, "{}", url)
+
+    class Lan:
+        real = LocalAdapters()
+
+        def perform(self, source, spec, timeout, allowed=None):
+            if source == "discover":
+                return {"method": "scan", "query": spec["scan"], "ok": True, "found": 1, "devices": [{"address": spec["scan"], "open": [80]}], "body": "", "json": []}
+            return self.real.perform(source, spec, timeout, allowed)
+
+    runner = Runner(examples, Ntfy(), adapters=Lan(), env={"NTFY_TOPIC": "house-1234"})
+
+    def run(uptime):
+        return runner.run_tree("device-offline", {"host": "192.168.1.50", "name": "The printer", "uptime": uptime})
+
+    assert run(None).say == "The printer (192.168.1.50) is online."            # no uptime yet: nothing to say about it
+    assert run(99.8).say.endswith("since " + run(99.8).output["since"] + ".") and not sent
+    low = run(98.5)
+    assert low.say.endswith("Uptime is 98.5%, below 99%; the alert is sent.") and len(sent) == 1
+    assert (sent[0]["title"], sent[0]["priority"]) == ("The printer: uptime 98.5%", 3)
+    assert low.output["online"] is True and "uptime" not in low.output  # the output stays the same run to run, so the history stays one span
+    assert run(97.0).say.endswith(".") and len(sent) == 1                        # once per drop
+    assert "Uptime" not in run(99.2).say and len(sent) == 1                      # between the lines: as it was
+    assert run(99.7).say.endswith("Uptime is back to 99.7%.") and len(sent) == 1
+    assert run(98.0).say.endswith("below 99%; the alert is sent.") and len(sent) == 2   # a new drop, a new alert
+
+
 def test_device_offline_from_fixtures(runner):
     assert runner.run_intent("is 192.168.1.50 online").say == "The device (192.168.1.50) is online, since 2026-10-24T08:00:00Z."
     assert runner.run_intent("is 192.168.1.51 offline").output["changed"] is False
