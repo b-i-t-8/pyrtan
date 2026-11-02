@@ -11,7 +11,7 @@ import urllib.request
 
 from pyrtan.hub import serve_hub
 from pyrtan.service import serve
-from pyrtan.watch import TIMELINE_DAYS, Timelines
+from pyrtan.watch import TIMELINE_DAYS, Timelines, Watch, Watcher, uptime
 
 UP, DOWN = {"online": True}, {"online": False}
 
@@ -113,6 +113,42 @@ def test_services_and_hubs_serve_the_timelines(tmp_path):
         server.stop()
 
 
+def test_uptime_counts_checked_time_only():
+    H = 3600
+    spans = [
+        {"from": 0, "to": 10 * H, "status": "done", "output": UP},
+        {"from": 10 * H, "to": 11 * H, "status": "done", "output": DOWN},
+        {"from": 15 * H, "to": 24 * H, "status": "done", "output": UP},   # 4 h nobody checked: not counted
+        {"from": 24 * H, "to": 24 * H, "status": "error", "output": None},
+    ]
+    assert uptime(spans, 60, 86400, 24 * H) == round(100 * 19 / 20, 2)
+    assert uptime(spans, 60, 2 * H, 24 * H) == 100.0
+    assert uptime(spans[:1], 60, 86400, 0.5 * H) is None                    # under an hour checked: no uptime yet
+    assert uptime([{"from": 0, "to": 10 * H, "status": "done", "output": {"x": 1}}], 60, 86400, 10 * H) is None  # not a device
+    # The newest span reaches now while the watch keeps time.
+    assert uptime([{"from": 0, "to": H, "status": "done", "output": UP}, {"from": H, "to": H, "status": "done", "output": DOWN}], 60, 86400, H + 90) == round(100 * H / (H + 90), 2)
+
+
+def test_a_clock_watch_hands_its_uptime_to_its_tree(tmp_path):
+    from pyrtan import Registry
+    from pyrtan.runtime import Outcome
+
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "u.toml").write_text(
+        'name = "u"\nstart = "say"\n[inputs.u]\ntype = "float"\nrequired = false\n[[watches]]\nname = "w"\nevery = 60\n'
+        'inputs = { u = "{{ event.uptime.day }}" }\n[nodes.say]\nkind = "done"\nsay = "x"\noutput = { online = true }\n')
+    reg = Registry.from_paths([tmp_path / "t"])
+    got = []
+    timelines = Timelines()
+    now = time.time()
+    timelines.data["u/w"] = [{"from": now - 7200, "to": now - 3600, "n": 60, "status": "done", "h": "a", "output": UP},
+                             {"from": now - 3600, "to": now - 60, "n": 59, "status": "done", "h": "b", "output": DOWN}]
+    watcher = Watcher(reg, lambda tree, inputs, trace: (got.append(inputs), Outcome("done", tree.name, say="x", output={"online": True}))[1], timelines=timelines)
+    w = Watch(watcher, "u", 0, reg.get("u").watches[0])
+    w.fire({"kind": "every", "n": 1, "every": 60})
+    assert 49 < got[0]["u"] < 51  # an hour up, then an hour down (the newest span reaches now)
+
+
 # A calendar watch keeps time when no slot passes between two runs, so a
 # weekend with no slots is not a gap, and a slot the service was down for is.
 
@@ -169,6 +205,11 @@ def test_a_calendar_watch_keeps_time_by_its_slots(tmp_path):
     clock = Watch(watcher, "ups", 0, {"every": 60})
     assert clock.holds_until([{"to": 1000.0}]) == 1150.0 and clock.holds_until([]) is None
     assert Watch(watcher, "ups", 0, {"file": "/var/log/x"}).holds_until([{"to": 1000.0}]) is None
+    # Its uptime counts the newest span on to the next slot, not two and a half of no interval.
+    on_thursday_night = t(2026, 11, 5, 20)
+    assert uptime(spans, None, 86400, t(2026, 11, 4, 20), h["holds_until"]) == 100.0       # Wednesday evening: up since 09:00
+    assert uptime(spans, None, 86400, on_thursday_night, h["holds_until"]) is None         # Thursday's slot passed unrun: the day since is unchecked
+    assert uptime([{"from": 0, "to": 1, "status": "done", "output": UP}], None, 86400, 7200, 7000) is None  # an hour unchecked is not an hour up
 
 
 def test_the_console_draws_a_calendar_watch_until_its_next_slot():

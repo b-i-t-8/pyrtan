@@ -132,7 +132,8 @@ def test_a_calendar_watch_runs_at_its_slot(tmp_path):
             time.sleep(0.05)
         assert fired, "the slot never ran"
         event, outcome = fired[0]
-        assert event == {"kind": "at", "n": 1, "at": "2026-10-30T08:00:00Z", "slot": "fri 09:00", "tz": "Europe/Oslo"}
+        # Its uptime comes with it, as a clock's does: none yet, with nothing checked.
+        assert event == {"kind": "at", "n": 1, "at": "2026-10-30T08:00:00Z", "slot": "fri 09:00", "tz": "Europe/Oslo", "uptime": {"day": None, "week": None, "month": None}}
         assert outcome.say == "good morning (fri 09:00)"
         assert outcome.trace.steps[0].summary == "at fri 09:00 Europe/Oslo, run 1"
         status = watcher.status()["watches"][0]

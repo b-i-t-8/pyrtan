@@ -158,7 +158,11 @@ span when the watch kept time: within two and a half intervals of an
 while the service was down is a gap, drawn as unknown; a weekend with no
 slots is not). The newest span holds until `holds_until`, which
 `/watches/history` gives: those intervals past it, or an `at`'s next slot
-and five minutes. `--watch` on a service or hub runs
+and five minutes. A clock or calendar watch's event carries that uptime
+for its tree to decide on: `event.uptime.day`, `.week` and `.month`, the
+percentage of the checked time its runs said `online = true`, or `None`
+before an hour has been checked
+(`inputs = { uptime = "{{ event.uptime.day }}" }`). `--watch` on a service or hub runs
 them; `pyrtan watch DIR` runs them alone.
 
 ## Inputs

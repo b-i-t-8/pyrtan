@@ -413,22 +413,23 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.43, built: calendar watches.** A watch's clock was only `every`;
+19. **v0.44, built: calendar watches.** A watch's clock was only `every`;
     `at = "mon-fri 09:00, 17:30"` with an optional `tz` runs a tree at
     times of day, on the days named. The grammar is fixed (day names,
     ranges, `weekdays`, `weekends`, `daily`; times as `nlp.parse_time`
     reads them), a change of clocks has one stated rule, and a missed slot
     is not made up (`schedule.py`).
-20. **v0.51, built: a calendar's timeline keeps its own time.** A watch's
+20. **v0.52, built: a calendar's timeline keeps its own time.** A watch's
     timeline joined two runs of an `at` watch whatever lay between them,
     since a calendar has no interval: a morning check that missed a week
     while the service was down read as up all week. Two runs now abut
     only when no slot of the calendar passed between them, so a weekend
     with no slots is not a gap and a missed Tuesday is; `/watches/history`
     says until when the newest span holds (`holds_until`: a clock's two
-    and a half intervals, a calendar's next slot and five minutes), and
-    the console's Devices tab reads a calendar's device late only past its
-    slot (`watch.py`, `page.py`).
+    and a half intervals, a calendar's next slot and five minutes), a
+    calendar watch's event carries its uptime as a clock's does, counted
+    the same way, and the console's Devices tab reads a calendar's device
+    late only past its slot (`watch.py`, `page.py`).
 21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 

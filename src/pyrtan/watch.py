@@ -25,10 +25,14 @@ calendar passed between two runs: a slot passed by while the service was
 down is a gap too, however long the calendar's own gaps (a weekend, a
 month) are. The newest span holds until ``holds_until``: two and a half
 intervals past its last run, or a calendar's next slot and
-:data:`CALENDAR_GRACE` after it; then it is unknown too. :class:`Timelines`
-keeps them, in a JSON file when the service is given one
-(``--watch-history``), and ``GET /watches/history`` serves them; the
-console's Devices tab draws uptime from them.
+:data:`CALENDAR_GRACE` after it; then it is unknown too. A clock or
+calendar watch's event carries its own uptime from that timeline
+(``event.uptime.day``, ``.week``, ``.month``: the percentage of checked
+time its runs said ``online = true``, or None before an hour has been
+checked), so a tree can decide on it. :class:`Timelines` keeps them, in a
+JSON file when the service is given one (``--watch-history``), and ``GET
+/watches/history`` serves them; the console's Devices tab draws uptime
+from them.
 
 The trace of a watched run begins with a ``watch`` step, as an asked
 run's begins with ``intent``. Watches are static: a path, a topic, a
@@ -70,6 +74,35 @@ TIMELINE_OUTPUT = 2048 # an output larger than this (as JSON) is compared, not k
 TIMELINE_SAVE = 60.0   # seconds between saves while nothing changes
 CONTIGUOUS = 2.5       # intervals between two runs of a clock watch that still count as one stretch
 CALENDAR_GRACE = 300.0 # seconds past a calendar's slot that its last outcome still holds, while the slot's run runs
+UPTIME_MIN_KNOWN = 3600.0  # seconds of checked time before an uptime is given
+UPTIME_WINDOWS = {"day": 86400, "week": 7 * 86400, "month": 30 * 86400}
+
+
+def uptime(spans: list[dict[str, Any]], interval: float | None, window: float, now: float, holds_until: float | None = None) -> float | None:
+    """The percentage of the checked time in the last ``window`` seconds that
+    the runs said ``online = true``, the way the console's Devices tab counts
+    it: a span holds from its first run to its last, the newest reaches now
+    while its watch keeps time (until ``holds_until`` when it is given, as
+    for a calendar; else within two and a half ``interval``), and time
+    nobody checked does not count. None before an hour has been checked."""
+    start = now - window
+    up = down = 0.0
+    for i, s in enumerate(spans):
+        out = s.get("output") or {}
+        if s.get("status") != "done" or not isinstance(out.get("online"), bool):
+            continue
+        a, b = float(s["from"]), float(s["to"])
+        if i == len(spans) - 1 and (now <= holds_until if holds_until is not None else bool(interval) and now - b <= CONTIGUOUS * interval):
+            b = now
+        a, b = max(a, start), min(b, now)
+        if b > a:
+            if out["online"]:
+                up += b - a
+            else:
+                down += b - a
+    if up + down < min(UPTIME_MIN_KNOWN, window):
+        return None
+    return round(100.0 * up / (up + down), 2)
 
 
 class Timelines:
@@ -309,6 +342,11 @@ class Watch:
         if tree is None:
             self._fail(f"tree {self.tree_name!r} is gone")
             return None
+        if self.kind in ("every", "at"):
+            spans = self.watcher.timelines.spans(self.timeline)
+            at = time.time() if self.kind == "every" else self.watcher.clock().timestamp()  # a calendar's timeline is on the watcher's clock
+            held = self.holds_until(spans) if self.kind == "at" else None
+            event = {**event, "uptime": {k: uptime(spans, self.interval, w, at, held) for k, w in UPTIME_WINDOWS.items()}}
         scope = {"event": event, "env": self.watcher.env, "now": _now_scope(self.watcher.clock())}
         try:
             inputs = {k: render(v, scope) for k, v in (self.spec.get("inputs") or {}).items()}
