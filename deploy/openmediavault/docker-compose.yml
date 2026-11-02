@@ -90,6 +90,9 @@ services:
       PYRTAN_CLOSED: "true"
     ports:
       - "8700:8700"
+    # How the hub reaches `mine`, which runs on the NAS's own network.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - hub-state:/state
       # - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/handout:/handout   # with PYRTAN_HANDOUT above: trees the phones run
@@ -124,16 +127,22 @@ services:
   # anything on a private address) and look for them (discover), within the
   # hosts and networks it lists. Every hub in the family network may ask it
   # to run its trees, so put a tree here only if the family may use it.
-  # The container is on the compose network, so unicast reaches the LAN
-  # (a scan, or a device by its address) but a broadcast or a multicast
-  # does not: for discovery by mDNS, SSDP or BACnet Who-Is, give it the
-  # NAS's network instead (network_mode: host; ../README.md says how).
+  #
+  # It runs on the NAS's own network (network_mode: host), not the compose
+  # network, because the broadcast and multicast that discovery uses (mDNS,
+  # SSDP, BACnet Who-Is) do not cross Docker's NAT. So it listens on the
+  # NAS's port 8702 (8701 is the bare demo's, ../README.md), behind the
+  # token like everything else; it reaches the hub at the port the hub
+  # publishes, and the hub reaches it through the Docker host's gateway
+  # (host.docker.internal, given to the hub below).
   mine:
     <<: *pyrtan
-    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8701", "--name", "mine", "--hub", "http://hub:8700", "--advertise", "http://mine:8701", "--gaps", "/trees/.gaps.jsonl"]
+    network_mode: host
+    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8702", "--name", "mine", "--hub", "http://127.0.0.1:8700", "--advertise", "http://host.docker.internal:8702", "--gaps", "/trees/.gaps.jsonl"]
     environment:
       <<: *env
       PYRTAN_EGRESS: any
+      PYRTAN_PORT: "8702"        # what the health check asks
     volumes:
       - /srv/dev-disk-by-uuid-CHANGE-ME/pyrtan/trees:/trees
     depends_on: [hub]

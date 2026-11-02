@@ -17,7 +17,9 @@ runs four containers: a **hub** on port 8700, two example services
 (**news**: Hacker News and GitHub; **weather**: Open-Meteo and site status)
 that register with the hub over the compose network, and **mine**, which
 serves a folder of your own trees from a shared folder and reloads them
-when you edit a file.
+when you edit a file. `mine` runs on the NAS's own network (port 8702),
+so its trees can reach and discover the house's devices; see "The house's
+devices" below.
 
 1. **Install the plugin**, if it is not there: in OMV, *System › Plugins*,
    install `openmediavault-compose` (needs omv-extras on OMV 6/7). It
@@ -60,8 +62,9 @@ tree you dropped into `trees/` before it is live:
 `docker compose -p pyrtan exec mine pyrtan check /trees`. To see gaps the
 hub has met: `http://<nas-ip>:8700/gaps` (with the token, as everything else).
 
-The services do not expose their own ports; everything goes through the
-hub on 8700, and every request but `/health` and the console page needs
+The example services do not expose their own ports, and `mine`'s port
+8702 is the NAS's own; everything goes through the hub on 8700, and every
+request but `/health` and the console page needs
 the token (every container reads it from the compose file's `x-pyrtan`
 block, so the swarm shares it). The hub takes no `--cors`, so no page but
 its own console talks to it: the family uses `http://<nas-ip>:8700/`. Do
@@ -233,39 +236,29 @@ for discovery, the `networks`) it lists. Every hub in the family network
 may ask `mine` to run its trees, so put a tree there only if the family
 may use it.
 
-To find what to put in a tree, ask the network from the NAS. A scan works
-from inside the stack:
+`mine` runs on the NAS's own network (`network_mode: host`), because the
+broadcast and multicast that discovery uses (mDNS, SSDP, BACnet Who-Is) do
+not cross Docker's NAT. It listens on the NAS's port 8702 (8701 is the
+bare demo's, below), behind the token like everything else; it registers
+with the hub at the port the hub publishes (`http://127.0.0.1:8700`), and
+the hub reaches it through the Docker host's gateway
+(`host.docker.internal`, which the compose file gives the hub). If the
+hub's page says 3/4 peers up, check that nothing else holds port 8702 and
+that the NAS's firewall lets the Docker network reach it.
+
+To find what to put in a tree, ask the network from the NAS:
 
 ```
 docker compose -p pyrtan exec mine pyrtan discover scan 192.168.1.0/24 --ports 22,80,443,502,1883,5540,47808 --names
+docker compose -p pyrtan exec mine pyrtan discover mdns _matter._tcp
+docker compose -p pyrtan exec mine pyrtan discover mdns          # every service type on the network
+docker compose -p pyrtan exec mine pyrtan discover ssdp
+docker compose -p pyrtan exec mine pyrtan discover bacnet
 ```
 
-mDNS, SSDP and BACnet Who-Is are multicast and broadcast, which do not
-cross Docker's NAT, so run those in a throwaway container on the NAS's own
-network:
-
-```
-docker run --rm --network host pyrtan:local discover mdns _matter._tcp
-docker run --rm --network host pyrtan:local discover mdns          # every service type on the network
-docker run --rm --network host pyrtan:local discover ssdp
-docker run --rm --network host pyrtan:local discover bacnet
-```
-
-A tree whose `discover` node uses mDNS, SSDP or BACnet needs `mine` on
-the NAS's network too. Give the `mine` service, in the compose file:
-
-```yaml
-    network_mode: host
-    command: ["serve", "/trees", "--host", "0.0.0.0", "--port", "8702", "--name", "mine", "--hub", "http://127.0.0.1:8700", "--advertise", "http://<nas-ip>:8702", "--gaps", "/trees/.gaps.jsonl"]
-    environment:
-      <<: *env
-      PYRTAN_EGRESS: any
-      PYRTAN_PORT: "8702"        # what the health check asks
-```
-
-It then listens on the NAS's port 8702 (behind the token, as everything
-is) and the hub reaches it there; a scan and the field protocols work the
-same either way.
+A BACnet Who-Is listens on UDP 47808 for the I-Ams that come back; if
+another BACnet program on the NAS holds that port, only devices that
+answer by unicast are found.
 
 ### Without the plugin
 
