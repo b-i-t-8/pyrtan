@@ -74,6 +74,19 @@ Directory's own transitive rule (`member:1.2.840.113556.1.4.1941:=`), one
 search per listed group, rather than walking the groups here: the
 directory knows its graph, and ends its cycles, better than a client does.
 
+**OIDC sign-in (v0.48.0).** The other account people already have: with
+`--oidc ISSUER` a service or hub sends a browser to an OpenID Connect
+provider and takes it back (`src/pyrtan/oidc.py`), the authorization code
+flow with PKCE and nothing else. The session it opens is the same `pyu_…`
+bearer an LDAP sign-in gives (both doors share `ldap.Sessions`), handed
+over in a redirect's fragment so no server or log sees it; the provider's
+groups claim gives the same four abilities (`--oidc-group
+VALUE=ABILITIES`), checked by the same rule before the route. Discovery,
+the exchange, the JWKS and an RS256 check are the standard library; any
+other signature algorithm is taken on the direct TLS connection the token
+came over, as Core §3.1.3.7 allows. Both doors may be open at once, and
+neither replaces the token.
+
 None of these does TLS. A hub that leaves the LAN sits behind a proxy that does.
 mTLS between services is still open (design.md §7); a shared token is
 enough for the first swarm that crosses a network boundary.

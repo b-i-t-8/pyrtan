@@ -43,7 +43,9 @@
 
 ``serve`` and ``hub`` take ``--token`` (or ``$PYRTAN_TOKEN``) to require a
 bearer token, ``--ldap URL`` (with ``--ldap-user-dn`` or ``--ldap-base``)
-to let people in with their directory account on top of it, and
+to let people in with their directory account on top of it, ``--oidc
+ISSUER`` (with ``--oidc-client-id`` and ``--oidc-redirect``) to let them
+sign in at an OpenID Connect provider, and
 ``pyrtan login --at URL --user NAME`` prints a session token for one;
 ``--cors ORIGIN`` to let a browser elsewhere call them, and
 ``serve`` takes ``--gaps FILE`` to keep gaps across restarts and
@@ -534,6 +536,18 @@ def _access_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--ldap-starttls", action="store_true", default=env("PYRTAN_LDAP_STARTTLS", "").lower() in ("1", "true", "yes"), help="upgrade an ldap:// connection with StartTLS (default $PYRTAN_LDAP_STARTTLS)")
     g.add_argument("--ldap-ca", metavar="FILE", default=env("PYRTAN_LDAP_CA"), help="check the directory's certificate against this CA bundle (default $PYRTAN_LDAP_CA, else the system's)")
     g.add_argument("--ldap-session", type=float, metavar="HOURS", default=float(env("PYRTAN_LDAP_SESSION", "12") or 12), help="how long a session from /login lasts (default $PYRTAN_LDAP_SESSION or 12)")
+    g = p.add_argument_group("OIDC sign-in", "let people in with the account they have at an OpenID Connect provider, on top of --token (pyrtan.oidc)")
+    g.add_argument("--oidc", metavar="ISSUER", default=env("PYRTAN_OIDC"), help="the provider's issuer URL, the one that publishes /.well-known/openid-configuration, e.g. https://auth.example.org/realms/home (default $PYRTAN_OIDC)")
+    g.add_argument("--oidc-client-id", metavar="ID", default=env("PYRTAN_OIDC_CLIENT_ID"), help="what this Pyrtan is called at the provider; its secret, if the provider gave one, in $PYRTAN_OIDC_CLIENT_SECRET (default $PYRTAN_OIDC_CLIENT_ID)")
+    g.add_argument("--oidc-redirect", metavar="URL", default=env("PYRTAN_OIDC_REDIRECT"), help="this Pyrtan's address as a browser reaches it; the provider must allow URL/auth/oidc/callback (default $PYRTAN_OIDC_REDIRECT, else --advertise)")
+    g.add_argument("--oidc-group", action="append", default=[a for a in env("PYRTAN_OIDC_GROUPS", "").split(";") if a.strip()], metavar="VALUE=ABILITIES", help="people whose groups claim holds VALUE may these: ask, chat, run, operate (repeatable; default $PYRTAN_OIDC_GROUPS, ';'-separated)")
+    g.add_argument("--oidc-claim", metavar="NAME", default=env("PYRTAN_OIDC_CLAIM", "groups"), help="the claim --oidc-group reads (default $PYRTAN_OIDC_CLAIM or groups; 'email' makes --oidc-group a grant to one person)")
+    g.add_argument("--oidc-may", metavar="ABILITIES", default=env("PYRTAN_OIDC_MAY"), help="what anyone who signs in may, in a group or not; 'none' for nothing (default $PYRTAN_OIDC_MAY, else ask when no --oidc-group is given and none when one is)")
+    g.add_argument("--oidc-scope", metavar="SCOPES", default=env("PYRTAN_OIDC_SCOPE", "openid profile email"), help="the scopes asked for, space-separated (default $PYRTAN_OIDC_SCOPE or 'openid profile email'; Authelia wants 'groups' added)")
+    g.add_argument("--oidc-name", metavar="CLAIM", default=env("PYRTAN_OIDC_NAME"), help="the claim that names the person (default $PYRTAN_OIDC_NAME, else preferred_username, then email, then sub)")
+    g.add_argument("--oidc-provider", metavar="NAME", default=env("PYRTAN_OIDC_PROVIDER"), help="what the console's sign-in button calls the provider (default $PYRTAN_OIDC_PROVIDER, else the issuer's host)")
+    g.add_argument("--oidc-ca", metavar="FILE", default=env("PYRTAN_OIDC_CA"), help="check the provider's certificate against this CA bundle (default $PYRTAN_OIDC_CA, else the system's)")
+    g.add_argument("--oidc-session", type=float, metavar="HOURS", default=float(env("PYRTAN_OIDC_SESSION", "12") or 12), help="how long a sign-in's session lasts (default $PYRTAN_OIDC_SESSION or 12)")
 
 
 def _ldap_users(args: argparse.Namespace) -> Any:
@@ -557,6 +571,32 @@ def _ldap_users(args: argparse.Namespace) -> Any:
         print(f"pyrtan {command}: {args.ldap} is not TLS: passwords cross the network in the clear; use ldaps:// or --ldap-starttls", file=sys.stderr)
     if not users.may and not users.groups:
         print(f"pyrtan {command}: --ldap-may none and no --ldap-group: nobody who signs in may do anything", file=sys.stderr)
+    return users
+
+
+def _oidc_users(args: argparse.Namespace) -> Any:
+    """The provider --oidc names, or None; SystemExit with what is wrong."""
+    if not getattr(args, "oidc", None):
+        return None
+    from .oidc import OidcError, OidcUsers, parse_abilities, parse_group
+    command = args.command
+    if not args.token:
+        raise SystemExit(f"pyrtan {command}: --oidc lets people in on top of a token: give --token (or $PYRTAN_TOKEN) too")
+    redirect = args.oidc_redirect or getattr(args, "advertise", None)
+    if not redirect:
+        raise SystemExit(f"pyrtan {command}: --oidc needs to know where the provider sends people back: --oidc-redirect https://hub.example.net (this Pyrtan's address as a browser reaches it), or --advertise")
+    try:
+        users = OidcUsers(
+            args.oidc, args.oidc_client_id or "", os.environ.get("PYRTAN_OIDC_CLIENT_SECRET"), redirect=redirect,
+            groups=dict(parse_group(g) for g in args.oidc_group), may=parse_abilities(args.oidc_may), claim=args.oidc_claim,
+            name_claim=args.oidc_name, scopes=(args.oidc_scope or "").split(), provider=args.oidc_provider, ca=args.oidc_ca, session_ttl=args.oidc_session * 3600.0,
+        )
+    except OidcError as e:
+        raise SystemExit(f"pyrtan {command}: {e}") from None
+    if not users.secure:
+        print(f"pyrtan {command}: {args.oidc} is not https: the client secret, the codes and the tokens cross the network in the clear", file=sys.stderr)
+    if not users.may and not users.groups:
+        print(f"pyrtan {command}: --oidc-may none and no --oidc-group: nobody who signs in may do anything", file=sys.stderr)
     return users
 
 
@@ -1182,7 +1222,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     paths = _paths(args.paths)
     name = args.name or (paths[0].resolve().name if paths else "pyrtan")
     users = _ldap_users(args)
-    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_env(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users, watch_history=args.watch_history)
+    oidc = _oidc_users(args)
+    service, server = serve(paths, args.host, args.port, name=name, hub=args.hub, env=_env(args.env), advertise=args.advertise, quiet=args.quiet, token=args.token, cors=args.cors, gaps=args.gaps, egress=args.egress, unanswered=args.unanswered, watch=args.watch, suggestions=args.suggestions, memory=args.memory, users=users, oidc=oidc, watch_history=args.watch_history)
     watching = f", watching {len(service.watcher)}" if service.watcher else ""
     print(f"pyrtan service {name!r}: {len(service.registry)} tree(s) at {server.url}{watching}" + (f", registered with {args.hub}" if args.hub else "") + _access_note(args), flush=True)
     for path, err in service.registry.errors.items():
@@ -1513,6 +1554,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
     follow = list(args.follow)
     join = list(args.join)
     users = _ldap_users(args)
+    oidc = _oidc_users(args)
     try:
         hub, server = serve_hub(
             args.host, args.port, name=args.name, peers=args.peer, poll_every=args.poll, quiet=args.quiet, token=args.token, cors=args.cors,
@@ -1520,7 +1562,7 @@ def cmd_hub(args: argparse.Namespace) -> int:
             state=args.state, open_follows=not args.closed, follow=follow, join=join, listed=args.listed,
             trees=[Path(t) for t in args.trees], handout=[Path(t) for t in args.handout], env=_env(args.env), gaps=args.gaps, egress=args.egress,
             store=args.store, replicas=args.replicas, report_gaps=args.report_gaps, unanswered=args.unanswered, suggestions=args.suggestions, watch=args.watch, memory=args.memory, watch_history=args.watch_history, chat=args.chat or args.chat_public, chat_typing=args.chat_typing, chat_public=args.chat_public, lan=args.lan, chat_reach=args.chat_reach,
-            allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain, users=users,
+            allow=args.allow, grants=args.grants, names=args.names, names_domain=args.names_domain, users=users, oidc=oidc,
         )
     except IdentityError as e:
         print(f"pyrtan hub: {e}", file=sys.stderr)
@@ -1839,6 +1881,9 @@ def _access_note(args: argparse.Namespace) -> str:
     if getattr(args, "ldap", None):
         groups = len(getattr(args, "ldap_group", []) or [])
         notes.append(f"LDAP users from {args.ldap}" + (f" in {groups} group(s)" if groups else "") + (", nested" if groups and getattr(args, "ldap_nested", False) else ""))
+    if getattr(args, "oidc", None):
+        groups = len(getattr(args, "oidc_group", []) or [])
+        notes.append(f"OIDC sign-in at {args.oidc}" + (f" in {groups} group(s)" if groups else ""))
     if getattr(args, "cors", None):
         notes.append("cors: " + ", ".join(args.cors))
     if getattr(args, "egress", "any") != "any":
@@ -1867,7 +1912,11 @@ def cmd_login(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"pyrtan login: {args.at} did not answer: {e}", file=sys.stderr)
         return 1
-    if status == 404 or (status == 401 and isinstance(body, dict) and str(body.get("say", "")).startswith("This Pyrtan needs a token:")):  # what a server without --ldap says
+    say = str(body.get("say", "")) if isinstance(body, dict) else ""
+    if status == 401 and "/auth/oidc" in say and "/login" not in say:  # --oidc without --ldap: the sign-in is a browser's
+        print(f"pyrtan login: {args.at} signs people in through a browser: open {args.at.rstrip('/')}/auth/oidc, and use the session the console keeps", file=sys.stderr)
+        return 1
+    if status == 404 or (status == 401 and say.startswith("This Pyrtan needs a token:")):  # what a server without --ldap says
         print(f"pyrtan login: {args.at} takes no sign-in: it was not started with --ldap", file=sys.stderr)
         return 1
     if status != 200 or not isinstance(body, dict) or not body.get("token"):

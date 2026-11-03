@@ -89,6 +89,7 @@ from .runtime import Outcome
 from .tree import Tree
 from .service import PEER_HEADER, Server, Service, bearer_ok, http_json, outcome_from_dict, set_egress, signed_path, build_answer
 from .ldap import LdapUsers, user_may
+from .oidc import OidcUsers
 from .store import StoreError, check_key
 from .transport import EgressRefused, check_egress
 
@@ -984,6 +985,7 @@ def serve_hub(
     chat_typing: bool = True,
     chat_public: bool = False,
     users: LdapUsers | None = None,
+    oidc: OidcUsers | None = None,
 ) -> tuple[Hub, Server]:
     """Start a hub. ``allow`` holds ``WHO=ABILITIES`` grants, made before it answers
     anything (a name is resolved now; IdentityError if it cannot be); ``grants`` is
@@ -999,7 +1001,7 @@ def serve_hub(
     set_egress(egress)  # the hub's own requests to hosts it did not choose (followed hubs, the hub list, identity documents) under the same policy as its trees
     local = Service(Registry.from_paths(trees), name=f"{name}", env=env, gaps=gaps, egress=egress, watch=watch, memory=memory, watch_history=watch_history) if trees else None
     hub = Hub(name=name, poll_every=poll_every, token=token, local=local, handout=Registry.from_paths(handout) if handout else None, unanswered=unanswered, chat=chat, chat_typing=chat_typing, chat_public=chat_public, grants=granted, chat_reach=chat_reach, suggestions=suggestions, names=names, names_domain=names_domain)
-    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True, users=users).start()
+    server = Server(hub.route, host, port, quiet, token=token, cors=cors, federated=federate or bool(advertise), public=is_chat_path if chat_public else None, keyed=True, users=users, oidc=oidc).start()
     hub._audience = (advertise or server.url).rstrip("/")
     hub.advertised = bool(advertise)
     hub.egress = egress

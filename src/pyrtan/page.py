@@ -217,6 +217,7 @@ TEMPLATE = r"""<!doctype html>
         <input type="password" id="hub-token" placeholder="token, if the hub needs one" autocomplete="off">
         <input type="text" id="hub-user" placeholder="or your user name" autocomplete="username" hidden>
         <input type="password" id="hub-password" placeholder="and password" autocomplete="current-password" hidden>
+        <button type="button" id="hub-signin" hidden>Sign in</button>
         <button type="submit" id="connect-go">Connect</button>
         <button type="button" class="quiet" id="forget">Forget</button>
       </form>
@@ -939,7 +940,8 @@ async function detect() {
         $("#connect-help").innerHTML = "Kept in this browser only. The token is the one the hub or service was started with (<code>--token</code> or <code>$PYRTAN_TOKEN</code>).";
         $("#hub-token").value = token;
         signIn(a);
-        if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
+        if (signInFailed) { problem(signInFailed, true); signInFailed = ""; }
+        else if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
       }
       return a;
     }
@@ -1072,7 +1074,7 @@ async function load() {
   $("#access-tab").hidden = !(isHub && a.audience);
   $("#chat-tab").hidden = !(isHub && a.chat);
   if (isHub && a.chat) chat.recover();
-  if (token && ((a.chat && a.chat_bots === false) || (a.login === "ldap" && !a.user))) {
+  if (token && ((a.chat && a.chat_bots === false) || ((a.login === "ldap" || a.oidc) && !a.user))) {
     try { const again = await json("api"); a.chat_bots = again.chat_bots; a.user = again.user; } catch (e) {}  // the first ask went without the token
   }
   if (a.chat && a.chat_bots === false) {
@@ -1871,15 +1873,21 @@ $("#hubs").addEventListener("click", async (e) => {
 });
 $("#tries").addEventListener("click", (e) => { const a = e.target.closest("a[data-q]"); if (!a) return; e.preventDefault(); $("#text").value = a.dataset.q; location.hash = "#ask"; ask(); });
 // A Pyrtan started with --ldap takes a directory account too: the password goes to /login once,
-// and only the session token it answers with is kept, in place of a token.
+// and only the session token it answers with is kept, in place of a token. One started with
+// --oidc sends the person to its provider from its own page (/auth/oidc) and comes back with
+// the session in the fragment, so the button shows only when this console is that page.
 function signIn(a) {
   const on = !!(a && a.login === "ldap");
+  const sso = !remote && a && a.oidc && a.oidc.start ? a.oidc : null;
   $("#hub-user").hidden = !on; $("#hub-password").hidden = !on;
-  if (on) {
+  $("#hub-signin").hidden = !sso;
+  if (sso) { $("#hub-signin").textContent = `Sign in with ${sso.provider || "the provider"}`; $("#hub-signin").dataset.start = sso.start; }
+  if (on || sso) {
     $("#hub-token").placeholder = "token, or sign in:";
-    if (!remote) $("#connect-lede").textContent = "This Pyrtan needs a token, or your directory account:";
+    if (!remote) $("#connect-lede").textContent = on && sso ? `This Pyrtan needs a token, your directory account, or a sign-in with ${sso.provider}:` : on ? "This Pyrtan needs a token, or your directory account:" : `This Pyrtan needs a token, or a sign-in with ${sso.provider}:`;
   }
 }
+$("#hub-signin").addEventListener("click", () => { location.href = $("#hub-signin").dataset.start + "?next=" + encodeURIComponent(location.pathname); });
 $("#connect-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   agentsUI.putAway();
@@ -2456,6 +2464,17 @@ $("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAwa
 // (Safari, private windows), and then the console would hold no trees at
 // all. A key that comes late moves what this browser kept, as any new key
 // does; a hub's console starts again, so its calls are signed.
+// Back from /auth/oidc/callback: the session token rides in the fragment, which no server or
+// log sees, and is kept the way a token is; a failed sign-in brings its message the same way.
+let signInFailed = "";
+{
+  const back = /^#(session|signin-failed)=(.*)$/.exec(location.hash);
+  if (back) {
+    history.replaceState(null, "", location.pathname + location.search);
+    if (back[1] === "session") store.set({token: decodeURIComponent(back[2])});
+    else signInFailed = decodeURIComponent(back[2]);
+  }
+}
 let loading = null;
 const begin = () => { if (!loading) loading = load(); };
 ident.init().finally(() => { if (!loading) return begin(); loading.finally(() => { if (local) moveKept(); else if (ident.key) load(); }); });
