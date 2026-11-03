@@ -1,10 +1,14 @@
 name = "hacker-news-item"
-version = 2
+version = 3
 namespace = "pyrtan"
 description = "One Hacker News item by id: title, url, score, author."
 tags = ["news", "read-only"]
 license = "MIT"
 hosts = ["hacker-news.firebaseio.com"]
+# What a caller may rely on when this ends done (hacker-news reads each
+# story's title and url). pyrtan check holds callers to it, and a run
+# whose output breaks it stops as "contract" instead of handing it on.
+returns = { id = "int", title = "str", url = "str", score = "int?", by = "str?" }
 start = "fetch"
 
 [[triggers]]
