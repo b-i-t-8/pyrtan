@@ -445,7 +445,13 @@ Five trees, all against real public APIs, all tested offline:
     not the tree's. A request must fit every budget that applies, and one
     refused is counted in none, so the GitHub trees can spend GitHub's own
     sixty an hour together once they say so (`runtime.py`).
-27. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+27. **v0.64, built: a budget a token raises.** `raised_by = { GITHUB_TOKEN
+    = 5000 }` beside a budget's `requests` says what a signed-in caller
+    is allowed: when the runner's environment holds the name, that number
+    is the budget, so a tree written for sixty an hour anonymous does not
+    refuse at sixty when it has a token. The name is said in the refusal
+    and the output; the value never is (`runtime.py`).
+28. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

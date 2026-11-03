@@ -226,3 +226,58 @@ def test_a_host_budget_matches_by_name_and_glob_and_only_what_reaches_a_host():
 def test_a_bad_host_budget_is_refused(budget, words):
     with pytest.raises(TreeError, match=re.escape(words)):
         load_tree_text(shop("bad", budget))
+
+
+def raised(budget: str, env: dict[str, str]):
+    reg = Registry()
+    reg.add(load_tree_text(shop("gh", budget)))
+    return Runner(reg, RecordedTransport(json.loads(json.dumps(FIXTURE))), env=env, clock=lambda: T0)
+
+
+def test_a_credential_in_the_environment_raises_the_budget():
+    budget = '{ requests = 1, per = "1 hour", raised_by = { SHOP_TOKEN = 3 } }'
+    r = raised(budget, {"SHOP_TOKEN": "s3cret"})
+    assert [r.run_tree("gh", {}).status for _ in range(3)] == ["done"] * 3
+    out = r.run_tree("gh", {})
+    assert out.reason == "budget"
+    assert out.say == "get: gh has spent its budget of 3 requests per 1 hour (raised by SHOP_TOKEN); the next is allowed in 3600 s."
+    assert out.output == {"budget": {"requests": 3, "per": 3600, "retry_after": 3600, "raised_by": "SHOP_TOKEN"}}
+    assert "s3cret" not in out.say + json.dumps(out.output)  # the name, never the value
+
+
+@pytest.mark.parametrize("env", [{}, {"SHOP_TOKEN": ""}, {"OTHER": "x"}])
+def test_without_the_credential_the_budget_is_the_plain_one(env):
+    r = raised('{ requests = 1, per = "1 hour", raised_by = { SHOP_TOKEN = 3 } }', env)
+    assert r.run_tree("gh", {}).status == "done"
+    out = r.run_tree("gh", {})
+    assert out.reason == "budget" and out.output["budget"] == {"requests": 1, "per": 3600, "retry_after": 3600}
+    assert "raised" not in out.say
+
+
+def test_of_several_credentials_present_the_largest_counts():
+    budget = '{ requests = 1, per = "1m", raised_by = { A_TOKEN = 2, B_TOKEN = 4, C_TOKEN = 9 } }'
+    r = raised(budget, {"A_TOKEN": "a", "B_TOKEN": "b"})
+    assert [r.run_tree("gh", {}).status for _ in range(5)] == ["done"] * 4 + ["error"]
+    assert r.run_tree("gh", {}).output["budget"]["raised_by"] == "B_TOKEN"
+
+
+def test_a_raised_host_budget_and_the_capability():
+    budget = '{ host = "api.example", requests = 1, per = "1m", raised_by = { SHOP_TOKEN = 2 } }'
+    r = raised(budget, {"SHOP_TOKEN": "t"})
+    assert [r.run_tree("gh", {}).status for _ in range(3)] == ["done", "done", "error"]
+    tree = load_tree_text(shop("gh", budget))
+    assert tree.budget == [{"requests": 1, "per": 60, "said": "1m", "host": "api.example", "raised_by": {"SHOP_TOKEN": 2}}]
+    assert tree.capability()["budget"] == [{"requests": 1, "per": 60, "host": "api.example", "raised_by": {"SHOP_TOKEN": 2}}]
+
+
+@pytest.mark.parametrize("raised_by, words", [
+    ('{}', "budget.raised_by is a table of env names"),
+    ('"GITHUB_TOKEN"', "budget.raised_by is a table of env names"),
+    ('{ "not-a-name" = 5 }', "not an env name"),
+    ('{ SHOP_TOKEN = 1 }', "budget.raised_by.SHOP_TOKEN is a whole number above requests (1)"),
+    ('{ SHOP_TOKEN = 2.5 }', "budget.raised_by.SHOP_TOKEN is a whole number above requests"),
+    ('{ SHOP_TOKEN = true }', "budget.raised_by.SHOP_TOKEN is a whole number above requests"),
+])
+def test_a_bad_raised_by_is_refused(raised_by, words):
+    with pytest.raises(TreeError, match=re.escape(words)):
+        load_tree_text(shop("bad", f'{{ requests = 1, per = "1m", raised_by = {raised_by} }}'))

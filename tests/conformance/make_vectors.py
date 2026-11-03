@@ -36,6 +36,7 @@ from pyrtan.service import Service  # noqa: E402
 from pyrtan.tree import build as build_tree  # noqa: E402
 
 CLOCK = _dt.datetime(2026, 10, 25, 12, 0, tzinfo=_dt.timezone.utc)
+HUB_ENV = {"VECTOR_TOKEN": "made-up"}  # what the hub's service holds: a budget raised by it is raised
 POSTFINITE = "tests/fixtures/postfinite.json"
 POSTFINITE_ENV = {"postfinite_email": "ops@example.org", "postfinite_password": "not-a-real-password"}
 CASES: list[dict] = [
@@ -263,6 +264,10 @@ LANGUAGE_TREES: list[dict] = [
        "budget": [{"host": "hacker-news.firebaseio.com", "requests": 2, "per": "1 hour"}, {"requests": 5, "per": 60}], "start": "get",
        "nodes": {"get": {"kind": "observe", "http": {"url": "https://hacker-news.firebaseio.com/v0/item/101.json"}, "into": "r", "extract": [{"into": "title", "json": "json.title"}], "next": "said"},
                  "said": {"kind": "done", "say": "{{ state.title }}"}}} for x in ("a", "b")),
+    *({"name": f"raise-{x}", "version": 1, "description": f"reads one item, within a budget a token raises ({x})", "hosts": ["hacker-news.firebaseio.com"],
+       "budget": {"requests": 1, "per": "1 hour", "raised_by": {token: 2 if x == "a" else 5}}, "start": "get",
+       "nodes": {"get": {"kind": "observe", "http": {"url": "https://hacker-news.firebaseio.com/v0/item/101.json"}, "into": "r", "extract": [{"into": "title", "json": "json.title"}], "next": "said"},
+                 "said": {"kind": "done", "say": "{{ state.title }}"}}} for x, token in (("a", "VECTOR_TOKEN"), ("b", "ABSENT_TOKEN"))),
     {"name": "panel", "version": 1, "description": "reads a status panel with patterns", "hosts": [], "start": "read",
      "inputs": {"text": {"type": "str", "required": True}},
      "nodes": {"read": {"kind": "observe", "from": "inputs.text", "next": "temp", "extract": [
@@ -385,6 +390,11 @@ HUB = [
     ("POST", "/run", {"tree": "share-a"}),
     ("POST", "/run", {"tree": "share-b"}),
     ("POST", "/run", {"tree": "share-a"}),            # the host's two are spent, by both trees together
+    ("POST", "/run", {"tree": "raise-a"}),
+    ("POST", "/run", {"tree": "raise-a"}),            # VECTOR_TOKEN is in the hub's env: one raised to two
+    ("POST", "/run", {"tree": "raise-a"}),            # ... and those two are spent
+    ("POST", "/run", {"tree": "raise-b"}),
+    ("POST", "/run", {"tree": "raise-b"}),            # ABSENT_TOKEN is not: still one
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "TEMPERATURE: 35°C"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "nothing here"}}),
@@ -428,6 +438,7 @@ def _hub_exchanges(reg: Registry, fixture: Path) -> list[dict]:
     snapshot of "@last" is the one the previous answer carried."""
     service = Service(reg, name="this browser", transport=RecordedTransport.from_file(fixture))
     service.runner.clock = lambda: CLOCK
+    service.runner.env = dict(HUB_ENV)
     out, last = [], None
     for method, path, body in HUB:
         if body is not None and body.get("snapshot") == "@last":
@@ -487,6 +498,7 @@ def build() -> dict:
         "pyrtan-conformance": 1,
         "clock": CLOCK.isoformat(),
         "fixture": "tests/fixtures/examples.json",
+        "hub_env": HUB_ENV,
         "trees": {t.name: t.raw for t in reg.trees()},
         "runs": runs,
         "language_trees": LANGUAGE_TREES,
