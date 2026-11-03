@@ -432,7 +432,16 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+21. **v0.61, built: an act done once per key.** An act could be done
+    twice for one thing: a watch that fired twice, a person who asked
+    twice, a hub that retried. `once = "{{ inputs.order }}"` names what
+    makes two runs the same; the first does the act and keeps the key
+    with what it got, in the box's memory (so across restarts), and a
+    later one does not do it again, says so in its step and hands on
+    what the first got. Only a good answer keeps a key; two runs at once
+    are taken in turn; an act done before is neither asked about nor a
+    stop in a dry run (`once.py`, `runtime.py`, `pyrtan.js`).
+22. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

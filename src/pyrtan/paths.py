@@ -94,6 +94,8 @@ def does(node: Node) -> str:
             text = f"{str(s.get('method', 'GET')).upper()} {s.get('url')}" if source == "http" else f"{source} {what(source, s)}"
         if node.kind == "act" and node.get("confirm"):
             text += " (asks first)"
+        if node.kind == "act" and node.get("once"):
+            text += f" (once per {node.get('once')})"
         return text
     if node.kind == "delegate":
         return f"tree {spec['tree']}" if "tree" in spec else f"intent {spec.get('intent')!r}"

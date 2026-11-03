@@ -246,6 +246,10 @@ LANGUAGE_TREES: list[dict] = [
      "triggers": ["turn {state:word} the {room:word} light", "dim the {room:word} light"], "inputs": {"state": {"type": "str", "default": "on"}, "room": {"type": "str", "required": True}},
      "nodes": {"switch": {"kind": "act", "http": {"method": "POST", "url": "https://lights.example/{{ inputs.room }}", "body": {"on": "{{ inputs.state }}"}}, "confirm": "Turn the {{ inputs.room }} light {{ inputs.state }}?", "into": "set", "next": "done"},
                "done": {"kind": "done", "say": "The {{ inputs.room }} light is {{ inputs.state }} ({{ state.set.status }}).", "output": {"status": "{{ state.set.status }}"}}}},
+    {"name": "notify", "version": 1, "description": "tells the kitchen once per order", "hosts": ["lights.example"], "start": "send",
+     "inputs": {"order": {"type": "int", "required": True}},
+     "nodes": {"send": {"kind": "act", "http": {"method": "POST", "url": "https://lights.example/kitchen", "body": {"order": "{{ inputs.order }}"}}, "once": "order {{ inputs.order }}", "into": "sent", "next": "done"},
+               "done": {"kind": "done", "say": "order {{ inputs.order }}: first {{ state.sent.once.first }}, {{ state.sent.status }}", "output": {"once": "{{ state.sent.once }}"}}}},
     {"name": "grade", "version": 1, "description": "a score, looked up", "hosts": [], "start": "word",
      "triggers": ["grade {score:int}"], "inputs": {"score": {"type": "int", "required": False}, "strict": {"type": "bool", "default": False}},
      "nodes": {"word": {"kind": "lookup", "on": "inputs.score", "into": "word", "next": "mark",
@@ -360,6 +364,10 @@ HUB = [
     ("POST", "/resume", {"snapshot": "@last", "answer": "not now"}),
     ("POST", "/intent", {"text": "turn on the kitchen light", "dry_run": True}),
     ("POST", "/run", {"tree": "light", "inputs": {"room": "hall"}, "dry_run": True}),
+    ("POST", "/run", {"tree": "notify", "inputs": {"order": 7}}),
+    ("POST", "/run", {"tree": "notify", "inputs": {"order": 7}}),   # the same order: not posted again
+    ("POST", "/run", {"tree": "notify", "inputs": {"order": 8}}),
+    ("POST", "/run", {"tree": "notify", "inputs": {"order": 7}, "dry_run": True}),   # done before: nothing to stop at
     ("POST", "/run", {"tree": "light", "inputs": {"room": "attic"}}),
     ("POST", "/intent", {"text": "tally ada"}),
     ("POST", "/intent", {"text": "peek tally"}),

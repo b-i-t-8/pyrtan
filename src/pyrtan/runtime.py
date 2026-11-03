@@ -30,6 +30,7 @@ the trace is the whole of its explanation.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
@@ -107,10 +108,17 @@ class Runner:
     max_depth: int = MAX_DEPTH
     emitted: list[dict[str, Any]] = field(default_factory=list)
     adapters: Any = None  # the other sources (file, shell, serial, queue, browser); a recorded transport answers for them too
+    once: Any = None  # the keys acts with `once` were done for (pyrtan.once.Once), in the box's memory
 
     def __post_init__(self) -> None:
         if self.adapters is None:
             self.adapters = self.transport if hasattr(self.transport, "perform") else LocalAdapters()
+        if self.once is None:
+            from .memory import Memory
+            from .once import Once
+
+            memory = getattr(self.adapters, "memory", None)
+            self.once = Once(memory if isinstance(memory, Memory) else None)
 
     # ------------------------------------------------------------ entry points
 
@@ -247,9 +255,47 @@ class Runner:
 
     def _do_act(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         flags = scope[FLAGS]
+        once = node.get("once")
+        if once is not None:
+            value = render(once, scope)
+            key = "" if value is None or value is MISSING else str(value).strip()
+            if not key:
+                return Outcome("error", tree.name, reason="template", say=f"{node.id}: 'once' rendered to nothing, so nothing says which thing this is")
+            slot = self.once.slot(tree.name, node.id, key)
+            prior = self.once.done(slot)
+            if prior is not None:  # done for this key before: not again, not even asked
+                return self._done_before(node, scope, key, prior)
         if (node.get("confirm") or flags["dry_run"]) and flags["confirmed"] != node.id:
             return self._ask_first(tree, node, scope, trace, depth)
         flags["confirmed"] = None  # a yes is for one act, once
+        if once is not None:
+            prior = self.once.claim(slot)
+            if prior is not None:  # another run did it while this one was asking or waiting
+                return self._done_before(node, scope, key, prior)
+            kept = False
+            try:
+                result = self._act(tree, node, scope, trace, depth)
+                into = node.get("into", "last")
+                got = resolve(_state_path(into), scope)
+                source_name = "emit" if node.get("emit") is not None else next((s for s in SOURCES if node.get(s) is not None), None)
+                if isinstance(result, tuple) and isinstance(got, dict) and good(source_name, got):
+                    at = self.clock().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                    plain = {k: v for k, v in got.items() if k != "once"}
+                    self.once.keep(slot, key, at, json.loads(json.dumps(plain, default=str)), node.get("once_for"))
+                    kept = True
+                    got["once"] = {"key": key, "first": True, "at": at}
+                return result
+            finally:
+                if not kept:
+                    self.once.release(slot)
+        return self._act(tree, node, scope, trace, depth)
+
+    def _done_before(self, node: Node, scope: dict[str, Any], key: str, prior: dict[str, Any]):
+        result = prior.get("result") if isinstance(prior.get("result"), dict) else {}
+        _put(scope["state"], node.get("into", "last"), {**result, "once": {"key": key, "first": False, "at": prior.get("at")}})
+        return Step(node.id, "act", f"already done for {key!r} (at {prior.get('at')}): not done again", observed={"once": key, "at": prior.get("at")}), node.next
+
+    def _act(self, tree: Tree, node: Node, scope: dict[str, Any], trace: Trace, depth: int):
         emit = node.get("emit")
         if emit is not None:
             event = {"event": render(emit["event"], scope), "data": render(emit.get("data", {}), scope), "tree": tree.name}

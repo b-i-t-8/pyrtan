@@ -1492,6 +1492,27 @@
       "version": 1
      },
      {
+      "description": "tells the kitchen once per order",
+      "hosts": [
+       "lights.example"
+      ],
+      "inputs": {
+       "order": {
+        "required": true,
+        "type": "int"
+       }
+      },
+      "language": {},
+      "license": "",
+      "name": "notify",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
       "description": "How many times an npm package was downloaded in the last week.",
       "hosts": [
        "api.npmjs.org"
@@ -4794,6 +4815,199 @@
   {
    "body": {
     "inputs": {
+     "order": 7
+    },
+    "tree": "notify"
+   },
+   "expect": {
+    "inputs": {
+     "order": 7
+    },
+    "output": {
+     "once": {
+      "at": "2026-10-25T12:00:00Z",
+      "first": true,
+      "key": "order 7"
+     }
+    },
+    "say": "order 7: first True, 204",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "send",
+       "summary": "POST https://lights.example/kitchen -> 204"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "order 7: first True, 204"
+      }
+     ],
+     "tree": "notify"
+    },
+    "tree": "notify"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "order": 7
+    },
+    "tree": "notify"
+   },
+   "expect": {
+    "inputs": {
+     "order": 7
+    },
+    "output": {
+     "once": {
+      "at": "2026-10-25T12:00:00Z",
+      "first": false,
+      "key": "order 7"
+     }
+    },
+    "say": "order 7: first False, 204",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "send",
+       "observed": {
+        "at": "2026-10-25T12:00:00Z",
+        "once": "order 7"
+       },
+       "summary": "already done for 'order 7' (at 2026-10-25T12:00:00Z): not done again"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "order 7: first False, 204"
+      }
+     ],
+     "tree": "notify"
+    },
+    "tree": "notify"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
+     "order": 8
+    },
+    "tree": "notify"
+   },
+   "expect": {
+    "inputs": {
+     "order": 8
+    },
+    "output": {
+     "once": {
+      "at": "2026-10-25T12:00:00Z",
+      "first": true,
+      "key": "order 8"
+     }
+    },
+    "say": "order 8: first True, 204",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "send",
+       "summary": "POST https://lights.example/kitchen -> 204"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "order 8: first True, 204"
+      }
+     ],
+     "tree": "notify"
+    },
+    "tree": "notify"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "dry_run": true,
+    "inputs": {
+     "order": 7
+    },
+    "tree": "notify"
+   },
+   "expect": {
+    "inputs": {
+     "order": 7
+    },
+    "output": {
+     "once": {
+      "at": "2026-10-25T12:00:00Z",
+      "first": false,
+      "key": "order 7"
+     }
+    },
+    "say": "order 7: first False, 204",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "act",
+       "next": "done",
+       "node": "send",
+       "observed": {
+        "at": "2026-10-25T12:00:00Z",
+        "once": "order 7"
+       },
+       "summary": "already done for 'order 7' (at 2026-10-25T12:00:00Z): not done again"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "done",
+       "summary": "order 7: first False, 204"
+      }
+     ],
+     "tree": "notify"
+    },
+    "tree": "notify"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "inputs": {
      "room": "attic"
     },
     "tree": "light"
@@ -5888,7 +6102,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 37,
+    "runs": 41,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -5934,6 +6148,7 @@
      "natural-events",
      "network-scan",
      "next-launch",
+     "notify",
      "npm-downloads",
      "npm-package",
      "nuget",
@@ -6401,6 +6616,43 @@
     "turn {state:word} the {room:word} light",
     "dim the {room:word} light"
    ],
+   "version": 1
+  },
+  {
+   "description": "tells the kitchen once per order",
+   "hosts": [
+    "lights.example"
+   ],
+   "inputs": {
+    "order": {
+     "required": true,
+     "type": "int"
+    }
+   },
+   "name": "notify",
+   "nodes": {
+    "done": {
+     "kind": "done",
+     "output": {
+      "once": "{{ state.sent.once }}"
+     },
+     "say": "order {{ inputs.order }}: first {{ state.sent.once.first }}, {{ state.sent.status }}"
+    },
+    "send": {
+     "http": {
+      "body": {
+       "order": "{{ inputs.order }}"
+      },
+      "method": "POST",
+      "url": "https://lights.example/kitchen"
+     },
+     "into": "sent",
+     "kind": "act",
+     "next": "done",
+     "once": "order {{ inputs.order }}"
+    }
+   },
+   "start": "send",
    "version": 1
   },
   {
