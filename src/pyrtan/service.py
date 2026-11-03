@@ -591,8 +591,27 @@ class Server:
         while self.thread.is_alive():
             self.thread.join(0.5)
 
+    STOP_WITHIN = 10.0  # seconds stop() waits for the request loop before it says where the loop is stuck
+
     def stop(self) -> None:
-        self.httpd.shutdown()
+        """Stop the request loop and close the socket. It never waits more
+        than :data:`STOP_WITHIN`: ``socketserver``'s own ``shutdown()``
+        waits for the loop without limit, and waits forever when the loop
+        is not running (a server never started) or cannot get back to its
+        poll. A loop that does not stop in time is said on stderr, with the
+        frame it is in, and the socket is closed under it."""
+        if self.thread is None or not self.thread.is_alive():
+            self.httpd.server_close()  # no loop to wait for (never started, or already gone)
+            return
+        stopping = threading.Thread(target=self.httpd.shutdown, name="pyrtan-server-stop", daemon=True)
+        stopping.start()
+        stopping.join(self.STOP_WITHIN)
+        if stopping.is_alive():
+            import traceback
+
+            frame = sys._current_frames().get(self.thread.ident or -1)
+            where = "".join(traceback.format_stack(frame)) if frame is not None else "  (its thread has no frame)\n"
+            print(f"pyrtan: the server at {self.url} did not stop within {self.STOP_WITHIN:g} s; its request loop is at:\n{where}", file=sys.stderr, flush=True)
         self.httpd.server_close()
 
 
