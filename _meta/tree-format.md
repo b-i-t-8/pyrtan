@@ -56,6 +56,20 @@ it:
 
 `/capabilities` carries it, so a hub knows what each tree returns.
 
+The other half is what a caller hands over. `pyrtan check` over several
+trees holds a `delegate` or an `each` over a tree (`tree` with `with`) to
+the callee's declared `inputs`, before anything runs, as the callee's own
+run would hold it: `hands fetch-one 'page', which it does not take; it
+takes id, kind, count`, `does not hand fetch-one 'id', which it requires`,
+and a literal of the wrong type, out of `min`/`max`, outside `one_of` or
+not matching `pattern` (`hands fetch-one count = 9, which it refuses:
+input 'count' must be at most 5, got 9`). A template is the run's to
+render, so only a caller's own input handed over whole
+(`{{ inputs.ratio }}`) is judged by its declared type, and only a type
+the callee's can never take is a warning (a float for an int; a `str`
+may still read as a number and is not). A callee the swarm holds, not
+among the trees checked, is left alone.
+
 ## Triggers
 
 ```toml

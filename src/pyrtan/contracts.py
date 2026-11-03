@@ -21,6 +21,15 @@ says the field may be empty (absent, or null). Three things hold it:
 
 A caller of a tree that promises nothing is not held to anything; check
 says so, once, where it reads the output.
+
+The other half is what a caller hands over. ``pyrtan check`` over several
+trees holds a ``delegate`` or an ``each`` over a tree (``tree`` with
+``with``) to the callee's declared inputs, as the callee's own run would
+hold it, before anything runs: no input it does not take, every required
+one given, a literal value of the declared type, range, choices and
+pattern. A caller's own input handed over whole (``{{ inputs.n }}``) whose
+type the callee's can never take is a warning (a ``str`` is not judged: it
+may still read as a number).
 """
 
 from __future__ import annotations
@@ -174,4 +183,73 @@ def check_callers(trees: dict[str, Any]) -> dict[str, list[tuple[str, str, str]]
                     out.setdefault(tree.name, []).append(("info", where, f"reads {path}, but {callee} promises nothing about its output; give it 'returns' to have this checked"))
             elif field not in returns:
                 out.setdefault(tree.name, []).append(("error", where, f"reads {path}, but {callee} does not return {field!r}; it returns {', '.join(returns)}"))
+    return out
+
+
+# The other half of a contract: what a caller hands a tree. A tree declares
+# its inputs; a caller that delegates to it (``tree`` with ``with``), or
+# walks it with ``each``, is held to them before anything runs, as the
+# callee's own run would hold it: no input it does not take, every required
+# one given, and a literal value of the declared kind and range.
+
+PLACEHOLDER = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
+
+
+def _types_clash(given: str, wanted: str) -> bool:
+    """Whether a caller's input of type ``given``, handed over whole, can
+    never be the callee's input of type ``wanted``. A whole placeholder
+    keeps its value's kind and the callee coerces it as it would a
+    sentence's, so a str may still read as a number and is not judged."""
+    if given == wanted or wanted == "str" or given == "str":
+        return False
+    if "list" in (given, wanted) or "dict" in (given, wanted):
+        return True
+    return (given, wanted) in {("float", "int"), ("bool", "int"), ("bool", "float"), ("int", "bool"), ("float", "bool")}
+
+
+def check_inputs(trees: dict[str, Any]) -> dict[str, list[tuple[str, str, str]]]:
+    """For each tree, (level, where, message) about the inputs it hands the
+    trees it delegates to or walks, where those trees are among ``trees``.
+    Errors are what the callee's run would refuse as ``bad-input`` whatever
+    the values: an input it does not take, a required one not given, a
+    literal it cannot coerce. A warning is a caller's own input handed over
+    whole (``{{ inputs.n }}``) whose declared type the callee's cannot take."""
+    from .tree import TreeError
+
+    out: dict[str, list[tuple[str, str, str]]] = {}
+    for tree in trees.values():
+        for node in tree.nodes.values():
+            callee_name = node.spec.get("tree")
+            if node.kind not in ("delegate", "each") or not isinstance(callee_name, str):
+                continue
+            callee = trees.get(callee_name)
+            if callee is None:
+                continue  # a tree the swarm holds: its inputs are not known here
+            given = node.spec.get("with") or {}
+            if not isinstance(given, dict):
+                continue  # tree.check says what 'with' must be
+            where = f"nodes.{node.id}.with"
+            say = lambda level, text: out.setdefault(tree.name, []).append((level, where, text))  # noqa: E731
+            takes = ", ".join(callee.inputs) or "none"
+            for key in sorted(set(given) - set(callee.inputs)):
+                say("error", f"hands {callee_name} {key!r}, which it does not take; it takes {takes}")
+            for key, spec in callee.inputs.items():
+                if key not in given and spec.required and spec.default is None:
+                    say("error", f"does not hand {callee_name} {key!r}, which it requires")
+            for key, value in given.items():
+                spec = callee.inputs.get(key)
+                if spec is None or value is None:
+                    continue
+                if not (isinstance(value, str) and PLACEHOLDER.search(value)):
+                    try:
+                        spec.coerce(value)
+                    except TreeError as e:
+                        say("error", f"hands {callee_name} {key} = {value!r}, which it refuses: {str(e)}")
+                    continue
+                whole = PLACEHOLDER.fullmatch(value.strip())
+                ref = whole.group(1) if whole else None
+                if ref and "|" not in ref and ref.startswith("inputs.") and ref[len("inputs."):] in tree.inputs:
+                    mine = tree.inputs[ref[len("inputs."):]]
+                    if _types_clash(mine.type, spec.type):
+                        say("warn", f"hands {callee_name} {key} from {ref}, a {mine.type}, where it takes a {spec.type}")
     return out

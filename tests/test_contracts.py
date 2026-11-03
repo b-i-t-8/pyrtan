@@ -176,3 +176,119 @@ def test_the_capability_and_the_command(tmp_path, capsys):
     assert main(["check", str(tmp_path), "--quiet"]) == 1
     out = capsys.readouterr().out
     assert "caller: 4 nodes" in out and "error: nodes.done: reads state.items[1].author, but item does not return 'author'" in out
+
+
+# The other half: what a caller hands a tree, held to that tree's inputs.
+
+CALLEE = '''
+name = "fetch-one"
+description = "one thing by id"
+start = "done"
+
+[inputs.id]
+type = "int"
+
+[inputs.kind]
+type = "str"
+one_of = ["story", "comment"]
+default = "story"
+
+[inputs.count]
+type = "int"
+min = 1
+max = 5
+required = false
+
+[nodes.done]
+kind = "done"
+say = "{{ inputs.id }}"
+'''
+
+
+def caller(with_: str, kind: str = "delegate", extra: str = "") -> str:
+    over = 'over = "inputs.ids"\nlimit = 3\n' if kind == "each" else ""
+    return f'''
+name = "caller"
+description = "hands fetch-one its inputs"
+start = "get"
+{extra}
+[inputs.ids]
+type = "list"
+default = [1]
+
+[inputs.flag]
+type = "bool"
+default = false
+
+[inputs.ratio]
+type = "float"
+default = 0.5
+
+[nodes.get]
+kind = "{kind}"
+{over}tree = "fetch-one"
+with = {with_}
+into = "got"
+next = "done"
+
+[nodes.done]
+kind = "done"
+say = "ok"
+'''
+
+
+def handed(with_: str, kind: str = "delegate") -> list[tuple[str, str, str]]:
+    from pyrtan.contracts import check_inputs
+
+    trees = {t.name: t for t in (load_tree_text(CALLEE), load_tree_text(caller(with_, kind)))}
+    return check_inputs(trees).get("caller", [])
+
+
+def test_a_caller_is_held_to_the_callee_s_inputs():
+    assert handed('{ id = "{{ inputs.ids }}" }') == [("warn", "nodes.get.with", "hands fetch-one id from inputs.ids, a list, where it takes a int")]
+    assert handed('{ id = 7 }') == []
+    assert handed('{ id = "{{ item }}" }', kind="each") == []  # an each over the tree, its item handed on
+    assert handed('{ id = 7, page = 2 }') == [("error", "nodes.get.with", "hands fetch-one 'page', which it does not take; it takes id, kind, count")]
+    assert handed('{ kind = "story" }') == [("error", "nodes.get.with", "does not hand fetch-one 'id', which it requires")]
+    assert handed('{ id = "seven" }') == [("error", "nodes.get.with", "hands fetch-one id = 'seven', which it refuses: input 'id' must be int, got 'seven'")]
+    assert handed('{ id = 7, count = 9 }') == [("error", "nodes.get.with", "hands fetch-one count = 9, which it refuses: input 'count' must be at most 5, got 9")]
+    assert handed('{ id = 7, kind = "poll" }') == [("error", "nodes.get.with", "hands fetch-one kind = 'poll', which it refuses: input 'kind' must be one of ['story', 'comment'], got 'poll'")]
+    # A caller's own input handed whole, of a type the callee's can never take; a str is not judged.
+    assert handed('{ id = 7, count = "{{ inputs.flag }}" }')[0][2] == "hands fetch-one count from inputs.flag, a bool, where it takes a int"
+    assert handed('{ id = 7, count = "{{ inputs.ratio }}" }')[0][2] == "hands fetch-one count from inputs.ratio, a float, where it takes a int"
+    assert handed('{ id = "{{ inputs.flag | int }}" }') == []  # through a filter: not judged
+    # A tree the swarm holds (not among those checked) is left alone.
+    from pyrtan.contracts import check_inputs
+
+    assert check_inputs({"caller": load_tree_text(caller('{ page = 2 }'))}) == {}
+
+
+@pytest.mark.parametrize("given, refused", [
+    ({"id": 7}, False),
+    ({"id": 7, "kind": "comment", "count": 5}, False),
+    ({"id": 7, "page": 2}, True),
+    ({"kind": "story"}, True),
+    ({"id": "seven"}, True),
+    ({"id": 7, "count": 9}, True),
+    ({"id": 7, "kind": "poll"}, True),
+])
+def test_what_check_refuses_the_run_refuses_too(given, refused):
+    # Every error check gives is a bad-input the callee's own run would stop with.
+    import tomllib
+
+    reg = Registry()
+    reg.add(load_tree_text(CALLEE))
+    with_ = "{ " + ", ".join(f"{k} = {json.dumps(v)}" for k, v in given.items()) + " }"
+    assert tomllib.loads(f"w = {with_}")["w"] == given
+    errors = [h for h in handed(with_) if h[0] == "error"]
+    out = Runner(reg, RecordedTransport({})).run_tree("fetch-one", given)
+    assert bool(errors) == refused == (out.reason == "bad-input"), (given, errors, out.reason)
+
+
+def test_the_command_holds_callers_to_inputs(tmp_path, capsys):
+    (tmp_path / "fetch-one.toml").write_text(CALLEE)
+    (tmp_path / "caller.toml").write_text(caller('{ kind = "story" }'))
+    assert main(["check", str(tmp_path)]) == 1
+    assert "error: nodes.get.with: does not hand fetch-one 'id', which it requires" in capsys.readouterr().out
+    (tmp_path / "caller.toml").write_text(caller('{ id = 7 }'))
+    assert main(["check", str(tmp_path)]) == 0

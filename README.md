@@ -182,6 +182,9 @@ A tree that others delegate to can say what its output carries,
 holds both sides to it: the tree's own endings, and every caller that
 reads a field of that output. A run that would hand back something else
 stops as `contract` instead ([`_meta/tree-format.md`](_meta/tree-format.md#returns)).
+The inputs go the other way: a caller that hands a tree an input it does
+not take, leaves out one it requires, or passes a literal it refuses is
+refused by `pyrtan check`, not at the callee's first run.
 
 ## The command
 
@@ -942,7 +945,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.56.0. The core, the service, the hub, the command, the console (which
+0.60.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

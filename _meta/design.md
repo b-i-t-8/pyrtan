@@ -439,7 +439,17 @@ Five trees, all against real public APIs, all tested offline:
     a run whose output breaks it stops as `contract`. Drift detection
     between a tree and a site, the same between two trees, caught before
     anything runs (`contracts.py`).
-30. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+30. **v0.60, built: what a caller hands a tree.** `returns` held a
+    callee to what callers read; nothing held a caller to what the
+    callee takes, so a renamed or newly required input, a literal out of
+    range, surfaced as `bad-input` at the callee's first run. `pyrtan
+    check` over several trees now holds each `delegate` and `each` over a
+    tree to the callee's `inputs`, as the callee's own run would: no input
+    it does not take, every required one given, a literal coerced and
+    held to `min`, `max`, `one_of` and `pattern`; a caller's own input
+    handed over whole is warned of when its type can never be the
+    callee's (`contracts.py`).
+31. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
