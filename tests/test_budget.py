@@ -146,7 +146,7 @@ def test_the_github_example_keeps_a_budget():
     from pyrtan.tree import load_tree
 
     tree = load_tree(ROOT / "examples" / "github" / "github-release.toml")
-    assert tree.budget == [{"requests": 30, "per": 3600, "said": "1 hour", "host": None}]
+    assert tree.budget == [{"requests": 60, "per": 3600, "said": "1 hour", "host": "api.github.com"}]
 
 
 def shop(name: str, budget: str, url: str = "https://api.example/1") -> str:
@@ -226,3 +226,11 @@ def test_a_host_budget_matches_by_name_and_glob_and_only_what_reaches_a_host():
 def test_a_bad_host_budget_is_refused(budget, words):
     with pytest.raises(TreeError, match=re.escape(words)):
         load_tree_text(shop("bad", budget))
+
+
+def test_both_github_trees_share_github_s_hour():
+    from conftest import ROOT
+    from pyrtan.tree import load_tree
+
+    trees = [load_tree(ROOT / "examples" / d / f"{n}.toml") for d, n in (("github", "github-release"), ("github-repo", "github-repo"))]
+    assert all(t.budget == [{"requests": 60, "per": 3600, "said": "1 hour", "host": "api.github.com"}] for t in trees)
