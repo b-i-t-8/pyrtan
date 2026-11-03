@@ -533,6 +533,23 @@ def check(tree: Tree) -> list[Problem]:
                     err(where, "'confirm' is for an act: an observe changes nothing, so there is nothing to agree to")
                 elif not isinstance(confirm, bool) and not (isinstance(confirm, str) and confirm.strip()):
                     err(where, "'confirm' is true, or the question to ask before the act (a template)")
+            once, once_for = node.get("once"), node.get("once_for")
+            if once is not None:
+                if node.kind != "act":
+                    err(where, "'once' is for an act: an observe is read afresh on every run, as it should be")
+                elif not isinstance(once, str) or not once.strip():
+                    err(where, "'once' is the key that makes two runs the same thing, a template such as \"{{ inputs.order }}\"")
+            if once_for is not None:
+                if once is None:
+                    err(where, "'once_for' says how long a 'once' key is kept; there is no 'once'")
+                else:
+                    from . import memory as memorymod
+
+                    try:
+                        if memorymod.ttl_seconds(once_for) is None:
+                            raise ValueError
+                    except (ValueError, memorymod.MemoryRefused):
+                        err(where, f"'once_for' is a duration such as \"30 days\", got {once_for!r}")
             for j, ex in enumerate(node.get("extract", []) or []):
                 try:
                     extractmod.validate(ex)

@@ -936,7 +936,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.47.1. The core, the service, the hub, the command, the console (which
+0.61.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
@@ -953,6 +953,7 @@ behind an allow-list, watches (a tree that runs when a clock, a file, a
 topic or a serial line speaks), `pyrtan grow` (the branch a gap asks
 for, drafted by rules), lookup tables (a code into a word in one node),
 acts that ask first (`confirm`) and dry runs that change nothing,
+acts done at most once per key (`once`, kept across restarts),
 a check that reads a decision's order (dead branches, conditions nothing
 meets, the holes a gap will fall into),
 the shape of a good answer (`expect`, and drift when a source changes),

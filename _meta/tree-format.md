@@ -362,6 +362,34 @@ run only to its own trees and to services whose `/capabilities` says
 `"dry_run": true`; a member, a followed hub, or an older service gets
 `dry-run` instead of a run that might act.
 
+An act may be done **once per key**. `once` names what makes two runs
+the same thing, so a watch that fires twice, a person who asks twice or a
+hub that retries does not post the same order twice:
+
+```toml
+[nodes.post]
+kind = "act"
+http = { method = "POST", url = "https://shop.example/orders", body = { id = "{{ inputs.order }}" } }
+once = "{{ inputs.order }}"      # at most once per order
+once_for = "30 days"             # optional: how long a key is kept (for good without it)
+into = "posted"                  # state.posted.once = { key, first, at }
+```
+
+The first run that reaches the act with a key does it. A later one with
+the same key does not: its step says `already done for '7' (at …): not
+done again`, and `into` holds what the first run got, with `once.first`
+false, so the rest of the tree runs as it did. An act done before is not
+asked about, and does not stop a dry run, since nothing would be done.
+Only a good answer (a 2xx page, a program that exited 0…) keeps the key,
+so an act that failed, or a request that never got through, may be tried
+again. Two runs at once with one key are taken in turn. A key that
+renders to nothing (an input not given) stops the run with `template`.
+Keys are the tree's and the node's, kept where the box keeps its memory
+(`--memory FILE`, so they outlive a restart; in the process without one)
+under `pyrtan-once/`, where `pyrtan memory` lists them and `--forget`
+lets one be done again. `pyrtan check` refuses `once` on anything but an
+act, and a `once_for` that is not a duration or has no `once`.
+
 ### `decide`: branch
 
 ```toml

@@ -1494,6 +1494,8 @@
       this.clock = opts.clock || (() => new Date());
       this.maxSteps = opts.maxSteps || MAX_STEPS; this.maxDepth = opts.maxDepth || MAX_DEPTH;
       this.emitted = [];
+      // The keys acts with `once` were done for (runtime.Runner.once): in the page, gone with it.
+      this.onceDone = new Map(); this.onceDoing = new Map();
     }
     add(treeOrRaw) { const t = treeOrRaw instanceof Tree ? treeOrRaw : new Tree(treeOrRaw); this.trees[t.name] = t; return t; }
     get(name) { return this.trees[name] || null; }
@@ -1606,8 +1608,46 @@
     do_observe(tree, node, scope, trace, depth) { return this.observeOrAct(tree, node, scope, trace, true); }
     async do_act(tree, node, scope, trace, depth) {
       const flags = scope[FLAGS];
+      const once = node.get("once");
+      let key = null, slot = null;
+      if (once !== undefined && once !== null) {
+        const value = render(once, scope);
+        key = value === null || value === undefined || value === MISSING ? "" : pyStr(value).trim();
+        if (!key) return outcome("error", tree.name, { reason: "template", say: `${node.id}: 'once' rendered to nothing, so nothing says which thing this is` });
+        slot = `${tree.name}/${node.id}/${key}`;
+        const prior = this.onceDone.get(slot);
+        if (prior) return this.doneBefore(node, scope, key, prior);  // done for this key before: not again, not even asked
+      }
       if ((node.get("confirm") || flags.dryRun) && flags.confirmed !== node.id) return this.askFirst(tree, node, scope, trace, depth);
       flags.confirmed = null;  // a yes is for one act, once
+      if (slot === null) return this.act(tree, node, scope, trace, depth);
+      while (this.onceDoing.has(slot)) await this.onceDoing.get(slot);
+      const prior = this.onceDone.get(slot);
+      if (prior) return this.doneBefore(node, scope, key, prior);  // another run did it meanwhile
+      let release;
+      this.onceDoing.set(slot, new Promise((r) => { release = r; }));
+      try {
+        const result = await this.act(tree, node, scope, trace, depth);
+        const got = resolve(statePath(node.get("into", "last")), scope);
+        const sourceName = node.get("emit") !== undefined && node.get("emit") !== null ? "emit" : SOURCES.find((s) => node.spec[s] !== undefined && node.spec[s] !== null);
+        if (Array.isArray(result) && isObj(got) && good(sourceName, got)) {
+          const at = this.clock().toISOString().replace(/\.\d{3}Z$/, "Z");
+          const plain = Object.assign({}, got); delete plain.once;
+          this.onceDone.set(slot, { key, at, result: JSON.parse(JSON.stringify(plain)) });
+          got.once = { key, first: true, at };
+        }
+        return result;
+      } finally {
+        this.onceDoing.delete(slot);
+        release();
+      }
+    }
+    doneBefore(node, scope, key, prior) {
+      const result = isObj(prior.result) ? prior.result : {};
+      put(scope.state, node.get("into", "last"), Object.assign({}, result, { once: { key, first: false, at: prior.at } }));
+      return [step(node.id, "act", `already done for ${pyrepr(key)} (at ${prior.at}): not done again`, { observed: { once: key, at: prior.at } }), node.next];
+    }
+    async act(tree, node, scope, trace, depth) {
       const emit = node.get("emit");
       if (emit !== undefined && emit !== null) {
         const event = { event: render(emit.event, scope), data: render(emit.data !== undefined ? emit.data : {}, scope), tree: tree.name };
