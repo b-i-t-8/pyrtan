@@ -268,10 +268,26 @@ class Coverage:
     stopped: list[tuple[str, str, str]] = field(default_factory=list)  # (test, the node it stopped at, why) for a run no route ends like
     unrun: list[tuple[str, str]] = field(default_factory=list)  # (test, why) for a test that could not run
 
+    def counts(self, found: list[Route]) -> tuple[int, int]:
+        """(routes the tests take, routes that can be taken): a route the
+        order check proves is never taken is not one a test could take."""
+        live = [i for i, r in enumerate(found) if not r.never]
+        return sum(1 for i in live if i in self.tested), len(live)
 
-def coverage(tree: Tree, others: list[Tree] = (), found: list[Route] | None = None) -> Coverage:
-    """Run the tree's tests against their recordings, and match each run's
-    route to one of the routes from the tree's start."""
+    def untested(self, found: list[Route]) -> list[Route]:
+        return [r for i, r in enumerate(found) if not r.never and i not in self.tested]
+
+
+def describe(r: Route) -> str:
+    """A route in one line, as ``pyrtan paths`` lists it."""
+    steps = " -> ".join(f"{leg.node} [{leg.via}]" if leg.via else leg.node for leg in r.legs)
+    return f"{steps}: {r.end} {r.says}"
+
+
+def coverage(tree: Tree, others: list[Tree] = (), found: list[Route] | None = None, ran: list[tuple[str, Any]] | None = None) -> Coverage:
+    """Run the tree's tests against their recordings (or take the runs
+    already made, as ``(test name, outcome)``), and match each run's route
+    to one of the routes from the tree's start."""
     from .cases import cases, run_case, with_tree
 
     found = found if found is not None else routes(tree)[0]
@@ -279,18 +295,19 @@ def coverage(tree: Tree, others: list[Tree] = (), found: list[Route] | None = No
     for i, r in enumerate(found):
         by_signature.setdefault(signature(r.legs), i)
     out = Coverage()
-    registry = with_tree(list(others), tree)
-    for case in cases(tree):
-        outcome = run_case(case, tree, registry)
+    if ran is None:
+        registry = with_tree(list(others), tree)
+        ran = [(case.name, run_case(case, tree, registry)) for case in cases(tree)]
+    for name, outcome in ran:
         if outcome.reason == "no-fixture":
-            out.unrun.append((case.name, outcome.say or "no recording"))
+            out.unrun.append((name, outcome.say or "no recording"))
             continue
         took = walked(outcome)
         i = by_signature.get(took)
         if i is not None:
-            out.tested.setdefault(i, []).append(case.name)
+            out.tested.setdefault(i, []).append(name)
         else:
-            out.stopped.append((case.name, took[-1][0] if took else tree.start, outcome.reason or outcome.status))
+            out.stopped.append((name, took[-1][0] if took else tree.start, outcome.reason or outcome.status))
     return out
 
 
@@ -312,21 +329,19 @@ def render(tree: Tree, limit: int = MAX_ROUTES, covered: Coverage | None = None)
             lines.append("")
             lines.append(f"{title}:")
         for i, r in enumerate(found, 1):
-            steps = " -> ".join(f"{leg.node} [{leg.via}]" if leg.via else leg.node for leg in r.legs)
             mark = "  (never taken)" if r.never else ""
             if covered is not None and title is None:
                 by = covered.tested.get(i - 1)
                 mark += f"  [tested: {', '.join(by)}]" if by else ("" if r.never else "  [untested]")
-            lines.append(f"{i}. {steps}: {r.end} {r.says}{mark}")
+            lines.append(f"{i}. {describe(r)}{mark}")
             for read in r.reads:
                 lines.append(f"     {read}")
         if over:
             lines.append(f"… more than {limit} routes; the rest are not listed")
     if covered is not None:
-        top = routes(tree, tree.start, limit)[0]
-        live = [i for i, r in enumerate(top) if not r.never]
+        took, can = covered.counts(routes(tree, tree.start, limit)[0])
         lines.append("")
-        lines.append(f"tested: {sum(1 for i in live if i in covered.tested)} of {len(live)} route(s) that can be taken, by {len(cases_of(tree))} test(s)")
+        lines.append(f"tested: {took} of {can} route(s) that can be taken, by {len(cases_of(tree))} test(s)")
         for name, node, why in covered.stopped:
             lines.append(f"  {name}: stopped at {node} ({why}), on no route above")
         for name, why in covered.unrun:

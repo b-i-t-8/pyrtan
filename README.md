@@ -186,7 +186,7 @@ slots gives a table of them.
 | `pyrtan list DIR` | What is loaded and the sentences it answers to. |
 | `pyrtan run "…" --trees DIR` | Answers a sentence in this process, printing the trace. `--replay FIXTURE` answers HTTP from a recording; `--record FIXTURE` makes one. `--dry-run` reads for real but stops before the first act and says what it would do. An act with `confirm` asks first, at the terminal. |
 | `pyrtan run --tree NAME --input k=v` | Runs a named tree. |
-| `pyrtan test DIR` | Runs each tree's own `[[tests]]` against their recordings: a sentence or inputs, and the status, answer, output and path the run must come to. Exit 1 if any misses. |
+| `pyrtan test DIR` | Runs each tree's own `[[tests]]` against their recordings: a sentence or inputs, and the status, answer, output and path the run must come to. Exit 1 if any misses. `--min-coverage N` also exits 1 when a tree's tests take under N% of the routes it can take, and lists the ones they miss. |
 | `pyrtan diff FILE` | What an edit changes: every test the file and its last committed version carry (`--against REF`, or `--old FILE`), run on both against the same recordings; names each run whose answer or path moved. Exit 1 if any did. |
 | `pyrtan memory FILE` | What memory nodes keep in a `--memory` file (`serve`, `hub`, `watch` and `run` take `--memory FILE`, or `$PYRTAN_MEMORY`): every key, its value, when it was written and until when. `--forget KEY` drops one. |
 | `pyrtan match "…" --trees DIR` | How a sentence reads, without running anything: the rewrites, every trigger's verdict, the winner. The tool for writing triggers. |
@@ -936,7 +936,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.57.0. The core, the service, the hub, the command, the console (which
+0.58.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the

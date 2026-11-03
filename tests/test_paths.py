@@ -277,6 +277,82 @@ def test_every_example_s_tests_take_a_route():
             assert not got.unrun and not [s for s in got.stopped if s[2] != "drift"], (tree.name, got)
 
 
+LIGHT = '''
+name = "light"
+description = "a status code, and its own tests"
+start = "status"
+
+[[tests]]
+name = "up"
+inputs = { code = 200 }
+expect = { status = "done" }
+
+[[tests]]
+name = "down"
+inputs = { code = 503 }
+expect = { status = "failed" }
+
+[inputs.code]
+type = "int"
+
+[nodes.status]
+kind = "decide"
+on = "inputs.code"
+branches = [
+  { when = { eq = 200 }, then = "up" },
+  { when = { gte = 500 }, then = "down" },
+  { when = { between = [500, 599] }, then = "down" },
+  { else = "odd" },
+]
+
+[nodes.up]
+kind = "done"
+say = "up"
+
+[nodes.down]
+kind = "fail"
+reason = "down"
+say = "down"
+
+[nodes.odd]
+kind = "fail"
+reason = "odd"
+say = "odd"
+'''
+
+
+def test_the_tests_can_be_held_to_a_coverage(tmp_path, capsys):
+    (tmp_path / "light.toml").write_text(LIGHT)
+    (tmp_path / "codes.toml").write_text(CODES)  # no tests: not judged
+    # Two of the three routes that can be taken (between [500, 599] never is): 67%.
+    assert main(["test", str(tmp_path), "--min-coverage", "60"]) == 0
+    out = capsys.readouterr().out
+    assert "  coverage: 2 of 3 route(s), 67%\n" in out
+    assert "coverage: 1 of 1 tree(s) at 60% or more; 1 tree(s) carry no tests and are not judged" in out
+    assert main(["test", str(tmp_path), "--min-coverage", "70"]) == 1
+    out = capsys.readouterr().out
+    assert "  coverage: 2 of 3 route(s), 67%, below 70%" in out
+    assert "        untested: status [inputs.code: anything else] -> odd: fail odd" in out
+    assert "2/2 passed" in out  # every test passed: the coverage alone fails it
+    assert main(["test", str(tmp_path), "--min-coverage", "70", "--json"]) == 1
+    got = json.loads(capsys.readouterr().out)["coverage"]
+    assert got["min"] == 70 and got["below"] == ["light"] and got["untested_trees"] == 1
+    assert got["trees"] == [{"tree": "light", "tested": 2, "routes": 3, "percent": 66.7, "below": True, "untested": ["status [inputs.code: anything else] -> odd: fail odd"]}]
+    # Without the flag, nothing about coverage is said or judged.
+    assert main(["test", str(tmp_path)]) == 0
+    assert "coverage" not in capsys.readouterr().out
+
+
+def test_a_coverage_is_a_percentage(tmp_path, capsys):
+    import pytest
+
+    (tmp_path / "light.toml").write_text(LIGHT)
+    for bad in ("101", "-1", "most"):
+        with pytest.raises(SystemExit):
+            main(["test", str(tmp_path), "--min-coverage", bad])
+    assert "--min-coverage" in capsys.readouterr().err
+
+
 DEVICES = '''
 name = "devices"
 description = "a PLC, a templated UPS, a key, a log, a program and a scan"

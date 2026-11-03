@@ -33,4 +33,4 @@ __all__ = [
     "Response",
 ]
 
-__version__ = "0.57.0"
+__version__ = "0.58.0"
