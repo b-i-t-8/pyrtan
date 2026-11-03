@@ -421,14 +421,25 @@ Five trees, all against real public APIs, all tested offline:
     branch the order check proves is never taken is marked. Trees do not
     loop, so the list is finite: the audit, and the documentation, of
     what a tree can do (`paths.py`).
-20. **v0.51, built: which routes the tests take.** `pyrtan paths
+20. **v0.47, built: what can stop a route, for every source.** `pyrtan
+    paths` said once what can stop any route on its way, but only a
+    failed request, drift, a budget kept as one table and a confirmation
+    declined. A tree that reaches a field device, a templated host, a
+    memory key or the network can also stop where the run alone knows:
+    a target decided at run time outside its allow-list (each node `pyrtan
+    check` warns of, with the reason the run stops with), and a service
+    started `--egress public`, which closes the box's own sources and
+    discovery and refuses a private address (`plc.local`, `10.0.0.2`),
+    as the tree says it without a lookup. A budget reads as one table or
+    a list, a host's marked shared (`paths.py`).
+30. **v0.57, built: which routes the tests take.** `pyrtan paths
     --covered` runs a tree's own `[[tests]]` and matches each run's route,
     node by node and choice by choice as its trace records them, to one
     of the routes from the tree's start: each route says which tests take
     it or that none does, a test that stops on the way (a transport, a
     drift) says where, and the tree says how many of the routes that can
     be taken are tested (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+31. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

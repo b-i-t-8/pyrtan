@@ -275,3 +275,104 @@ def test_every_example_s_tests_take_a_route():
         if tree.tests:
             got = coverage(tree, reg.trees())
             assert not got.unrun and not [s for s in got.stopped if s[2] != "drift"], (tree.name, got)
+
+
+DEVICES = '''
+name = "devices"
+description = "a PLC, a templated UPS, a key, a log, a program and a scan"
+hosts = ["plc.local", "api.example"]
+keys = ["devices/*"]
+paths = ["/var/log"]
+commands = ["uptime"]
+networks = ["192.168.1.0/24"]
+start = "plc"
+
+[inputs.ups]
+type = "str"
+default = "ups"
+
+[nodes.plc]
+kind = "observe"
+modbus = { url = "modbus://plc.local", read = "holding", address = 100 }
+into = "level"
+next = "ups"
+
+[nodes.ups]
+kind = "observe"
+snmp = { url = "snmp://{{ inputs.ups }}.example", get = "sysName.0" }
+into = "ups"
+next = "seen"
+
+[nodes.seen]
+kind = "act"
+memory = { key = "devices/{{ inputs.ups }}", write = "{{ state.ups.ok }}" }
+into = "m"
+next = "log"
+
+[nodes.log]
+kind = "observe"
+file = { path = "/var/log/{{ inputs.ups }}.log" }
+into = "l"
+next = "up"
+
+[nodes.up]
+kind = "observe"
+shell = { command = "uptime" }
+into = "u"
+next = "scan"
+
+[nodes.scan]
+kind = "observe"
+discover = { scan = "192.168.1.0/24", ports = [502] }
+into = "found"
+next = "api"
+
+[nodes.api]
+kind = "observe"
+http = { url = "https://api.example/x" }
+into = "a"
+next = "done"
+
+[nodes.done]
+kind = "done"
+say = "ok"
+'''
+
+
+def test_what_can_stop_a_tree_of_devices():
+    got = stops(load_tree_text(DEVICES))
+    assert got == [
+        "a request that fails (transport)",
+        "a host decided at run time outside the tree's hosts (host-not-allowed: ups)",
+        "a key decided at run time outside the tree's keys (key-not-allowed: seen)",
+        "a path decided at run time outside the tree's paths (path-not-allowed: log)",
+        # The PLC is on the LAN (plc.local); the API is not, and nor is a templated host it cannot tell.
+        "a service started --egress public, which refuses the box's own files, programs, serial lines and memory, discovery and a private address (transport: seen, log, up, scan, plc)",
+    ]
+
+
+def test_a_spent_budget_reads_in_either_shape():
+    # A runtime with budgets keeps a tree's as one table (declared budgets,
+    # b-i-t-8/pyrtan#66) or a list of them (a host's budget, #79).
+    tree = load_tree_text(WALKER)
+    tree.budget = {"requests": 5, "per": 60, "said": "1m"}
+    assert stops(tree)[-2] == "a spent budget (5 requests per 1m)"
+    tree.budget = [{"requests": 10, "per": 60, "said": "1m", "host": None}, {"requests": 60, "per": 3600, "said": "1 hour", "host": "api.example"}]
+    assert stops(tree)[-2] == "a spent budget (10 requests per 1m; 60 requests per 1 hour for api.example, shared)"
+
+
+def test_a_stop_paths_lists_is_how_the_run_stops():
+    from pyrtan import RecordedTransport, Registry, Runner
+
+    reg = Registry()
+    reg.add(load_tree_text(DEVICES))
+    fixture = {"modbus modbus://plc.local unit 1 holding 100": {"ok": True, "value": 1}}
+    out = Runner(reg, RecordedTransport(fixture)).run_tree("devices", {"ups": "elsewhere"})
+    assert out.reason == "host-not-allowed" and out.trace.steps[-1].node in ("plc", "ups")  # snmp://elsewhere.example is not in hosts
+
+
+def test_private_addresses_as_paths_reads_them():
+    from pyrtan.paths import _private
+
+    assert all(_private({"url": u}) for u in ["modbus://plc.local", "snmp://{{ inputs.ups }}.local", "coap://192.168.1.9/x", "ws://[::1]:5580/ws", "http://localhost:8080/", "mqtt://10.0.0.2"])
+    assert not any(_private({"url": u}) for u in ["https://api.example/x", "snmp://{{ inputs.host }}", "bacnet://8.8.8.8", "nonsense"])

@@ -335,3 +335,49 @@ def test_the_hubs_own_requests_keep_to_the_egress_policy(monkeypatch):
     hub.egress = "public"
     assert hub.route("POST", "/register", {"url": "http://127.0.0.1:1"}, {"Authorization": "Bearer t"})[0] == 200
     hub.stop()
+
+
+# stop() never waits without limit: socketserver's shutdown() waits forever
+# for a loop that is not running, or one stuck in a request.
+
+def _route(method, path, body, headers):
+    return 200, {"ok": True}
+
+
+def test_a_server_never_started_stops_at_once():
+    srv = Server(_route)
+    t = time.time()
+    srv.stop()  # shutdown() alone would wait for a loop that never ran
+    assert time.time() - t < 1
+
+
+def test_a_stuck_request_loop_is_told_and_left(capsys, monkeypatch):
+    import threading
+
+    srv = Server(_route).start()
+    stuck, release = threading.Event(), threading.Event()
+
+    def jam():
+        stuck.set()
+        release.wait(30)  # the loop's own thread, stuck in a request
+
+    monkeypatch.setattr(srv.httpd, "_handle_request_noblock", jam)
+    monkeypatch.setattr(Server, "STOP_WITHIN", 0.5)
+    import socket
+
+    socket.create_connection(("127.0.0.1", srv.port), timeout=2).close()  # wakes the loop's poll
+    assert stuck.wait(5)
+    t = time.time()
+    srv.stop()
+    took = time.time() - t
+    release.set()
+    err = capsys.readouterr().err
+    assert took < 3 and f"the server at {srv.url} did not stop within 0.5 s" in err and "in jam" in err
+
+
+def test_a_server_stops_quickly():
+    srv = Server(_route).start()
+    assert http_json("GET", srv.url + "/x")[0] == 200
+    t = time.time()
+    srv.stop()
+    assert time.time() - t < 2 and not srv.thread.is_alive()
