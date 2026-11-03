@@ -432,7 +432,14 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+28. **v0.55, built: a question is answered once.** A paused run's
+    snapshot carries an id, and the runner that paused it keeps the first
+    answer's outcome: a second answer to the same snapshot gets that
+    outcome back and does nothing again, so a double-clicked yes, or a
+    resume retried after a timeout, cannot do an act twice. Ids are random
+    in a running service and counted in the conformance vectors, so both
+    runtimes still agree word for word (`runtime.py`).
+29. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
