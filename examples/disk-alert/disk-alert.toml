@@ -1,0 +1,126 @@
+# Says so when a filesystem stays nearly full: a watch reads df every 15
+# minutes, memory counts the high readings in a row, and only the second
+# one speaks. One high reading (a big download, a log about to rotate) is
+# noted and kept quiet; a reading under the line forgets the count, and
+# so does an hour without a high one (the count's ttl), so "in a row"
+# means what it says.
+#
+# `keys` is memory's allow-list, as `commands` is for programs: this tree
+# may keep disk-alert/* and nothing else. Memory lives in the file a
+# service's --memory names: `pyrtan watch examples --memory alerts.json`.
+
+name = "disk-alert"
+version = 1
+namespace = "pyrtan"
+description = "Says when a filesystem has been nearly full for two readings in a row, and keeps quiet about one."
+tags = ["ops", "box", "alert"]
+license = "MIT"
+commands = ["df"]
+keys = ["disk-alert/*"]
+start = "df"
+
+[[triggers]]
+pattern = "disk alert"
+[[triggers]]
+pattern = "disk alert for {mount:word} as {name:word}"
+
+[[watches]]
+name = "root"
+every = "15m"
+inputs = { mount = "/", name = "root" }
+
+[[tests]]
+name = "one high reading is noted, and nobody is told"
+inputs = { mount = "/data", name = "data" }
+fixture = "disk-alert.first.json"
+expect = { status = "done", path = ["df", "ran", "level", "count", "again", "noted"] }
+
+[[tests]]
+name = "the second high reading in a row speaks"
+inputs = { mount = "/data", name = "data" }
+fixture = "disk-alert.second.json"
+expect = { status = "failed", reason = "disk-full", say = "/data has been 96% full for 2 readings in a row." }
+
+[[tests]]
+name = "a reading under the line forgets the count"
+sentence = "disk alert"
+fixture = "disk-alert.fine.json"
+expect = { status = "done", say = "/ is 71% full.", path = ["df", "ran", "level", "forget", "fine"] }
+
+[inputs.mount]
+type = "str"
+default = "/"
+description = "A mount point, or any path on the filesystem to measure"
+
+[inputs.name]
+type = "str"
+default = "root"
+pattern = "^[a-z0-9-]+$"
+description = "What the count is kept under: disk-alert/<name>"
+
+[nodes.df]
+kind = "observe"
+shell = { command = "df", args = ["-P", "{{ inputs.mount }}"] }
+into = "df"
+extract = [{ into = "used", pattern = "{percent:int}% {mounted:word}" }]
+next = "ran"
+
+[nodes.ran]
+kind = "decide"
+on = "df.ok"
+branches = [{ when = { eq = true }, then = "level" }, { else = "failed" }]
+
+[nodes.level]
+kind = "decide"
+on = "used.percent"
+branches = [
+  { when = { exists = false }, then = "unreadable" },
+  { when = { gte = 90 }, then = "count" },
+  { else = "forget" },
+]
+
+# A high reading: one more in a row. The count lasts an hour after the
+# last one, four readings of a 15-minute watch.
+[nodes.count]
+kind = "act"
+memory = { key = "disk-alert/{{ inputs.name }}", add = 1, ttl = "1 hour" }
+into = "row"
+next = "again"
+
+[nodes.again]
+kind = "decide"
+on = "row.value"
+branches = [{ when = { eq = 1 }, then = "noted" }, { else = "alert" }]
+
+[nodes.noted]
+kind = "done"
+say = "{{ state.used.mounted }} is {{ state.used.percent }}% full; noted, and quiet unless the next reading says the same."
+output = { mounted = "{{ state.used.mounted }}", percent = "{{ state.used.percent }}", in_a_row = "{{ state.row.value }}" }
+
+[nodes.alert]
+kind = "fail"
+reason = "disk-full"
+say = "{{ state.used.mounted }} has been {{ state.used.percent }}% full for {{ state.row.value }} readings in a row."
+output = { mounted = "{{ state.used.mounted }}", percent = "{{ state.used.percent }}", in_a_row = "{{ state.row.value }}" }
+
+# Under the line: the row is broken.
+[nodes.forget]
+kind = "act"
+memory = { key = "disk-alert/{{ inputs.name }}", delete = true }
+into = "forgot"
+next = "fine"
+
+[nodes.fine]
+kind = "done"
+say = "{{ state.used.mounted }} is {{ state.used.percent }}% full."
+output = { mounted = "{{ state.used.mounted }}", percent = "{{ state.used.percent }}", in_a_row = 0 }
+
+[nodes.unreadable]
+kind = "fail"
+reason = "df-unreadable"
+say = "df answered for {{ inputs.mount }}, but no line of it reads as \"N% mount\"."
+
+[nodes.failed]
+kind = "fail"
+reason = "df-failed"
+say = "df could not measure {{ inputs.mount }}: {{ state.df.stderr | strip }}"

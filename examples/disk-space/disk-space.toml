@@ -3,10 +3,12 @@
 # shell reads the line, so nothing in an argument is ever a command.
 # `commands` is the allow-list, as `hosts` is for HTTP; `df` is all this
 # tree may run. A service started with --egress public refuses shell nodes
-# altogether: a hosted box is not lent out.
+# altogether: a hosted box is not lent out. What df printed is read with a
+# pattern, the trigger syntax: "{percent:int}% {mounted:word}" finds the
+# line that ends "71% /" and gives both, the number already a number.
 
 name = "disk-space"
-version = 2
+version = 3
 namespace = "pyrtan"
 description = "How full a filesystem is, from df on the box this tree runs on."
 tags = ["ops", "box", "read-only"]
@@ -21,6 +23,30 @@ pattern = "disk space"
 [[triggers]]
 pattern = "disk space on {mount:word}"
 
+[[tests]]
+name = "the root filesystem, with room"
+sentence = "how full is the disk"
+fixture = "disk-space.fixture.json"
+expect = { status = "done", say = "/ is 71% full.", output = { mounted = "/", percent = 71 } }
+
+[[tests]]
+name = "a full one"
+sentence = "disk space on /data"
+fixture = "disk-space.fixture.json"
+expect = { status = "failed", reason = "disk-full", path = ["df", "ran", "level", "full"] }
+
+[[tests]]
+name = "a df that prints no usage line is said so, not read as full"
+inputs = { mount = "/odd" }
+fixture = "disk-space.fixture.json"
+expect = { status = "failed", reason = "df-unreadable" }
+
+[[tests]]
+name = "a path that is not there"
+inputs = { mount = "/nowhere" }
+fixture = "disk-space.fixture.json"
+expect = { status = "failed", reason = "df-failed" }
+
 [inputs.mount]
 type = "str"
 default = "/"
@@ -30,26 +56,19 @@ description = "A mount point, or any path on the filesystem to measure"
 kind = "observe"
 shell = { command = "df", args = ["-P", "{{ inputs.mount }}"] }
 into = "df"                   # state.df = { command, args, status, ok, stdout, stderr, body, json, lines }
-extract = [
-  { into = "percent", regex = "(\\d+)%", group = 1 },
-  { into = "mounted", regex = "%\\s+(\\S+)\\s*$", group = 1 },
-]
+extract = [{ into = "used", pattern = "{percent:int}% {mounted:word}" }]   # state.used = { percent, mounted }
 next = "ran"
 
 [nodes.ran]
 kind = "decide"
 on = "df.ok"
-branches = [{ when = { eq = true }, then = "number" }, { else = "failed" }]
-
-[nodes.number]
-kind = "set"
-set = { pct = "{{ state.percent | int }}" }
-next = "level"
+branches = [{ when = { eq = true }, then = "level" }, { else = "failed" }]
 
 [nodes.level]
 kind = "decide"
-on = "pct"
+on = "used.percent"
 branches = [
+  { when = { exists = false }, then = "unreadable" },
   { when = { lt = 80 }, then = "fine" },
   { when = { lt = 95 }, then = "tight" },
   { else = "full" },
@@ -57,18 +76,23 @@ branches = [
 
 [nodes.fine]
 kind = "done"
-say = "{{ state.mounted }} is {{ state.pct }}% full."
-output = { mounted = "{{ state.mounted }}", percent = "{{ state.pct }}" }
+say = "{{ state.used.mounted }} is {{ state.used.percent }}% full."
+output = { mounted = "{{ state.used.mounted }}", percent = "{{ state.used.percent }}" }
 
 [nodes.tight]
 kind = "done"
-say = "{{ state.mounted }} is {{ state.pct }}% full; make room soon."
-output = { mounted = "{{ state.mounted }}", percent = "{{ state.pct }}" }
+say = "{{ state.used.mounted }} is {{ state.used.percent }}% full; make room soon."
+output = { mounted = "{{ state.used.mounted }}", percent = "{{ state.used.percent }}" }
 
 [nodes.full]
 kind = "fail"
 reason = "disk-full"
-say = "{{ state.mounted }} is {{ state.pct }}% full."
+say = "{{ state.used.mounted }} is {{ state.used.percent }}% full."
+
+[nodes.unreadable]
+kind = "fail"
+reason = "df-unreadable"
+say = "df answered for {{ inputs.mount }}, but no line of it reads as \"N% mount\"."
 
 [nodes.failed]
 kind = "fail"

@@ -206,7 +206,7 @@ def test_namespaces_in_the_index_and_in_pulls(tmp_path):
     with pytest.raises(CatalogError, match="not in the catalog"):
         cat.find("nobody/weather")
     assert [e["id"] for e in cat.search("barry")] == ["barry/weather"]
-    assert {e["id"] for e in cat.search("shell")} == {"pyrtan/disk-space"}
+    assert {e["id"] for e in cat.search("shell")} == {"pyrtan/disk-space", "pyrtan/disk-alert"}
     target = cat.pull("barry/weather", tmp_path / "trees")
     assert target.name == "weather.toml" and target.read_text() == OTHER
     # A file whose namespace is not the index's is refused.

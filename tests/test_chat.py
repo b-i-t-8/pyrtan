@@ -120,7 +120,8 @@ def test_a_bot_is_trees_and_says_how_it_answered(examples_hub):
     assert seat["state"] == "talking" and seat["partner"]["kind"] == "bot" and seat["partner"]["name"] == "alpha"
     intro = texts(seat["events"], "system")[-1]
     assert intro.startswith("You're now chatting with a bot: alpha, this hub's own trees.") and "not a model" in intro
-    assert "Try “how full is the disk”." in intro  # a sentence from the tree that shares the interest
+    # A sentence from a tree that shares the interest, chosen at random among them.
+    assert intro.endswith(("Try “how full is the disk”.", "Try “disk alert”."))
     after = seat["after"]
 
     def bot_says(text):
