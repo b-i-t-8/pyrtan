@@ -145,6 +145,138 @@ def test_every_example_ends_somewhere():
             assert all(r.end in ("done", "fail", "gap") for r in found), (tree.name, [r.says for r in found if r.end == "dead-end"])
 
 
+TESTED = '''
+name = "tested"
+description = "a light, some codes, and its own tests"
+hosts = ["api.example"]
+start = "get"
+
+[[tests]]
+name = "ok, and switched on"
+inputs = { code = 200 }
+fixture = "fx.json"
+answers = ["yes"]
+expect = { status = "done" }
+
+[[tests]]
+name = "teapot"
+inputs = { code = 418 }
+fixture = "fx.json"
+expect = { status = "failed" }
+
+[[tests]]
+name = "gone"
+inputs = { code = 410 }
+fixture = "fx.json"
+expect = { status = "failed" }
+
+[[tests]]
+name = "a code nobody foresaw"
+inputs = { code = 100 }
+fixture = "fx.json"
+expect = { reason = "gap" }
+
+[[tests]]
+name = "no recording for it"
+inputs = { code = 999 }
+fixture = "fx.json"
+expect = { status = "done" }
+
+[[tests]]
+name = "no file"
+inputs = { code = 200 }
+fixture = "missing.json"
+expect = { status = "done" }
+
+[inputs.code]
+type = "int"
+
+[nodes.get]
+kind = "observe"
+http = { url = "https://api.example/{{ inputs.code }}" }
+into = "r"
+retries = 0
+next = "status"
+
+[nodes.status]
+kind = "decide"
+on = "inputs.code"
+branches = [
+  { when = { eq = 200 }, then = "switch" },
+  { when = { eq = 418 }, then = "down" },
+  { when = { between = [400, 499] }, then = "down" },
+  { when = { gte = 500 }, then = "down" },
+]
+
+[nodes.switch]
+kind = "act"
+http = { method = "POST", url = "https://api.example/on" }
+confirm = true
+into = "on"
+next = "done"
+
+[nodes.done]
+kind = "done"
+say = "on"
+
+[nodes.down]
+kind = "fail"
+reason = "down"
+say = "down"
+'''
+
+
+def test_coverage_marks_the_routes_the_tests_take(tmp_path):
+    fixture = {f"GET https://api.example/{c}": {"status": 200, "body": ""} for c in (200, 418, 410, 100)}
+    fixture["POST https://api.example/on"] = {"status": 204, "body": ""}
+    (tmp_path / "fx.json").write_text(json.dumps(fixture))
+    (tmp_path / "tested.toml").write_text(TESTED)
+    from pyrtan.paths import coverage
+    from pyrtan.tree import load_tree
+
+    tree = load_tree(tmp_path / "tested.toml")
+    found, _ = routes(tree)
+    names = [" -> ".join(f"{leg.node}[{leg.choice}]" if leg.choice else leg.node for leg in r.legs) for r in found]
+    got = coverage(tree, [], found)
+    tested = {names[i]: by for i, by in got.tested.items()}
+    # An act that asked first and was answered is one leg of its route.
+    assert tested["get -> status[eq 200] -> switch -> done"] == ["ok, and switched on"]
+    # Two branches to the same node are two routes, and each test takes the one it took.
+    assert tested["get -> status[eq 418] -> down"] == ["teapot"]
+    assert tested["get -> status[between [400, 499]] -> down"] == ["gone"]
+    assert "get -> status[gte 500] -> down" not in tested
+    assert tested["get -> status[gap]"] == ["a code nobody foresaw"]
+    assert got.stopped == [("no recording for it", "get", "transport")]
+    assert [n for n, _ in got.unrun] == ["no file"]
+    text = render(tree, covered=got)
+    assert "status [inputs.code gte 500] -> down: fail down  [untested]" in text
+    assert "tested: 4 of 5 route(s) that can be taken, by 6 test(s)" in text
+    assert "  no recording for it: stopped at get (transport), on no route above" in text
+
+
+def test_the_command_covers(tmp_path, capsys):
+    fixture = {"GET https://api.example/200": {"status": 200, "body": ""}, "POST https://api.example/on": {"status": 204, "body": ""}}
+    (tmp_path / "fx.json").write_text(json.dumps(fixture))
+    (tmp_path / "tested.toml").write_text(TESTED)
+    assert main(["paths", str(tmp_path / "tested.toml"), "--covered", "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    by = [r["tested_by"] for r in out["flows"]["get"]["routes"]]
+    assert by[0] == ["ok, and switched on"] and sum(1 for b in by if b) == 1
+    assert {s["test"] for s in out["tests"]["stopped"]} == {"teapot", "gone", "a code nobody foresaw", "no recording for it"}
+    assert main(["paths", str(tmp_path / "tested.toml")]) == 0
+    assert "[tested" not in capsys.readouterr().out  # only with --covered
+
+
+def test_every_example_s_tests_take_a_route():
+    from pyrtan.paths import coverage
+
+    reg = Registry.from_paths([ROOT / "examples", ROOT / "catalog"])
+    for tree in reg.trees():
+        if tree.tests:
+            got = coverage(tree, reg.trees())
+            assert not got.unrun and not [s for s in got.stopped if s[2] != "drift"], (tree.name, got)
+
+
 DEVICES = '''
 name = "devices"
 description = "a PLC, a templated UPS, a key, a log, a program and a scan"

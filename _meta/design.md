@@ -432,7 +432,14 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+30. **v0.57, built: which routes the tests take.** `pyrtan paths
+    --covered` runs a tree's own `[[tests]]` and matches each run's route,
+    node by node and choice by choice as its trace records them, to one
+    of the routes from the tree's start: each route says which tests take
+    it or that none does, a test that stops on the way (a transport, a
+    drift) says where, and the tree says how many of the routes that can
+    be taken are tested (`paths.py`).
+31. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
