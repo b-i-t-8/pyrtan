@@ -432,7 +432,13 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+22. **v0.49, built: calendar watches.** A watch's clock was only `every`;
+    `at = "mon-fri 09:00, 17:30"` with an optional `tz` runs a tree at
+    times of day, on the days named. The grammar is fixed (day names,
+    ranges, `weekdays`, `weekends`, `daily`; times as `nlp.parse_time`
+    reads them), a change of clocks has one stated rule, and a missed slot
+    is not made up (`schedule.py`).
+23. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
