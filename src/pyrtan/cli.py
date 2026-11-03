@@ -589,10 +589,13 @@ def cmd_check(args: argparse.Namespace) -> int:
         except Exception as e:  # TreeError or TOML trouble: already explained
             print(f"{path}: error: {e}")
             worst = max(worst, 1)
-    # What a tree reads of another's output, held to what that one returns.
-    callers = contracts.check_callers({t.name: t for _, t in loaded})
+    # What a tree reads of another's output, held to what that one returns;
+    # what it hands another, held to that one's inputs.
+    named = {t.name: t for _, t in loaded}
+    callers = contracts.check_callers(named)
+    handed = contracts.check_inputs(named)
     for path, tree in loaded:
-        problems = check(tree) + [Problem(level, where, message) for level, where, message in callers.get(tree.name, [])]
+        problems = check(tree) + [Problem(level, where, message) for level, where, message in callers.get(tree.name, []) + handed.get(tree.name, [])]
         errors = [p for p in problems if p.level == "error"]
         if errors:
             worst = max(worst, 1)
