@@ -20,11 +20,17 @@ same output). A device watched every minute that stays up for a week is
 one span; each change starts another. A clock watch's spans abut when the
 watch kept time (the change happened between two runs); a gap longer than
 two and a half intervals (the service was down) is left as a gap, which a
-reader shows as unknown. A clock watch's event carries its own uptime from
-that timeline (``event.uptime.day``, ``.week``, ``.month``: the percentage
-of checked time its runs said ``online = true``, or None before an hour
-has been checked), so a tree can decide on it. :class:`Timelines` keeps them, in a JSON file
-when the service is given one (``--watch-history``), and ``GET
+reader shows as unknown. A calendar watch kept time when no slot of its
+calendar passed between two runs: a slot passed by while the service was
+down is a gap too, however long the calendar's own gaps (a weekend, a
+month) are. The newest span holds until ``holds_until``: two and a half
+intervals past its last run, or a calendar's next slot and
+:data:`CALENDAR_GRACE` after it; then it is unknown too. A clock or
+calendar watch's event carries its own uptime from that timeline
+(``event.uptime.day``, ``.week``, ``.month``: the percentage of checked
+time its runs said ``online = true``, or None before an hour has been
+checked), so a tree can decide on it. :class:`Timelines` keeps them, in a
+JSON file when the service is given one (``--watch-history``), and ``GET
 /watches/history`` serves them; the console's Devices tab draws uptime
 from them.
 
@@ -67,16 +73,18 @@ TIMELINE_SPANS = 5000  # spans kept per watch, at most
 TIMELINE_OUTPUT = 2048 # an output larger than this (as JSON) is compared, not kept
 TIMELINE_SAVE = 60.0   # seconds between saves while nothing changes
 CONTIGUOUS = 2.5       # intervals between two runs of a clock watch that still count as one stretch
+CALENDAR_GRACE = 300.0 # seconds past a calendar's slot that its last outcome still holds, while the slot's run runs
 UPTIME_MIN_KNOWN = 3600.0  # seconds of checked time before an uptime is given
 UPTIME_WINDOWS = {"day": 86400, "week": 7 * 86400, "month": 30 * 86400}
 
 
-def uptime(spans: list[dict[str, Any]], interval: float | None, window: float, now: float) -> float | None:
+def uptime(spans: list[dict[str, Any]], interval: float | None, window: float, now: float, holds_until: float | None = None) -> float | None:
     """The percentage of the checked time in the last ``window`` seconds that
     the runs said ``online = true``, the way the console's Devices tab counts
     it: a span holds from its first run to its last, the newest reaches now
-    while its watch keeps time, and time nobody checked does not count. None
-    before an hour has been checked."""
+    while its watch keeps time (until ``holds_until`` when it is given, as
+    for a calendar; else within two and a half ``interval``), and time
+    nobody checked does not count. None before an hour has been checked."""
     start = now - window
     up = down = 0.0
     for i, s in enumerate(spans):
@@ -84,7 +92,7 @@ def uptime(spans: list[dict[str, Any]], interval: float | None, window: float, n
         if s.get("status") != "done" or not isinstance(out.get("online"), bool):
             continue
         a, b = float(s["from"]), float(s["to"])
-        if i == len(spans) - 1 and interval and now - b <= CONTIGUOUS * interval:
+        if i == len(spans) - 1 and (now <= holds_until if holds_until is not None else bool(interval) and now - b <= CONTIGUOUS * interval):
             b = now
         a, b = max(a, start), min(b, now)
         if b > a:
@@ -120,13 +128,23 @@ class Timelines:
                 self.error = f"{self.path}: {e}"
                 self.note(f"watch history: {self.error}; starting afresh")
 
-    def record(self, key: str, at: float, status: str, output: Any, interval: float | None) -> None:
+    def record(self, key: str, at: float, status: str, output: Any, interval: float | None, missed: Callable[[float], bool] | None = None) -> None:
+        """One run. It continues the last span when nothing was missed since
+        that span's end: ``missed(end)`` says so for a calendar (did a slot
+        pass with no run?); otherwise a clock watch's ``interval`` does
+        (more than two and a half of them is a gap), and an event watch,
+        with neither, is never late."""
         sig = json.dumps([status, output], sort_keys=True, ensure_ascii=False, default=str)
         h = hashlib.sha256(sig.encode("utf-8")).hexdigest()[:16]
         with self._lock:
             spans = self.data.setdefault(key, [])
             last = spans[-1] if spans else None
-            contiguous = last is not None and (interval is None or at - float(last["to"]) <= CONTIGUOUS * interval)
+            if last is None:
+                contiguous = False
+            elif missed is not None:
+                contiguous = not missed(float(last["to"]))
+            else:
+                contiguous = interval is None or at - float(last["to"]) <= CONTIGUOUS * interval
             started = False
             if last is not None and contiguous and last.get("h") == h:
                 last["to"] = at
@@ -185,6 +203,12 @@ class Watch:
         self.key = json.dumps([tree_name, index, spec], sort_keys=True, default=str)
         self.timeline = f"{tree_name}/{self.name}"   # outlives an edit to the watch, so its history does too
         self.interval = every_seconds(spec["every"]) if self.kind == "every" else None
+        self.calendar: tuple[schedule.Schedule, _dt.tzinfo] | None = None
+        if self.kind == "at":
+            try:
+                self.calendar = (schedule.parse_at(spec["at"]), schedule.zone(spec.get("tz")))
+            except (schedule.ScheduleError, ValueError):
+                pass  # pyrtan check refuses it; _at says so when it runs
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
         self.fires = 0
@@ -260,7 +284,7 @@ class Watch:
                 if self.stop.wait(min(60.0, (due - now).total_seconds())):
                     return
             n += 1
-            self.fire({"kind": "at", "n": n, "at": due.replace(microsecond=0).isoformat().replace("+00:00", "Z"), "slot": schedule.slot_name(due, tz), "tz": str(self.spec.get("tz") or "UTC")})
+            self.fire({"kind": "at", "n": n, "at": due.replace(microsecond=0).isoformat().replace("+00:00", "Z"), "slot": schedule.slot_name(due, tz), "tz": str(self.spec.get("tz") or "UTC")}, slot=due)
             after = max(due, self.watcher.clock())  # a slot missed while running is not made up
 
     def _file(self) -> None:
@@ -290,17 +314,39 @@ class Watch:
             if self.stop.wait(FILE_POLL):
                 return
 
-    def fire(self, event: dict[str, Any]) -> Outcome | None:
-        """Run the tree for one event. Returns the outcome, or None when the
-        tree is gone or its inputs do not render."""
+    def slot_after(self, at: float) -> float | None:
+        """A calendar watch: its first slot after ``at``, as a timestamp."""
+        if self.calendar is None:
+            return None
+        when, tz = self.calendar
+        return schedule.next_after(when, _dt.datetime.fromtimestamp(at, _dt.timezone.utc), tz).timestamp()
+
+    def holds_until(self, spans: list[dict[str, Any]]) -> float | None:
+        """Until when the newest span's outcome is taken to hold: a clock
+        watch's two and a half intervals past it, a calendar's next slot
+        and a grace for that slot's run, an event watch's for good (None
+        then, as for no span)."""
+        if not spans:
+            return None
+        to = float(spans[-1]["to"])
+        if self.interval:
+            return to + CONTIGUOUS * self.interval
+        nxt = self.slot_after(to)
+        return nxt + CALENDAR_GRACE if nxt is not None else None
+
+    def fire(self, event: dict[str, Any], slot: _dt.datetime | None = None) -> Outcome | None:
+        """Run the tree for one event (for a calendar, the ``slot`` it is
+        for). Returns the outcome, or None when the tree is gone or its
+        inputs do not render."""
         tree = self.watcher.registry.get(self.tree_name)
         if tree is None:
             self._fail(f"tree {self.tree_name!r} is gone")
             return None
-        if self.kind == "every":
+        if self.kind in ("every", "at"):
             spans = self.watcher.timelines.spans(self.timeline)
-            at = time.time()
-            event = {**event, "uptime": {k: uptime(spans, self.interval, w, at) for k, w in UPTIME_WINDOWS.items()}}
+            at = time.time() if self.kind == "every" else self.watcher.clock().timestamp()  # a calendar's timeline is on the watcher's clock
+            held = self.holds_until(spans) if self.kind == "at" else None
+            event = {**event, "uptime": {k: uptime(spans, self.interval, w, at, held) for k, w in UPTIME_WINDOWS.items()}}
         scope = {"event": event, "env": self.watcher.env, "now": _now_scope(self.watcher.clock())}
         try:
             inputs = {k: render(v, scope) for k, v in (self.spec.get("inputs") or {}).items()}
@@ -323,7 +369,12 @@ class Watch:
             self.history.append({"at": now, "status": outcome.status, "say": outcome.say, "path": path, "event": _observed(event)})
             del self.history[:-HISTORY]
             last = self.last_outcome
-        self.watcher.timelines.record(self.timeline, now, last.get("status", ""), last.get("output"), self.interval)
+        # A calendar's slots are read on the watcher's clock, so its timeline is too.
+        missed = None
+        if slot is not None and self.calendar is not None:
+            due = slot.timestamp()
+            missed = lambda end: (self.slot_after(end) or due) < due - 1  # noqa: E731  a slot between the last run and this one
+        self.watcher.timelines.record(self.timeline, self.watcher.clock().timestamp() if missed else now, last.get("status", ""), last.get("output"), self.interval, missed)
         self.watcher.after(self, event, outcome)
         return outcome
 
@@ -411,7 +462,10 @@ class Watcher:
         """Each watch's timeline (``GET /watches/history``)."""
         with self._lock:
             current = list(self.watches.values())
-        out = [{"tree": w.tree_name, "index": w.index, "name": w.name, "kind": w.kind, "every": w.interval, "spans": self.timelines.spans(w.timeline)} for w in current]
+        out = []
+        for w in current:
+            spans = self.timelines.spans(w.timeline)
+            out.append({"tree": w.tree_name, "index": w.index, "name": w.name, "kind": w.kind, "every": w.interval, "holds_until": w.holds_until(spans), "spans": spans})
         out.sort(key=lambda w: (w["tree"], w["index"]))
         return {"count": len(out), "days": TIMELINE_DAYS, "watches": out, **({"error": self.timelines.error} if self.timelines.error else {})}
 
