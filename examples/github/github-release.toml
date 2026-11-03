@@ -2,12 +2,16 @@
 # optional token from the service's env and a decision on the status code.
 
 name = "github-release"
-version = 3
+version = 4
 namespace = "pyrtan"
 description = "The latest release of a GitHub repository."
 tags = ["github", "read-only"]
 license = "MIT"
 hosts = ["api.github.com"]
+# GitHub answers 60 unauthenticated requests an hour from one address, then
+# 403. Spending them more slowly than that means the tree says "budget"
+# (and when to try again) itself, before GitHub has to say "rate-limited".
+budget = { requests = 30, per = "1 hour" }
 start = "fetch"
 
 [[triggers]]
