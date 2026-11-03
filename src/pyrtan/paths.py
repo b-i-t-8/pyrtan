@@ -9,10 +9,15 @@ listed. Each one is the nodes it passes, the branch it takes at each
 A branch :mod:`pyrtan.analysis` proves is never taken is listed and
 marked, so an audit sees it.
 
-Besides the ending it lists, any request can stop a run on its way
-(``transport``, ``drift`` when it has an ``expect``, ``budget``,
-a template that resolves to nothing): those are the same for every route
-and are said once, by :func:`stops`.
+Besides the ending it lists, any request can stop a run on its way, and
+those are the same for every route, so :func:`stops` says them once: a
+request that fails (``transport``); a target decided at run time that its
+allow-list refuses (``host-not-allowed``, ``key-not-allowed``… for each
+node ``pyrtan check`` warns of); a service started ``--egress public``,
+which refuses the box's own sources, discovery and a private address
+(``transport``, naming the nodes: a field device on ``plc.local`` is one);
+an answer out of shape (``drift``); a spent budget, the tree's own or a
+host's; a confirmation declined.
 
 An ``each`` with a sub-flow is one step of the route that walks it; the
 sub-flow's own routes are listed beside the tree's, from its start.
@@ -20,13 +25,23 @@ sub-flow's own routes are listed beside the tree's, from its start.
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from . import analysis
-from .adapters import SOURCES, what
+from .adapters import LOCAL_SOURCES, SOURCES, what
+from .template import PLACEHOLDER
 from .trace import cond_words
-from .tree import Node, Tree, row_condition
+from .tree import Node, Tree, check, row_condition
+
+# The allow-list a target decided at run time is held to, as `pyrtan check`
+# names it, and the reason a run that misses it stops with.
+REFUSED = {"hosts": ("host", "host-not-allowed"), "paths": ("path", "path-not-allowed"), "commands": ("command", "command-not-allowed"),
+           "devices": ("device", "device-not-allowed"), "topics": ("topic", "topic-not-allowed"), "keys": ("key", "key-not-allowed"),
+           "networks": ("network", "network-not-allowed")}
+PRIVATE_SUFFIXES = (".local", ".lan", ".home.arpa", ".internal")
 
 MAX_ROUTES = 1000
 
@@ -155,17 +170,65 @@ def sub_flows(tree: Tree) -> list[str]:
     return [n.spec["start"] for n in tree.nodes.values() if n.kind == "each" and isinstance(n.spec.get("start"), str)]
 
 
+def _source(node: Node) -> str | None:
+    return next((s for s in SOURCES if node.get(s) is not None), None)
+
+
+def _private(spec: Any) -> bool:
+    """Whether a request's address is one ``--egress public`` refuses as
+    private, as far as the tree says without running: a LAN name
+    (``plc.local``, ``{{ inputs.ups }}.local``) or a private, loopback or
+    link-local IP. Any other templated host is not judged, and no name is
+    looked up."""
+    m = re.match(r"[A-Za-z][A-Za-z0-9+.-]*://(?:[^@/?#]*@)?(\[[^\]]*\]|[^/:?#]*)", str(spec.get("url", ""))) if isinstance(spec, dict) else None
+    if not m:
+        return False
+    host = m.group(1).lower().strip("[]")
+    if host == "localhost" or host.endswith(PRIVATE_SUFFIXES):
+        return True
+    if PLACEHOLDER.search(host):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback or ip.is_link_local
+
+
 def stops(tree: Tree) -> list[str]:
-    """What can stop any route on its way, besides the ending it lists."""
+    """What can stop any route on its way, besides the ending it lists: a
+    request that fails, a target decided at run time that its allow-list
+    refuses, a service that reaches only public addresses, an answer out of
+    shape, a spent budget, a confirmation declined."""
     out: list[str] = []
-    requests = [n for n in tree.nodes.values() if n.kind in ("observe", "act") and any(n.get(s) is not None for s in SOURCES)]
+    requests = [n for n in tree.nodes.values() if n.kind in ("observe", "act") and _source(n) is not None]
     if requests:
         out.append("a request that fails (transport)")
+    # A target only the run knows is held to its list then: `pyrtan check` warns of each.
+    late: dict[str, list[str]] = {}
+    for p in check(tree):
+        m = re.search(r"refuses (\w+) outside the list", p.message) if p.level == "warn" else None
+        if m and m.group(1) in REFUSED and p.where.startswith("nodes."):
+            node = p.where.split(".")[1]
+            if node not in late.setdefault(m.group(1), []):
+                late[m.group(1)].append(node)
+    for allow, nodes in late.items():
+        noun, reason = REFUSED[allow]
+        out.append(f"a {noun} decided at run time outside the tree's {allow} ({reason}: {', '.join(nodes)})")
+    # --egress public closes the box's own sources and discovery, and refuses a private address.
+    own = [n.id for n in requests if _source(n) in LOCAL_SOURCES]
+    scans = [n.id for n in requests if _source(n) == "discover"]
+    lan = [n.id for n in requests if _source(n) not in LOCAL_SOURCES + ("discover",) and _private(n.get(_source(n)))]
+    refused = [w for w, ids in (("the box's own files, programs, serial lines and memory", own), ("discovery", scans), ("a private address", lan)) if ids]
+    if refused:
+        said = refused[0] if len(refused) == 1 else ", ".join(refused[:-1]) + " and " + refused[-1]
+        out.append(f"a service started --egress public, which refuses {said} (transport: {', '.join(own + scans + lan)})")
     if any(n.get("expect") for n in requests):
         out.append("an answer out of shape (drift: " + ", ".join(n.id for n in requests if n.get("expect")) + ")")
-    budget = getattr(tree, "budget", None)  # a tree's budget, where this runtime keeps one
-    if isinstance(budget, dict):
-        out.append(f"a spent budget ({budget['requests']} requests per {budget['said']})")
+    budget = getattr(tree, "budget", None)  # a table, or a list of them, where this runtime keeps one
+    budgets = [b for b in (budget if isinstance(budget, list) else [budget]) if isinstance(b, dict)]
+    if budgets:
+        out.append("a spent budget (" + "; ".join(f"{b['requests']} requests per {b['said']}" + (f" for {b['host']}, shared" if b.get("host") else "") for b in budgets) + ")")
     if any(n.kind == "act" and n.get("confirm") for n in tree.nodes.values()):
         out.append("a confirmation answered no (declined)")
     return out
