@@ -47,3 +47,4 @@ packages = ["src/pyrtan"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+faulthandler_timeout = 300   # a test still running after five minutes has every thread's stack written out, so a hang says where it is
