@@ -413,14 +413,33 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.47, built: a question is answered once.** A paused run's
+19. **v0.46, built: every route, listed.** `pyrtan paths` walks a tree
+    without running it and lists each route from its start: the branch
+    taken at each `decide` in a trace's words, what the route reads,
+    does and asks as written, and how it ends, including the gaps a
+    decision without `else` or a lookup without `default` leaves. A
+    branch the order check proves is never taken is marked. Trees do not
+    loop, so the list is finite: the audit, and the documentation, of
+    what a tree can do (`paths.py`).
+20. **v0.47, built: what can stop a route, for every source.** `pyrtan
+    paths` said once what can stop any route on its way, but only a
+    failed request, drift, a budget kept as one table and a confirmation
+    declined. A tree that reaches a field device, a templated host, a
+    memory key or the network can also stop where the run alone knows:
+    a target decided at run time outside its allow-list (each node `pyrtan
+    check` warns of, with the reason the run stops with), and a service
+    started `--egress public`, which closes the box's own sources and
+    discovery and refuses a private address (`plc.local`, `10.0.0.2`),
+    as the tree says it without a lookup. A budget reads as one table or
+    a list, a host's marked shared (`paths.py`).
+28. **v0.55, built: a question is answered once.** A paused run's
     snapshot carries an id, and the runner that paused it keeps the first
     answer's outcome: a second answer to the same snapshot gets that
     outcome back and does nothing again, so a double-clicked yes, or a
     resume retried after a timeout, cannot do an act twice. Ids are random
     in a running service and counted in the conformance vectors, so both
     runtimes still agree word for word (`runtime.py`).
-20. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+29. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
