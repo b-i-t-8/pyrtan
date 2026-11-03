@@ -186,3 +186,27 @@ def test_every_other_week_counts_from_the_week_of_its_from_date():
 def test_what_the_calendar_refuses(text, words):
     with pytest.raises(ScheduleError, match=words):
         parse_at(text)
+
+
+def test_a_weekday_by_its_place_in_the_month():
+    assert parse_at("first mon, third wed 08:00").describe() == "first mon, third wed 08:00"
+    assert runs("first mon 09:00", utc(2026, 11, 1), 3) == ["Mon 2026-11-02 09:00", "Mon 2026-12-07 09:00", "Mon 2027-01-04 09:00"]
+    assert runs("last fri 17:00", utc(2026, 11, 1), 3) == ["Fri 2026-11-27 17:00", "Fri 2026-12-25 17:00", "Fri 2027-01-29 17:00"]
+    assert runs("first mon, third wed 08:00", utc(2026, 11, 1), 4) == ["Mon 2026-11-02 08:00", "Wed 2026-11-18 08:00", "Mon 2026-12-07 08:00", "Wed 2026-12-16 08:00"]
+    # A month without a fifth Monday is passed over: after 30 November 2026, the next is in March.
+    assert runs("fifth mon 09:00", utc(2026, 11, 1), 2) == ["Mon 2026-11-30 09:00", "Mon 2027-03-29 09:00"]
+    # "last" with no day after it is still the month's last day; "last fri" is the last Friday.
+    assert parse_at("last 18:00").monthdays and not parse_at("last 18:00").nth
+    assert parse_at("last fri 18:00").nth == frozenset({(-1, 4)})
+
+
+@pytest.mark.parametrize("text, words", [
+    ("first 09:00", "'first' needs a day after it"),
+    ("first mon-fri 09:00", "'first' needs a day after it"),
+    ("first mon, 15th 09:00", "a schedule is one or the other"),
+    ("first mon, fri 09:00", "a schedule is one or the other"),
+    ("every 2 weeks from 2026-11-02 first mon 09:00", "not their place in the month"),
+])
+def test_what_a_weekday_s_place_refuses(text, words):
+    with pytest.raises(ScheduleError, match=words):
+        parse_at(text)
