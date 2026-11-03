@@ -145,3 +145,44 @@ def test_a_calendar_watch_runs_at_its_slot(tmp_path):
         assert len(fired) == 1
     finally:
         watcher.stop()
+
+
+def runs(text: str, after: dt.datetime, n: int = 5, tz=OSLO) -> list[str]:
+    when, out = parse_at(text), []
+    for _ in range(n):
+        after = next_after(when, after, tz)
+        out.append(after.astimezone(tz).strftime("%a %Y-%m-%d %H:%M"))
+    return out
+
+
+def test_days_of_the_month():
+    assert parse_at("1st,15th 09:00").describe() == "1st,15th 09:00"
+    assert runs("1st,15th 09:00", utc(2026, 11, 1, 12, 0), 4) == ["Sun 2026-11-15 09:00", "Tue 2026-12-01 09:00", "Tue 2026-12-15 09:00", "Fri 2027-01-01 09:00"]
+    # A month without the day is passed over, as cron does; "last" is each month's own last day.
+    assert runs("31st 08:00", utc(2026, 1, 1), 3) == ["Sat 2026-01-31 08:00", "Tue 2026-03-31 08:00", "Sun 2026-05-31 08:00"]
+    assert runs("last 18:00", utc(2028, 1, 1), 3) == ["Mon 2028-01-31 18:00", "Tue 2028-02-29 18:00", "Fri 2028-03-31 18:00"]  # a leap year
+
+
+def test_every_other_week_counts_from_the_week_of_its_from_date():
+    # From Wednesday 4 November 2026: that Monday is before it, so the first run is the Thursday.
+    assert runs("every 2 weeks from 2026-11-04 mon,thu 10:00", utc(2026, 10, 1)) == [
+        "Thu 2026-11-05 10:00", "Mon 2026-11-16 10:00", "Thu 2026-11-19 10:00", "Mon 2026-11-30 10:00", "Thu 2026-12-03 10:00"]
+    assert parse_at("every other week from 2026-11-02 fri 17:00") == parse_at("every 2 weeks from 2026-11-02 fri 17:00")
+    assert parse_at("fortnightly from 2026-11-02 fri 17:00").describe() == "every 2 weeks from 2026-11-02 fri 17:00"
+    assert runs("every 3 weeks from 2026-11-02 mon 09:00", utc(2026, 11, 3), 2) == ["Mon 2026-11-23 09:00", "Mon 2026-12-14 09:00"]
+    # Across a new year the weeks keep counting (an ISO week number would restart).
+    assert runs("every 2 weeks from 2026-12-21 mon 09:00", utc(2026, 12, 1), 3) == ["Mon 2026-12-21 09:00", "Mon 2027-01-04 09:00", "Mon 2027-01-18 09:00"]
+
+
+@pytest.mark.parametrize("text, words", [
+    ("fortnightly mon 09:00", "counts from a week; say which"),
+    ("every 2 weeks from soon mon 09:00", "'soon' is not a date"),
+    ("every 0 weeks from 2026-11-02 mon 09:00", "every 0 weeks is never"),
+    ("1st mon 09:00", "days of the month and days of the week"),
+    ("every 2 weeks from 2026-11-02 1st 09:00", "names days of the week, not of the month"),
+    ("32nd 09:00", "not a day of the month"),
+    ("2th 09:00", "not a day of the month"),
+])
+def test_what_the_calendar_refuses(text, words):
+    with pytest.raises(ScheduleError, match=words):
+        parse_at(text)
