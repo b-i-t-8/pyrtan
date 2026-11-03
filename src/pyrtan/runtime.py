@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from . import conditions
-from .adapters import SOURCES, LocalAdapters, brief_result, good, what, would
+from .adapters import FIELD_SOURCES, SOURCES, LocalAdapters, brief_result, broker, field_endpoint, good, what, would
 from .extract import extract
 from .grow import no_match_outcome
 from .registry import Ambiguous, NoMatch, Registry
@@ -98,6 +98,23 @@ class Outcome:
 class _Halt(Exception):
     def __init__(self, outcome: Outcome) -> None:
         self.outcome = outcome
+
+
+def request_host(source: str, spec: dict[str, Any]) -> str | None:
+    """The host a request reaches, for a host's budget: every source that
+    ``hosts`` governs names one (a page, a broker, a field device; for
+    Matter, its controller). The allow-list has already held it."""
+    url = str(spec.get("url", ""))
+    try:
+        if source in ("http", "browser"):
+            return urllib.parse.urlsplit(url).hostname
+        if source == "queue":
+            return broker(url)[1]
+        if source in FIELD_SOURCES:
+            return field_endpoint(source, url)[1]
+    except ValueError:
+        return None
+    return None
 
 
 @dataclass
@@ -322,7 +339,7 @@ class Runner:
             attempts = 1 + int(node.get("retries", DEFAULT_RETRIES)) if retry else 1
             last_error: str | None = None
             observed = None
-            reaches = urllib.parse.urlsplit(str(spec.get("url"))).hostname if source_name in ("http", "browser") else None
+            reaches = request_host(source_name, spec)
             for attempt in range(attempts):
                 refused = self._spend(tree, reaches) if source_name != "memory" else None
                 if refused is not None:

@@ -553,6 +553,17 @@
     return false;
   }
   const discoverMethod = (spec) => ["mdns", "ssdp", "bacnet", "scan"].find((m) => m in spec) || "?";
+  // The host a request reaches, for a host's budget (runtime.request_host):
+  // every source hosts governs names one; for Matter, its controller.
+  function requestHost(source, spec) {
+    const url = spec.url === undefined ? "" : spec.url;
+    try {
+      if (source === "http" || source === "browser") return new URL(String(url)).hostname;
+      if (source === "queue") return broker(url)[1];
+      if (FIELD_SOURCES.includes(source)) return fieldEndpoint(source, url)[1];
+    } catch (e) { return null; }
+    return null;
+  }
   function broker(url) {
     const m = /^(mqtts?):\/\/([^/:?#]+)(?::(\d+))?/.exec(String(url));
     if (!m) throw new Error(`${pyrepr(String(url))} is not mqtt://host[:port] or mqtts://host[:port]`);
@@ -1680,8 +1691,7 @@
           call = () => this.adapters.perform(sourceName, spec, timeout, (u) => tree.hostAllowed(u));
         }
         const attempts = retry ? 1 + Number(node.get("retries", DEFAULT_RETRIES)) : 1;
-        let reaches = null;
-        if (sourceName === "http" || sourceName === "browser") { try { reaches = new URL(String(spec.url)).hostname; } catch (e) { reaches = null; } }
+        const reaches = requestHost(sourceName, spec);
         let lastError = null, observed = null;
         for (let attempt = 0; attempt < attempts; attempt++) {
           const refused = sourceName !== "memory" ? this.spend(tree, reaches) : null;

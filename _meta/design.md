@@ -445,7 +445,16 @@ Five trees, all against real public APIs, all tested offline:
     not the tree's. A request must fit every budget that applies, and one
     refused is counted in none, so the GitHub trees can spend GitHub's own
     sixty an hour together once they say so (`runtime.py`).
-27. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+27. **v0.54, built: a field device's budget.** A host's budget counted
+    only what reached the host by `http` or `browser`, so a PLC, a UPS's
+    SNMP agent or a Matter controller named in one was never held to it:
+    a tree's own budget counted their requests, a host's let them all
+    through. Every source that `hosts` governs now names the host it
+    reaches, with the same parse its allow-list uses (a queue's broker; a
+    field device's address; Matter's controller), in both runtimes; one
+    node's request is one, however many packets its protocol exchanges
+    (`runtime.py`, `pyrtan.js`).
+28. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

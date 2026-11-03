@@ -226,3 +226,59 @@ def test_a_host_budget_matches_by_name_and_glob_and_only_what_reaches_a_host():
 def test_a_bad_host_budget_is_refused(budget, words):
     with pytest.raises(TreeError, match=re.escape(words)):
         load_tree_text(shop("bad", budget))
+
+
+# A host's budget counts every source that hosts governs: a field device
+# (for Matter, its controller) and a queue's broker, not only http.
+
+FIELD = {
+    "modbus": '{ url = "modbus://plant.local", read = "holding", address = 0 }',
+    "bacnet": '{ url = "bacnet://plant.local", object = "ai:1" }',
+    "snmp": '{ url = "snmp://plant.local", get = "sysName.0" }',
+    "coap": '{ url = "coap://plant.local/level" }',
+    "matter": '{ url = "ws://plant.local:5580/ws", node = 1, read = "1/OnOff/OnOff" }',
+}
+
+
+def device(source: str, spec: str, budget: str = '{ host = "plant.local", requests = 5, per = "1m" }') -> str:
+    return f'''
+name = "{source}-reader"
+description = "reads the plant by {source}"
+hosts = ["plant.local"]
+budget = {budget}
+start = "get"
+
+[nodes.get]
+kind = "observe"
+{source} = {spec}
+into = "r"
+next = "said"
+
+[nodes.said]
+kind = "done"
+say = "read"
+'''
+
+
+def test_a_host_s_budget_counts_its_field_devices_too():
+    import tomllib
+
+    from pyrtan.adapters import adapter_key
+
+    reg = Registry()
+    fixture = {}
+    for source, spec in FIELD.items():
+        reg.add(load_tree_text(device(source, spec)))
+        fixture[adapter_key(source, tomllib.loads(f"s = {spec}")["s"])] = {"ok": True, "value": 1, "refused": None}
+    reg.add(load_tree_text(device("queue", '{ url = "mqtt://plant.local", topic = "plant/level" }').replace('hosts = ["plant.local"]', 'hosts = ["plant.local"]\ntopics = ["plant/level"]')))
+    fixture["queue mqtt://plant.local plant/level"] = {"status": 0, "ok": True, "body": "7", "topic": "plant/level"}
+    now = [T0]
+    r = Runner(reg, RecordedTransport(json.loads(json.dumps(fixture))), clock=lambda: now[0])
+    # Five protocols, one device: five requests of its five a minute.
+    assert [r.run_tree(f"{s}-reader", {}).status for s in FIELD] == ["done"] * 5
+    for name in ("modbus-reader", "queue-reader"):
+        out = r.run_tree(name, {})
+        assert out.reason == "budget" and out.output["budget"]["host"] == "plant.local", (name, out.say)
+    assert "the budget of 5 requests per 1m for plant.local" in out.say
+    now[0] = T0 + dt.timedelta(seconds=61)
+    assert r.run_tree("queue-reader", {}).status == "done"  # the broker is the same host, and counts the same way

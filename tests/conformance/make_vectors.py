@@ -263,6 +263,14 @@ LANGUAGE_TREES: list[dict] = [
        "budget": [{"host": "hacker-news.firebaseio.com", "requests": 2, "per": "1 hour"}, {"requests": 5, "per": 60}], "start": "get",
        "nodes": {"get": {"kind": "observe", "http": {"url": "https://hacker-news.firebaseio.com/v0/item/101.json"}, "into": "r", "extract": [{"into": "title", "json": "json.title"}], "next": "said"},
                  "said": {"kind": "done", "say": "{{ state.title }}"}}} for x in ("a", "b")),
+    *({"name": f"plc-{u}", "version": 1, "description": f"reads unit {u} of the PLC, within the device's budget", "hosts": ["plc.local"],
+       "budget": {"host": "plc.local", "requests": 2, "per": "1 hour"}, "start": "get",
+       "nodes": {"get": {"kind": "observe", "modbus": {"url": "modbus://plc.local", "unit": u, "read": "holding", "address": 100}, "into": "r", "next": "said"},
+                 "said": {"kind": "done", "say": f"unit {u}: {{{{ state.r.value }}}}"}}} for u in (1, 2)),
+    {"name": "plug-share", "version": 1, "description": "reads a plug through its controller, within the controller's budget", "hosts": ["matter.local"],
+     "budget": {"host": "matter.local", "requests": 1, "per": "1 hour"}, "start": "get",
+     "nodes": {"get": {"kind": "observe", "matter": {"url": "ws://matter.local:5580/ws", "node": 4, "read": "1/OnOff/OnOff"}, "into": "r", "next": "said"},
+               "said": {"kind": "done", "say": "plug: {{ state.r.value }}"}}},
     {"name": "panel", "version": 1, "description": "reads a status panel with patterns", "hosts": [], "start": "read",
      "inputs": {"text": {"type": "str", "required": True}},
      "nodes": {"read": {"kind": "observe", "from": "inputs.text", "next": "temp", "extract": [
@@ -385,6 +393,11 @@ HUB = [
     ("POST", "/run", {"tree": "share-a"}),
     ("POST", "/run", {"tree": "share-b"}),
     ("POST", "/run", {"tree": "share-a"}),            # the host's two are spent, by both trees together
+    ("POST", "/run", {"tree": "plc-1"}),
+    ("POST", "/run", {"tree": "plc-2"}),
+    ("POST", "/run", {"tree": "plc-1"}),              # a field device's host budget: its two are spent, by both units' trees
+    ("POST", "/run", {"tree": "plug-share"}),
+    ("POST", "/run", {"tree": "plug-share"}),         # Matter's host is its controller
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "TEMPERATURE: 35°C"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "nothing here"}}),

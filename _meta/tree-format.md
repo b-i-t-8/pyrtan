@@ -55,8 +55,11 @@ budget = { host = "api.github.com", requests = 60, per = "1 hour" }
 budget = [{ requests = 10, per = "1m" }, { host = "api.github.com", requests = 60, per = "1 hour" }]
 ```
 
-With `host` (a name, or `*.example.com`), the budget is the host's: one
-count of the requests that reach it (by `http` or `browser`), shared by
+With `host` (a name, an address such as `192.168.1.20`, or
+`*.example.com`), the budget is the host's: one count of the requests
+that reach it by any source `hosts` governs (`http`, `browser`, a
+`queue`'s broker, and a field device: `modbus`, `bacnet`, `snmp`, `coap`,
+and for `matter` its controller), shared by
 every tree on the service that names it, as a site's rate limit is
 shared by everyone at one address. Each tree holds the shared count to
 its own number, so one that names fewer is refused sooner. A list holds
