@@ -9,8 +9,10 @@ listed. Each one is the nodes it passes, the branch it takes at each
 A branch :mod:`pyrtan.analysis` proves is never taken is listed and
 marked, so an audit sees it.
 
-Besides the ending it lists, any request can stop a run on its way, and
-those are the same for every route, so :func:`stops` says them once: a
+Besides the ending it lists, a request can stop a run on its way.
+:func:`stops` says what can, for the tree and, given a route's nodes, for
+that route alone, naming the nodes each stop is at (:func:`route_stops`;
+a route that passes no request has none): a
 request that fails (``transport``); a target decided at run time that its
 allow-list refuses (``host-not-allowed``, ``key-not-allowed``… for each
 node ``pyrtan check`` warns of); a service started ``--egress public``,
@@ -195,16 +197,10 @@ def _private(spec: Any) -> bool:
     return ip.is_private or ip.is_loopback or ip.is_link_local
 
 
-def stops(tree: Tree) -> list[str]:
-    """What can stop any route on its way, besides the ending it lists: a
-    request that fails, a target decided at run time that its allow-list
-    refuses, a service that reaches only public addresses, an answer out of
-    shape, a spent budget, a confirmation declined."""
-    out: list[str] = []
+def facts(tree: Tree) -> dict[str, Any]:
+    """Which nodes each stop can happen at, gathered once for a tree (it
+    runs ``pyrtan check`` for the targets decided at run time)."""
     requests = [n for n in tree.nodes.values() if n.kind in ("observe", "act") and _source(n) is not None]
-    if requests:
-        out.append("a request that fails (transport)")
-    # A target only the run knows is held to its list then: `pyrtan check` warns of each.
     late: dict[str, list[str]] = {}
     for p in check(tree):
         m = re.search(r"refuses (\w+) outside the list", p.message) if p.level == "warn" else None
@@ -212,31 +208,64 @@ def stops(tree: Tree) -> list[str]:
             node = p.where.split(".")[1]
             if node not in late.setdefault(m.group(1), []):
                 late[m.group(1)].append(node)
-    for allow, nodes in late.items():
-        noun, reason = REFUSED[allow]
-        out.append(f"a {noun} decided at run time outside the tree's {allow} ({reason}: {', '.join(nodes)})")
-    # --egress public closes the box's own sources and discovery, and refuses a private address.
-    own = [n.id for n in requests if _source(n) in LOCAL_SOURCES]
-    scans = [n.id for n in requests if _source(n) == "discover"]
-    lan = [n.id for n in requests if _source(n) not in LOCAL_SOURCES + ("discover",) and _private(n.get(_source(n)))]
+    budget = getattr(tree, "budget", None)  # a table, or a list of them, where this runtime keeps one
+    return {
+        "requests": [n.id for n in requests],
+        "late": late,
+        # --egress public closes the box's own sources and discovery, and refuses a private address.
+        "own": [n.id for n in requests if _source(n) in LOCAL_SOURCES],
+        "scans": [n.id for n in requests if _source(n) == "discover"],
+        "lan": [n.id for n in requests if _source(n) not in LOCAL_SOURCES + ("discover",) and _private(n.get(_source(n)))],
+        "drift": [n.id for n in requests if n.get("expect")],
+        "budgets": [b for b in (budget if isinstance(budget, list) else [budget]) if isinstance(b, dict)],
+        "declined": [n.id for n in tree.nodes.values() if n.kind == "act" and n.get("confirm")],
+    }
+
+
+def stops(tree: Tree, nodes: set[str] | None = None, *, known: dict[str, Any] | None = None) -> list[str]:
+    """What can stop a route on its way, besides the ending it lists: a
+    request that fails, a target decided at run time that its allow-list
+    refuses, a service that reaches only public addresses, an answer out of
+    shape, a spent budget, a confirmation declined. Without ``nodes``, for
+    the whole tree (any of its routes); with them, for a route that passes
+    those nodes, naming the ones each stop is at."""
+    f = known if known is not None else facts(tree)
+    within = (lambda ids: [i for i in ids if i in nodes]) if nodes is not None else (lambda ids: list(ids))
+    at = (lambda reason, ids: f"{reason}: {', '.join(ids)}") if nodes is not None else (lambda reason, ids: reason)
+    out: list[str] = []
+    requests = within(f["requests"])
+    if requests:
+        out.append(f"a request that fails ({at('transport', requests)})")
+    for allow, ids in f["late"].items():
+        ids = within(ids)
+        if ids:
+            noun, reason = REFUSED[allow]
+            out.append(f"a {noun} decided at run time outside the tree's {allow} ({reason}: {', '.join(ids)})")
+    own, scans, lan = within(f["own"]), within(f["scans"]), within(f["lan"])
     refused = [w for w, ids in (("the box's own files, programs, serial lines and memory", own), ("discovery", scans), ("a private address", lan)) if ids]
     if refused:
         said = refused[0] if len(refused) == 1 else ", ".join(refused[:-1]) + " and " + refused[-1]
         out.append(f"a service started --egress public, which refuses {said} (transport: {', '.join(own + scans + lan)})")
-    if any(n.get("expect") for n in requests):
-        out.append("an answer out of shape (drift: " + ", ".join(n.id for n in requests if n.get("expect")) + ")")
-    budget = getattr(tree, "budget", None)  # a table, or a list of them, where this runtime keeps one
-    budgets = [b for b in (budget if isinstance(budget, list) else [budget]) if isinstance(b, dict)]
-    if budgets:
-        out.append("a spent budget (" + "; ".join(f"{b['requests']} requests per {b['said']}" + (f" for {b['host']}, shared" if b.get("host") else "") for b in budgets) + ")")
-    if any(n.kind == "act" and n.get("confirm") for n in tree.nodes.values()):
-        out.append("a confirmation answered no (declined)")
+    drift = within(f["drift"])
+    if drift:
+        out.append("an answer out of shape (drift: " + ", ".join(drift) + ")")
+    if f["budgets"] and requests:
+        out.append("a spent budget (" + "; ".join(f"{b['requests']} requests per {b['said']}" + (f" for {b['host']}, shared" if b.get("host") else "") for b in f["budgets"]) + ")")
+    declined = within(f["declined"])
+    if declined:
+        out.append(f"a confirmation answered no ({at('declined', declined)})")
     return out
+
+
+def route_stops(tree: Tree, route: Route, known: dict[str, Any] | None = None) -> list[str]:
+    """What can stop this one route: the stops at the nodes it passes."""
+    return stops(tree, {leg.node for leg in route.legs}, known=known)
 
 
 def render(tree: Tree, limit: int = MAX_ROUTES) -> str:
     """The routes as text, the way ``pyrtan paths`` prints them."""
     lines: list[str] = []
+    known = facts(tree)
     sections = [(None, tree.start)] + [(f"each sub-flow from {s}", s) for s in sub_flows(tree)]
     total = 0
     for title, start in sections:
@@ -251,10 +280,13 @@ def render(tree: Tree, limit: int = MAX_ROUTES) -> str:
             lines.append(f"{i}. {steps}: {r.end} {r.says}{mark}")
             for read in r.reads:
                 lines.append(f"     {read}")
+            own = route_stops(tree, r, known)
+            if own:
+                lines.append(f"     can stop at: {'; '.join(own)}")
         if over:
             lines.append(f"… more than {limit} routes; the rest are not listed")
     head = f"{tree.name}: {total} route(s)"
-    can = stops(tree)
+    can = stops(tree, known=known)
     if can:
         head += "; any of them can also stop at " + "; ".join(can)
     return "\n".join([head] + lines)

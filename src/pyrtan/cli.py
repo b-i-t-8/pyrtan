@@ -621,10 +621,11 @@ def cmd_paths(args: argparse.Namespace) -> int:
             continue
         if args.json:
             flows = {}
+            known = pathsmod.facts(tree)
             for start in [tree.start] + pathsmod.sub_flows(tree):
                 found, over = pathsmod.routes(tree, start)
-                flows[start] = {"routes": [r.to_dict() for r in found], "more": over}
-            out.append({"tree": tree.name, "file": str(path), "start": tree.start, "flows": flows, "stops": pathsmod.stops(tree)})
+                flows[start] = {"routes": [{**r.to_dict(), "stops": pathsmod.route_stops(tree, r, known)} for r in found], "more": over}
+            out.append({"tree": tree.name, "file": str(path), "start": tree.start, "flows": flows, "stops": pathsmod.stops(tree, known=known)})
         else:
             if out:
                 print()

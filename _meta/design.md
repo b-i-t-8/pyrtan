@@ -432,7 +432,14 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+21. **v0.63, built: what can stop each route.** `pyrtan paths` said once,
+    for the tree, what can stop any of its routes, so a route through a
+    `decide` that skips every request read as if a refused host could stop
+    it. Each route now says what can stop it, at the nodes it passes and
+    naming them (`can stop at: a request that fails (transport: fetch);
+    a confirmation answered no (declined: post)`), and `--json` gives each
+    route its own `stops`; the tree's line is as it was (`paths.py`).
+22. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
