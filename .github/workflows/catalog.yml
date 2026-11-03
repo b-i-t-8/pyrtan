@@ -17,6 +17,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # the suite takes about three; a hang stops here, with pytest's faulthandler stacks in the log, not at GitHub's six hours
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

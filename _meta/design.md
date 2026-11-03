@@ -413,20 +413,39 @@ Five trees, all against real public APIs, all tested offline:
     program's output or a serial reply, for people who do not write
     regexes, and `pyrtan build` takes one where it took a regex
     (`extract.py`, `intent.py`).
-19. **v0.45, built: declared budgets.** `budget = { requests = 30, per =
+19. **v0.46, built: every route, listed.** `pyrtan paths` walks a tree
+    without running it and lists each route from its start: the branch
+    taken at each `decide` in a trace's words, what the route reads,
+    does and asks as written, and how it ends, including the gaps a
+    decision without `else` or a lookup without `default` leaves. A
+    branch the order check proves is never taken is marked. Trees do not
+    loop, so the list is finite: the audit, and the documentation, of
+    what a tree can do (`paths.py`).
+20. **v0.47, built: what can stop a route, for every source.** `pyrtan
+    paths` said once what can stop any route on its way, but only a
+    failed request, drift, a budget kept as one table and a confirmation
+    declined. A tree that reaches a field device, a templated host, a
+    memory key or the network can also stop where the run alone knows:
+    a target decided at run time outside its allow-list (each node `pyrtan
+    check` warns of, with the reason the run stops with), and a service
+    started `--egress public`, which closes the box's own sources and
+    discovery and refuses a private address (`plc.local`, `10.0.0.2`),
+    as the tree says it without a lookup. A budget reads as one table or
+    a list, a host's marked shared (`paths.py`).
+25. **v0.52, built: declared budgets.** `budget = { requests = 30, per =
     "1 hour" }` holds a tree to so many requests in any window, across
     the runs a service makes of it. The one that would go past is not
     sent: the run stops with reason `budget` and says when the next may
     go. The window slides by the runner's clock, so a recording gives the
     same refusal every time; `github-release` spends GitHub's hourly
     allowance slowly enough to refuse before GitHub does (`runtime.py`).
-20. **v0.50, built: a host's budget, shared.** A budget may name a host:
+26. **v0.53, built: a host's budget, shared.** A budget may name a host:
     one count of the requests that reach it, kept across every tree on
     the service that names it, since a rate limit is the address's and
     not the tree's. A request must fit every budget that applies, and one
     refused is counted in none, so the GitHub trees can spend GitHub's own
     sixty an hour together once they say so (`runtime.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+27. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
