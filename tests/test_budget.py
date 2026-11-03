@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 
 import pytest
 
@@ -121,7 +122,7 @@ def test_a_service_keeps_the_budget_across_requests(tmp_path):
     d.mkdir()
     (d / "hits.toml").write_text(HITS)
     svc = Service(Registry.from_paths([d]), name="s", transport=RecordedTransport(json.loads(json.dumps(FIXTURE))))
-    assert svc.capabilities()["trees"][0]["budget"] == {"requests": 2, "per": 60}
+    assert svc.capabilities()["trees"][0]["budget"] == [{"requests": 2, "per": 60}]
     statuses = [svc.run({"tree": "hits"})["status"] for _ in range(3)]
     assert statuses == ["done", "done", "error"]
 
@@ -131,13 +132,13 @@ def test_a_service_keeps_the_budget_across_requests(tmp_path):
     ('{ requests = 2.5, per = "1m" }', "budget.requests is a whole number"),
     ('{ requests = 2, per = "soon" }', "budget.per is a duration"),
     ('{ requests = 2 }', "'budget' is a table of 'requests' and 'per'"),
-    ('{ requests = 2, per = "1m", host = "x" }', "'budget' is a table of 'requests' and 'per'"),
+    ('{ requests = 2, per = "1m", scope = "x" }', "'budget' is a table of 'requests' and 'per'"),
     ('"10 a minute"', "'budget' is a table"),
 ])
 def test_a_bad_budget_is_refused(budget, words):
     with pytest.raises(TreeError, match=words):
         load_tree_text(HITS.replace('{ requests = 2, per = "1m" }', budget))
-    assert load_tree_text(HITS.replace('per = "1m"', "per = 90")).budget == {"requests": 2, "per": 90, "said": "90 s"}
+    assert load_tree_text(HITS.replace('per = "1m"', "per = 90")).budget == [{"requests": 2, "per": 90, "said": "90 s", "host": None}]
 
 
 def test_the_github_example_keeps_a_budget():
@@ -145,4 +146,83 @@ def test_the_github_example_keeps_a_budget():
     from pyrtan.tree import load_tree
 
     tree = load_tree(ROOT / "examples" / "github" / "github-release.toml")
-    assert tree.budget == {"requests": 30, "per": 3600, "said": "1 hour"}
+    assert tree.budget == [{"requests": 30, "per": 3600, "said": "1 hour", "host": None}]
+
+
+def shop(name: str, budget: str, url: str = "https://api.example/1") -> str:
+    return f'''
+name = "{name}"
+description = "reads the shop"
+hosts = ["api.example", "*.shop.example"]
+budget = {budget}
+start = "get"
+[nodes.get]
+kind = "observe"
+http = {{ url = "{url}" }}
+into = "r"
+retries = 0
+next = "done"
+[nodes.done]
+kind = "done"
+say = "{{{{ state.r.status }}}}"
+'''
+
+
+def shops(*trees: str):
+    reg = Registry()
+    for t in trees:
+        reg.add(load_tree_text(t))
+    fixture = {**FIXTURE, "GET https://EU.shop.example/x": {"status": 200, "body": ""}}
+    now = [T0]
+    return Runner(reg, RecordedTransport(json.loads(json.dumps(fixture))), clock=lambda: now[0]), now
+
+
+def test_a_host_s_budget_is_shared_by_every_tree_that_names_it():
+    host = '{ host = "api.example", requests = 2, per = "1m" }'
+    r, now = shops(shop("a", host), shop("b", host))
+    assert [r.run_tree(t, {}).status for t in ("a", "b")] == ["done", "done"]
+    out = r.run_tree("a", {})
+    assert out.reason == "budget" and out.output["budget"] == {"requests": 2, "per": 60, "retry_after": 60, "host": "api.example"}
+    assert out.say == "get: the budget of 2 requests per 1m for api.example, which every tree here naming it shares, is spent; the next is allowed in 60 s."
+    assert r.run_tree("b", {}).reason == "budget"  # b's is the same count
+    now[0] = T0 + dt.timedelta(seconds=61)
+    assert r.run_tree("b", {}).status == "done"
+
+
+def test_each_tree_holds_the_shared_count_to_its_own_number():
+    r, now = shops(shop("strict", '{ host = "api.example", requests = 1, per = "1m" }'), shop("easy", '{ host = "api.example", requests = 3, per = "1 hour" }'))
+    assert r.run_tree("easy", {}).status == "done"
+    assert r.run_tree("strict", {}).reason == "budget"  # one has gone already
+    assert r.run_tree("easy", {}).status == "done"
+    now[0] = T0 + dt.timedelta(minutes=30)  # past strict's minute, inside easy's hour: the count keeps easy's window
+    assert r.run_tree("easy", {}).status == "done"
+    assert r.run_tree("easy", {}).reason == "budget"
+
+
+def test_a_request_must_fit_every_budget_and_a_refused_one_counts_in_none():
+    both = '[{ requests = 1, per = "1m" }, { host = "api.example", requests = 5, per = "1m" }]'
+    r, _ = shops(shop("both", both), shop("other", '{ host = "api.example", requests = 5, per = "1m" }'))
+    assert r.run_tree("both", {}).status == "done"
+    assert r.run_tree("both", {}).output["budget"] == {"requests": 1, "per": 60, "retry_after": 60}  # its own, not the host's
+    # The refused one was not counted against the host: four of its five are left.
+    assert [r.run_tree("other", {}).status for _ in range(5)] == ["done"] * 4 + ["error"]
+
+
+def test_a_host_budget_matches_by_name_and_glob_and_only_what_reaches_a_host():
+    r, _ = shops(shop("glob", '{ host = "*.shop.example", requests = 1, per = "1m" }', url="https://EU.shop.example/x"))
+    assert r.run_tree("glob", {}).status == "done" and r.run_tree("glob", {}).reason == "budget"
+    r, _ = shops(shop("elsewhere", '{ host = "other.example", requests = 1, per = "1m" }'))
+    assert [r.run_tree("elsewhere", {}).status for _ in range(3)] == ["done"] * 3  # api.example has no budget here
+
+
+@pytest.mark.parametrize("budget, words", [
+    ('{ host = "API.example", requests = 1, per = "1m" }', "budget.host is a host name"),
+    ('{ host = "a b", requests = 1, per = "1m" }', "budget.host is a host name"),
+    ('[{ requests = 1, per = "1m" }, { requests = 2, per = "1h" }]', "names a host (or the tree itself) twice"),
+    ('[{ host = "api.example", requests = 1, per = "1m" }, { host = "api.example", requests = 2, per = "1h" }]', "twice"),
+    ("[]", "a table, or a list of them"),
+    ('[{ requests = 0, per = "1m" }]', "budget[0].requests is a whole number"),
+])
+def test_a_bad_host_budget_is_refused(budget, words):
+    with pytest.raises(TreeError, match=re.escape(words)):
+        load_tree_text(shop("bad", budget))

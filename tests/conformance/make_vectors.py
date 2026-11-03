@@ -259,6 +259,10 @@ LANGUAGE_TREES: list[dict] = [
                "item": {"kind": "observe", "http": {"url": "https://hacker-news.firebaseio.com/v0/item/{{ item }}.json"}, "into": "r", "extract": [{"into": "title", "json": "json.title"}], "next": "got"},
                "got": {"kind": "done", "say": "{{ state.title }}"},
                "reply": {"kind": "done", "say": "{{ state.items | length }} read", "output": {"items": "{{ state.items }}"}}}},
+    *({"name": f"share-{x}", "version": 1, "description": f"reads one item, within the host's budget ({x})", "hosts": ["hacker-news.firebaseio.com"],
+       "budget": [{"host": "hacker-news.firebaseio.com", "requests": 2, "per": "1 hour"}, {"requests": 5, "per": 60}], "start": "get",
+       "nodes": {"get": {"kind": "observe", "http": {"url": "https://hacker-news.firebaseio.com/v0/item/101.json"}, "into": "r", "extract": [{"into": "title", "json": "json.title"}], "next": "said"},
+                 "said": {"kind": "done", "say": "{{ state.title }}"}}} for x in ("a", "b")),
     {"name": "panel", "version": 1, "description": "reads a status panel with patterns", "hosts": [], "start": "read",
      "inputs": {"text": {"type": "str", "required": True}},
      "nodes": {"read": {"kind": "observe", "from": "inputs.text", "next": "temp", "extract": [
@@ -378,6 +382,9 @@ HUB = [
     ("POST", "/intent", {"text": "quota 2"}),
     ("POST", "/intent", {"text": "quota 2"}),
     ("POST", "/intent", {"text": "quota 1"}),
+    ("POST", "/run", {"tree": "share-a"}),
+    ("POST", "/run", {"tree": "share-b"}),
+    ("POST", "/run", {"tree": "share-a"}),            # the host's two are spent, by both trees together
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "TEMPERATURE: 35°C"}}),
     ("POST", "/run", {"tree": "panel", "inputs": {"text": "nothing here"}}),

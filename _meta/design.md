@@ -439,7 +439,13 @@ Five trees, all against real public APIs, all tested offline:
     go. The window slides by the runner's clock, so a recording gives the
     same refusal every time; `github-release` spends GitHub's hourly
     allowance slowly enough to refuse before GitHub does (`runtime.py`).
-26. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+26. **v0.53, built: a host's budget, shared.** A budget may name a host:
+    one count of the requests that reach it, kept across every tree on
+    the service that names it, since a rate limit is the address's and
+    not the tree's. A request must fit every budget that applies, and one
+    refused is counted in none, so the GitHub trees can spend GitHub's own
+    sixty an hour together once they say so (`runtime.py`).
+27. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
