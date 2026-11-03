@@ -941,7 +941,13 @@
        "[what's the] weather tomorrow (in|for) {place}",
        "will it rain tomorrow in {place}"
       ],
-      "version": 1
+      "version": 2,
+      "watches": [
+       {
+        "kind": "at",
+        "what": "daily 18:00 (Europe/Oslo)"
+       }
+      ]
      },
      {
       "description": "The latest release of a GitHub repository.",
@@ -1174,7 +1180,13 @@
        "[when is the] next [public|bank] holiday in {country:word}",
        "[public|bank] holidays in {country:word}"
       ],
-      "version": 1
+      "version": 2,
+      "watches": [
+       {
+        "kind": "at",
+        "what": "1st 08:00 (Europe/Oslo)"
+       }
+      ]
      },
      {
       "description": "A Homebrew formula's current stable version and what it is, from formulae.brew.sh.",
@@ -27563,7 +27575,17 @@
      "pattern": "will it rain tomorrow in {place}"
     }
    ],
-   "version": 1
+   "version": 2,
+   "watches": [
+    {
+     "at": "daily 18:00",
+     "inputs": {
+      "place": "Oslo"
+     },
+     "name": "Oslo, the evening before",
+     "tz": "Europe/Oslo"
+    }
+   ]
   },
   "github-release": {
    "description": "The latest release of a GitHub repository.",
@@ -28439,7 +28461,17 @@
      "pattern": "[public|bank] holidays in {country:word}"
     }
    ],
-   "version": 1
+   "version": 2,
+   "watches": [
+    {
+     "at": "1st 08:00",
+     "inputs": {
+      "country": "NO"
+     },
+     "name": "Norway, each month",
+     "tz": "Europe/Oslo"
+    }
+   ]
   },
   "homebrew": {
    "description": "A Homebrew formula's current stable version and what it is, from formulae.brew.sh.",

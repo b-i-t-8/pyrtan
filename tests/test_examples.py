@@ -585,3 +585,19 @@ def test_f1_events_and_people_in_space(runner):
     assert out.say == "NASA is tracking 5 open events. The latest: Tropical Cyclone Arnab." and len(out.output["events"]) == 5
     out = runner.run_intent("how many people are in space")
     assert out.output["count"] == 10 and out.output["people"][0] == "Zhu Yangzhu"
+
+
+def test_the_calendar_watches_run_when_they_say(examples):
+    import datetime as dt
+
+    from pyrtan.schedule import next_after, parse_at, slot_name, zone
+
+    after = dt.datetime(2026, 11, 2, 12, 0, tzinfo=dt.timezone.utc)
+    # Six in the evening in Oslo is 17:00 UTC in November; the first of
+    # December at eight is a Tuesday.
+    for name, due, slot in [("forecast", "2026-11-02T17:00:00+00:00", "mon 18:00"), ("holidays", "2026-12-01T07:00:00+00:00", "tue 08:00")]:
+        (watch,) = examples.get(name).watches
+        tz = zone(watch["tz"])
+        at = next_after(parse_at(watch["at"]), after, tz)
+        assert at.astimezone(dt.timezone.utc).isoformat() == due, name
+        assert slot_name(at, tz) == slot, name
