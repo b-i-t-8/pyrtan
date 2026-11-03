@@ -1,6 +1,6 @@
 [project]
 name = "pyrtan"
-version = "0.48.0"
+version = "0.56.0"
 description = "Open-source total automation: a core set of expandable services that act on all forms of I/O through inspectable decision trees."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -47,3 +47,4 @@ packages = ["src/pyrtan"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+faulthandler_timeout = 300   # a test still running after five minutes has every thread's stack written out, so a hang says where it is
