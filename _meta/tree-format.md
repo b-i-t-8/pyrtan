@@ -116,7 +116,7 @@ every = "15m"                        # a duration, or seconds
 inputs = { host = "example.com" }    # templates may read event, env and now
 
 [[watches]]
-at = "mon-fri 09:00, 17:30"          # a calendar: days and times of day (or "1st,last 08:00", or "every 2 weeks from 2026-11-02 mon 10:00")
+at = "mon-fri 09:00, 17:30"          # a calendar: days and times of day (or "1st,last 08:00", "first mon, last fri 09:00", or "every 2 weeks from 2026-11-02 mon 10:00")
 tz = "Europe/Oslo"                   # optional; UTC when not given
 inputs = { slot = "{{ event.slot }}" }   # event.slot = "fri 09:00", event.at = the instant, in UTC
 
@@ -142,7 +142,12 @@ days of the month or of the week, not both. `every 2 weeks from
 2026-11-02 mon 10:00` (or `every other week`, `fortnightly`, `every 3
 weeks`…) counts weeks, Monday to Sunday, from the week of its `from`
 date, and runs nothing before that date; it needs the date, since "every
-other" has to know which. Times are `09:00`,
+other" has to know which. Or a weekday by its place in the month:
+`first mon 09:00`, `last fri 17:00`, `first mon, third wed 08:00` (first,
+second, third, fourth, fifth or last, each before a day); a month without
+a fifth Monday is passed over, `last` with no day after it is still the
+month's last day, and a schedule names places or other days, not both.
+Times are `09:00`,
 `9am`, `noon`, `midnight`, several separated by commas. They are in `tz`,
 an IANA zone name, or UTC. A time the clocks skip (02:30 the night they
 go forward) runs at the shifted hour; a time that happens twice runs

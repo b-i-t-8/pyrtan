@@ -8,6 +8,9 @@ A schedule is days and times of day, in a fixed little grammar::
     "weekdays noon"             also: daily, every day, weekends
     "fri-mon 22:00"             a range may wrap the week
     "1st,15th 09:00"            days of the month; "last" is its last day
+    "first mon, third wed 09:00"
+                                a weekday by its place in the month: first,
+                                second, third, fourth, fifth or last ("last fri")
     "every 2 weeks from 2026-11-02 mon 10:00"
                                 every other Monday, counting from that week
                                 (also: every other week, fortnightly)
@@ -16,7 +19,10 @@ Days are names (``mon`` or ``monday``), ranges of them, or the words
 above; no days means every day. Days of the month are ordinals (``1st``,
 ``2nd``, ``31st``) or ``last``, and a month without that day (the 31st in
 April) is passed over, as cron does; a schedule names days of the month
-or days of the week, not both. ``every N weeks`` counts weeks (Monday to
+or days of the week, not both. A weekday by its place (``first mon``,
+``last fri``) is a third kind: a month without a fifth Monday is passed
+over, and ``last`` alone, with no day after it, is still the month's last
+day. ``every N weeks`` counts weeks (Monday to
 Sunday) from the week of its ``from`` date, which it needs, since "every
 other" has to know which; nothing runs before that date. Times are read by :func:`nlp.parse_time`
 (``09:00``, ``9am``, ``noon``, ``midnight``), so a time has no space in
@@ -47,6 +53,7 @@ class ScheduleError(ValueError):
 
 
 LAST = 0  # in monthdays: the month's last day
+PLACES = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "last": -1}  # a weekday's place in its month
 
 
 @dataclass(frozen=True)
@@ -56,9 +63,13 @@ class Schedule:
     monthdays: frozenset[int] = frozenset()  # 1..31, and LAST; when given, days is every day
     weeks: int = 1                # every N weeks
     since: _dt.date | None = None  # the from date: weeks count from its week, and nothing runs before it
+    nth: frozenset[tuple[int, int]] = frozenset()  # (place, weekday): 1..5 or -1 for the last; when given, days is every day
 
     def describe(self) -> str:
-        if self.monthdays:
+        if self.nth:
+            words = {v: k for k, v in PLACES.items()}
+            days = ", ".join(f"{words[n]} {DAYS[d]}" for n, d in sorted(self.nth, key=lambda p: (p[0] if p[0] > 0 else 9, p[1])))
+        elif self.monthdays:
             days = ",".join("last" if d == LAST else _ordinal(d) for d in sorted(self.monthdays, key=lambda d: d or 32))
         else:
             days = "every day" if len(self.days) == 7 else ",".join(DAYS[d] for d in sorted(self.days))
@@ -66,8 +77,12 @@ class Schedule:
         return f"{every}{days} {', '.join(f'{h:02d}:{m:02d}' for h, m in self.times)}"
 
     def runs_on(self, day: _dt.date) -> bool:
-        if self.monthdays:
-            last = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1) - _dt.timedelta(days=1)
+        last = (day.replace(day=28) + _dt.timedelta(days=4)).replace(day=1) - _dt.timedelta(days=1)
+        if self.nth:
+            place = (day.day - 1) // 7 + 1
+            if not ((place, day.weekday()) in self.nth or ((-1, day.weekday()) in self.nth and day.day + 7 > last.day)):
+                return False
+        elif self.monthdays:
             if day.day not in self.monthdays and not (LAST in self.monthdays and day == last):
                 return False
         elif day.weekday() not in self.days:
@@ -112,8 +127,23 @@ def parse_at(text: object) -> Schedule:
         t = t[: m.start()] + " " + t[m.end():]
     days: set[int] = set()
     monthdays: set[int] = set()
+    nth: set[tuple[int, int]] = set()
     times: set[tuple[int, int]] = set()
-    for token in (x for x in re.split(r"[\s,]+", t) if x):
+    tokens = [x for x in re.split(r"[\s,]+", t) if x]
+    place: int | None = None  # a place word waiting for its weekday
+    for i, token in enumerate(tokens):
+        if place is not None:
+            if not (re.fullmatch(r"[a-z]+", token) and nlp._weekday(token) is not None):
+                raise ScheduleError(f"{text!r}: {tokens[i - 1]!r} needs a day after it, such as \"{tokens[i - 1]} mon\"")
+            nth.add((place, _day(token)))
+            place = None
+            continue
+        following = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if token in PLACES and re.fullmatch(r"[a-z]+", following) and nlp._weekday(following) is not None:
+            place = PLACES[token]
+            continue
+        if token in PLACES and token != "last":
+            raise ScheduleError(f"{text!r}: {token!r} needs a day after it, such as \"{token} mon\"")
         if token in WORDS:
             days.update(WORDS[token])
         elif token == "last":
@@ -136,11 +166,15 @@ def parse_at(text: object) -> Schedule:
             times.add((int(hh), int(mm)))
     if not times:
         raise ScheduleError(f"{text!r} names no time of day; say when, such as \"{text.strip()} 09:00\"")
+    if nth and (days or monthdays):
+        raise ScheduleError(f"{text!r} names a weekday by its place in the month and other days too; a schedule is one or the other")
+    if nth and weeks > 1:
+        raise ScheduleError(f"{text!r}: every {weeks} weeks counts weeks, so it names days of the week, not their place in the month")
     if monthdays and days:
         raise ScheduleError(f"{text!r} names days of the month and days of the week; a schedule is one or the other")
     if monthdays and weeks > 1:
         raise ScheduleError(f"{text!r}: every {weeks} weeks counts weeks, so it names days of the week, not of the month")
-    return Schedule(frozenset(days or range(7)), tuple(sorted(times)), frozenset(monthdays), weeks, since)
+    return Schedule(frozenset(days or range(7)), tuple(sorted(times)), frozenset(monthdays), weeks, since, frozenset(nth))
 
 
 def zone(name: object) -> _dt.tzinfo:
@@ -163,6 +197,8 @@ def next_after(schedule: Schedule, after: _dt.datetime, tz: _dt.tzinfo) -> _dt.d
     # Long enough to reach the next slot whatever the schedule: a 31st two
     # months on, N weeks, and the wait for a week that has not begun.
     ahead = 62 + 7 * schedule.weeks + max(0, (schedule.since - local.date()).days if schedule.since else 0)
+    if schedule.nth:
+        ahead = 400  # a fifth Monday can be four months off
     for d in range(ahead + 1):
         day = local.date() + _dt.timedelta(days=d)
         if not schedule.runs_on(day):

@@ -443,7 +443,14 @@ Five trees, all against real public APIs, all tested offline:
     over in a month without them, or run every N weeks counted from the
     week of a `from` date it must give, so "every other Monday" says
     which Mondays and keeps counting across a new year (`schedule.py`).
-24. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+24. **v0.62, built: a weekday by its place in the month.** "The first
+    Monday" and "the last Friday" still meant a daily watch and a
+    `decide` on `now`, since `1st` stays a date. `first mon 09:00`,
+    `last fri 17:00` and lists of them (`first mon, third wed`) name a
+    weekday by its place, first to fifth or last; a month without a fifth
+    Monday is passed over, as a 31st is, and `last` alone is still the
+    month's last day (`schedule.py`).
+25. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions
