@@ -244,3 +244,68 @@ def test_private_addresses_as_paths_reads_them():
 
     assert all(_private({"url": u}) for u in ["modbus://plc.local", "snmp://{{ inputs.ups }}.local", "coap://192.168.1.9/x", "ws://[::1]:5580/ws", "http://localhost:8080/", "mqtt://10.0.0.2"])
     assert not any(_private({"url": u}) for u in ["https://api.example/x", "snmp://{{ inputs.host }}", "bacnet://8.8.8.8", "nonsense"])
+
+
+SPLIT = '''
+name = "split"
+description = "posts, or reads a log, or neither"
+hosts = ["api.example"]
+paths = ["/var/log"]
+start = "which"
+
+[inputs.what]
+type = "str"
+
+[nodes.which]
+kind = "decide"
+on = "inputs.what"
+branches = [
+  { when = { eq = "post" }, then = "post" },
+  { when = { eq = "log" }, then = "log" },
+]
+
+[nodes.post]
+kind = "act"
+http = { method = "POST", url = "https://api.example/x" }
+confirm = true
+into = "p"
+next = "done"
+
+[nodes.log]
+kind = "observe"
+file = { path = "/var/log/{{ inputs.what }}.log" }
+into = "l"
+next = "done"
+
+[nodes.done]
+kind = "done"
+say = "ok"
+'''
+
+
+def test_each_route_says_what_can_stop_it():
+    from pyrtan.paths import route_stops
+
+    tree = load_tree_text(SPLIT)
+    found, _ = routes(tree)
+    by_end = {" -> ".join(leg.node for leg in r.legs): route_stops(tree, r) for r in found}
+    assert by_end["which -> post -> done"] == ["a request that fails (transport: post)", "a confirmation answered no (declined: post)"]
+    assert by_end["which -> log -> done"] == [
+        "a request that fails (transport: log)",
+        "a path decided at run time outside the tree's paths (path-not-allowed: log)",
+        "a service started --egress public, which refuses the box's own files, programs, serial lines and memory (transport: log)",
+    ]
+    assert by_end["which"] == []  # the gap: nothing on the way can stop it
+    # The tree's own line is every route's, as before.
+    assert stops(tree)[0] == "a request that fails (transport)" and "a confirmation answered no (declined)" in stops(tree)
+    text = render(tree)
+    assert "     can stop at: a request that fails (transport: post); a confirmation answered no (declined: post)" in text
+
+
+def test_the_command_gives_each_route_its_stops(tmp_path, capsys):
+    (tmp_path / "split.toml").write_text(SPLIT)
+    assert main(["paths", str(tmp_path / "split.toml"), "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    got = {" -> ".join(r["path"]): r["stops"] for r in out["flows"]["which"]["routes"]}
+    assert got["which"] == [] and got["which -> post -> done"][-1] == "a confirmation answered no (declined: post)"
+    assert out["stops"][0] == "a request that fails (transport)"
