@@ -64,7 +64,7 @@ function hubShape(d) {
   for (const p of vectors.proposals) compare(`propose ${JSON.stringify(p.text)}`, p.expect, Pyrtan.propose(p.text));
   // The hub in a page: the same requests, the same answers as a service.
   const transport = new Pyrtan.RecordedTransport(fixture);
-  const hub = new Pyrtan.LocalHub({ trees: Object.values(vectors.trees).concat(vectors.language_trees), transport, adapters: transport, clock });
+  const hub = new Pyrtan.LocalHub({ trees: Object.values(vectors.trees).concat(vectors.language_trees), transport, adapters: transport, clock, env: vectors.hub_env || {} });
   for (const x of vectors.hub) {
     const [status, payload] = await hub.route(x.method, x.path, x.body === null ? undefined : JSON.parse(JSON.stringify(x.body)));
     compare(`hub ${x.method} ${x.path} ${x.body ? JSON.stringify(x.body).slice(0, 60) : ""}`, { status: x.status, body: hubShape(x.expect) }, { status, body: hubShape(JSON.parse(JSON.stringify(payload))) });

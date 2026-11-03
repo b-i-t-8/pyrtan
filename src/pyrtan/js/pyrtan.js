@@ -1387,7 +1387,7 @@
       cap.sources = this.sources();
       const watches = Array.isArray(this.raw.watches) ? this.raw.watches : [];
       if (watches.length) cap.watches = watches.map((w) => { const kind = ["every", "file", "queue", "serial"].find((k) => k in w) || "?"; return { kind, what: kind === "every" ? String(w.every) : kind === "file" ? String(w.file) : kind === "queue" ? `${w.queue && w.queue.topic} at ${w.queue && w.queue.url}` : String(w.serial && w.serial.device) }; });
-      if (this.budget) cap.budget = this.budget.map((b) => Object.assign({ requests: b.requests, per: b.per }, b.host ? { host: b.host } : {}));
+      if (this.budget) cap.budget = this.budget.map((b) => Object.assign({ requests: b.requests, per: b.per }, b.host ? { host: b.host } : {}, b.raised_by ? { raised_by: b.raised_by } : {}));
       const fixed = this.triggers.filter((t) => Object.keys(t.fixedInputs).length);
       return Object.assign(cap, { license: this.license, language: languageDict(this.language), triggers: this.triggers.map((t) => t.pattern) }, fixed.length ? { trigger_inputs: Object.fromEntries(fixed.map((t) => [t.pattern, t.fixedInputs])) } : {}, { inputs });
     }
@@ -1493,7 +1493,7 @@
       if (typeof b.per === "number") seconds = b.per;
       else { try { seconds = parseDuration(String(b.per)).value; } catch (e) { if (!(e instanceof ParseError)) throw e; } }
       if (seconds < 1) return null;
-      out.push({ requests: b.requests, per: seconds, said: typeof b.per === "number" ? `${b.per} s` : String(b.per), host: typeof b.host === "string" ? b.host : null });
+      out.push(Object.assign({ requests: b.requests, per: seconds, said: typeof b.per === "number" ? `${b.per} s` : String(b.per), host: typeof b.host === "string" ? b.host : null }, isObj(b.raised_by) && Object.keys(b.raised_by).length ? { raised_by: Object.assign({}, b.raised_by) } : {}));
     }
     return out.length ? out : null;
   }
@@ -1515,8 +1515,17 @@
     }
     // One request against every budget it falls under, the tree's and a host's (as runtime.py):
     // null when it may go, counted in all; else [seconds until the next may, that budget], counted in none.
+    // A budget as this runner holds it (runtime.Runner._allowance): raised_by raises its
+    // number when the env holds one of its names, the largest (then the later name) if several.
+    allowance(b) {
+      const raised = Object.entries(b.raised_by || {}).filter(([name]) => this.env[name] !== undefined && this.env[name] !== null && this.env[name] !== "");
+      if (!raised.length) return b;
+      raised.sort((x, y) => (x[1] - y[1]) || (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
+      const [name, n] = raised[raised.length - 1];
+      return Object.assign({}, b, { requests: n, raised: name });
+    }
     spend(tree, host) {
-      const budgets = (tree.budget || []).filter((b) => b.host === null || (host && globMatch(b.host, host.toLowerCase())));
+      const budgets = (tree.budget || []).filter((b) => b.host === null || (host && globMatch(b.host, host.toLowerCase()))).map((b) => this.allowance(b));
       if (!budgets.length) return null;
       const now = this.clock().getTime() / 1000;
       const keys = budgets.map((b) => (b.host === null ? `tree ${tree.name}` : `host ${b.host}`));
@@ -1686,10 +1695,10 @@
         for (let attempt = 0; attempt < attempts; attempt++) {
           const refused = sourceName !== "memory" ? this.spend(tree, reaches) : null;
           if (refused !== null) {
-            const [wait, b] = refused, allowance = `${b.requests} requests per ${b.said}`;
+            const [wait, b] = refused, allowance = `${b.requests} requests per ${b.said}` + (b.raised ? ` (raised by ${b.raised})` : "");
             const said = b.host === null ? `${node.id}: ${tree.name} has spent its budget of ${allowance}; the next is allowed in ${wait} s.` : `${node.id}: the budget of ${allowance} for ${b.host}, which every tree here naming it shares, is spent; the next is allowed in ${wait} s.`;
             trace.add(step(node.id, node.kind, `${label}: not sent; the budget of ${allowance}${b.host ? " for " + b.host : ""} is spent, the next in ${wait} s`));
-            return outcome("error", tree.name, { reason: "budget", say: said, output: { budget: Object.assign({ requests: b.requests, per: b.per, retry_after: wait }, b.host ? { host: b.host } : {}) } });
+            return outcome("error", tree.name, { reason: "budget", say: said, output: { budget: Object.assign({ requests: b.requests, per: b.per, retry_after: wait }, b.host ? { host: b.host } : {}, b.raised ? { raised_by: b.raised } : {}) } });
           }
           try { observed = await call(); break; }
           catch (e) { if (!(e instanceof TransportError)) throw e; lastError = e.message; if (attempt + 1 < attempts) await sleep(Math.min(200 * (attempt + 1), 1000)); }

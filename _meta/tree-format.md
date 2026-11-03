@@ -16,7 +16,7 @@ A tree is one TOML file. This is the whole of it.
 | `topics` | if any node talks to a queue | MQTT topic filters: `+` one level, `#` the rest (`home/+/temperature`). |
 | `keys` | if any node uses memory | Memory keys or globs (`disk-space/*`); `*` is every key. |
 | `networks` | if any node discovers | Networks (CIDRs) a `discover` node may look at (`192.168.1.0/24`); a scan's target must be inside them and devices answering from outside are left out. `*` is everything. |
-| `budget` | no | At most so many requests in any window: `{ requests = 10, per = "1m" }`, or a host's, shared by every tree that names it (below). |
+| `budget` | no | At most so many requests in any window: `{ requests = 10, per = "1m" }`, or a host's, shared by every tree that names it, and raised by a credential in the environment (below). |
 | `start` | yes | The first node. |
 | `tags` | no | Free strings, for people and for the hub's listing. |
 | `license` | for a catalog | An SPDX identifier such as `MIT`, `Apache-2.0` or `CC0-1.0`: what others may do with the file. A tree without one runs anywhere but is left out of a catalog. |
@@ -65,6 +65,19 @@ must fit every one that applies: if any refuses it, it is counted in
 none. A refusal by a host's says so (`the budget of 60 requests per 1
 hour for api.github.com, which every tree here naming it shares, is
 spent`) and `output.budget` names the `host`.
+
+```toml
+budget = { host = "api.github.com", requests = 60, per = "1 hour", raised_by = { GITHUB_TOKEN = 5000 } }
+```
+
+A site often allows more to a caller who signs in. `raised_by` names the
+environment variables that do it and the number each allows, above
+`requests`: when one is set and not empty in the runner's environment,
+that number is the budget; of several set, the largest. The env name is
+said, never its value: the refusal reads `the budget of 5000 requests
+per 1 hour (raised by GITHUB_TOKEN) …`, and `output.budget.raised_by`
+names it. A host's count is still one count, whichever number each tree
+holds it to. `/capabilities` shows `raised_by` beside the budget.
 
 ## Triggers
 

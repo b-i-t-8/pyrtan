@@ -2183,6 +2183,56 @@
       "version": 1
      },
      {
+      "budget": [
+       {
+        "per": 3600,
+        "raised_by": {
+         "VECTOR_TOKEN": 2
+        },
+        "requests": 1
+       }
+      ],
+      "description": "reads one item, within a budget a token raises (a)",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "raise-a",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
+      "budget": [
+       {
+        "per": 3600,
+        "raised_by": {
+         "ABSENT_TOKEN": 5
+        },
+        "requests": 1
+       }
+      ],
+      "description": "reads one item, within a budget a token raises (b)",
+      "hosts": [
+       "hacker-news.firebaseio.com"
+      ],
+      "inputs": {},
+      "language": {},
+      "license": "",
+      "name": "raise-b",
+      "sources": [
+       "http"
+      ],
+      "tags": [],
+      "triggers": [],
+      "version": 1
+     },
+     {
       "description": "A recipe for a dish: where it is from, its ingredients and how to make it, from TheMealDB.",
       "hosts": [
        "www.themealdb.com"
@@ -5757,6 +5807,188 @@
   },
   {
    "body": {
+    "tree": "raise-a"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "Pyrtan 0.1",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "Pyrtan 0.1"
+      }
+     ],
+     "tree": "raise-a"
+    },
+    "tree": "raise-a"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "raise-a"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "Pyrtan 0.1",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "Pyrtan 0.1"
+      }
+     ],
+     "tree": "raise-a"
+    },
+    "tree": "raise-a"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "raise-a"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "budget": {
+      "per": 3600,
+      "raised_by": "VECTOR_TOKEN",
+      "requests": 2,
+      "retry_after": 3600
+     }
+    },
+    "reason": "budget",
+    "say": "get: raise-a has spent its budget of 2 requests per 1 hour (raised by VECTOR_TOKEN); the next is allowed in 3600 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "get",
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json: not sent; the budget of 2 requests per 1 hour (raised by VECTOR_TOKEN) is spent, the next in 3600 s"
+      }
+     ],
+     "tree": "raise-a"
+    },
+    "tree": "raise-a"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "raise-b"
+   },
+   "expect": {
+    "inputs": {},
+    "say": "Pyrtan 0.1",
+    "status": "done",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": "said",
+       "node": "get",
+       "observed": {
+        "title": "Pyrtan 0.1"
+       },
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json -> 200; title=Pyrtan 0.1"
+      },
+      {
+       "depth": 0,
+       "kind": "done",
+       "next": null,
+       "node": "said",
+       "summary": "Pyrtan 0.1"
+      }
+     ],
+     "tree": "raise-b"
+    },
+    "tree": "raise-b"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
+    "tree": "raise-b"
+   },
+   "expect": {
+    "inputs": {},
+    "output": {
+     "budget": {
+      "per": 3600,
+      "requests": 1,
+      "retry_after": 3600
+     }
+    },
+    "reason": "budget",
+    "say": "get: raise-b has spent its budget of 1 requests per 1 hour; the next is allowed in 3600 s.",
+    "status": "error",
+    "trace": {
+     "gaps": [],
+     "steps": [
+      {
+       "depth": 0,
+       "kind": "observe",
+       "next": null,
+       "node": "get",
+       "summary": "GET https://hacker-news.firebaseio.com/v0/item/101.json: not sent; the budget of 1 requests per 1 hour is spent, the next in 3600 s"
+      }
+     ],
+     "tree": "raise-b"
+    },
+    "tree": "raise-b"
+   },
+   "method": "POST",
+   "path": "/run",
+   "status": 200
+  },
+  {
+   "body": {
     "inputs": {
      "text": "Maxtemperature 99\nTemperature: 21.5°C\r\nWind 12 km/h from the NW\nStatus:   all systems go  \nUpdated: 2026-13-45\nchecked 25 oct 2026\nused 1,234 of 5,000 MB, used 7 of 8 MB"
     },
@@ -6322,7 +6554,7 @@
     "errors": {},
     "gaps": 2,
     "name": "this browser",
-    "runs": 43,
+    "runs": 48,
     "status": "ok",
     "suggestions": 3,
     "trees": [
@@ -6391,6 +6623,8 @@
      "pypi-package",
      "quota",
      "quote",
+     "raise-a",
+     "raise-b",
      "recipe",
      "remind",
      "rendered-headline",
@@ -6447,6 +6681,9 @@
    "status": 404
   }
  ],
+ "hub_env": {
+  "VECTOR_TOKEN": "made-up"
+ },
  "language_trees": [
   {
    "description": "echo for remind",
@@ -7035,6 +7272,78 @@
     "hacker-news.firebaseio.com"
    ],
    "name": "share-b",
+   "nodes": {
+    "get": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      }
+     ],
+     "http": {
+      "url": "https://hacker-news.firebaseio.com/v0/item/101.json"
+     },
+     "into": "r",
+     "kind": "observe",
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "{{ state.title }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": {
+    "per": "1 hour",
+    "raised_by": {
+     "VECTOR_TOKEN": 2
+    },
+    "requests": 1
+   },
+   "description": "reads one item, within a budget a token raises (a)",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "name": "raise-a",
+   "nodes": {
+    "get": {
+     "extract": [
+      {
+       "into": "title",
+       "json": "json.title"
+      }
+     ],
+     "http": {
+      "url": "https://hacker-news.firebaseio.com/v0/item/101.json"
+     },
+     "into": "r",
+     "kind": "observe",
+     "next": "said"
+    },
+    "said": {
+     "kind": "done",
+     "say": "{{ state.title }}"
+    }
+   },
+   "start": "get",
+   "version": 1
+  },
+  {
+   "budget": {
+    "per": "1 hour",
+    "raised_by": {
+     "ABSENT_TOKEN": 5
+    },
+    "requests": 1
+   },
+   "description": "reads one item, within a budget a token raises (b)",
+   "hosts": [
+    "hacker-news.firebaseio.com"
+   ],
+   "name": "raise-b",
    "nodes": {
     "get": {
      "extract": [

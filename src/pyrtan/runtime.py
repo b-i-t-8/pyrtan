@@ -247,6 +247,15 @@ class Runner:
                 raise _Halt(Outcome("error", tree.name, reason="dead-end", say=f"{node.id} has nowhere to go.", trace=trace))
             node_id = next_id
 
+    def _allowance(self, b: dict[str, Any]) -> dict[str, Any]:
+        """A budget as this runner holds it: ``raised_by`` raises its number
+        when the runner's env holds one of its names (the largest, if several)."""
+        raised = [(n, name) for name, n in (b.get("raised_by") or {}).items() if self.env.get(name) not in (None, "")]
+        if not raised:
+            return b
+        n, name = max(raised)
+        return {**b, "requests": n, "raised": name}
+
     def _spend(self, tree: Tree, host: str | None) -> tuple[int, dict[str, Any]] | None:
         """Count one request against every budget it falls under: the tree's
         own, and a host's when it goes to that host (shared by every tree
@@ -262,6 +271,7 @@ class Runner:
         with self._spending:
             refused: tuple[int, dict[str, Any]] | None = None
             for b, key in zip(budgets, keys):
+                b = self._allowance(b)
                 self.windows[key] = max(self.windows.get(key, 0), b["per"])  # the longest any tree holds it to
                 kept = [t for t in self.spent.get(key, []) if t > now - self.windows[key]]
                 self.spent[key] = kept
@@ -327,14 +337,14 @@ class Runner:
                 refused = self._spend(tree, reaches) if source_name != "memory" else None
                 if refused is not None:
                     wait, b = refused
-                    allowance = f"{b['requests']} requests per {b['said']}"
+                    allowance = f"{b['requests']} requests per {b['said']}" + (f" (raised by {b['raised']})" if b.get("raised") else "")
                     if b["host"] is None:
                         said = f"{node.id}: {tree.name} has spent its budget of {allowance}; the next is allowed in {wait} s."
                     else:
                         said = f"{node.id}: the budget of {allowance} for {b['host']}, which every tree here naming it shares, is spent; the next is allowed in {wait} s."
                     trace.add(Step(node.id, node.kind, f"{label}: not sent; the budget of {allowance}" + (f" for {b['host']}" if b["host"] else "") + f" is spent, the next in {wait} s"))
                     return Outcome("error", tree.name, reason="budget", say=said,
-                                   output={"budget": {"requests": b["requests"], "per": b["per"], "retry_after": wait, **({"host": b["host"]} if b["host"] else {})}})
+                                   output={"budget": {"requests": b["requests"], "per": b["per"], "retry_after": wait, **({"host": b["host"]} if b["host"] else {}), **({"raised_by": b["raised"]} if b.get("raised") else {})}})
                 try:
                     observed = call()
                     break

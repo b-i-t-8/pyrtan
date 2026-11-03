@@ -289,7 +289,7 @@ class Tree:
             **{k: getattr(self, k) for k in ("paths", "commands", "devices", "topics", "keys", "networks") if getattr(self, k)},
             "sources": self.sources(),
             **({"watches": [{"kind": k, "what": _watch_what(w)} for k, w in zip(self.watch_kinds(), self.watches)]} if self.watches else {}),
-            **({"budget": [{"requests": b["requests"], "per": b["per"], **({"host": b["host"]} if b["host"] else {})} for b in self.budget]} if self.budget else {}),
+            **({"budget": [{"requests": b["requests"], "per": b["per"], **({"host": b["host"]} if b["host"] else {}), **({"raised_by": b["raised_by"]} if b.get("raised_by") else {})} for b in self.budget]} if self.budget else {}),
             "license": self.license,
             "language": self.language.to_dict(),
             "triggers": [t.pattern for t in self.triggers],
@@ -307,7 +307,9 @@ def _budget(name: str, raw: Any) -> list[dict[str, Any]] | None:
     in any window of that length, across every run of the tree. With
     ``host``, the budget is the host's: every tree that names the same one
     spends one count of the requests that reach it. A list holds several,
-    and a request must fit them all."""
+    and a request must fit them all. ``raised_by = { GITHUB_TOKEN = 5000 }``
+    raises the number when the service's env holds that name (a token that
+    buys a larger allowance), the largest when several do."""
     from .nlp import ParseError, parse_duration
 
     if raw is None:
@@ -318,8 +320,8 @@ def _budget(name: str, raw: Any) -> list[dict[str, Any]] | None:
     out: list[dict[str, Any]] = []
     for i, b in enumerate(tables):
         where = "budget" if not isinstance(raw, list) else f"budget[{i}]"
-        if not isinstance(b, dict) or not {"requests", "per"} <= set(b) or set(b) - {"requests", "per", "host"}:
-            raise TreeError(f"{name}: '{where}' is a table of 'requests' and 'per', and 'host' for a host's own, such as {{ requests = 10, per = \"1m\" }}")
+        if not isinstance(b, dict) or not {"requests", "per"} <= set(b) or set(b) - {"requests", "per", "host", "raised_by"}:
+            raise TreeError(f"{name}: '{where}' is a table of 'requests' and 'per', 'host' for a host's own and 'raised_by' for a credential that raises it, such as {{ requests = 10, per = \"1m\" }}")
         requests, per, host = b["requests"], b["per"], b.get("host")
         if isinstance(requests, bool) or not isinstance(requests, int) or requests < 1:
             raise TreeError(f"{name}: {where}.requests is a whole number of requests, 1 or more, got {requests!r}")
@@ -331,7 +333,16 @@ def _budget(name: str, raw: Any) -> list[dict[str, Any]] | None:
             raise TreeError(f"{name}: {where}.per is a duration such as \"1m\" or \"1 hour\", got {per!r}")
         if host is not None and (not isinstance(host, str) or not re.fullmatch(r"(?:\*\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*", host)):
             raise TreeError(f"{name}: {where}.host is a host name such as \"api.github.com\" (or \"*.example.com\"), got {host!r}")
-        out.append({"requests": requests, "per": seconds, "said": f"{per} s" if isinstance(per, int) else str(per), "host": host})
+        raised = b.get("raised_by")
+        if raised is not None:
+            if not isinstance(raised, dict) or not raised:
+                raise TreeError(f"{name}: {where}.raised_by is a table of env names and the number each allows, such as {{ GITHUB_TOKEN = 5000 }}")
+            for env_name, n in raised.items():
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_name):
+                    raise TreeError(f"{name}: {where}.raised_by: {env_name!r} is not an env name")
+                if isinstance(n, bool) or not isinstance(n, int) or n <= requests:
+                    raise TreeError(f"{name}: {where}.raised_by.{env_name} is a whole number above requests ({requests}), since it raises the budget, got {n!r}")
+        out.append({"requests": requests, "per": seconds, "said": f"{per} s" if isinstance(per, int) else str(per), "host": host, **({"raised_by": dict(raised)} if raised else {})})
     if len({b["host"] for b in out}) != len(out):
         raise TreeError(f"{name}: 'budget' names a host (or the tree itself) twice; give each one budget")
     return out
