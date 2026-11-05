@@ -432,7 +432,15 @@ Five trees, all against real public APIs, all tested offline:
     discovery and refuses a private address (`plc.local`, `10.0.0.2`),
     as the tree says it without a lookup. A budget reads as one table or
     a list, a host's marked shared (`paths.py`).
-21. **Later:** hosting (`platform.md` Phase 3); a serial line held open
+21. **v0.48, built: list and number filters.** `sum`, `average`, `min`,
+    `max`, `sort` (`sort:key` for tables), `reverse`, `pluck:key`,
+    `round:n`, `percent:n`, `bytes`, and unit conversions from a fixed
+    table (`c_to_f`, `km_to_mi`…). Still no expression language: each
+    filter is fixed, and the one argument a few take is a literal, never
+    a path. Rounding works on a float's shortest decimal form and sums
+    add left to right, so the browser agrees digit for digit
+    (`template.py`).
+22. **Later:** hosting (`platform.md` Phase 3); a serial line held open
     across the nodes of one run, for devices with a session.
 
 ## 7. Open questions

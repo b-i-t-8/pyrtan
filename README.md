@@ -177,6 +177,12 @@ finds the words in what was observed and reads the slot with its kind's
 parser (`number`, `date`, `duration`, `host`…); a pattern with several
 slots gives a table of them.
 
+What was read can be summed, sorted and rounded on the way into a
+sentence, with fixed filters rather than an expression language:
+`{{ state.rows | pluck:qty | sum }}`, `{{ state.temp | c_to_f | round:1 }}`,
+`{{ state.used | percent:1 }}`, `{{ state.size | bytes }}`. The list is
+in [`_meta/tree-format.md`](_meta/tree-format.md#templates).
+
 ## The command
 
 | Command | What it does |

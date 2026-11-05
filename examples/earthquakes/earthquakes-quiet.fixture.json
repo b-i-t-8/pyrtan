@@ -1,0 +1,13 @@
+{
+  "GET https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson": {
+    "status": 200,
+    "body": {
+      "type": "FeatureCollection",
+      "metadata": {
+        "count": 0,
+        "title": "USGS Magnitude 4.5+ Earthquakes, Past Day"
+      },
+      "features": []
+    }
+  }
+}
