@@ -940,6 +940,7 @@ async function detect() {
         $("#connect-help").innerHTML = "Kept in this browser only. The token is the one the hub or service was started with (<code>--token</code> or <code>$PYRTAN_TOKEN</code>).";
         $("#hub-token").value = token;
         signIn(a);
+        if (await autoSignIn(a)) await new Promise(() => {});  // on its way to the provider
         if (signInFailed) { problem(signInFailed, true); signInFailed = ""; }
         else if (!token) problem(a.chat_public ? "Enter the token to see what this Pyrtan can answer, or open Chat: its lobby is open to anyone." : "Enter the token to see what this Pyrtan can answer.");
       }
@@ -1887,6 +1888,25 @@ function signIn(a) {
     if (!remote) $("#connect-lede").textContent = on && sso ? `This Pyrtan needs a token, your directory account, or a sign-in with ${sso.provider}:` : on ? "This Pyrtan needs a token, or your directory account:" : `This Pyrtan needs a token, or a sign-in with ${sso.provider}:`;
   }
 }
+// --oidc-auto: at the address the provider sends people back to, no session (or one that has
+// expired) goes to the provider without the button. It tries once a minute at most, and a
+// failed sign-in or forgetting the hub turns it off for this tab until a sign-in works.
+async function autoSignIn(a) {
+  const sso = a && a.oidc;
+  if (remote || !sso || !sso.auto || !sso.start || sso.auto !== location.origin) return false;
+  try {
+    if (sessionStorage.getItem("pyrtan-sso-off")) return false;
+    if (token) {
+      const r = await fetch("capabilities", {headers: {"Authorization": `Bearer ${token}`}});
+      if (r.ok) $("#connect").hidden = true;  // signed in: nothing here to ask for
+      if (r.status !== 401) return false;
+    }
+    if (Date.now() - Number(sessionStorage.getItem("pyrtan-sso-tried") || 0) < 60000) return false;
+    sessionStorage.setItem("pyrtan-sso-tried", String(Date.now()));
+  } catch (e) { return false; }
+  location.replace(sso.start + "?next=" + encodeURIComponent(location.pathname));
+  return true;
+}
 $("#hub-signin").addEventListener("click", () => { location.href = $("#hub-signin").dataset.start + "?next=" + encodeURIComponent(location.pathname); });
 $("#connect-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2459,7 +2479,7 @@ $("#skill-export").addEventListener("click", () => { const a = document.createEl
 try { agentsUI.init(); } catch (e) { console.error("agents:", e); }
 
 // Forgetting the hub makes this browser its own hub again.
-$("#forget").addEventListener("click", () => { chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
+$("#forget").addEventListener("click", () => { try { sessionStorage.setItem("pyrtan-sso-off", "1"); } catch (e) {} chat.leave(true); agentsUI.putAway(); store.clear(); base = ""; token = ""; member.stop(); $("#hub-url").value = ""; $("#hub-token").value = ""; $("#caps tbody").innerHTML = ""; $("#tries").innerHTML = ""; problem(""); if (remote) { const q = new URLSearchParams(location.search); if (q.has("hub")) { q.delete("hub"); history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } load(); } });
 // The trees do not wait long on the key: IndexedDB can leave it unanswered
 // (Safari, private windows), and then the console would hold no trees at
 // all. A key that comes late moves what this browser kept, as any new key
@@ -2473,6 +2493,7 @@ let signInFailed = "";
     history.replaceState(null, "", location.pathname + location.search);
     if (back[1] === "session") store.set({token: decodeURIComponent(back[2])});
     else signInFailed = decodeURIComponent(back[2]);
+    try { if (back[1] === "session") sessionStorage.removeItem("pyrtan-sso-off"); else sessionStorage.setItem("pyrtan-sso-off", "1"); } catch (e) {}
   }
 }
 let loading = null;
