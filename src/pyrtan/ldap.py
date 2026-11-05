@@ -454,13 +454,66 @@ class Connection:
 
 @dataclass(frozen=True)
 class User:
-    """A person the directory vouched for, and what they may do here."""
+    """A person the directory (or, with ``issuer``, an OpenID Connect provider,
+    :mod:`pyrtan.oidc`) vouched for, and what they may do here. ``dn`` is the
+    directory's name for them, or the provider's subject."""
     name: str
     dn: str
     may: frozenset[str]
+    issuer: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"user": self.name, "dn": self.dn, "may": [a for a in ABILITIES if a in self.may]}
+        may = [a for a in ABILITIES if a in self.may]
+        if self.issuer:
+            return {"user": self.name, "sub": self.dn, "issuer": self.issuer, "may": may}
+        return {"user": self.name, "dn": self.dn, "may": may}
+
+
+class Sessions:
+    """The sessions a door has opened: ``pyu_…`` tokens, kept hashed, each for a while."""
+
+    def __init__(self, ttl: float = SESSION_TTL) -> None:
+        self.ttl = ttl
+        self._lock = threading.Lock()
+        self._held: dict[bytes, tuple[User, float]] = {}
+
+    @staticmethod
+    def _digest(token: str) -> bytes:
+        return hashlib.sha256(token.encode("utf-8")).digest()
+
+    def open(self, user: User) -> tuple[str, int]:
+        """A new session for this person: (token, when it expires)."""
+        token = SESSION_PREFIX + secrets.token_urlsafe(32)
+        now = time.time()
+        with self._lock:
+            if len(self._held) >= MAX_SESSIONS:
+                self._held = {k: v for k, v in self._held.items() if v[1] > now}
+                while len(self._held) >= MAX_SESSIONS:
+                    self._held.pop(min(self._held, key=lambda k: self._held[k][1]))
+            self._held[self._digest(token)] = (user, now + self.ttl)
+        return token, int(now + self.ttl)
+
+    def get(self, token: str) -> User | None:
+        if not isinstance(token, str) or not token.startswith(SESSION_PREFIX):
+            return None
+        now = time.time()
+        with self._lock:
+            held = self._held.get(self._digest(token))
+            if held is None:
+                return None
+            if held[1] <= now:
+                self._held.pop(self._digest(token), None)
+                return None
+            return held[0]
+
+    def close(self, token: str) -> bool:
+        with self._lock:
+            return self._held.pop(self._digest(token), None) is not None
+
+    def __len__(self) -> int:
+        now = time.time()
+        with self._lock:
+            return sum(1 for _, until in self._held.values() if until > now)
 
 
 def parse_group(spec: str) -> tuple[str, list[str]]:
@@ -541,7 +594,7 @@ class LdapUsers:
         self._key = secrets.token_bytes(32)
         self._lock = threading.Lock()
         self._cache: dict[bytes, tuple[User, float]] = {}
-        self._sessions: dict[bytes, tuple[User, float]] = {}
+        self.sessions = Sessions(session_ttl)
         self._failures: dict[str, deque[float]] = {}
 
     def __repr__(self) -> str:  # never the bind password
@@ -661,21 +714,8 @@ class LdapUsers:
 
     # -------------------------------------------------------- sessions
 
-    def _digest(self, token: str) -> bytes:
-        return hashlib.sha256(token.encode("utf-8")).digest()
-
     def session(self, token: str) -> User | None:
-        if not token.startswith(SESSION_PREFIX):
-            return None
-        now = time.time()
-        with self._lock:
-            held = self._sessions.get(self._digest(token))
-            if held is None:
-                return None
-            if held[1] <= now:
-                self._sessions.pop(self._digest(token), None)
-                return None
-            return held[0]
+        return self.sessions.get(token)
 
     def login(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         """``POST /login``: a session token for a name and password the directory takes."""
@@ -691,15 +731,8 @@ class LdapUsers:
             return 401, {"status": "error", "reason": "unauthorised", "say": "That user name and password are not taken here."}
         if not found.may:
             return 403, {"status": "error", "reason": "not-granted", "say": f"{found.name} signed in, but is in none of the groups this Pyrtan lets in."}
-        token = SESSION_PREFIX + secrets.token_urlsafe(32)
-        now = time.time()
-        with self._lock:
-            if len(self._sessions) >= MAX_SESSIONS:
-                self._sessions = {k: v for k, v in self._sessions.items() if v[1] > now}
-                while len(self._sessions) >= MAX_SESSIONS:
-                    self._sessions.pop(min(self._sessions, key=lambda k: self._sessions[k][1]))
-            self._sessions[self._digest(token)] = (found, now + self.session_ttl)
-        return 200, {"status": "ok", "token": token, "expires": int(now + self.session_ttl), **found.to_dict()}
+        token, expires = self.sessions.open(found)
+        return 200, {"status": "ok", "token": token, "expires": expires, **found.to_dict()}
 
     def logout(self, header: str | None) -> tuple[int, dict[str, Any]]:
         """``POST /logout``: the session token in the header is no longer taken."""
@@ -707,14 +740,10 @@ class LdapUsers:
         value = value.strip()
         if scheme.lower() != "bearer" or not value.startswith(SESSION_PREFIX):
             return 400, {"status": "error", "reason": "bad-request", "say": "Send the session token as Authorization: Bearer pyu_…."}
-        with self._lock:
-            gone = self._sessions.pop(self._digest(value), None)
-        return 200, {"status": "ok", "ended": gone is not None}
+        return 200, {"status": "ok", "ended": self.sessions.close(value)}
 
     def __len__(self) -> int:
-        now = time.time()
-        with self._lock:
-            return sum(1 for _, until in self._sessions.values() if until > now)
+        return len(self.sessions)
 
 
 # What a caller's directory account may do, as the server tells the route: set by the

@@ -36,6 +36,13 @@ x-pyrtan: &pyrtan
     # services present it when they register with the hub. Make one with
     # `openssl rand -hex 24`, and never commit the real one.
     PYRTAN_TOKEN: "CHANGE-ME-to-a-long-random-string"
+    # Sign in with the account the family has at an OpenID Connect provider (Authentik, Keycloak, Authelia…),
+    # on top of the token: register http://<nas-ip>:8700/auth/oidc/callback at the provider, then
+    # PYRTAN_OIDC: "https://auth.example.org/application/o/pyrtan/"   # the issuer
+    # PYRTAN_OIDC_CLIENT_ID: "pyrtan"
+    # PYRTAN_OIDC_CLIENT_SECRET: "…"
+    # PYRTAN_OIDC_REDIRECT: "http://CHANGE-ME-nas-ip:8700"            # this hub as a browser reaches it
+    # PYRTAN_OIDC_GROUPS: "family=ask,chat,run;admins=operate"
     # Hubs that follow this one (the family's other hubs) may ask it to run
     # trees, so no tree may reach the LAN, files, programs or serial lines
     # on their behalf: the hub and the example services keep to public

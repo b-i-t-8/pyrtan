@@ -217,7 +217,9 @@ slots gives a table of them.
 `Authorization: Bearer` on everything but `/health` and the console, and
 `--cors ORIGIN` to let a browser at another origin call. `ask`, `gaps` and
 `unanswered` take `--token` too. With a token, `--ldap URL` lets people in
-with their directory account as well (*LDAP users*, below).
+with their directory account as well (*LDAP users*, below), and `--oidc
+ISSUER` with the account they have at an OpenID Connect provider (*OIDC
+sign-in*, below).
 
 ## A swarm
 
@@ -598,6 +600,39 @@ the swarm's: services register and hubs forward with it, never with a
 person's account. Use `ldaps://` or `--ldap-starttls`; every flag has a
 `$PYRTAN_LDAP…` variable. See `src/pyrtan/ldap.py`.
 
+### OIDC sign-in
+
+Likewise on top of the token, a service or hub sends people to an OpenID
+Connect provider (Keycloak, Authentik, Authelia, Entra ID, Google, Okta,
+anything with a `/.well-known/openid-configuration`) and takes them back
+signed in. What each person may do comes from a claim in the ID token,
+`groups` unless `--oidc-claim` names another, in the same four abilities.
+
+```
+export PYRTAN_TOKEN="$(openssl rand -hex 24)"
+export PYRTAN_OIDC_CLIENT_SECRET=…        # if the provider gave one; PKCE is used either way
+pyrtan hub --host 0.0.0.0 --oidc https://auth.example.org/realms/home \
+    --oidc-client-id pyrtan --oidc-redirect https://hub.example.net \
+    --oidc-group family=ask,chat --oidc-group admins=operate
+```
+
+At the provider, register `https://hub.example.net/auth/oidc/callback` as
+the client's redirect URI and have it put the groups in the ID token (or
+in the userinfo answer, which is asked when the token holds none). The
+console then shows *Sign in with auth.example.org* beside the token box
+(`--oidc-provider` names it otherwise). The person comes back with a
+session, the same `pyu_…` bearer an LDAP sign-in gives, kept in the
+browser like a token until it expires (`--oidc-session`, twelve hours) or
+`POST /logout`. The flow is the authorization code flow with PKCE and
+nothing else; the ID token's issuer, audience, expiry and nonce are
+checked, and an RS256 signature against the provider's published keys, in
+the standard library. `--oidc-claim email` with `--oidc-group
+alice@example.org=operate` grants one person. A person with no listed
+value may what `--oidc-may` says: `ask` when no group is listed, nothing
+otherwise. `--oidc` and `--ldap` may both be on; `pyrtan login` is LDAP's,
+since this sign-in needs a browser. Every flag has a `$PYRTAN_OIDC…`
+variable. See `src/pyrtan/oidc.py`.
+
 A service and a hub answer the same requests, so a caller never needs to
 know which it is talking to. A swarm starts as one process holding every
 tree and splits into many without the callers changing. A tree that
@@ -936,7 +971,7 @@ site/           pyrtan.com: the landing page, the hub list, the catalog
 
 ## Status
 
-0.47.1. The core, the service, the hub, the command, the console (which
+0.48.0. The core, the service, the hub, the command, the console (which
 carries the default trees, so it holds them with no network), the
 Postfinite trees (every published dataset, entity, reading and forecast
 on Postfinite, as the pyrtan tenant), the
