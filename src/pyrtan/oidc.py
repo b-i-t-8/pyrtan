@@ -45,6 +45,15 @@ listed, nothing otherwise. Someone the provider vouches for who may
 nothing is sent back with a message, not a session. Groups are read at
 sign-in; a session keeps what it was given until it expires.
 
+**Single sign-on.** With ``--oidc-auto`` the console does not wait for the
+button: opened at the ``--oidc-redirect`` address with no session, or with
+one that has expired, it goes to the provider at once, and someone already
+signed in there comes back signed in here without doing anything, and the
+console's connect box stays out of the way once they are. At any
+other address the console still asks. It tries once a minute at most, and
+a failed sign-in or forgetting the hub turns it off for that tab until a
+sign-in works, so the message stays and the token box can be reached.
+
 **What this refuses.** A state it did not make, or one already spent; an
 ID token for another client or from another issuer, one that has expired,
 or one whose nonce is not the one kept; a redirect anywhere but a path
@@ -246,6 +255,7 @@ class OidcUsers:
         name_claim: str | None = None,
         scopes: list[str] | None = None,
         provider: str | None = None,
+        auto: bool = False,
         ca: str | None = None,
         timeout: float = 10.0,
         session_ttl: float = SESSION_TTL,
@@ -273,6 +283,7 @@ class OidcUsers:
         if "openid" not in self.scopes:
             self.scopes.insert(0, "openid")
         self.provider = (provider or "").strip() or (parts.hostname or "")
+        self.auto = auto
         self.timeout = timeout
         self.session_ttl = session_ttl
         self.sessions = Sessions(session_ttl)
@@ -290,7 +301,11 @@ class OidcUsers:
 
     def to_dict(self) -> dict[str, Any]:
         """What ``/api`` says: where a browser starts, and what to call the provider."""
-        return {"start": START_PATH, "provider": self.provider}
+        said = {"start": START_PATH, "provider": self.provider}
+        if self.auto:
+            parts = urllib.parse.urlsplit(self.redirect)
+            said["auto"] = f"{parts.scheme}://{parts.netloc}"
+        return said
 
     # -------------------------------------------------------- the provider's documents
 

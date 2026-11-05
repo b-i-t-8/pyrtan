@@ -546,6 +546,7 @@ def _access_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--oidc-scope", metavar="SCOPES", default=env("PYRTAN_OIDC_SCOPE", "openid profile email"), help="the scopes asked for, space-separated (default $PYRTAN_OIDC_SCOPE or 'openid profile email'; Authelia wants 'groups' added)")
     g.add_argument("--oidc-name", metavar="CLAIM", default=env("PYRTAN_OIDC_NAME"), help="the claim that names the person (default $PYRTAN_OIDC_NAME, else preferred_username, then email, then sub)")
     g.add_argument("--oidc-provider", metavar="NAME", default=env("PYRTAN_OIDC_PROVIDER"), help="what the console's sign-in button calls the provider (default $PYRTAN_OIDC_PROVIDER, else the issuer's host)")
+    g.add_argument("--oidc-auto", action="store_true", default=env("PYRTAN_OIDC_AUTO", "").lower() in ("1", "true", "yes"), help="single sign-on: the console opened at --oidc-redirect goes to the provider by itself instead of showing the button (default $PYRTAN_OIDC_AUTO)")
     g.add_argument("--oidc-ca", metavar="FILE", default=env("PYRTAN_OIDC_CA"), help="check the provider's certificate against this CA bundle (default $PYRTAN_OIDC_CA, else the system's)")
     g.add_argument("--oidc-session", type=float, metavar="HOURS", default=float(env("PYRTAN_OIDC_SESSION", "12") or 12), help="how long a sign-in's session lasts (default $PYRTAN_OIDC_SESSION or 12)")
 
@@ -589,7 +590,7 @@ def _oidc_users(args: argparse.Namespace) -> Any:
         users = OidcUsers(
             args.oidc, args.oidc_client_id or "", os.environ.get("PYRTAN_OIDC_CLIENT_SECRET"), redirect=redirect,
             groups=dict(parse_group(g) for g in args.oidc_group), may=parse_abilities(args.oidc_may), claim=args.oidc_claim,
-            name_claim=args.oidc_name, scopes=(args.oidc_scope or "").split(), provider=args.oidc_provider, ca=args.oidc_ca, session_ttl=args.oidc_session * 3600.0,
+            name_claim=args.oidc_name, scopes=(args.oidc_scope or "").split(), provider=args.oidc_provider, auto=args.oidc_auto, ca=args.oidc_ca, session_ttl=args.oidc_session * 3600.0,
         )
     except OidcError as e:
         raise SystemExit(f"pyrtan {command}: {e}") from None

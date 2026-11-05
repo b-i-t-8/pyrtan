@@ -43,6 +43,7 @@ x-pyrtan: &pyrtan
     # PYRTAN_OIDC_CLIENT_SECRET: "…"
     # PYRTAN_OIDC_REDIRECT: "http://CHANGE-ME-nas-ip:8700"            # this hub as a browser reaches it
     # PYRTAN_OIDC_GROUPS: "family=ask,chat,run;admins=operate"
+    # PYRTAN_OIDC_AUTO: "true"                                        # single sign-on: no button, straight to the provider
     # Hubs that follow this one (the family's other hubs) may ask it to run
     # trees, so no tree may reach the LAN, files, programs or serial lines
     # on their behalf: the hub and the example services keep to public

@@ -630,7 +630,11 @@ the standard library. `--oidc-claim email` with `--oidc-group
 alice@example.org=operate` grants one person. A person with no listed
 value may what `--oidc-may` says: `ask` when no group is listed, nothing
 otherwise. `--oidc` and `--ldap` may both be on; `pyrtan login` is LDAP's,
-since this sign-in needs a browser. Every flag has a `$PYRTAN_OIDC…`
+since this sign-in needs a browser. `--oidc-auto` makes it single sign-on:
+the console opened at the `--oidc-redirect` address goes to the provider by
+itself instead of showing the button, again when a session has expired,
+and someone already signed in there is simply in; any other address still
+asks, and so the token box stays within reach. Every flag has a `$PYRTAN_OIDC…`
 variable. See `src/pyrtan/oidc.py`.
 
 A service and a hub answer the same requests, so a caller never needs to

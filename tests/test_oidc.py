@@ -490,3 +490,10 @@ def test_serve_takes_oidc(monkeypatch, provider):
     with pytest.raises(Started) as got:
         cli.main(["serve", str(EXAMPLES), "--oidc", provider.issuer, "--oidc-client-id", CLIENT, "--oidc-redirect", REDIRECT])
     assert got.value.args[0].client_secret == "from-env" and got.value.args[0].groups == {"a": ["ask"], "b": ["run"]}
+
+
+def test_oidc_auto_says_the_address_it_works_at():
+    plain = OidcUsers("https://auth.example.org", CLIENT, redirect="https://hub.example.net")
+    assert "auto" not in plain.to_dict()
+    auto = OidcUsers("https://auth.example.org", CLIENT, redirect="https://hub.example.net/", auto=True)
+    assert auto.to_dict() == {"start": "/auth/oidc", "provider": "auth.example.org", "auto": "https://hub.example.net"}
